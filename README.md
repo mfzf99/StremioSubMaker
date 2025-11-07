@@ -200,7 +200,7 @@ Languages to **translate to** (unlimited)
 ## 📧 Support
 
 **Issues & Questions**
-[Open an issue](https://github.com/xtremexq/SubMaker/issues) on GitHub
+[Open an issue](https://github.com/xtremexq/StremioSubMaker/issues) on GitHub
 
 **Documentation**
 Check the `/public/configure.html` UI for interactive help
@@ -212,4 +212,4 @@ Join Stremio Discord for general Stremio addon help
 
 **Made with ❤️ for the Stremio community**
 
-[⭐ Star this repo](https://github.com/xtremexq/SubMaker) · [🐛 Report Bug](https://github.com/xtremexq/SubMaker/issues) · [✨ Request Feature](https://github.com/xtremexq/SubMaker/issues)
+[⭐ Star this repo](https://github.com/xtremexq/StremioSubMaker) · [🐛 Report Bug](https://github.com/xtremexq/StremioSubMaker/issues) · [✨ Request Feature](https://github.com/xtremexq/StremioSubMaker/issues)
