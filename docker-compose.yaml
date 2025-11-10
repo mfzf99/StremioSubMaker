@@ -22,7 +22,6 @@ services:
       - REDIS_KEY_PREFIX=stremio:
 
       # API Keys (configure these in your .env file)
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OPENSUBTITLES_API_KEY=${OPENSUBTITLES_API_KEY:-}
 
       # Optional: Session configuration

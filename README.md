@@ -134,9 +134,10 @@ REDIS_PASSWORD=your_secure_password
 REDIS_DB=0
 REDIS_KEY_PREFIX=stremio:
 
-# API Keys
-GEMINI_API_KEY=your_gemini_key
+# API Keys (optional, for server-level config)
 OPENSUBTITLES_API_KEY=your_opensubtitles_key
+
+# Note: Gemini API key is configured per-user in Stremio addon settings
 ```
 
 ### Cache Size Limits
@@ -162,7 +163,6 @@ docker run -d \
   -e STORAGE_TYPE=redis \
   -e REDIS_HOST=your-redis-host \
   -e REDIS_PORT=6379 \
-  -e GEMINI_API_KEY=your_key \
   stremio-submaker
 
 # Run with filesystem storage (requires volume mount)
@@ -172,7 +172,6 @@ docker run -d \
   -v $(pwd)/.cache:/app/.cache \
   -v $(pwd)/data:/app/data \
   -e STORAGE_TYPE=filesystem \
-  -e GEMINI_API_KEY=your_key \
   stremio-submaker
 ```
 
