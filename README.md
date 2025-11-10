@@ -54,12 +54,10 @@ npm install
 
 # Start the server
 npm start
-
-# Open configuration page in your browser
-# On macOS/Linux: open http://localhost:7001
-# On Windows: start http://localhost:7001
-# Or manually visit: http://localhost:7001
 ```
+
+### Open configuration page in your browser
+Visit: http://localhost:7001
 
 ### Configure & Install
 
