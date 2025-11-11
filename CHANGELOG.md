@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker 1.1.0
+
+**Infrastructure:**
+- Added extensive Redis support for caching
+- Docker deployment support with docker-compose configurations for both standalone and Redis-backed deployments
+- Filesystem storage adapter still default for local deployment and fallback
+
+**Performance & UX:**
+- Translation Cache Overwrite reduced from 5 clicks in 10 seconds to 3 clicks in 3 seconds (to avoid Stremio rate-limiting)
+
 ## SubMaker 1.0.3
 
 **UI Redesign:**
@@ -44,7 +54,7 @@ All notable changes to this project will be documented in this file.
 - Fixed unbounded session cache by adding `maxSessions` limit (50k default, configurable via `SESSION_MAX_SESSIONS`)
 - Switched user translation counts to LRU cache (max 50k tracked users, auto-expires after 24h)
 - Automatic cleanup of stale session and translation-tracking data
-- Cache reset safety: 5-click cache reset now blocked while translation is in progress (prevents interruption)
+- Cache reset safety: 3-click cache reset now blocked while translation is in progress (prevents interruption)
 - Graceful shutdown: Server properly exits, clears timers, and saves sessions before closing
 - Duplicate translation prevention: In-flight request deduplication allows simultaneous identical requests to share one translation
 

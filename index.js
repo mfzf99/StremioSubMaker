@@ -137,17 +137,17 @@ function isLocalhost(req) {
 }
 
 /**
- * Safety check for 5-click cache reset during active translation
- * Prevents cache reset if ALL 5 clicks meet BOTH conditions:
- * 1. All 5 clicks are for the same subtitle (sourceFileId)
- * 2. All 5 clicks are from the same user (config hash)
+ * Safety check for 3-click cache reset during active translation
+ * Prevents cache reset if ALL 3 clicks meet BOTH conditions:
+ * 1. All 3 clicks are for the same subtitle (sourceFileId)
+ * 2. All 3 clicks are from the same user (config hash)
  * AND translation is currently in progress
  *
  * @param {string} clickKey - The click tracker key (includes config and fileId)
  * @param {string} sourceFileId - The subtitle file ID
  * @param {string} configHash - The user's config hash
  * @param {string} targetLang - The target language
- * @returns {boolean} - True if the 5-click cache reset should be BLOCKED
+ * @returns {boolean} - True if the 3-click cache reset should be BLOCKED
  */
 function shouldBlockCacheReset(clickKey, sourceFileId, configHash, targetLang) {
     try {
@@ -155,7 +155,7 @@ function shouldBlockCacheReset(clickKey, sourceFileId, configHash, targetLang) {
         // Format: translate-click:${configStr}:${sourceFileId}:${targetLang}
         const clickEntry = firstClickTracker.get(clickKey);
 
-        if (!clickEntry || !clickEntry.times || clickEntry.times.length < 5) {
+        if (!clickEntry || !clickEntry.times || clickEntry.times.length < 3) {
             return false; // Not enough clicks yet
         }
 
@@ -181,9 +181,9 @@ function shouldBlockCacheReset(clickKey, sourceFileId, configHash, targetLang) {
             return false; // Translation not in progress, allow reset
         }
 
-        // Validate that all 5 clicks are for the SAME subtitle and SAME user
+        // Validate that all 3 clicks are for the SAME subtitle and SAME user
         // The clickKey already includes the sourceFileId and configStr (which is used to compute configHash)
-        // So if we got here with the same clickKey, it means all 5 clicks are for the same subtitle and user
+        // So if we got here with the same clickKey, it means all 3 clicks are for the same subtitle and user
 
         console.log(`[SafetyBlock] Blocking cache reset: Translation is in progress for ${sourceFileId} (user: ${configHash}, target: ${targetLang})`);
         return true; // BLOCK the cache reset
@@ -638,33 +638,33 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
         // Create deduplication key based on source file and target language
         const dedupKey = `translate:${configStr}:${sourceFileId}:${targetLang}`;
 
-        // Unusual purge: if same translated subtitle is loaded 5 times in < 10s, purge and retrigger
+        // Unusual purge: if same translated subtitle is loaded 3 times in < 3s, purge and retrigger
         // SAFETY BLOCK: Only purge if translation is NOT currently in progress
         try {
             const clickKey = `translate-click:${configStr}:${sourceFileId}:${targetLang}`;
             const now = Date.now();
-            const windowMs = 10_000; // 10 seconds
+            const windowMs = 3_000; // 3 seconds (reduced to avoid Stremio rate-limiting)
             const entry = firstClickTracker.get(clickKey) || { times: [] };
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
             entry.times.push(now);
             firstClickTracker.set(clickKey, entry);
 
-            if (entry.times.length >= 5) {
+            if (entry.times.length >= 3) {
                 // SAFETY CHECK: Block cache reset if translation is in progress for same subtitle and same user
                 const shouldBlock = shouldBlockCacheReset(clickKey, sourceFileId, config.__configHash, targetLang);
 
                 if (shouldBlock) {
-                    console.log(`[PurgeTrigger] 5 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
+                    console.log(`[PurgeTrigger] 3 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
                 } else {
                     // Reset the counter immediately to avoid loops
                     firstClickTracker.set(clickKey, { times: [] });
                     const hadCache = hasCachedTranslation(sourceFileId, targetLang, config);
                     if (hadCache) {
-                        console.log(`[PurgeTrigger] 5 rapid loads detected (<10s) for ${sourceFileId}/${targetLang}. Purging cache and re-triggering translation.`);
+                        console.log(`[PurgeTrigger] 3 rapid loads detected (<3s) for ${sourceFileId}/${targetLang}. Purging cache and re-triggering translation.`);
                         purgeTranslationCache(sourceFileId, targetLang, config);
                     } else {
-                        console.log(`[PurgeTrigger] 5 rapid loads detected but no cached translation found for ${sourceFileId}/${targetLang}. Skipping purge.`);
+                        console.log(`[PurgeTrigger] 3 rapid loads detected but no cached translation found for ${sourceFileId}/${targetLang}. Skipping purge.`);
                     }
                 }
             }

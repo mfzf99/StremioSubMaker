@@ -224,7 +224,7 @@ Languages to **translate to** (unlimited)
 
 ### Translation problem?
 
-1. **Force cache overwrite** - Within stremio, click 5 times (within 10 secs) on the problematic translation subtitle
+1. **Force cache overwrite** - Within stremio, click 3 times (within 3 secs) on the problematic translation subtitle
 2. **Bypass Translation Cache** - Change your config to bypass the addons' subtitles database
 
 ### Translation Fails?

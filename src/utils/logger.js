@@ -28,7 +28,7 @@ const currentLevel = LEVELS[LOG_LEVEL] !== undefined ? LEVELS[LOG_LEVEL] : LEVEL
 const fs = require('fs');
 const path = require('path');
 
-const LOG_TO_FILE = (process.env.LOG_TO_FILE === 'true') || (process.env.NODE_ENV === 'production' && process.env.LOG_TO_FILE !== 'false');
+const LOG_TO_FILE = process.env.LOG_TO_FILE !== 'false'; // Enabled by default, disable with LOG_TO_FILE=false
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', '..', 'logs');
 const LOG_BASENAME = process.env.LOG_BASENAME || 'app.log';
 const LOG_MAX_SIZE_BYTES = (() => {
