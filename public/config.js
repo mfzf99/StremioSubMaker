@@ -590,7 +590,7 @@ Translate to {target_language}.`;
 
         // OpenSubtitles implementation type selection
         document.querySelectorAll('input[name="opensubtitlesImplementation"]').forEach(radio => {
-            radio.addEventListener('change', handleOpenSubtitlesImplChange);
+            radio.addEventListener('change', (e) => handleOpenSubtitlesImplChange(e));
         });
 
         // Password visibility toggle
@@ -1147,7 +1147,17 @@ Translate to {target_language}.`;
         const configDiv = document.getElementById(configId);
         if (configDiv) {
             configDiv.style.opacity = enabled ? '1' : '0.5';
-            configDiv.style.pointerEvents = enabled ? 'auto' : 'none';
+
+            if (configId === 'opensubtitlesConfig') {
+                // For OpenSubtitles, disable individual controls instead of blocking pointer events
+                const inputs = configDiv.querySelectorAll('input, select, textarea');
+                inputs.forEach(input => {
+                    input.disabled = !enabled;
+                });
+            } else {
+                // For other providers, use pointer-events as before
+                configDiv.style.pointerEvents = enabled ? 'auto' : 'none';
+            }
         }
     }
 
