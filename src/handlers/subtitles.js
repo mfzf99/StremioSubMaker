@@ -1545,7 +1545,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
                 content: partialSrt,
                 expiresAt: Date.now() + 60 * 60 * 1000
               });
-              console.log(`[Translation] Saved partial (chunked mode): ${progress.completedEntries} entries (${partialSrt.length} chars)`);
+              debug(() => `[Translation] Saved partial (chunked mode): ${progress.completedEntries} entries (${partialSrt.length} chars)`);
             }
           } else {
             // For batch mode: flush periodically
