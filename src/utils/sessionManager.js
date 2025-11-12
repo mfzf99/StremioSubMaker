@@ -292,7 +292,16 @@ class SessionManager {
      * @param {http.Server} server - Express server instance to close
      */
     setupShutdownHandlers(server) {
+        let isShuttingDown = false; // Prevent multiple shutdown attempts
+
         const shutdown = async (signal) => {
+            // Prevent multiple shutdown attempts
+            if (isShuttingDown) {
+                console.log(`[SessionManager] Shutdown already in progress, ignoring ${signal}`);
+                return;
+            }
+            isShuttingDown = true;
+
             console.log(`[SessionManager] Received ${signal}, saving sessions...`);
 
             // Clear the auto-save timer
@@ -301,32 +310,59 @@ class SessionManager {
                 console.log('[SessionManager] Cleared auto-save timer');
             }
 
+            // Save with timeout to prevent hanging
+            let saveFailed = false;
             try {
-                await this.saveToDisk();
+                // Create a promise that rejects after 3 seconds
+                const savePromise = this.saveToDisk();
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Save operation timed out after 3 seconds')), 3000);
+                });
+
+                await Promise.race([savePromise, timeoutPromise]);
                 console.log('[SessionManager] Sessions saved successfully');
             } catch (err) {
-                console.error('[SessionManager] Failed to save sessions on shutdown:', err);
+                saveFailed = true;
+                console.error('[SessionManager] Failed to save sessions on shutdown:', err.message);
+                // Continue with shutdown even if save fails
             }
 
             // Close the server if provided
             if (server) {
                 server.close(() => {
-                    console.log('[SessionManager] Server closed');
-                    process.exit(0);
+                    console.log('[SessionManager] Server closed gracefully');
+                    process.exit(saveFailed ? 1 : 0);
                 });
 
-                // Force exit after 5 seconds if graceful shutdown takes too long
+                // Force exit after 2 seconds if server close hangs
                 setTimeout(() => {
-                    console.warn('[SessionManager] Forcefully exiting after 5s timeout');
-                    process.exit(1);
-                }, 5000);
+                    console.warn('[SessionManager] Forcefully exiting after timeout');
+                    process.exit(saveFailed ? 1 : 0);
+                }, 2000).unref(); // unref to allow process to exit naturally if server closes faster
             } else {
-                process.exit(0);
+                process.exit(saveFailed ? 1 : 0);
             }
         };
 
+        // Handle SIGTERM (kill command)
         process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+        // Handle SIGINT (Ctrl+C)
         process.on('SIGINT', () => shutdown('SIGINT'));
+
+        // Handle uncaught exceptions to save before crash
+        process.on('uncaughtException', (err) => {
+            console.error('[SessionManager] Uncaught exception:', err);
+            if (!isShuttingDown) {
+                shutdown('uncaughtException').then(() => {
+                    process.exit(1);
+                }).catch(() => {
+                    process.exit(1);
+                });
+            }
+        });
+
+        console.log('[SessionManager] Graceful shutdown handlers registered (SIGTERM, SIGINT, uncaughtException)');
     }
 
     /**

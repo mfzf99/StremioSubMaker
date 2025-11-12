@@ -638,12 +638,12 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
         // Create deduplication key based on source file and target language
         const dedupKey = `translate:${configStr}:${sourceFileId}:${targetLang}`;
 
-        // Unusual purge: if same translated subtitle is loaded 3 times in < 3s, purge and retrigger
+        // Unusual purge: if same translated subtitle is loaded 3 times in < 6s, purge and retrigger
         // SAFETY BLOCK: Only purge if translation is NOT currently in progress
         try {
             const clickKey = `translate-click:${configStr}:${sourceFileId}:${targetLang}`;
             const now = Date.now();
-            const windowMs = 3_000; // 3 seconds (reduced to avoid Stremio rate-limiting)
+            const windowMs = 6_000; // 6 seconds
             const entry = firstClickTracker.get(clickKey) || { times: [] };
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
@@ -661,7 +661,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
                     firstClickTracker.set(clickKey, { times: [] });
                     const hadCache = hasCachedTranslation(sourceFileId, targetLang, config);
                     if (hadCache) {
-                        console.log(`[PurgeTrigger] 3 rapid loads detected (<3s) for ${sourceFileId}/${targetLang}. Purging cache and re-triggering translation.`);
+                        console.log(`[PurgeTrigger] 3 rapid loads detected (<6s) for ${sourceFileId}/${targetLang}. Purging cache and re-triggering translation.`);
                         purgeTranslationCache(sourceFileId, targetLang, config);
                     } else {
                         console.log(`[PurgeTrigger] 3 rapid loads detected but no cached translation found for ${sourceFileId}/${targetLang}. Skipping purge.`);

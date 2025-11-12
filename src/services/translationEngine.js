@@ -153,6 +153,10 @@ class TranslationEngine {
           const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
           cleanedText = cleanedText.replace(timecodePattern, '').trim();
 
+          // Normalize line endings: Convert CRLF (\r\n) to LF (\n) only
+          // This fixes the issue on Linux where CRLF causes extra spacing between subtitle lines
+          cleanedText = cleanedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
           // Create entry with original timing and cleaned translated text
           const translatedEntry = {
             id: original.id,

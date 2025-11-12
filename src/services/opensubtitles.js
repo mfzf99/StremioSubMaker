@@ -26,6 +26,7 @@ class OpenSubtitlesService {
     // Add API key if configured
     if (OPENSUBTITLES_API_KEY) {
       defaultHeaders['Api-Key'] = OPENSUBTITLES_API_KEY;
+      console.log('[OpenSubtitles] API key loaded successfully from environment');
     }
 
     this.client = axios.create({
@@ -35,7 +36,9 @@ class OpenSubtitlesService {
 
     // Validate API key is configured
     if (!OPENSUBTITLES_API_KEY) {
-      console.warn('[OpenSubtitles] OPENSUBTITLES_API_KEY not configured in .env - API requests may fail or have rate limits');
+      console.warn('[OpenSubtitles] WARNING: OPENSUBTITLES_API_KEY not found in environment variables');
+      console.warn('[OpenSubtitles] Please set OPENSUBTITLES_API_KEY in your .env file');
+      console.warn('[OpenSubtitles] API requests may fail or have very limited rate limits');
     }
 
     // Validate that credentials are provided

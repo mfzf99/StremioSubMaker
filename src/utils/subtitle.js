@@ -42,7 +42,12 @@ function parseSRT(srtContent) {
  */
 function toSRT(entries) {
   return entries
-    .map(entry => `${entry.id}\n${entry.timecode}\n${entry.text}`)
+    .map(entry => {
+      // Ensure text uses only LF (\n), not CRLF (\r\n)
+      // This prevents extra spacing issues on Linux
+      const normalizedText = entry.text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      return `${entry.id}\n${entry.timecode}\n${normalizedText}`;
+    })
     .join('\n\n') + '\n';
 }
 

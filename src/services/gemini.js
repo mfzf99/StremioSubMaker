@@ -360,8 +360,9 @@ async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customP
     // Remove markdown code blocks if present
     let cleaned = text.replace(/```srt\n?/g, '').replace(/```\n?/g, '');
 
-    // Ensure proper line endings
-    cleaned = cleaned.replace(/\r\n/g, '\n');
+    // Ensure proper line endings: Convert CRLF (\r\n) and CR (\r) to LF (\n) only
+    // This fixes the issue on Linux where CRLF causes extra spacing between subtitle lines
+    cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     // Remove any leading/trailing whitespace
     cleaned = cleaned.trim();
