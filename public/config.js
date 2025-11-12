@@ -589,9 +589,15 @@ Translate to {target_language}.`;
         });
 
         // OpenSubtitles implementation type selection
-        document.querySelectorAll('input[name="opensubtitlesImplementation"]').forEach(radio => {
-            radio.addEventListener('change', (e) => handleOpenSubtitlesImplChange(e));
-        });
+        // Use event delegation for more reliable event handling
+        const opensubtitlesConfig = document.getElementById('opensubtitlesConfig');
+        if (opensubtitlesConfig) {
+            opensubtitlesConfig.addEventListener('change', (e) => {
+                if (e.target && e.target.name === 'opensubtitlesImplementation') {
+                    handleOpenSubtitlesImplChange(e);
+                }
+            });
+        }
 
         // Password visibility toggle
         const togglePasswordBtn = document.getElementById('toggleOpenSubsPassword');
@@ -678,32 +684,47 @@ Translate to {target_language}.`;
     }
 
     function handleOpenSubtitlesImplChange(e) {
-        const implementationType = e.target.value;
-        const authConfig = document.getElementById('opensubtitlesAuthConfig');
-
-        if (!authConfig) {
+        if (!e || !e.target) {
+            console.error('[OpenSubtitles] Invalid event object passed to handleOpenSubtitlesImplChange');
             return;
         }
 
+        const implementationType = e.target.value;
+        console.log('[OpenSubtitles] Implementation type changed to:', implementationType);
+
+        const authConfig = document.getElementById('opensubtitlesAuthConfig');
+
+        if (!authConfig) {
+            console.error('[OpenSubtitles] Auth config element not found');
+            return;
+        }
+
+        // Show/hide auth fields based on implementation type
         if (implementationType === 'auth') {
-            // Show auth fields
             authConfig.style.display = 'block';
+            console.log('[OpenSubtitles] Auth fields shown');
         } else {
-            // Hide auth fields for V3
             authConfig.style.display = 'none';
+            console.log('[OpenSubtitles] Auth fields hidden');
         }
 
         // Update visual selection state
-        document.querySelectorAll('input[name="opensubtitlesImplementation"]').forEach(radio => {
-            const label = radio.closest('label');
-            if (radio.checked) {
-                label.style.borderColor = 'var(--primary)';
-                label.style.background = 'var(--surface-light)';
-            } else {
-                label.style.borderColor = 'var(--border)';
-                label.style.background = 'white';
-            }
-        });
+        try {
+            document.querySelectorAll('input[name="opensubtitlesImplementation"]').forEach(radio => {
+                const label = radio.closest('label');
+                if (label) {
+                    if (radio.checked) {
+                        label.style.borderColor = 'var(--primary)';
+                        label.style.background = 'var(--surface-light)';
+                    } else {
+                        label.style.borderColor = 'var(--border)';
+                        label.style.background = 'white';
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('[OpenSubtitles] Error updating visual state:', error);
+        }
     }
 
     /**
@@ -1264,7 +1285,14 @@ Translate to {target_language}.`;
         toggleProviderConfig('opensubtitlesConfig', opensubtitlesEnabled);
 
         // Trigger implementation change to show/hide auth fields and update visuals
-        handleOpenSubtitlesImplChange({ target: { value: implementationType } });
+        // Use setTimeout to ensure DOM is fully ready
+        setTimeout(() => {
+            try {
+                handleOpenSubtitlesImplChange({ target: { value: implementationType } });
+            } catch (error) {
+                console.error('[Config] Error initializing OpenSubtitles auth fields:', error);
+            }
+        }, 0);
 
         // SubDL
         const subdlEnabled = (isFirstRun ? false : (currentConfig.subtitleProviders?.subdl?.enabled !== false));
