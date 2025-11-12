@@ -63,7 +63,7 @@ Visit: http://localhost:7001
 
 1. **Add Subtitle Sources API keys** (required)
 2. **Add Gemini API Key** (required)
-3. **Select source languages** (where to fetch subtitles from)
+3. **Select source languages**
 4. **Select target languages** (what to translate to)
 5. **Click "Install in Stremio"** or copy the URL
 
@@ -89,7 +89,7 @@ docker-compose up -d
 │  2. Subtitles appear with "Make [Language]" │
 │  3. Click → Select source subtitle          │
 │  4. AI translates in ~1 to 3 minutes        │
-│  5. Reselect the translated subtitles      	│
+│  5. Reselect the translated subtitles       │
 │  6. Next time? Instant! (cached on DB)      │
 └─────────────────────────────────────────────┘
 ```
@@ -108,9 +108,9 @@ SubMaker Addon (Express + Stremio SDK)
 ### Key Features
 
 **Multi-Source Fetching**
-- Queries 4 providers simultaneously
+- Queries 3 providers simultaneously
 - Automatic fallback if one fails
-- Ranks by downloads, ratings, quality
+- Ranks by filename, downloads, ratings, quality
 
 **AI Translation**
 - Context-aware (processes entire subtitle at once)
@@ -142,7 +142,6 @@ Languages to **translate to** (unlimited)
 - OpenSubtitles: Optional username/password for higher limits
 - SubDL: Requires API key
 - SubSource: Requires API key
-- Podnapisi: (DISABLED)
 
 ---
 
@@ -150,14 +149,14 @@ Languages to **translate to** (unlimited)
 
 ### Translation problem?
 
-1. **Force cache overwrite** - Within stremio, click 3 times (within 3 secs) on the problematic translation subtitle
+1. **Force cache overwrite** - Within stremio, click 3 times (within 6 secs) on the problematic translation subtitle
 2. **Bypass Translation Cache** - Change your config to bypass the addons' subtitles database
 
 ### Translation Fails?
 
 1. **Validate API key** - Test at [Google AI Studio](https://makersuite.google.com)
-2. **Check model selection** - Ensure model used is Flash or Flash-Lite Latest
-3. **Check Gemini quota** - Review your API usage
+2. **Check Gemini quota** - Review your API usage
+3. **Test other subtitles** - Try translating a different subtitle
 
 ### Configuration Not Saving?
 
@@ -194,6 +193,7 @@ Check the `/public/configure.html` UI for interactive help
 
 **Community**
 Join Stremio Discord for general Stremio addon help
+Join StremioAddons on Reddit for community news and support
 
 ---
 
