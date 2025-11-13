@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 
 const SUBDL_API_URL = 'https://api.subdl.com/api/v1';
 const USER_AGENT = 'StremioSubtitleTranslator v1.0';
@@ -16,7 +17,9 @@ class SubDLService {
         'User-Agent': USER_AGENT,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      }
+      },
+      httpAgent,
+      httpsAgent
     });
 
     if (this.apiKey && this.apiKey.trim() !== '') {
@@ -213,7 +216,9 @@ class SubDLService {
         headers: {
           'User-Agent': USER_AGENT
         },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000, // 30 second timeout
+        httpAgent,
+        httpsAgent
       });
 
       console.log('[SubDL] Response status:', subtitleResponse.status);

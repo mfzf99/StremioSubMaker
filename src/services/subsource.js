@@ -11,6 +11,7 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError, logApiError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 const zlib = require('zlib');
 
 const SUBSOURCE_API_URL = 'https://api.subsource.net/api/v1';
@@ -66,7 +67,9 @@ class SubSourceService {
 
       const response = await axios.get(searchUrl, {
         headers: this.defaultHeaders,
-        responseType: 'json'
+        responseType: 'json',
+        httpAgent,
+        httpsAgent
       });
 
       // Response could be an array of movies or a single movie
@@ -230,7 +233,9 @@ class SubSourceService {
       try {
         const rawResponse = await axios.get(url, {
           headers: this.defaultHeaders,
-          responseType: 'json'
+          responseType: 'json',
+          httpAgent,
+          httpsAgent
         });
 
         response = rawResponse.data;
@@ -242,7 +247,9 @@ class SubSourceService {
 
           const rawResponse = await axios.get(searchUrl, {
             headers: this.defaultHeaders,
-            responseType: 'json'
+            responseType: 'json',
+            httpAgent,
+            httpsAgent
           });
 
           response = rawResponse.data;
@@ -369,7 +376,9 @@ class SubSourceService {
       const url = `${this.baseURL}/subtitles/${subsource_id}/download`;
       const response = await axios.get(url, {
         headers: this.defaultHeaders,
-        responseType: 'arraybuffer' // Get response as buffer
+        responseType: 'arraybuffer', // Get response as buffer
+        httpAgent,
+        httpsAgent
       });
 
       // Check if response is a ZIP file or direct SRT content

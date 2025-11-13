@@ -58,6 +58,15 @@ const inFlightSearches = new LRUCache({
   updateAgeOnGet: false,
 });
 
+// Performance: LRU cache for completed subtitle search results (max 5000 entries)
+// Caches completed subtitle searches to avoid repeated API calls for identical queries
+// This significantly reduces latency and API load for popular content (e.g., trending shows)
+const subtitleSearchResultsCache = new LRUCache({
+  max: 5000, // Max 5000 searches cached
+  ttl: 1000 * 60 * 60, // 1 hour TTL (subtitles don't change frequently)
+  updateAgeOnGet: true, // Popular content stays cached longer
+});
+
 // Security: In-flight translation requests to prevent duplicate translations (max 500 entries)
 // Maps cacheKey -> Promise that all simultaneous requests will wait for
 const inFlightTranslations = new LRUCache({
@@ -594,25 +603,38 @@ setInterval(enforceCacheSizeLimit, 1000 * 60 * 10);
 setInterval(verifyBypassCacheIntegrity, 1000 * 60 * 30);
 
 /**
- * Deduplicates subtitle search requests
+ * Deduplicates subtitle search requests by caching in-flight promises and completed results
  * @param {string} key - Unique key for the request
- * @param {Function} fn - Function to execute if not already in flight
+ * @param {Function} fn - Function to execute if not already in flight or cached
  * @returns {Promise} - Promise result
  */
 async function deduplicateSearch(key, fn) {
+    // Check completed results cache first (persistent cache)
+    const cachedResult = subtitleSearchResultsCache.get(key);
+    if (cachedResult) {
+        console.log(`[Subtitle Cache] Found cached search results for: ${shortKey(key)} (${cachedResult.length} subtitles)`);
+        return cachedResult;
+    }
+
+    // Check in-flight requests (prevents duplicate API calls for concurrent requests)
     const cached = inFlightSearches.get(key);
     if (cached) {
-        console.log(`[Dedup] Subtitle search already in flight: ${key}`);
+        console.log(`[Dedup] Subtitle search already in flight: ${shortKey(key)}`);
         return cached.promise;
     }
 
-    console.log(`[Dedup] Processing new subtitle search: ${key}`);
+    console.log(`[Dedup] Processing new subtitle search: ${shortKey(key)}`);
     const promise = fn();
 
     inFlightSearches.set(key, { promise });
 
     try {
         const result = await promise;
+        // Cache the completed result for future requests
+        if (result && Array.isArray(result)) {
+            subtitleSearchResultsCache.set(key, result);
+            console.log(`[Subtitle Cache] Cached search results for: ${shortKey(key)} (${result.length} subtitles)`);
+        }
         return result;
     } finally {
         inFlightSearches.delete(key);
@@ -860,7 +882,10 @@ function createSubtitleHandler(config) {
 
       // Collect subtitles from all enabled providers with deduplication
       const foundSubtitles = await deduplicateSearch(dedupKey, async () => {
-        let subtitles = [];
+        // Parallelize all provider searches using Promise.allSettled for better performance
+        // This reduces search time from (OpenSubtitles + SubDL + SubSource + Podnapisi) sequential
+        // to max(OpenSubtitles, SubDL, SubSource, Podnapisi) parallel
+        const searchPromises = [];
 
         // Check if OpenSubtitles provider is enabled
         if (config.subtitleProviders?.opensubtitles?.enabled) {
@@ -874,9 +899,11 @@ function createSubtitleHandler(config) {
             opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
           }
 
-          const opensubtitlesResults = await opensubtitles.searchSubtitles(searchParams);
-          console.log(`[Subtitles] Found ${opensubtitlesResults.length} subtitles from OpenSubtitles (${implementationType})`);
-          subtitles = [...subtitles, ...opensubtitlesResults];
+          searchPromises.push(
+            opensubtitles.searchSubtitles(searchParams)
+              .then(results => ({ provider: `OpenSubtitles (${implementationType})`, results }))
+              .catch(error => ({ provider: `OpenSubtitles (${implementationType})`, results: [], error }))
+          );
         } else {
           console.log('[Subtitles] OpenSubtitles provider is disabled');
         }
@@ -885,9 +912,11 @@ function createSubtitleHandler(config) {
         if (config.subtitleProviders?.subdl?.enabled) {
           console.log('[Subtitles] SubDL provider is enabled');
           const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
-          const subdlResults = await subdl.searchSubtitles(searchParams);
-          console.log(`[Subtitles] Found ${subdlResults.length} subtitles from SubDL`);
-          subtitles = [...subtitles, ...subdlResults];
+          searchPromises.push(
+            subdl.searchSubtitles(searchParams)
+              .then(results => ({ provider: 'SubDL', results }))
+              .catch(error => ({ provider: 'SubDL', results: [], error }))
+          );
         } else {
           console.log('[Subtitles] SubDL provider is disabled');
         }
@@ -896,9 +925,11 @@ function createSubtitleHandler(config) {
         if (config.subtitleProviders?.subsource?.enabled) {
           console.log('[Subtitles] SubSource provider is enabled');
           const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
-          const subsourceResults = await subsource.searchSubtitles(searchParams);
-          console.log(`[Subtitles] Found ${subsourceResults.length} subtitles from SubSource`);
-          subtitles = [...subtitles, ...subsourceResults];
+          searchPromises.push(
+            subsource.searchSubtitles(searchParams)
+              .then(results => ({ provider: 'SubSource', results }))
+              .catch(error => ({ provider: 'SubSource', results: [], error }))
+          );
         } else {
           console.log('[Subtitles] SubSource provider is disabled');
         }
@@ -907,11 +938,27 @@ function createSubtitleHandler(config) {
         if (config.subtitleProviders?.podnapisi?.enabled) {
           console.log('[Subtitles] Podnapisi provider is enabled');
           const podnapisi = new PodnapisService(config.subtitleProviders.podnapisi.apiKey);
-          const podnapisResults = await podnapisi.searchSubtitles(searchParams);
-          console.log(`[Subtitles] Found ${podnapisResults.length} subtitles from Podnapisi`);
-          subtitles = [...subtitles, ...podnapisResults];
+          searchPromises.push(
+            podnapisi.searchSubtitles(searchParams)
+              .then(results => ({ provider: 'Podnapisi', results }))
+              .catch(error => ({ provider: 'Podnapisi', results: [], error }))
+          );
         } else {
           console.log('[Subtitles] Podnapisi provider is disabled');
+        }
+
+        // Execute all searches in parallel
+        const providerResults = await Promise.all(searchPromises);
+
+        // Collect and log results from all providers
+        let subtitles = [];
+        for (const result of providerResults) {
+          if (result.error) {
+            console.error(`[Subtitles] ${result.provider} search failed:`, result.error.message);
+          } else {
+            console.log(`[Subtitles] Found ${result.results.length} subtitles from ${result.provider}`);
+            subtitles = [...subtitles, ...result.results];
+          }
         }
 
         return subtitles;
@@ -1739,7 +1786,8 @@ async function getAvailableSubtitlesForTranslation(videoId, config) {
 
     // Collect subtitles from all enabled providers with deduplication
     const subtitles = await deduplicateSearch(dedupKey, async () => {
-      let subs = [];
+      // Parallelize all provider searches using Promise.all for better performance
+      const searchPromises = [];
 
       // Check if OpenSubtitles provider is enabled
       if (config.subtitleProviders?.opensubtitles?.enabled) {
@@ -1752,22 +1800,44 @@ async function getAvailableSubtitlesForTranslation(videoId, config) {
           opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
         }
 
-        const opensubtitlesResults = await opensubtitles.searchSubtitles(searchParams);
-        subs = [...subs, ...opensubtitlesResults];
+        searchPromises.push(
+          opensubtitles.searchSubtitles(searchParams)
+            .then(results => ({ provider: `OpenSubtitles (${implementationType})`, results }))
+            .catch(error => ({ provider: `OpenSubtitles (${implementationType})`, results: [], error }))
+        );
       }
 
       // Check if SubDL provider is enabled
       if (config.subtitleProviders?.subdl?.enabled) {
         const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
-        const subdlResults = await subdl.searchSubtitles(searchParams);
-        subs = [...subs, ...subdlResults];
+        searchPromises.push(
+          subdl.searchSubtitles(searchParams)
+            .then(results => ({ provider: 'SubDL', results }))
+            .catch(error => ({ provider: 'SubDL', results: [], error }))
+        );
       }
 
       // Check if SubSource provider is enabled
       if (config.subtitleProviders?.subsource?.enabled) {
         const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
-        const subsourceResults = await subsource.searchSubtitles(searchParams);
-        subs = [...subs, ...subsourceResults];
+        searchPromises.push(
+          subsource.searchSubtitles(searchParams)
+            .then(results => ({ provider: 'SubSource', results }))
+            .catch(error => ({ provider: 'SubSource', results: [], error }))
+        );
+      }
+
+      // Execute all searches in parallel
+      const providerResults = await Promise.all(searchPromises);
+
+      // Collect results from all providers
+      let subs = [];
+      for (const result of providerResults) {
+        if (result.error) {
+          console.error(`[Translation Selector] ${result.provider} search failed:`, result.error.message);
+        } else {
+          subs = [...subs, ...result.results];
+        }
       }
 
       // Future providers can be added here

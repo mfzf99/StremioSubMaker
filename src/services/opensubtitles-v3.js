@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 
 const OPENSUBTITLES_V3_BASE_URL = 'https://opensubtitles-v3.strem.io/subtitles/';
 const USER_AGENT = 'SubMaker v1.0.3';
@@ -20,7 +21,9 @@ class OpenSubtitlesV3Service {
         'User-Agent': USER_AGENT,
         'Accept': 'application/json'
       },
-      timeout: 10000 // 10 second timeout
+      timeout: 10000, // 10 second timeout
+      httpAgent,
+      httpsAgent
     });
 
     // Only log initialization once at startup
@@ -153,7 +156,9 @@ class OpenSubtitlesV3Service {
         headers: {
           'User-Agent': USER_AGENT
         },
-        timeout: 30000 // 30 second timeout for download
+        timeout: 30000, // 30 second timeout for download
+        httpAgent,
+        httpsAgent
       });
 
       const subtitleContent = response.data;

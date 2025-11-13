@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { parseSRT, toSRT } = require('../utils/subtitle');
 const { handleTranslationError, logApiError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -262,9 +263,9 @@ async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customP
                   {
             params: { key: this.apiKey },
             timeout: this.timeout, // Configurable timeout (default 10 minutes)
-            // Add socket keepalive to prevent premature disconnection
-            httpAgent: new (require('http')).Agent({ keepAlive: true }),
-            httpsAgent: new (require('https')).Agent({ keepAlive: true })
+            // Use shared HTTP agents with connection pooling
+            httpAgent,
+            httpsAgent
           }
       );
 
@@ -815,8 +816,9 @@ async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customP
             'Accept': 'text/event-stream'
           },
           timeout: this.timeout || 600000,
-          httpAgent: new (require('http')).Agent({ keepAlive: true }),
-          httpsAgent: new (require('https')).Agent({ keepAlive: true })
+          // Use shared HTTP agents with connection pooling
+          httpAgent,
+          httpsAgent
         }
       );
       console.log('[Gemini] Stream response received, status:', response.status);

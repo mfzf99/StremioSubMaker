@@ -63,6 +63,15 @@ const firstClickTracker = new LRUCache({
     updateAgeOnGet: false,
 });
 
+// Performance: LRU cache for subtitle search results to reduce API calls
+// Caches completed subtitle searches for identical IMDB ID + languages combinations
+// This prevents repeated API calls for the same content (e.g., multiple users watching same episode)
+const subtitleSearchCache = new LRUCache({
+    max: 5000, // Max 5000 subtitle searches cached
+    ttl: 1000 * 60 * 60, // 1 hour TTL (subtitles don't change frequently)
+    updateAgeOnGet: true, // Extend TTL on access (popular content stays cached longer)
+});
+
 /**
  * Deduplicates requests by caching in-flight promises
  * @param {string} key - Unique key for the request
@@ -211,21 +220,69 @@ app.use(helmet({
 }));
 
 // Security: Rate limiting for subtitle searches and translations
+// Uses session ID or config hash instead of IP for better HA deployment support
+// This prevents all users behind a load balancer from sharing the same rate limit
 const searchLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
-    max: 20, // 20 requests per minute
+    max: 100, // 100 requests per minute per user (increased from 20 for HA support)
     message: 'Too many subtitle requests, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => {
+        // Try session ID first (if sessions are enabled)
+        if (req.session?.id) {
+            return `session:${req.session.id}`;
+        }
+        // Try config hash from params (most common for Stremio addons)
+        if (req.params?.config) {
+            try {
+                return `config:${computeConfigHash(req.params.config)}`;
+            } catch (e) {
+                // Fall through to IP if config parsing fails
+            }
+        }
+        // Try config from body (for API endpoints)
+        if (req.body?.configStr) {
+            try {
+                return `config:${computeConfigHash(req.body.configStr)}`;
+            } catch (e) {
+                // Fall through to IP if config parsing fails
+            }
+        }
+        // Fallback to IP address for non-authenticated requests
+        return `ip:${req.ip}`;
+    },
+    skip: (req) => {
+        // Skip rate limiting for cached subtitle search results
+        // This check is performed after cache lookup in the handler
+        return req.fromSubtitleCache === true;
+    }
 });
 
 // Security: Rate limiting for file translations (more restrictive)
+// Uses session ID or config hash instead of IP for better HA deployment support
 const fileTranslationLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
-    max: 5, // 5 file translations per minute
+    max: 10, // 10 file translations per minute per user (increased from 5 for HA support)
     message: 'Too many file translation requests, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => {
+        // Try session ID first (if sessions are enabled)
+        if (req.session?.id) {
+            return `session:${req.session.id}`;
+        }
+        // Try config hash from request body
+        if (req.body?.configStr) {
+            try {
+                return `config:${computeConfigHash(req.body.configStr)}`;
+            } catch (e) {
+                // Fall through to IP if config parsing fails
+            }
+        }
+        // Fallback to IP address for non-authenticated requests
+        return `ip:${req.ip}`;
+    }
 });
 
 // Enable gzip compression for all responses

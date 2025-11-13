@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError, handleAuthError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 
 const OPENSUBTITLES_API_URL = 'https://api.opensubtitles.com/api/v1';
 const USER_AGENT = 'SubMaker v1.0.1';
@@ -49,7 +50,9 @@ class OpenSubtitlesService {
 
     this.client = axios.create({
       baseURL: OPENSUBTITLES_API_URL,
-      headers: defaultHeaders
+      headers: defaultHeaders,
+      httpAgent,
+      httpsAgent
     });
 
     // Only log initialization messages once at startup
@@ -306,7 +309,9 @@ class OpenSubtitlesService {
         responseType: 'text',
         headers: {
           'User-Agent': USER_AGENT
-        }
+        },
+        httpAgent,
+        httpsAgent
       });
 
       const subtitleContent = subtitleResponse.data;

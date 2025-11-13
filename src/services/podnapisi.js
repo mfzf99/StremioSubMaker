@@ -18,6 +18,7 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 
 const PODNAPISI_API_URL = 'https://www.podnapisi.net/en/ppodnapisi/search';
 const PODNAPISI_DOWNLOAD_URL = 'https://www.podnapisi.net/en/subtitles';  // Changed: Added /en/ prefix
@@ -33,7 +34,9 @@ class PodnapisService {
         'User-Agent': USER_AGENT,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      }
+      },
+      httpAgent,
+      httpsAgent
     });
 
     console.log('[Podnapisi] Initialized (free API, no authentication required)');
@@ -315,7 +318,9 @@ class PodnapisService {
         responseType: 'text',  // Get as text directly
         validateStatus: function (status) {
           return status >= 200 && status < 500; // Accept 4xx to handle gracefully
-        }
+        },
+        httpAgent,
+        httpsAgent
       });
 
       // Handle 404 specifically - subtitle exists in search but file not available
