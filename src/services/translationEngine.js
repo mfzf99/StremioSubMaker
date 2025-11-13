@@ -26,7 +26,7 @@ const entryCache = new Map();
 const MAX_ENTRY_CACHE_SIZE = parseInt(process.env.ENTRY_CACHE_SIZE) || 100000;
 
 // Configuration constants
-const BATCH_SIZE = parseInt(process.env.TRANSLATION_BATCH_SIZE) || 50; // Entries per batch
+const BATCH_SIZE = parseInt(process.env.TRANSLATION_BATCH_SIZE) || 150; // Entries per batch
 const MAX_TOKENS_PER_BATCH = parseInt(process.env.MAX_TOKENS_PER_BATCH) || 25000; // Max tokens before auto-chunking
 const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS !== 'false'; // Enable/disable entry caching
 
@@ -46,26 +46,22 @@ class TranslationEngine {
    * @returns {Promise<string>} - Translated SRT content
    */
   async translateSubtitle(srtContent, targetLanguage, customPrompt = null, onProgress = null) {
-    log.debug(() => '[TranslationEngine] Starting unified translation workflow');
-
     // Step 1: Parse SRT into structured entries
     const entries = parseSRT(srtContent);
     if (!entries || entries.length === 0) {
       throw new Error('Invalid SRT content: no valid entries found');
     }
 
-    log.debug(() => `[TranslationEngine] Parsed ${entries.length} subtitle entries`);
+    log.info(() => `[TranslationEngine] Starting translation: ${entries.length} entries, ${Math.ceil(entries.length / this.batchSize)} batches`);
 
     // Step 2: Create batches
     const batches = this.createBatches(entries, this.batchSize);
-    log.debug(() => `[TranslationEngine] Created ${batches.length} batches (${this.batchSize} entries per batch)`);
 
-    // Step 3: Translate each batch with real-time progress
+    // Step 3: Translate each batch with smart progress tracking
     const translatedEntries = [];
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
-      log.debug(() => `[TranslationEngine] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} entries)`);
 
       try {
         // Translate batch (with auto-chunking if needed)
@@ -86,33 +82,33 @@ class TranslationEngine {
           const cleanedText = this.cleanTranslatedText(translated.text);
 
           // Create entry with original timing and cleaned translated text
-          const translatedEntry = {
+          translatedEntries.push({
             id: original.id,
             timecode: original.timecode, // PRESERVE ORIGINAL TIMING
             text: cleanedText
-          };
+          });
+        }
 
-          translatedEntries.push(translatedEntry);
-
-          // Real-time progress callback - called immediately after each entry
-          if (typeof onProgress === 'function') {
-            try {
-              await onProgress({
-                totalEntries: entries.length,
-                completedEntries: translatedEntries.length,
-                currentBatch: batchIndex + 1,
-                totalBatches: batches.length,
-                entry: translatedEntry,
-                // Provide partial SRT for progressive saving
-                partialSRT: toSRT(translatedEntries)
-              });
-            } catch (err) {
-              log.warn(() => ['[TranslationEngine] Progress callback error:', err.message]);
-            }
+        // Progress callback after each batch
+        if (typeof onProgress === 'function') {
+          try {
+            await onProgress({
+              totalEntries: entries.length,
+              completedEntries: translatedEntries.length,
+              currentBatch: batchIndex + 1,
+              totalBatches: batches.length,
+              partialSRT: toSRT(translatedEntries)
+            });
+          } catch (err) {
+            log.warn(() => ['[TranslationEngine] Progress callback error:', err.message]);
           }
         }
 
-        log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1}/${batches.length} completed (${translatedEntries.length}/${entries.length} total entries)`);
+        // Log progress only at milestones
+        const progress = Math.floor((translatedEntries.length / entries.length) * 100);
+        if (batchIndex === 0 || batchIndex === batches.length - 1 || progress % 25 === 0) {
+          log.info(() => `[TranslationEngine] Progress: ${progress}% (${translatedEntries.length}/${entries.length} entries, batch ${batchIndex + 1}/${batches.length})`);
+        }
 
       } catch (error) {
         log.error(() => [`[TranslationEngine] Error in batch ${batchIndex + 1}:`, error.message]);
@@ -125,12 +121,10 @@ class TranslationEngine {
       log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${entries.length}, got ${translatedEntries.length}`);
     }
 
-    log.debug(() => `[TranslationEngine] Translation completed: ${translatedEntries.length} entries translated`);
+    log.info(() => `[TranslationEngine] Translation completed: ${translatedEntries.length} entries`);
 
     // Step 5: Convert back to SRT format
-    const translatedSRT = toSRT(translatedEntries);
-
-    return translatedSRT;
+    return toSRT(translatedEntries);
   }
 
   /**
@@ -151,7 +145,6 @@ class TranslationEngine {
     // Check cache first
     const cacheResults = this.checkBatchCache(batch, targetLanguage, customPrompt);
     if (cacheResults.allCached) {
-      log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} fully cached (${batch.length} entries)`);
       return cacheResults.entries;
     }
 
@@ -163,27 +156,21 @@ class TranslationEngine {
     const estimatedTokens = this.gemini.estimateTokenCount(batchText + prompt);
 
     if (estimatedTokens > this.maxTokensPerBatch && batch.length > 1) {
-      // Auto-chunk: Split batch in half recursively
-      log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} too large (${estimatedTokens} tokens), auto-chunking...`);
+      // Auto-chunk: Split batch in half recursively (sequential for memory safety)
+      log.debug(() => `[TranslationEngine] Batch too large (${estimatedTokens} tokens), auto-chunking into 2 parts`);
 
       const midpoint = Math.floor(batch.length / 2);
       const firstHalf = batch.slice(0, midpoint);
       const secondHalf = batch.slice(midpoint);
 
-      log.debug(() => `[TranslationEngine] Split into ${firstHalf.length} + ${secondHalf.length} entries`);
-
-      // Recursively translate each half
-      const [firstTranslated, secondTranslated] = await Promise.all([
-        this.translateBatch(firstHalf, targetLanguage, customPrompt, batchIndex, totalBatches),
-        this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches)
-      ]);
+      // Translate sequentially to avoid memory spikes
+      const firstTranslated = await this.translateBatch(firstHalf, targetLanguage, customPrompt, batchIndex, totalBatches);
+      const secondTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches);
 
       return [...firstTranslated, ...secondTranslated];
     }
 
     // Translate batch
-    log.debug(() => `[TranslationEngine] Translating batch ${batchIndex + 1}/${totalBatches} (${estimatedTokens} tokens)`);
-
     const translatedText = await this.gemini.translateSubtitle(
       batchText,
       'detected',
@@ -206,8 +193,6 @@ class TranslationEngine {
         this.cacheEntry(batch[i].text, targetLanguage, translatedEntries[i].text, customPrompt);
       }
     }
-
-    log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} translated (${translatedEntries.length} entries)`);
 
     return translatedEntries;
   }
@@ -364,11 +349,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     }
 
     const allCached = cacheHits === batch.length;
-
-    if (cacheHits > 0) {
-      log.debug(() => `[TranslationEngine] Cache: ${cacheHits}/${batch.length} entries cached`);
-    }
-
     return { allCached, entries: allCached ? cachedEntries : [] };
   }
 
@@ -388,14 +368,13 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
   cacheEntry(sourceText, targetLanguage, translatedText, customPrompt) {
     if (!CACHE_TRANSLATIONS) return;
 
-    // Enforce cache size limit
+    // Enforce cache size limit (LRU eviction)
     if (entryCache.size >= MAX_ENTRY_CACHE_SIZE) {
       const evictionCount = Math.floor(MAX_ENTRY_CACHE_SIZE * 0.1);
       const keysToDelete = Array.from(entryCache.keys()).slice(0, evictionCount);
       for (const key of keysToDelete) {
         entryCache.delete(key);
       }
-      log.debug(() => `[TranslationEngine] Evicted ${evictionCount} entries from cache`);
     }
 
     const key = this.createCacheKey(sourceText, targetLanguage, customPrompt);

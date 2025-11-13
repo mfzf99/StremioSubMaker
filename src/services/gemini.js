@@ -177,7 +177,6 @@ class GeminiService {
       try {
         // Normalize target language to a human-readable form
         const normalizedTarget = normalizeTargetName(targetLanguage);
-        log.debug(() => `[Gemini] Translating to ${normalizedTarget}`);
 
         // Prepare the prompt
         const systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT)
@@ -203,8 +202,6 @@ class GeminiService {
           availableForOutput,
           Math.max(8192, estimatedSubtitleTokens * 3.5)
         ));
-
-        log.debug(() => `[Gemini] Estimated input tokens: ${estimatedInputTokens}, thinking budget: ${thinkingReserve}, output limit: ${estimatedOutputTokens} (total: ${estimatedOutputTokens + thinkingReserve})`);
 
         // Call Gemini API
         const response = await axios.post(
@@ -283,8 +280,6 @@ class GeminiService {
         }
 
         const translatedText = aggregatedText.length > 0 ? aggregatedText : candidate.content.parts[0].text;
-        log.debug(() => '[Gemini] Translation completed successfully');
-
         return this.cleanTranslatedSubtitle(translatedText);
 
       } catch (error) {

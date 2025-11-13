@@ -1787,9 +1787,18 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
 
     log.debug(() => '[Translation] Using unified translation engine');
 
-    // Translate with real-time progress - save partial results after each batch
+    // Translate with smart partial delivery to reduce Redis I/O
+    // Strategy: 1st batch → save, then next 3 → save, then next 5 → save, then every 5
     let translatedContent;
     let lastSavedBatch = 0;
+
+    const shouldSavePartial = (currentBatch) => {
+      if (currentBatch === 1) return true; // 1st batch: immediate feedback
+      if (currentBatch === 4) return true; // After next 3 batches (2,3,4)
+      if (currentBatch === 9) return true; // After next 5 batches (5,6,7,8,9)
+      if (currentBatch >= 10 && currentBatch % 5 === 0) return true; // Every 5 batches after that
+      return false;
+    };
 
     try {
       translatedContent = await translationEngine.translateSubtitle(
@@ -1797,9 +1806,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
         targetLangName,
         config.translationPrompt,
         async (progress) => {
-          // Save partial results immediately after each batch completes
-          // This provides real-time progressive delivery without arbitrary time delays
-          if (progress.partialSRT && progress.currentBatch > lastSavedBatch) {
+          // Smart partial delivery: save at strategic points to reduce Redis I/O
+          if (progress.partialSRT && shouldSavePartial(progress.currentBatch) && progress.currentBatch > lastSavedBatch) {
             lastSavedBatch = progress.currentBatch;
 
             const partialSrt = buildPartialSrtWithTail(progress.partialSRT);
@@ -1808,13 +1816,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
                 content: partialSrt,
                 expiresAt: Date.now() + 60 * 60 * 1000
               });
-              log.debug(() => `[Translation] Saved partial: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.completedEntries}/${progress.totalEntries} entries (${partialSrt.length} chars)`);
+              log.debug(() => `[Translation] Saved partial: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.completedEntries}/${progress.totalEntries} entries`);
             }
-          }
-
-          // Log progress
-          if (progress.completedEntries % 50 === 0 || progress.completedEntries === progress.totalEntries) {
-            log.debug(() => `[Translation] Progress: ${progress.completedEntries}/${progress.totalEntries} entries (batch ${progress.currentBatch}/${progress.totalBatches})`);
           }
         }
       );
