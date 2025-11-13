@@ -65,11 +65,15 @@ function getEncryptionKey() {
       return encryptionKey;
     } catch (error) {
       log.error(() => ['[Encryption] Failed to load encryption key from file:', error.message]);
-      log.error(() => ['[Encryption] File will be regenerated. Previous encrypted data may be inaccessible.']);
-      // Continue to generate new key
+      log.error(() => ['[Encryption] CRITICAL: File exists but cannot be read. Manual intervention required.']);
+      log.error(() => ['[Encryption] To fix: Delete the corrupt key file or fix permissions, then restart.']);
+      log.error(() => ['[Encryption] WARNING: Deleting the key file will make existing encrypted data inaccessible!']);
+      // IMPORTANT: Do NOT fall through to key generation - this would overwrite the existing key file
+      // and make all previously encrypted data permanently inaccessible
+      throw new Error(`Cannot load existing encryption key from ${ENCRYPTION_KEY_FILE}: ${error.message}`);
     }
   } else {
-    log.debug(() => ['[Encryption] Encryption key file does not exist:', ENCRYPTION_KEY_FILE]);
+    log.debug(() => ['[Encryption] Encryption key file does not exist, will generate new one']);
   }
 
   // Generate new key and save to file
