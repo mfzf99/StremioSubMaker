@@ -10,7 +10,10 @@
 
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
+const { handleSearchError, handleDownloadError, logApiError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 const zlib = require('zlib');
+const log = require('../utils/logger');
 
 const SUBSOURCE_API_URL = 'https://api.subsource.net/api/v1';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -49,7 +52,7 @@ class SubSourceService {
     if (this.apiKey && this.apiKey.trim() !== '') {
       this.defaultHeaders['X-API-Key'] = this.apiKey.trim();
       this.defaultHeaders['api-key'] = this.apiKey.trim();
-      console.log('[SubSource] Initializing with API key in headers');
+      log.debug(() => '[SubSource] Initializing with API key in headers');
     }
   }
 
@@ -61,11 +64,13 @@ class SubSourceService {
   async getMovieId(imdb_id) {
     try {
       const searchUrl = `${this.baseURL}/movies/search?searchType=imdb&imdb=${imdb_id}`;
-      console.log('[SubSource] Searching for movie:', searchUrl);
+      log.debug(() => ['[SubSource] Searching for movie:', searchUrl]);
 
       const response = await axios.get(searchUrl, {
         headers: this.defaultHeaders,
-        responseType: 'json'
+        responseType: 'json',
+        httpAgent,
+        httpsAgent
       });
 
       // Response could be an array of movies or a single movie
@@ -73,14 +78,14 @@ class SubSourceService {
 
       if (movies.length > 0) {
         const movieId = movies[0].id || movies[0].movieId;
-        console.log('[SubSource] Found SubSource movie ID:', movieId);
+        log.debug(() => ['[SubSource] Found SubSource movie ID:', movieId]);
         return movieId;
       }
 
-      console.log('[SubSource] No movie found for IMDB ID:', imdb_id);
+      log.debug(() => ['[SubSource] No movie found for IMDB ID:', imdb_id]);
       return null;
     } catch (error) {
-      console.error('[SubSource] Error getting movie ID:', error.message);
+      logApiError(error, 'SubSource', 'Get movie ID', { skipResponseData: true, skipUserMessage: true });
       return null;
     }
   }
@@ -99,8 +104,8 @@ class SubSourceService {
     try {
       // Check if API key is provided
       if (!this.apiKey || this.apiKey.trim() === '') {
-        console.error('[SubSource] API key is required for SubSource API');
-        console.error('[SubSource] Please get a free API key from https://subsource.net/');
+        log.error(() => '[SubSource] API key is required for SubSource API');
+        log.error(() => '[SubSource] Please get a free API key from https://subsource.net/');
         return [];
       }
 
@@ -109,7 +114,7 @@ class SubSourceService {
       // First, get SubSource's internal movie ID
       const movieId = await this.getMovieId(imdb_id);
       if (!movieId) {
-        console.log('[SubSource] Could not find movie ID for:', imdb_id);
+        log.debug(() => ['[SubSource] Could not find movie ID for:', imdb_id]);
         return [];
       }
 
@@ -216,7 +221,7 @@ class SubSourceService {
         queryParams.episode = episode;
       }
 
-      console.log('[SubSource] Searching with params:', JSON.stringify(queryParams));
+      log.debug(() => ['[SubSource] Searching with params:', JSON.stringify(queryParams)]);
 
       // Try /subtitles endpoint first (more common pattern), fallback to /search if needed
       let response;
@@ -229,19 +234,23 @@ class SubSourceService {
       try {
         const rawResponse = await axios.get(url, {
           headers: this.defaultHeaders,
-          responseType: 'json'
+          responseType: 'json',
+          httpAgent,
+          httpsAgent
         });
 
         response = rawResponse.data;
       } catch (error) {
         if (error.response?.status === 404) {
-          console.log('[SubSource] /subtitles endpoint not found, trying /search');
+          log.debug(() => '[SubSource] /subtitles endpoint not found, trying /search');
           endpoint = '/search';
           const searchUrl = `${this.baseURL}${endpoint}?${queryString}`;
 
           const rawResponse = await axios.get(searchUrl, {
             headers: this.defaultHeaders,
-            responseType: 'json'
+            responseType: 'json',
+            httpAgent,
+            httpsAgent
           });
 
           response = rawResponse.data;
@@ -250,7 +259,7 @@ class SubSourceService {
         }
       }
 
-      console.log('[SubSource] API Response received');
+      log.debug(() => '[SubSource] API Response received');
 
       // Handle different possible response formats
       // Cloudscraper with json:true returns the parsed JSON directly
@@ -275,7 +284,7 @@ class SubSourceService {
       }
 
       if (!subtitlesData || subtitlesData.length === 0) {
-        console.log('[SubSource] No subtitles found in response');
+        log.debug(() => '[SubSource] No subtitles found in response');
         return [];
       }
 
@@ -289,7 +298,7 @@ class SubSourceService {
 
         // Log subtitle structure for debugging if ID is missing
         if (!subtitleId) {
-          console.error('[SubSource] WARNING: Subtitle missing ID field');
+          log.error(() => '[SubSource] WARNING: Subtitle missing ID field');
         }
 
         return {
@@ -328,30 +337,11 @@ class SubSourceService {
       }
 
       const limitedSubtitles = Object.values(groupedByLanguage).flat();
-      console.log(`[SubSource] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
+      log.debug(() => `[SubSource] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
       return limitedSubtitles;
 
     } catch (error) {
-      console.error('[SubSource] Search error:', error.message);
-      if (error.response) {
-        console.error('[SubSource] Response status:', error.response.status);
-        console.error('[SubSource] Response headers:', JSON.stringify(error.response.headers));
-
-        if (error.response.data) {
-          const responseData = error.response.data;
-          if (typeof responseData === 'string') {
-            console.error('[SubSource] Response data:', responseData.substring(0, 500));
-          } else {
-            console.error('[SubSource] Response data:', JSON.stringify(responseData));
-          }
-        }
-
-        if (error.response.status === 401 || error.response.status === 403) {
-          console.error('[SubSource] Authentication failed! Please check your API key.');
-          console.error('[SubSource] Get a free API key from: https://subsource.net/');
-        }
-      }
-      return [];
+      return handleSearchError(error, 'SubSource');
     }
   }
 
@@ -363,7 +353,7 @@ class SubSourceService {
    */
   async downloadSubtitle(fileId, subsource_id = null) {
     try {
-      console.log('[SubSource] Downloading subtitle:', fileId);
+      log.debug(() => ['[SubSource] Downloading subtitle:', fileId]);
 
       // Parse the fileId to extract subsource_id if not provided
       if (!subsource_id) {
@@ -375,7 +365,7 @@ class SubSourceService {
         }
       }
 
-      console.log('[SubSource] SubSource ID:', subsource_id);
+      log.debug(() => ['[SubSource] SubSource ID:', subsource_id]);
 
       // Check if we have a valid ID
       if (!subsource_id || subsource_id === 'undefined') {
@@ -387,7 +377,9 @@ class SubSourceService {
       const url = `${this.baseURL}/subtitles/${subsource_id}/download`;
       const response = await axios.get(url, {
         headers: this.defaultHeaders,
-        responseType: 'arraybuffer' // Get response as buffer
+        responseType: 'arraybuffer', // Get response as buffer
+        httpAgent,
+        httpsAgent
       });
 
       // Check if response is a ZIP file or direct SRT content
@@ -416,11 +408,11 @@ class SubSourceService {
         }
 
         const subtitleContent = await zip.files[srtFile].async('string');
-        console.log('[SubSource] Subtitle downloaded and extracted successfully from ZIP');
+        log.debug(() => '[SubSource] Subtitle downloaded and extracted successfully from ZIP');
         return subtitleContent;
       } else {
         // Direct SRT content - decode as UTF-8
-        console.log('[SubSource] Subtitle downloaded successfully');
+        log.debug(() => '[SubSource] Subtitle downloaded successfully');
         const content = responseBuffer.toString('utf-8');
 
         // Validate that the decoded content looks like SRT (contains timecodes or text)
@@ -432,22 +424,7 @@ class SubSourceService {
       }
 
     } catch (error) {
-      console.error('[SubSource] Download error:', error.message);
-      if (error.response) {
-        console.error('[SubSource] Response status:', error.response.status);
-
-        if (error.response.data) {
-          const responseData = error.response.data;
-          if (typeof responseData === 'string') {
-            console.error('[SubSource] Response data:', responseData.substring(0, 500));
-          } else if (Buffer.isBuffer(responseData)) {
-            console.error('[SubSource] Response data (buffer):', responseData.toString('utf-8').substring(0, 500));
-          } else {
-            console.error('[SubSource] Response data:', JSON.stringify(responseData).substring(0, 500));
-          }
-        }
-      }
-      throw error;
+      handleDownloadError(error, 'SubSource');
     }
   }
 

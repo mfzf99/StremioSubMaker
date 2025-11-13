@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Encryption key (IMPORTANT: Keep this secure!)
+.encryption-key
+
 # Dependencies
 node_modules/
 
@@ -41,3 +44,5 @@ build/
 #-
 nul
 .sidedocs/
+temp
+.temp

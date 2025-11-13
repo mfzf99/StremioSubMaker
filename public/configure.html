@@ -1242,18 +1242,11 @@
                         // Show version badge
                         var el = document.getElementById('version-badge');
                         if (el) { el.textContent = 'v' + d.version; el.style.display = 'inline-block'; }
-
-                        // Cache-bust static assets
+                        // Optionally cache-bust logo image
                         var logo = document.querySelector('.logo img');
                         if (logo && logo.src && logo.src.indexOf('?v=') === -1) {
                             logo.src = logo.src + (logo.src.indexOf('?') === -1 ? '?v=' : '&v=') + d.version;
                         }
-                        var scripts = document.querySelectorAll('script[src]');
-                        scripts.forEach(function(s){
-                            if (/config\.js(\?.*)?$/i.test(s.getAttribute('src')) && s.src.indexOf('?v=') === -1) {
-                                s.src = s.src + (s.src.indexOf('?') === -1 ? '?v=' : '&v=') + d.version;
-                            }
-                        });
                     })
                     .catch(function(){});
             } catch (_) {}
@@ -1291,7 +1284,7 @@
                                 <span style="font-size: 1.5rem;">📄</span>
                                 <div>
                                     <strong style="display: block;">OpenSubtitles</strong>
-                                    <span class="label-description" style="margin: 0;">Account login for higher download limits (it'll work without one, but limited to 5 downloads a day).</span>
+                                    <span class="label-description" style="margin: 0;">Choose your preferred OpenSubtitles implementation below.</span>
                                 </div>
                             </label>
                             <label class="toggle-switch">
@@ -1300,16 +1293,40 @@
                             </label>
                         </div>
                         <div id="opensubtitlesConfig">
-                            <label style="display: block; margin-bottom: 0.5rem;">Username</label>
-                            <input type="text" id="opensubtitlesUsername" placeholder="Enter your OpenSubtitles username" style="margin-bottom: 0.75rem;">
-
-                            <label style="display: block; margin-bottom: 0.5rem;">Password</label>
-                            <div class="password-field-wrapper" style="margin-bottom: 0.75rem;">
-                                <input type="password" id="opensubtitlesPassword" placeholder="Enter your OpenSubtitles password">
-                                <span class="password-toggle-icon" id="toggleOpenSubsPassword" title="Show/hide password">👁️</span>
+                            <!-- Implementation Type Selection -->
+                            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-light); border-radius: 8px;">
+                                <label style="display: block; margin-bottom: 0.75rem; font-weight: 600;">Implementation Type</label>
+                                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <label style="display: flex; align-items: start; gap: 0.5rem; cursor: pointer; padding: 0.75rem; background: white; border: 2px solid var(--border); border-radius: 8px; transition: all 0.2s;">
+                                        <input type="radio" name="opensubtitlesImplementation" id="opensubtitlesImplV3" value="v3" checked style="margin-top: 0.25rem;">
+                                        <div>
+                                            <strong style="display: block; margin-bottom: 0.25rem;">V3 (Default)</strong>
+                                            <span class="label-description" style="margin: 0; font-size: 0.875rem;">Uses the official Stremio OpenSubtitles V3 addon. No authentication required, simple setup.</span>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: start; gap: 0.5rem; cursor: pointer; padding: 0.75rem; background: white; border: 2px solid var(--border); border-radius: 8px; transition: all 0.2s;">
+                                        <input type="radio" name="opensubtitlesImplementation" id="opensubtitlesImplAuth" value="auth" style="margin-top: 0.25rem;">
+                                        <div>
+                                            <strong style="display: block; margin-bottom: 0.25rem;">Auth</strong>
+                                            <span class="label-description" style="margin: 0; font-size: 0.875rem;">Uses your OpenSubtitles account with API key authentication. Requires username/password.</span>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
 
-                            <span class="label-description">Login with your OpenSubtitles account for higher download limits.<br><a href="https://www.opensubtitles.com/en/newuser" target="_blank" style="color: var(--primary-light);">Create a free account</a> if you don't have one. If not provided, uses basic API access with standard limits.</span>
+                            <!-- Auth Configuration (shown when Auth is selected) -->
+                            <div id="opensubtitlesAuthConfig" style="display: none;">
+                                <label style="display: block; margin-bottom: 0.5rem;">Username</label>
+                                <input type="text" id="opensubtitlesUsername" placeholder="Enter your OpenSubtitles username" style="margin-bottom: 0.75rem;">
+
+                                <label style="display: block; margin-bottom: 0.5rem;">Password</label>
+                                <div class="password-field-wrapper" style="margin-bottom: 0.75rem;">
+                                    <input type="password" id="opensubtitlesPassword" placeholder="Enter your OpenSubtitles password">
+                                    <span class="password-toggle-icon" id="toggleOpenSubsPassword" title="Show/hide password">👁️</span>
+                                </div>
+
+                                <span class="label-description"><a href="https://www.opensubtitles.com/en/newuser" target="_blank" style="color: var(--primary-light);">Create a free account</a> if you don't have one.</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1352,8 +1369,6 @@
                             <input type="text" id="subdlApiKey" placeholder="Enter SubDL API key">
                         </div>
                     </div>
-
-                    <!-- Podnapisi removed from UI - provider still available in code but not accessible -->
                 </div>
             </div>
 
@@ -1405,7 +1420,7 @@
                 <div class="card-content">
                     <div class="form-group">
                         <label for="geminiApiKey">
-                            API Key *
+                            Gemini API Key
                             <span class="label-description">Get your free API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: var(--primary-light);">Google AI Studio</a></span>
                         </label>
                         <input type="password" id="geminiApiKey" required placeholder="Enter your Gemini API key">
@@ -1413,10 +1428,10 @@
                         <div id="modelStatus" class="model-status"></div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" style="display: none;">
                         <label for="geminiModel">
                             Translation Model *
-                            <span class="label-description">AI model for translations<br>ONLY Gemini Flash and Flash-<b>Lite</b> are recommended.<br>Pro and other models take too long and might fail.</span>
+                            <span class="label-description">AI model for translations</span>
                         </label>
                         <select id="geminiModel" required>
                             <option value="">Select a model...</option>
@@ -1424,7 +1439,7 @@
                         <div class="field-error" id="geminiModelError">Please select a model</div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" style="display: none;">
                         <label for="promptStyle">
                             Prompt Style
                             <span class="label-description">Choose between strict structure preservation or natural flow adaptation</span>
@@ -1444,7 +1459,7 @@
                 <div class="card-header">
                     <div class="card-title-group">
                         <div class="card-icon">🌍</div>
-                        <h2 class="card-title">Source Language (Translation)</h2>
+                        <h2 class="card-title">Source Language</h2>
                         <span class="card-badge" id="sourceBadge">0</span>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="source"></button>
@@ -1453,8 +1468,8 @@
                 <div class="card-content">
                     <div class="form-group">
                         <label>
-                            Source languages for translations *
-                            <span class="label-description">Select up to 3 source languages. All subtitles from these languages will be available for translation in the translation selector AND will be fetched.</span>
+                            * Source languages for translations
+                            <span class="label-description">Select up to 3 source languages for translation. All subtitles from these languages will be available for translation in the translation selector AND will be fetched (original subtitles will show up).</span>
                         </label>
 
                         <div class="language-search">
@@ -1484,7 +1499,7 @@
                 <div class="card-content">
                     <div class="form-group">
                         <label>
-                            Target languages for subtitles and translations *
+                            * Target languages for subtitles and translations
                             <span class="label-description">Subtitles in target languages will be fetched AND translation buttons will appear for translating FROM the source language TO these languages.</span>
                         </label>
 
@@ -1522,7 +1537,7 @@
                         <label>
                             <input type="checkbox" id="fileTranslationEnabled">
                             Enable "Translate SRT"
-                            <span class="label-description">Show the "Translate SRT" option in the subtitles list to upload and translate your own .srt files.</span>
+                            <span class="label-description">Show the "Translate SRT" option in the subtitles list to upload and translate subtitles files directly.</span>
                         </label>
                     </div>
 
@@ -1665,6 +1680,29 @@
         </div>
     </div>
 
-    <script src="config.js"></script>
+    <script>
+    (function(){
+        function loadConfigJs(versionQuery){
+            var s = document.createElement('script');
+            s.src = 'config.js' + versionQuery;
+            s.defer = false;
+            document.body.appendChild(s);
+        }
+
+        try {
+            fetch('/api/session-stats', { cache: 'no-store' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){
+                    var vq = d && d.version ? ('?v=' + d.version) : ('?v=' + Date.now());
+                    loadConfigJs(vq);
+                })
+                .catch(function(){
+                    loadConfigJs('?v=' + Date.now());
+                });
+        } catch (e) {
+            loadConfigJs('?v=' + Date.now());
+        }
+    })();
+    </script>
 </body>
 </html>

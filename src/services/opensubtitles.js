@@ -1,11 +1,26 @@
 const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
+const { handleSearchError, handleDownloadError, handleAuthError } = require('../utils/apiErrorHandler');
+const { httpAgent, httpsAgent } = require('../utils/httpAgents');
+const { version } = require('../utils/version');
+const log = require('../utils/logger');
 
 const OPENSUBTITLES_API_URL = 'https://api.opensubtitles.com/api/v1';
-const USER_AGENT = 'SubMaker v1.0.1';
-const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY || '';
+const USER_AGENT = `SubMaker v${version}`;
+
+/**
+ * Get OpenSubtitles API key at runtime (not at module load time)
+ * This ensures Docker ENV vars and runtime environment changes are picked up
+ * @returns {string} API key or empty string
+ */
+function getOpenSubtitlesApiKey() {
+  return process.env.OPENSUBTITLES_API_KEY || '';
+}
 
 class OpenSubtitlesService {
+  // Static flag to track if initialization logs have been shown
+  static initLogged = false;
+
   constructor(config = {}) {
     // Config requires username/password for user authentication (mandatory)
     this.config = {
@@ -16,6 +31,9 @@ class OpenSubtitlesService {
     this.token = null;
     this.tokenExpiry = null;
 
+    // Read API key at runtime (not at module load time)
+    const apiKey = getOpenSubtitlesApiKey();
+
     // Create axios instance with default configuration
     const defaultHeaders = {
       'User-Agent': USER_AGENT,
@@ -24,25 +42,39 @@ class OpenSubtitlesService {
     };
 
     // Add API key if configured
-    if (OPENSUBTITLES_API_KEY) {
-      defaultHeaders['Api-Key'] = OPENSUBTITLES_API_KEY;
+    if (apiKey) {
+      defaultHeaders['Api-Key'] = apiKey;
+      // Only log once at startup
+      if (!OpenSubtitlesService.initLogged) {
+        log.warn(() => '[OpenSubtitles] API key loaded successfully from environment');
+      }
     }
 
     this.client = axios.create({
       baseURL: OPENSUBTITLES_API_URL,
-      headers: defaultHeaders
+      headers: defaultHeaders,
+      httpAgent,
+      httpsAgent
     });
 
-    // Validate API key is configured
-    if (!OPENSUBTITLES_API_KEY) {
-      console.warn('[OpenSubtitles] OPENSUBTITLES_API_KEY not configured in .env - API requests may fail or have rate limits');
-    }
+    // Only log initialization messages once at startup
+    if (!OpenSubtitlesService.initLogged) {
+      // Validate API key is configured
+      if (!apiKey) {
+        log.warn(() => '[OpenSubtitles] WARNING: OPENSUBTITLES_API_KEY not found in environment variables');
+        log.warn(() => '[OpenSubtitles] Set it via: .env file, Docker ENV, or docker-compose environment');
+        log.warn(() => '[OpenSubtitles] API requests may fail or have very limited rate limits');
+      }
 
-    // Validate that credentials are provided
-    if (!this.config.username || !this.config.password) {
-      console.warn('[OpenSubtitles] Username and password are optional - searches will use basic API access (limited to 5 downloads/24h per IP)');
-    } else {
-      console.log('[OpenSubtitles] Initialized with user account authentication for higher rate limits');
+      // Validate that credentials are provided
+      if (!this.config.username || !this.config.password) {
+        log.warn(() => '[OpenSubtitles] Username and password are optional - searches will use basic API access (limited to 5 downloads/24h per IP)');
+      } else {
+        log.warn(() => '[OpenSubtitles] Initialized with user account authentication for higher rate limits');
+      }
+
+      // Mark as logged
+      OpenSubtitlesService.initLogged = true;
     }
 
     // Add request interceptor to handle token refresh for user authentication
@@ -70,7 +102,7 @@ class OpenSubtitlesService {
    */
   async loginWithCredentials(username, password) {
     try {
-      console.log('[OpenSubtitles] Authenticating user:', username);
+      log.debug(() => ['[OpenSubtitles] Authenticating user:', username]);
 
       const response = await this.client.post('/login', {
         username: username,
@@ -85,12 +117,11 @@ class OpenSubtitlesService {
       // Token is valid for 24 hours
       this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000);
 
-      console.log('[OpenSubtitles] User authentication successful');
+      log.debug(() => '[OpenSubtitles] User authentication successful');
       return this.token;
 
     } catch (error) {
-      console.error('[OpenSubtitles] User authentication failed:', error.message);
-      throw error;
+      return handleAuthError(error, 'OpenSubtitles');
     }
   }
 
@@ -120,15 +151,14 @@ class OpenSubtitlesService {
     try {
       // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
-        console.error('[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
+        log.error(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
         return [];
       }
 
       if (this.isTokenExpired()) {
-        try {
-          await this.login();
-        } catch (error) {
-          console.error('[OpenSubtitles] Authentication failed:', error.message);
+        const loginResult = await this.login();
+        if (!loginResult) {
+          // Authentication failed, handleAuthError already logged it
           return [];
         }
       }
@@ -164,7 +194,7 @@ class OpenSubtitlesService {
         return lower;
       }).filter(lang => lang); // Remove any nulls/undefined
 
-      console.log('[OpenSubtitles] Converted languages from ISO-639-2 to ISO-639-1:', languages.join(','), '->', convertedLanguages.join(','));
+      log.debug(() => ['[OpenSubtitles] Converted languages from ISO-639-2 to ISO-639-1:', languages.join(','), '->', convertedLanguages.join(',')]);
 
       // Build query parameters for REST API
       const queryParams = {
@@ -177,11 +207,11 @@ class OpenSubtitlesService {
         queryParams.episode_number = episode;
       }
 
-      console.log('[OpenSubtitles] Searching with params:', JSON.stringify(queryParams));
+      log.debug(() => ['[OpenSubtitles] Searching with params:', JSON.stringify(queryParams)]);
       if (this.token) {
-        console.log('[OpenSubtitles] Using user account authentication');
+        log.debug(() => '[OpenSubtitles] Using user account authentication');
       } else {
-        console.log('[OpenSubtitles] Using basic API access');
+        log.debug(() => '[OpenSubtitles] Using basic API access');
       }
 
       const response = await this.client.get('/subtitles', {
@@ -189,7 +219,7 @@ class OpenSubtitlesService {
       });
 
       if (!response.data || !response.data.data || response.data.data.length === 0) {
-        console.log('[OpenSubtitles] No subtitles found in response');
+        log.debug(() => '[OpenSubtitles] No subtitles found in response');
         return [];
       }
 
@@ -233,26 +263,11 @@ class OpenSubtitlesService {
       }
 
       const limitedSubtitles = Object.values(groupedByLanguage).flat();
-      console.log(`[OpenSubtitles] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
+      log.debug(() => `[OpenSubtitles] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
       return limitedSubtitles;
 
     } catch (error) {
-      console.error('[OpenSubtitles] Search error:', error.message);
-      if (error.response) {
-        console.error('[OpenSubtitles] Response status:', error.response.status);
-        console.error('[OpenSubtitles] Response headers:', JSON.stringify(error.response.headers));
-        console.error('[OpenSubtitles] Response data:', JSON.stringify(error.response.data));
-
-                if (error.response.status === 401 || error.response.status === 403) {
-          console.error('[OpenSubtitles] Authentication failed!');
-          if (this.config.username && this.config.password) {
-            console.error('[OpenSubtitles] Check your username and password.');
-          } else {
-            console.error('[OpenSubtitles] You may have hit rate limits. Consider adding your OpenSubtitles account credentials for higher limits.');
-          }
-        }
-      }
-      return [];
+      return handleSearchError(error, 'OpenSubtitles');
     }
   }
 
@@ -263,20 +278,19 @@ class OpenSubtitlesService {
    */
   async downloadSubtitle(fileId) {
     try {
-      console.log('[OpenSubtitles] Downloading subtitle via REST API:', fileId);
+      log.debug(() => ['[OpenSubtitles] Downloading subtitle via REST API:', fileId]);
 
       // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
-        console.error('[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
+        log.error(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
         throw new Error('OpenSubtitles credentials not configured');
       }
 
       if (this.isTokenExpired()) {
-        try {
-          await this.login();
-        } catch (error) {
-          console.error('[OpenSubtitles] Authentication failed:', error.message);
-          throw error;
+        const loginResult = await this.login();
+        if (!loginResult) {
+          // Authentication failed, handleAuthError already logged it
+          throw new Error('OpenSubtitles authentication failed');
         }
       }
 
@@ -290,36 +304,24 @@ class OpenSubtitlesService {
       }
 
       const downloadLink = downloadResponse.data.link;
-      console.log('[OpenSubtitles] Got download link:', downloadLink);
+      log.debug(() => ['[OpenSubtitles] Got download link:', downloadLink]);
 
       // Download the subtitle file
       const subtitleResponse = await axios.get(downloadLink, {
         responseType: 'text',
         headers: {
           'User-Agent': USER_AGENT
-        }
+        },
+        httpAgent,
+        httpsAgent
       });
 
       const subtitleContent = subtitleResponse.data;
-      console.log('[OpenSubtitles] Subtitle downloaded successfully');
+      log.debug(() => '[OpenSubtitles] Subtitle downloaded successfully');
       return subtitleContent;
 
     } catch (error) {
-      console.error('[OpenSubtitles] Download error:', error.message);
-      if (error.response) {
-        console.error('[OpenSubtitles] Response status:', error.response.status);
-        console.error('[OpenSubtitles] Response data:', error.response.data);
-
-        if (error.response.status === 401 || error.response.status === 403) {
-          console.error('[OpenSubtitles] Authentication failed for download!');
-          if (this.config.username && this.config.password) {
-            console.error('[OpenSubtitles] Check your username and password.');
-          } else {
-            console.error('[OpenSubtitles] You may have hit download limits. Consider adding your OpenSubtitles account credentials for higher limits.');
-          }
-        }
-      }
-      throw error;
+      handleDownloadError(error, 'OpenSubtitles');
     }
   }
 
@@ -453,7 +455,7 @@ class OpenSubtitlesService {
     }
 
     // Unknown language
-    console.warn(`[OpenSubtitles] Unknown language format: "${language}", filtering out`);
+    log.warn(() => `[OpenSubtitles] Unknown language format: "${language}", filtering out`);
     return null;
   }
 }

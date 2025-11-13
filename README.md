@@ -10,6 +10,8 @@ No-Translation mode: simply fetch selected languages from OpenSubtitles, SubSour
 
 Auto-sync subtitles in development!
 
+## 🚀 [Roadmap 🗺️](ROADMAP.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![Stremio Addon](https://img.shields.io/badge/Stremio-Addon-purple)](https://www.stremio.com)
@@ -34,7 +36,7 @@ Auto-sync subtitles in development!
 
 - **Node.js** 18+ ([Download](https://nodejs.org))
 - **Gemini API Key** ([Get one free](https://makersuite.google.com/app/apikey))
-- **OpenSubtitles** account for higher limits ([Sign up](https://www.opensubtitles.com/en/newuser)) and add your key to a `.env` file via `OPENSUBTITLES_API_KEY=...` (this may be the only `.env` entry you need).
+- **OpenSubtitles** API Key and account for higher limits ([Sign up](https://www.opensubtitles.com/en/newuser))
 - **SubSource API Key** ([Get one free](https://subsource.net/api-docs))
 - **SubDL API Key** ([Get one free](https://subdl.com/panel/api)) 
 
@@ -46,44 +48,51 @@ git clone https://github.com/xtremexq/StremioSubMaker.git
 cd StremioSubMaker
 npm install
 
-# Create .env file with your OpenSubtitles API key
+# Create .env file with your OpenSubtitles API key (NECESSARY FOR OPENSUBTITLES)
 # Option 1: Create a new file called `.env` in the project root and add:
-#   OPENSUBTITLES_API_KEY=your_api_key_here
+# OPENSUBTITLES_API_KEY=your_api_key_here
 # Option 2: Use command line (PowerShell, bash, or terminal)
-#   echo "OPENSUBTITLES_API_KEY=your_api_key_here" > .env
+# echo "OPENSUBTITLES_API_KEY=your_api_key_here" > .env
 
 # Start the server
 npm start
-
-# Open configuration page in your browser
-# On macOS/Linux: open http://localhost:7001
-# On Windows: start http://localhost:7001
-# Or manually visit: http://localhost:7001
 ```
+
+### Open configuration page in your browser
+Visit: http://localhost:7001
 
 ### Configure & Install
 
 1. **Add Subtitle Sources API keys** (required)
 2. **Add Gemini API Key** (required)
-3. **Select source languages** (where to fetch subtitles from)
+3. **Select source languages**
 4. **Select target languages** (what to translate to)
 5. **Click "Install in Stremio"** or copy the URL
 
-That's it! 
+That's it!
 Fetched languages and translation buttons (Make [Language]) will now appear in your Stremio subtitle menu.
 
 ---
+
+## 🐳 Docker Deployment
+
+📦 **[See complete Docker deployment guide →](DOCKER.md)**
+
+Quick start:
+```bash
+docker-compose up -d
+```
 
 ## 🎯 How It Works
 
 ```
 ┌─────────────────────────────────────────────┐
-│  1. Watch content in Stremio                		│
-│  2. Subtitles appear with "Make [Language]" 		│
-│  3. Click → Select source subtitle          		│
-│  4. AI translates in ~1 to 3 minutes        		│
-│  5. Reselect the translated subtitles       		│
-│  6. Next time? Instant! (cached on DB)      		│
+│  1. Watch content in Stremio                │
+│  2. Subtitles appear with "Make [Language]" │
+│  3. Click → Select source subtitle          │
+│  4. AI translates in ~1 to 3 minutes        │
+│  5. Reselect the translated subtitles       │
+│  6. Next time? Instant! (cached on DB)      │
 └─────────────────────────────────────────────┘
 ```
 
@@ -93,7 +102,7 @@ Fetched languages and translation buttons (Make [Language]) will now appear in y
 Stremio Player
     ↓
 SubMaker Addon (Express + Stremio SDK)
-    ├── Subtitle Fetcher → [OpenSubtitles, SubDL, SubSource, Podnapisi]
+    ├── Subtitle Fetcher → [OpenSubtitles, SubDL, SubSource]
     ├── Translation Engine → [Google Gemini AI]
     └── Cache Manager → [Memory LRU + Persistent Disk]
 ```
@@ -101,9 +110,9 @@ SubMaker Addon (Express + Stremio SDK)
 ### Key Features
 
 **Multi-Source Fetching**
-- Queries 4 providers simultaneously
+- Queries 3 providers simultaneously
 - Automatic fallback if one fails
-- Ranks by downloads, ratings, quality
+- Ranks by filename, downloads, ratings, quality
 
 **AI Translation**
 - Context-aware (processes entire subtitle at once)
@@ -135,7 +144,6 @@ Languages to **translate to** (unlimited)
 - OpenSubtitles: Optional username/password for higher limits
 - SubDL: Requires API key
 - SubSource: Requires API key
-- Podnapisi: (DISABLED)
 
 ---
 
@@ -143,14 +151,14 @@ Languages to **translate to** (unlimited)
 
 ### Translation problem?
 
-1. **Force cache overwrite** - Within stremio, click 5 times (within 10 secs) on the problematic translation subtitle
+1. **Force cache overwrite** - Within stremio, click 3 times (within 6 secs) on the problematic translation subtitle
 2. **Bypass Translation Cache** - Change your config to bypass the addons' subtitles database
 
 ### Translation Fails?
 
 1. **Validate API key** - Test at [Google AI Studio](https://makersuite.google.com)
-2. **Check model selection** - Ensure model used is Flash or Flash-Lite Latest
-3. **Check Gemini quota** - Review your API usage
+2. **Check Gemini quota** - Review your API usage
+3. **Test other subtitles** - Try translating a different subtitle
 
 ### Configuration Not Saving?
 
@@ -158,13 +166,6 @@ Languages to **translate to** (unlimited)
 2. **Check JavaScript console** - Look for errors (F12)
 3. **Disable browser extensions** - Some block localStorage
 4. **Try incognito mode** - Eliminate cache/extension issues
-
-### No Subtitles Loading?
-
-Stremio sometimes randomly stops sending subtitle requests to addons after installation. If no other subtitle addons load either:
-1. Try streaming different titles or files
-2. Restart Stremio
-3. It should resume working normally
 
 ---
 
@@ -194,6 +195,7 @@ Check the `/public/configure.html` UI for interactive help
 
 **Community**
 Join Stremio Discord for general Stremio addon help
+Join StremioAddons on Reddit for community news and support
 
 ---
 

@@ -2,6 +2,19 @@ const { LRUCache } = require('lru-cache');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { StorageFactory, StorageAdapter } = require('../storage');
+const log = require('./logger');
+const { shutdownLogger } = require('./logger');
+const { encryptUserConfig, decryptUserConfig } = require('./encryption');
+
+// Storage adapter (lazy loaded)
+let storageAdapter = null;
+async function getStorageAdapter() {
+  if (!storageAdapter) {
+    storageAdapter = await StorageFactory.getStorageAdapter();
+  }
+  return storageAdapter;
+}
 
 /**
  * Session Manager with LRU cache and disk persistence
@@ -27,7 +40,7 @@ class SessionManager {
             updateAgeOnHas: false,
             // Dispose callback for cleanup
             dispose: (value, key) => {
-                console.log(`[SessionManager] Session expired: ${key}`);
+                log.debug(() => `[SessionManager] Session expired: ${key}`);
             }
         };
         if (this.maxSessions) {
@@ -43,7 +56,7 @@ class SessionManager {
 
         // Load sessions from disk on startup
         this.loadFromDisk().catch(err => {
-            console.error('[SessionManager] Failed to load sessions from disk:', err.message);
+            log.error(() => ['[SessionManager] Failed to load sessions from disk:', err.message]);
         });
 
         // Start auto-save interval
@@ -58,10 +71,10 @@ class SessionManager {
             const dir = path.dirname(this.persistencePath);
             if (!require('fs').existsSync(dir)) {
                 require('fs').mkdirSync(dir, { recursive: true });
-                console.log(`[SessionManager] Created data directory: ${dir}`);
+                log.debug(() => `[SessionManager] Created data directory: ${dir}`);
             }
         } catch (err) {
-            console.error('[SessionManager] Failed to create data directory:', err.message);
+            log.error(() => ['[SessionManager] Failed to create data directory:', err.message]);
         }
     }
 
@@ -80,8 +93,12 @@ class SessionManager {
      */
     createSession(config) {
         const token = this.generateToken();
+
+        // Encrypt sensitive fields in config before storing
+        const encryptedConfig = encryptUserConfig(config);
+
         const sessionData = {
-            config,
+            config: encryptedConfig,
             createdAt: Date.now(),
             lastAccessedAt: Date.now()
         };
@@ -89,7 +106,7 @@ class SessionManager {
         this.cache.set(token, sessionData);
         this.dirty = true;
 
-        console.log(`[SessionManager] Session created: ${token} (total: ${this.cache.size})`);
+        log.debug(() => `[SessionManager] Session created: ${token} (total: ${this.cache.size})`);
         return token;
     }
 
@@ -112,7 +129,10 @@ class SessionManager {
         this.cache.set(token, sessionData);
         this.dirty = true;
 
-        return sessionData.config;
+        // Decrypt sensitive fields in config before returning
+        const decryptedConfig = decryptUserConfig(sessionData.config);
+
+        return decryptedConfig;
     }
 
     /**
@@ -136,18 +156,21 @@ class SessionManager {
         const sessionData = this.cache.get(token);
 
         if (!sessionData) {
-            console.warn(`[SessionManager] Cannot update - session not found: ${token}`);
+            log.warn(() => `[SessionManager] Cannot update - session not found: ${token}`);
             return false;
         }
 
+        // Encrypt sensitive fields in config before storing
+        const encryptedConfig = encryptUserConfig(config);
+
         // Update config but keep creation time
-        sessionData.config = config;
+        sessionData.config = encryptedConfig;
         sessionData.lastAccessedAt = Date.now();
 
         this.cache.set(token, sessionData);
         this.dirty = true;
 
-        console.log(`[SessionManager] Session updated: ${token}`);
+        log.debug(() => `[SessionManager] Session updated: ${token}`);
         return true;
     }
 
@@ -160,7 +183,7 @@ class SessionManager {
         const existed = this.cache.delete(token);
         if (existed) {
             this.dirty = true;
-            console.log(`[SessionManager] Session deleted: ${token}`);
+            log.debug(() => `[SessionManager] Session deleted: ${token}`);
         }
         return existed;
     }
@@ -179,7 +202,7 @@ class SessionManager {
         }
 
     /**
-     * Save sessions to disk
+     * Save sessions to storage
      * @returns {Promise<void>}
      */
     async saveToDisk() {
@@ -188,9 +211,7 @@ class SessionManager {
         }
 
         try {
-            // Ensure data directory exists
-            const dir = path.dirname(this.persistencePath);
-            await fs.mkdir(dir, { recursive: true });
+            const adapter = await getStorageAdapter();
 
             // Convert cache to serializable format
             const sessions = {};
@@ -204,43 +225,35 @@ class SessionManager {
                 sessions
             };
 
-            // Write atomically (write to temp file, then rename)
-            const tempPath = `${this.persistencePath}.tmp`;
-            await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8');
-            await fs.rename(tempPath, this.persistencePath);
-
-            // Set restrictive permissions (Unix-like systems only)
-            try {
-                await fs.chmod(this.persistencePath, 0o600);
-            } catch (err) {
-                // Ignore on Windows
-            }
+            // Save to storage
+            await adapter.set('sessions', data, StorageAdapter.CACHE_TYPES.SESSION);
 
             this.dirty = false;
-            console.log(`[SessionManager] Saved ${Object.keys(sessions).length} sessions to disk`);
+            log.debug(() => `[SessionManager] Saved ${Object.keys(sessions).length} sessions to storage`);
         } catch (err) {
-            console.error('[SessionManager] Failed to save sessions:', err);
+            log.error(() => ['[SessionManager] Failed to save sessions:', err]);
             throw err;
         }
     }
 
     /**
-     * Load sessions from disk
+     * Load sessions from storage
      * @returns {Promise<void>}
      */
     async loadFromDisk() {
         try {
-            const fileContent = await fs.readFile(this.persistencePath, 'utf8');
-            const data = JSON.parse(fileContent);
+            const adapter = await getStorageAdapter();
+            const data = await adapter.get('sessions', StorageAdapter.CACHE_TYPES.SESSION);
 
-            if (!data.sessions) {
-                console.log('[SessionManager] No sessions in persistence file');
+            if (!data || !data.sessions) {
+                log.debug(() => '[SessionManager] No sessions in storage');
                 return;
             }
 
             const now = Date.now();
             let loadedCount = 0;
             let expiredCount = 0;
+            let migratedCount = 0;
 
             for (const [token, sessionData] of Object.entries(data.sessions)) {
                 // Check if session is expired
@@ -250,18 +263,37 @@ class SessionManager {
                     continue;
                 }
 
-                // Restore session to cache
+                // Check if config is already encrypted
+                if (!sessionData.config._encrypted) {
+                    // Migrate old unencrypted config to encrypted format
+                    try {
+                        sessionData.config = encryptUserConfig(sessionData.config);
+                        migratedCount++;
+                    } catch (error) {
+                        log.error(() => [`[SessionManager] Failed to encrypt config for token ${token}:`, error.message]);
+                        // Keep the unencrypted config to avoid data loss
+                    }
+                }
+
+                // Restore session to cache (with encrypted config)
                 this.cache.set(token, sessionData);
                 loadedCount++;
             }
 
-            console.log(`[SessionManager] Loaded ${loadedCount} sessions from disk (${expiredCount} expired)`);
-            this.dirty = false;
+            if (migratedCount > 0) {
+                log.debug(() => `[SessionManager] Migrated ${migratedCount} sessions to encrypted format`);
+                this.dirty = true; // Mark as dirty to save encrypted versions
+            }
+
+            log.debug(() => `[SessionManager] Loaded ${loadedCount} sessions from storage (${expiredCount} expired)`);
+            if (!this.dirty) {
+                this.dirty = false;
+            }
         } catch (err) {
             if (err.code === 'ENOENT') {
-                console.log('[SessionManager] No existing sessions file found, starting fresh');
+                log.debug(() => '[SessionManager] No existing sessions file found, starting fresh');
             } else {
-                console.error('[SessionManager] Failed to load sessions:', err.message);
+                log.error(() => ['[SessionManager] Failed to load sessions:', err.message]);
             }
         }
     }
@@ -279,7 +311,7 @@ class SessionManager {
                 try {
                     await this.saveToDisk();
                 } catch (err) {
-                    console.error('[SessionManager] Auto-save failed:', err);
+                    log.error(() => ['[SessionManager] Auto-save failed:', err]);
                 }
             }
         }, this.autoSaveInterval);
@@ -293,41 +325,83 @@ class SessionManager {
      * @param {http.Server} server - Express server instance to close
      */
     setupShutdownHandlers(server) {
+        let isShuttingDown = false; // Prevent multiple shutdown attempts
+
         const shutdown = async (signal) => {
-            console.log(`[SessionManager] Received ${signal}, saving sessions...`);
+            // Prevent multiple shutdown attempts
+            if (isShuttingDown) {
+                log.warn(() => `[SessionManager] Shutdown already in progress, ignoring ${signal}`);
+                return;
+            }
+            isShuttingDown = true;
+
+            log.warn(() => `[SessionManager] Received ${signal}, saving sessions...`);
 
             // Clear the auto-save timer
             if (this.saveTimer) {
                 clearInterval(this.saveTimer);
-                console.log('[SessionManager] Cleared auto-save timer');
+                log.warn(() => '[SessionManager] Cleared auto-save timer');
             }
 
+            // Save with timeout to prevent hanging
+            let saveFailed = false;
             try {
-                await this.saveToDisk();
-                console.log('[SessionManager] Sessions saved successfully');
+                // Create a promise that rejects after 3 seconds
+                const savePromise = this.saveToDisk();
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Save operation timed out after 3 seconds')), 3000);
+                });
+
+                await Promise.race([savePromise, timeoutPromise]);
+                log.warn(() => '[SessionManager] Sessions saved successfully');
             } catch (err) {
-                console.error('[SessionManager] Failed to save sessions on shutdown:', err);
+                saveFailed = true;
+                log.error(() => ['[SessionManager] Failed to save sessions on shutdown:', err.message]);
+                // Continue with shutdown even if save fails
             }
 
             // Close the server if provided
             if (server) {
                 server.close(() => {
-                    console.log('[SessionManager] Server closed');
-                    process.exit(0);
+                    log.warn(() => '[SessionManager] Server closed gracefully');
+                    // Close logger before exit
+                    shutdownLogger();
+                    process.exit(saveFailed ? 1 : 0);
                 });
 
-                // Force exit after 5 seconds if graceful shutdown takes too long
+                // Force exit after 2 seconds if server close hangs
                 setTimeout(() => {
-                    console.warn('[SessionManager] Forcefully exiting after 5s timeout');
-                    process.exit(1);
-                }, 5000);
+                    log.warn(() => '[SessionManager] Forcefully exiting after timeout');
+                    // Close logger before exit
+                    shutdownLogger();
+                    process.exit(saveFailed ? 1 : 0);
+                }, 2000).unref(); // unref to allow process to exit naturally if server closes faster
             } else {
-                process.exit(0);
+                // Close logger before exit
+                shutdownLogger();
+                process.exit(saveFailed ? 1 : 0);
             }
         };
 
+        // Handle SIGTERM (kill command)
         process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+        // Handle SIGINT (Ctrl+C)
         process.on('SIGINT', () => shutdown('SIGINT'));
+
+        // Handle uncaught exceptions to save before crash
+        process.on('uncaughtException', (err) => {
+            log.error(() => ['[SessionManager] Uncaught exception:', err]);
+            if (!isShuttingDown) {
+                shutdown('uncaughtException').then(() => {
+                    shutdownLogger();
+                    process.exit(1);
+                }).catch(() => {
+                    shutdownLogger();
+                    process.exit(1);
+                });
+            }
+        });
     }
 
     /**
@@ -337,7 +411,7 @@ class SessionManager {
         this.cache.clear();
         this.dirty = true;
         await this.saveToDisk();
-        console.log('[SessionManager] All sessions cleared');
+        log.debug(() => '[SessionManager] All sessions cleared');
     }
 }
 

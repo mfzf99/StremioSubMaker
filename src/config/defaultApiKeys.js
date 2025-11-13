@@ -19,10 +19,6 @@ const DEFAULT_API_KEYS = {
   // Get your own at: https://subsource.net/
   SUBSOURCE: '',
 
-  // Podnapisi API Key (free API, no authentication required)
-  // Podnapisi is a free subtitle service that doesn't require API keys
-  PODNAPISI: '',
-
   // Gemini API Key
   // Get your own at: https://makersuite.google.com/app/apikey
   GEMINI: ''

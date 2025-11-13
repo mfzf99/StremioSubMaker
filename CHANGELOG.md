@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker 1.1.0
+
+**Translation Engine - Complete Rewrite:**
+- Completely rewrote subtitle translation workflow with structure-first approach to eliminate sync problems
+- NEW: Translation engine now preserves original SRT timing (timings never sent to AI, can't be modified)
+- Hardcoded gemini-flash-lite-09-2025 for consistency across all translations
+- Model selection UI will return in future versions with workflow optimization for different models
+
+**New Features and Updates:**
+- Added OpenSubtitles V3 implementation as an alternative to the default authenticated API
+  - Users can now choose between "Auth" (requires OpenSubtitles account) or "V3" (no authentication, uses Stremio's official OpenSubtitles V3 addon)
+- Translation Cache Overwrite reduced from 5 clicks in 10 seconds to 3 clicks in 5 seconds (to avoid Stremio rate-limiting)
+
+**Infrastructure:**
+- Redis support: Full Redis integration for translation cache, session storage, and subtitle cache with configurable TTLs and automatic key expiration (enables distributed HA deployments)
+- Encryption support: AES-256-GCM encryption for user configurations and sensitive API keys with per-user key derivation and secure session token generation
+- Docker deployment support with docker-compose configurations for both standalone and Redis-backed deployments
+- Filesystem storage adapter still available for local deployment and fallback
+
+**Performance & Logging:**
+- Parallel translation chunk processing: Process multiple Gemini chunks simultaneously (EXPERIMENTAL - DISABLED BY DEFAULT)
+- Redis Sentinel support (OPTIONAL - disabled by default)
+- High-performance logging overhaul: Lazy evaluation with callbacks for all 520+ log statements eliminates 40-70% CPU overhead from string interpolation on filtered logs
+- Increased entry cache: 10,000 → 100,000 entries (5x capacity, improves cache hit rate from ~60% to ~75-85%)
+- Optimized partial cache flushing: Flush interval increased from 15s → 30s (50% less I/O overhead)
+- Enhanced response compression: Maximum compression (level 9) for SRT files: 10-15x bandwidth reduction (500KB → 35KB typical)
+- Async file logging with buffering replaces synchronous writes, eliminating event loop blocking (1-5ms per log) that caused 100-300ms p99 latency spikes under load
+- Log sampling support for extreme load scenarios (LOG_SAMPLE_RATE, LOG_SAMPLE_DEBUG_ONLY) allows reducing log volume while preserving critical errors
+
+**Bug Fixes:**
+- Fixed bypass cache user isolation: Each user now gets their own user-scoped bypass cache entries (identified by config hash), preventing users from accessing each other's cached translations when using "Bypass Database Cache" mode
+- Fixed 3-click cache reset to properly handle bypass vs permanent cache
+- Config hash generation now handles edge cases gracefully with identifiable fallback values instead of silent failures
+- **Various major and minor bug fixes**
+
 ## SubMaker 1.0.3
 
 **UI Redesign:**
@@ -44,7 +79,7 @@ All notable changes to this project will be documented in this file.
 - Fixed unbounded session cache by adding `maxSessions` limit (50k default, configurable via `SESSION_MAX_SESSIONS`)
 - Switched user translation counts to LRU cache (max 50k tracked users, auto-expires after 24h)
 - Automatic cleanup of stale session and translation-tracking data
-- Cache reset safety: 5-click cache reset now blocked while translation is in progress (prevents interruption)
+- Cache reset safety: 3-click cache reset now blocked while translation is in progress (prevents interruption)
 - Graceful shutdown: Server properly exits, clears timers, and saves sessions before closing
 - Duplicate translation prevention: In-flight request deduplication allows simultaneous identical requests to share one translation
 

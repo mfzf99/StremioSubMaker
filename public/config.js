@@ -16,7 +16,6 @@
         // Do not ship real keys in the client bundle
         SUBDL: '',
         SUBSOURCE: '',
-        PODNAPISI: '',
         GEMINI: ''
     };
 
@@ -61,7 +60,12 @@ Translate to {target_language}.`;
     const TOKEN_KEY = 'submaker_session_token';
 
     // Initialize
-    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState !== 'loading') {
+        // If DOM is already loaded (dynamic script injection), run init immediately
+        setTimeout(init, 0);
+    } else {
+        document.addEventListener('DOMContentLoaded', init);
+    }
 
     async function init() {
         // Priority: cached config > URL config > default config
@@ -88,8 +92,7 @@ Translate to {target_language}.`;
             currentConfig.subtitleProviders = {
                 opensubtitles: { ...(defaults.subtitleProviders?.opensubtitles || {}), enabled: false },
                 subdl: { ...(defaults.subtitleProviders?.subdl || {}), enabled: false },
-                subsource: { ...(defaults.subtitleProviders?.subsource || {}), enabled: false },
-                podnapisi: { ...(defaults.subtitleProviders?.podnapisi || {}), enabled: false }
+                subsource: { ...(defaults.subtitleProviders?.subsource || {}), enabled: false }
             };
         }
 
@@ -231,7 +234,7 @@ Translate to {target_language}.`;
                 const decoded = atob(configStr);
                 return JSON.parse(decoded);
             } catch (e) {
-                console.error('Failed to parse config:', e);
+                // Failed to parse config
             }
         }
 
@@ -245,12 +248,13 @@ Translate to {target_language}.`;
             sourceLanguages: ['eng'], // Up to 3 source languages allowed
             targetLanguages: [],
             geminiApiKey: DEFAULT_API_KEYS.GEMINI,
-            geminiModel: '',
+            geminiModel: 'gemini-2.5-flash-lite-preview-09-2025',
             promptStyle: 'strict', // 'natural' or 'strict'
             translationPrompt: STRICT_TRANSLATION_PROMPT,
             subtitleProviders: {
                 opensubtitles: {
                     enabled: true,
+                    implementationType: 'v3', // 'auth' or 'v3'
                     username: '',
                     password: ''
                 },
@@ -261,10 +265,6 @@ Translate to {target_language}.`;
                 subsource: {
                     enabled: true,
                     apiKey: DEFAULT_API_KEYS.SUBSOURCE
-                },
-                podnapisi: {
-                    enabled: false, // Disabled by default - not accessible from UI
-                    apiKey: DEFAULT_API_KEYS.PODNAPISI
                 }
             },
             translationCache: {
@@ -297,7 +297,6 @@ Translate to {target_language}.`;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`[Languages] Attempt ${attempt}/${maxRetries} - Fetching from /api/languages...`);
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
@@ -310,19 +309,16 @@ Translate to {target_language}.`;
                 });
 
                 clearTimeout(timeoutId);
-                console.log(`[Languages] Response status: ${response.status}`);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const languages = await response.json();
-                console.log(`[Languages] Successfully loaded ${languages.length} languages`);
 
                 // Filter out special fake languages (like ___upload for File Translation) and dedupe variants
                 const filtered = languages.filter(lang => !lang.code.startsWith('___'));
                 allLanguages = dedupeLanguagesForUI(filtered);
-                console.log(`[Languages] After filtering/dedup: ${allLanguages.length} languages`);
 
                 renderLanguageGrid('sourceLanguages', 'selectedSourceLanguages', allLanguages);
                 renderLanguageGrid('targetLanguages', 'selectedTargetLanguages', allLanguages);
@@ -333,26 +329,18 @@ Translate to {target_language}.`;
                 updateSelectedChips('target', currentConfig.targetLanguages);
                 updateSelectedChips('notranslation', currentConfig.noTranslationLanguages);
 
-                console.log('[Languages] Language loading completed successfully');
                 return; // Success - exit function
             } catch (error) {
                 lastError = error;
-                console.error(`[Languages] Attempt ${attempt} failed:`, error.message);
 
                 if (attempt < maxRetries) {
                     const delayMs = 1000 * attempt; // Exponential backoff: 1s, 2s, 3s
-                    console.log(`[Languages] Retrying in ${delayMs}ms...`);
                     await new Promise(resolve => setTimeout(resolve, delayMs));
                 }
             }
         }
 
         // All retries failed
-        console.error('[Languages] All retry attempts failed. Error:', lastError);
-        console.error('[Languages] Error details:', {
-            message: lastError.message,
-            name: lastError.name
-        });
         showAlert(`Failed to load languages after ${maxRetries} attempts: ${lastError.message}. Please refresh the page.`, 'error');
     }
 
@@ -543,14 +531,14 @@ Translate to {target_language}.`;
         // Form submission
         document.getElementById('configForm').addEventListener('submit', handleSubmit);
 
-        // Gemini API key auto-fetch
-        const apiKeyInput = document.getElementById('geminiApiKey');
-        apiKeyInput.addEventListener('input', debounce((e) => {
-            const apiKey = e.target.value.trim();
-            if (apiKey && apiKey !== lastFetchedApiKey) {
-                autoFetchModels(apiKey);
-            }
-        }, 1000));
+        // Gemini API key auto-fetch - DISABLED
+        // const apiKeyInput = document.getElementById('geminiApiKey');
+        // apiKeyInput.addEventListener('input', debounce((e) => {
+        //     const apiKey = e.target.value.trim();
+        //     if (apiKey && apiKey !== lastFetchedApiKey) {
+        //         autoFetchModels(apiKey);
+        //     }
+        // }, 1000));
 
         // Search functionality
         document.getElementById('sourceSearch').addEventListener('input', (e) => {
@@ -587,6 +575,12 @@ Translate to {target_language}.`;
             toggleProviderConfig('opensubtitlesConfig', e.target.checked);
         });
 
+        // OpenSubtitles implementation type - attach listeners directly to radio buttons
+        const implRadios = document.querySelectorAll('input[name="opensubtitlesImplementation"]');
+        implRadios.forEach(radio => {
+            radio.addEventListener('change', handleOpenSubtitlesImplChange);
+        });
+
         // Password visibility toggle
         const togglePasswordBtn = document.getElementById('toggleOpenSubsPassword');
         if (togglePasswordBtn) {
@@ -621,11 +615,6 @@ Translate to {target_language}.`;
             toggleProviderConfig('subsourceConfig', e.target.checked);
         });
 
-        // Podnapisi removed from UI - no event listener needed
-        // document.getElementById('enablePodnapisi').addEventListener('change', (e) => {
-        //     toggleProviderConfig('podnapisConfig', e.target.checked);
-        // });
-
         // Install and copy buttons
         document.getElementById('installBtn').addEventListener('click', installAddon);
         document.getElementById('copyBtn').addEventListener('click', copyInstallUrl);
@@ -641,9 +630,6 @@ Translate to {target_language}.`;
                 collapseBtn.classList.toggle('collapsed');
             });
         });
-
-        // Prompt style selector
-        document.getElementById('promptStyle').addEventListener('change', handlePromptStyleChange);
 
         // Advanced settings toggle (element may not exist in current UI)
         const showAdv = document.getElementById('showAdvancedSettings');
@@ -666,9 +652,35 @@ Translate to {target_language}.`;
         // No need to attach individual listeners here
     }
 
-    function handlePromptStyleChange(e) {
-        // Prompt style change handler - no longer needed for custom prompts
-        // Keeping this function for potential future extensions
+    function handleOpenSubtitlesImplChange(e) {
+        const authConfig = document.getElementById('opensubtitlesAuthConfig');
+        if (!authConfig) return;
+
+        // Get implementation type from event or checked radio button
+        let implementationType;
+        if (e && e.target && e.target.value) {
+            implementationType = e.target.value;
+        } else {
+            const checkedRadio = document.querySelector('input[name="opensubtitlesImplementation"]:checked');
+            implementationType = checkedRadio ? checkedRadio.value : 'v3';
+        }
+
+        // Show/hide auth fields
+        authConfig.style.display = implementationType === 'auth' ? 'block' : 'none';
+
+        // Update visual selection state for all radio buttons
+        document.querySelectorAll('input[name="opensubtitlesImplementation"]').forEach(radio => {
+            const label = radio.closest('label');
+            if (label) {
+                if (radio.checked) {
+                    label.style.borderColor = 'var(--primary)';
+                    label.style.background = 'var(--surface-light)';
+                } else {
+                    label.style.borderColor = 'var(--border)';
+                    label.style.background = 'white';
+                }
+            }
+        });
     }
 
     /**
@@ -952,7 +964,13 @@ Translate to {target_language}.`;
             // Clear and populate model dropdown
             modelSelect.innerHTML = '<option value="">Select a model...</option>';
 
-            models.forEach(model => {
+            // Filter to only show models containing "pro" or "flash" (case-insensitive)
+            const filteredModels = models.filter(model => {
+                const nameLower = model.name.toLowerCase();
+                return nameLower.includes('pro') || nameLower.includes('flash');
+            });
+
+            filteredModels.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model.name;
                 option.textContent = `${model.displayName}`;
@@ -965,23 +983,20 @@ Translate to {target_language}.`;
             });
 
             // Select default if none selected
-            if (!modelSelect.value && models.length > 0) {
-                // Priority: Gemini Flash-Lite Latest → flash-lite latest → flash-lite (any) → flash (any) → first model
-                const geminiFlashLiteLatest = models.find(m => m.displayName && m.displayName.includes('Gemini Flash-Lite Latest'));
-                const flashLiteLatest = models.find(m => m.name.includes('flash-lite') && !m.name.includes('preview'));
-                const flashLiteAny = models.find(m => m.name.includes('flash-lite'));
-                const flashModel = models.find(m => m.name.includes('flash'));
+            if (!modelSelect.value && filteredModels.length > 0) {
+                // Default: gemini-2.5-flash-lite-preview-09-2025 (exact match preferred)
+                const defaultModel = filteredModels.find(m => m.name === 'gemini-2.5-flash-lite-preview-09-2025');
+                const flashLiteAny = filteredModels.find(m => m.name.includes('flash-lite'));
+                const flashModel = filteredModels.find(m => m.name.includes('flash'));
 
-                if (geminiFlashLiteLatest) {
-                    modelSelect.value = geminiFlashLiteLatest.name;
-                } else if (flashLiteLatest) {
-                    modelSelect.value = flashLiteLatest.name;
+                if (defaultModel) {
+                    modelSelect.value = defaultModel.name;
                 } else if (flashLiteAny) {
                     modelSelect.value = flashLiteAny.name;
                 } else if (flashModel) {
                     modelSelect.value = flashModel.name;
-                } else {
-                    modelSelect.value = models[0].name;
+                } else if (filteredModels.length > 0) {
+                    modelSelect.value = filteredModels[0].name;
                 }
             }
 
@@ -995,7 +1010,6 @@ Translate to {target_language}.`;
             }, 3000);
 
         } catch (error) {
-            console.error('Failed to fetch models:', error);
             statusDiv.innerHTML = '✗ Failed to fetch models. Check your API key.';
             statusDiv.className = 'model-status error';
 
@@ -1110,8 +1124,22 @@ Translate to {target_language}.`;
 
     function toggleProviderConfig(configId, enabled) {
         const configDiv = document.getElementById(configId);
-        if (configDiv) {
-            configDiv.style.opacity = enabled ? '1' : '0.5';
+        if (!configDiv) return;
+        
+        configDiv.style.opacity = enabled ? '1' : '0.5';
+
+        if (configId === 'opensubtitlesConfig') {
+            // For OpenSubtitles, disable individual controls instead of blocking pointer events
+            const inputs = configDiv.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.disabled = !enabled;
+            });
+            
+            // Always update auth fields visibility (whether enabled or disabled)
+            // This ensures correct state in all scenarios: enabled/disabled, v3/auth, with/without credentials
+            handleOpenSubtitlesImplChange();
+        } else {
+            // For other providers, use pointer-events as before
             configDiv.style.pointerEvents = enabled ? 'auto' : 'none';
         }
     }
@@ -1126,7 +1154,6 @@ Translate to {target_language}.`;
             localStorage.setItem(CACHE_KEY, JSON.stringify(config));
             localStorage.setItem(CACHE_EXPIRY_KEY, Date.now().toString());
         } catch (error) {
-            console.error('Failed to cache configuration:', error);
             // Continue anyway - caching is optional
         }
     }
@@ -1145,7 +1172,6 @@ Translate to {target_language}.`;
             const config = JSON.parse(cachedConfig);
             return config;
         } catch (error) {
-            console.error('Failed to load cached configuration:', error);
             return null;
         }
     }
@@ -1157,9 +1183,8 @@ Translate to {target_language}.`;
         try {
             localStorage.removeItem(CACHE_KEY);
             localStorage.removeItem(CACHE_EXPIRY_KEY);
-            console.log('Configuration cache cleared');
         } catch (error) {
-            console.error('Failed to clear cache:', error);
+            // Failed to clear cache
         }
     }
 
@@ -1177,13 +1202,12 @@ Translate to {target_language}.`;
 
         // Load Gemini model
         const modelSelect = document.getElementById('geminiModel');
-        if (currentConfig.geminiModel) {
-            const option = document.createElement('option');
-            option.value = currentConfig.geminiModel;
-            option.textContent = currentConfig.geminiModel;
-            option.selected = true;
-            modelSelect.appendChild(option);
-        }
+        const modelToUse = currentConfig.geminiModel || 'gemini-2.5-flash-lite-preview-09-2025';
+        const option = document.createElement('option');
+        option.value = modelToUse;
+        option.textContent = modelToUse;
+        option.selected = true;
+        modelSelect.appendChild(option);
 
         // Load prompt style
         const promptStyle = currentConfig.promptStyle || 'natural';
@@ -1201,12 +1225,23 @@ Translate to {target_language}.`;
         const opensubtitlesEnabled = (isFirstRun ? false : (currentConfig.subtitleProviders?.opensubtitles?.enabled !== false));
         document.getElementById('enableOpenSubtitles').checked = opensubtitlesEnabled;
 
+        // Load implementation type
+        const implementationType = currentConfig.subtitleProviders?.opensubtitles?.implementationType || 'v3';
+        const authRadio = document.getElementById('opensubtitlesImplAuth');
+        const v3Radio = document.getElementById('opensubtitlesImplV3');
+        if (implementationType === 'auth') {
+            authRadio.checked = true;
+        } else {
+            v3Radio.checked = true;
+        }
+
         // Load user credentials (optional)
         document.getElementById('opensubtitlesUsername').value =
             currentConfig.subtitleProviders?.opensubtitles?.username || '';
         document.getElementById('opensubtitlesPassword').value =
             currentConfig.subtitleProviders?.opensubtitles?.password || '';
 
+        // toggleProviderConfig will call handleOpenSubtitlesImplChange to set auth fields visibility
         toggleProviderConfig('opensubtitlesConfig', opensubtitlesEnabled);
 
         // SubDL
@@ -1222,13 +1257,6 @@ Translate to {target_language}.`;
         document.getElementById('subsourceApiKey').value =
             currentConfig.subtitleProviders?.subsource?.apiKey || DEFAULT_API_KEYS.SUBSOURCE;
         toggleProviderConfig('subsourceConfig', subsourceEnabled);
-
-        // Podnapisi removed from UI - no need to load config
-        // const podnapisEnabled = currentConfig.subtitleProviders?.podnapisi?.enabled === true;
-        // document.getElementById('enablePodnapisi').checked = podnapisEnabled;
-        // document.getElementById('podnapisApiKey').value =
-        //     currentConfig.subtitleProviders?.podnapisi?.apiKey || DEFAULT_API_KEYS.PODNAPISI;
-        // toggleProviderConfig('podnapisConfig', podnapisEnabled);
 
         // Load file translation setting
         document.getElementById('fileTranslationEnabled').checked = currentConfig.fileTranslationEnabled !== false;
@@ -1282,6 +1310,7 @@ Translate to {target_language}.`;
             subtitleProviders: {
                 opensubtitles: {
                     enabled: document.getElementById('enableOpenSubtitles').checked,
+                    implementationType: document.querySelector('input[name="opensubtitlesImplementation"]:checked')?.value || 'v3',
                     username: document.getElementById('opensubtitlesUsername').value.trim(),
                     password: document.getElementById('opensubtitlesPassword').value.trim()
                 },
@@ -1292,10 +1321,6 @@ Translate to {target_language}.`;
                 subsource: {
                     enabled: document.getElementById('enableSubSource').checked,
                     apiKey: document.getElementById('subsourceApiKey').value.trim()
-                },
-                podnapisi: {
-                    enabled: false, // Podnapisi disabled - not accessible from UI
-                    apiKey: DEFAULT_API_KEYS.PODNAPISI
                 }
             },
             translationCache: {
@@ -1327,6 +1352,13 @@ Translate to {target_language}.`;
         const anyProviderEnabled = Object.values(config.subtitleProviders).some(p => p.enabled);
         if (!anyProviderEnabled) {
             errors.push('⚠️ Please enable at least one subtitle provider');
+        }
+
+        // Validate that at least one of cache options is enabled
+        const cacheEnabled = document.getElementById('cacheEnabled').checked;
+        const bypassCache = document.getElementById('bypassCache')?.checked || false;
+        if (!cacheEnabled && !bypassCache) {
+            errors.push('⚠️ At least one cache option must be enabled: either "Enable SubMaker Database" or "Bypass SubMaker Database Cache"');
         }
 
         // Validate enabled subtitle sources have API keys (where required)
@@ -1385,7 +1417,6 @@ Translate to {target_language}.`;
         try {
             if (existingToken) {
                 // Try to update existing session first
-                console.log('Updating existing session...');
                 const response = await fetch(`/api/update-session/${existingToken}`, {
                     method: 'POST',
                     headers: {
@@ -1403,15 +1434,12 @@ Translate to {target_language}.`;
                 isUpdate = sessionData.updated;
 
                 if (sessionData.updated) {
-                    console.log('Session updated successfully');
                     showAlert('Configuration updated! Changes will take effect immediately in Stremio.', 'success');
                 } else if (sessionData.created) {
-                    console.log('Session expired, created new session');
                     showAlert('Session expired. Please reinstall the addon in Stremio.', 'warning');
                 }
             } else {
                 // No existing token, create new session
-                console.log('Creating new session...');
                 const response = await fetch('/api/create-session', {
                     method: 'POST',
                     headers: {
@@ -1426,18 +1454,11 @@ Translate to {target_language}.`;
 
                 const sessionData = await response.json();
                 configToken = sessionData.token;
-
-                console.log('Session created:', sessionData.type);
-                if (sessionData.type === 'session') {
-                    const expiryDays = Math.floor(sessionData.expiresIn / (24 * 60 * 60 * 1000));
-                    console.log(`Session will expire in ${expiryDays} days of inactivity`);
-                }
             }
 
             // Store token for future updates
             localStorage.setItem(TOKEN_KEY, configToken);
         } catch (error) {
-            console.error('Error with session:', error);
             showAlert('Failed to save configuration: ' + error.message, 'error');
             return;
         }
@@ -1446,9 +1467,6 @@ Translate to {target_language}.`;
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const baseUrl = isLocalhost ? 'http://localhost:7001' : window.location.origin;
         const installUrl = `${baseUrl}/addon/${configToken}/manifest.json`;
-
-        console.log('Configuration saved!');
-        console.log('Install URL:', installUrl);
 
         // Save to current config
         currentConfig = config;
@@ -1488,8 +1506,6 @@ Translate to {target_language}.`;
             // Stremio protocol format: stremio://localhost:7001/{config}/manifest.json
             const url = new URL(window.installUrl);
             const stremioUrl = `stremio://${url.host}${url.pathname}`;
-            console.log('Opening Stremio:', stremioUrl);
-            console.log('With manifest URL:', window.installUrl);
             window.location.href = stremioUrl;
             showAlert('Opening Stremio...', 'info');
         }
