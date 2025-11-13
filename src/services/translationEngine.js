@@ -1,18 +1,19 @@
 /**
- * Translation Engine - Structure-First Subtitle Translation
+ * Translation Engine - Unified Subtitle Translation
  *
- * This engine solves subtitle sync problems by:
- * 1. Parsing SRT into structured entries (id, timecode, text)
- * 2. Translating ONLY text content in batches
- * 3. Reconstructing SRT with ORIGINAL timings (guaranteed preservation)
- * 4. Validating structure at every step
- * 5. Streaming results entry-by-entry as they're validated
+ * Clean, simple, predictable translation workflow:
+ * 1. Parse SRT into entries
+ * 2. Translate in batches (real-time progress after each batch)
+ * 3. Auto-chunk large batches transparently when needed
+ * 4. Stream results entry-by-entry as they complete
+ * 5. No time-based checkpoints - everything is event-driven
  *
  * Benefits:
- * - Perfect timing preservation (timings never sent to AI)
- * - No sync issues (structure controlled by us)
- * - Entry-level caching for maximum reuse
+ * - Single code path for all files (small/large)
+ * - Perfect timing preservation
+ * - Real-time progressive delivery
  * - Simple, predictable behavior
+ * - Automatic optimization
  */
 
 const { parseSRT, toSRT } = require('../utils/subtitle');
@@ -21,37 +22,33 @@ const crypto = require('crypto');
 const log = require('../utils/logger');
 
 // Entry-level cache for translated subtitle entries
-// Key: hash of (source_text + target_language)
-// Value: translated text
 const entryCache = new Map();
-// Entry cache size (default: 100K entries = ~10-20MB RAM)
-// Configurable via ENTRY_CACHE_SIZE environment variable
-// Higher values improve cache hit rates but use more memory
-// Estimate: 1000 entries ≈ 100KB-200KB RAM
-const MAX_ENTRY_CACHE_SIZE = parseInt(process.env.ENTRY_CACHE_SIZE) || 100000; // Cache up to 100k individual entries (was 50k)
+const MAX_ENTRY_CACHE_SIZE = parseInt(process.env.ENTRY_CACHE_SIZE) || 100000;
+
+// Configuration constants
+const BATCH_SIZE = parseInt(process.env.TRANSLATION_BATCH_SIZE) || 50; // Entries per batch
+const MAX_TOKENS_PER_BATCH = parseInt(process.env.MAX_TOKENS_PER_BATCH) || 25000; // Max tokens before auto-chunking
+const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS !== 'false'; // Enable/disable entry caching
 
 class TranslationEngine {
   constructor(geminiService) {
     this.gemini = geminiService;
-    this.batchSize = 100; // Translate 100 entries at a time (adjustable)
+    this.batchSize = BATCH_SIZE;
+    this.maxTokensPerBatch = MAX_TOKENS_PER_BATCH;
   }
 
   /**
-   * Main translation method - structure-first approach
+   * Main translation method - unified approach for all files
    * @param {string} srtContent - Original SRT content
    * @param {string} targetLanguage - Target language name
    * @param {string} customPrompt - Optional custom prompt
-   * @param {Function} onProgress - Callback for progress updates (entry-by-entry)
+   * @param {Function} onProgress - Callback for real-time progress (entry-by-entry)
    * @returns {Promise<string>} - Translated SRT content
    */
   async translateSubtitle(srtContent, targetLanguage, customPrompt = null, onProgress = null) {
-    log.debug(() => '[TranslationEngine] Starting structure-first translation');
+    log.debug(() => '[TranslationEngine] Starting unified translation workflow');
 
-    // Step 0: Check if input is malformed or needs Gemini-level chunking
-    const estimatedTotalTokens = this.gemini.estimateTokenCount(srtContent);
-    log.debug(() => `[TranslationEngine] Estimated total input tokens: ${estimatedTotalTokens}`);
-
-    // Parse to check entry count
+    // Step 1: Parse SRT into structured entries
     const entries = parseSRT(srtContent);
     if (!entries || entries.length === 0) {
       throw new Error('Invalid SRT content: no valid entries found');
@@ -59,107 +56,11 @@ class TranslationEngine {
 
     log.debug(() => `[TranslationEngine] Parsed ${entries.length} subtitle entries`);
 
-    // Detect malformed sources: very few entries but substantial content
-    // Common issue: entire subtitle file parsed as 1 entry due to formatting issues
-    const avgTokensPerEntry = entries.length > 0 ? estimatedTotalTokens / entries.length : 0;
-    const isMalformed = entries.length <= 5 && avgTokensPerEntry > 500; // Aggressive: 1 entry with 2.5k+ tokens = malformed
-
-    // Route to Gemini chunking if:
-    // 1. File is too large (> 30k tokens), OR
-    // 2. File appears malformed (few entries but high tokens per entry)
-    if (estimatedTotalTokens > 30000 || isMalformed) {
-      log.debug(() => `[TranslationEngine] Routing to Gemini chunking:`);
-      log.debug(() => `  - Total tokens: ${estimatedTotalTokens}`);
-      log.debug(() => `  - Parsed entries: ${entries.length}`);
-      log.debug(() => `  - Avg tokens/entry: ${Math.floor(avgTokensPerEntry)}`);
-      log.debug(() => `  - Malformed: ${isMalformed ? 'YES' : 'NO'}`);
-
-      // Use Gemini's chunking with streaming and progress callback
-      let accumulatedChunks = [];
-      let streamBuffer = ''; // Buffer for accumulating streaming deltas
-      let lastPartialSave = Date.now();
-      const partialSaveInterval = 10000; // Save partial content every 10 seconds during streaming
-
-      const translatedSrt = await this.gemini.translateSubtitleInChunksWithStreaming(
-        srtContent,
-        'detected',
-        targetLanguage,
-        customPrompt,
-        null, // Use default chunk size
-        async (info) => {
-          // Call progress callback if provided
-          if (typeof onProgress === 'function') {
-            try {
-              if (info.isDelta) {
-                // Accumulate streaming deltas
-                streamBuffer += info.translatedChunk;
-
-                // Periodically try to parse and save partial content during streaming
-                const now = Date.now();
-                if (now - lastPartialSave > partialSaveInterval) {
-                  lastPartialSave = now;
-
-                  // Try to parse what we have so far
-                  const currentContent = accumulatedChunks.length > 0
-                    ? accumulatedChunks.join('\n\n') + '\n\n' + streamBuffer
-                    : streamBuffer;
-
-                  const parsedEntries = parseSRT(currentContent);
-                  if (parsedEntries.length > 0) {
-                    const totalEstimatedEntries = Math.floor(estimatedTotalTokens / 50);
-                    const completedEntries = parsedEntries.length;
-
-                    // Provide partial content for partial caching during streaming
-                    await onProgress({
-                      totalEntries: totalEstimatedEntries,
-                      completedEntries: completedEntries,
-                      currentBatch: info.index + 1,
-                      totalBatches: info.total,
-                      entry: null,
-                      partialContent: currentContent
-                    });
-                  }
-                }
-              } else {
-                // Chunk completed - add buffer to accumulated chunks
-                if (streamBuffer.length > 0) {
-                  accumulatedChunks.push(streamBuffer);
-                  streamBuffer = ''; // Reset buffer for next chunk
-                }
-
-                // Parse all accumulated chunks to get actual entries
-                const mergedChunks = accumulatedChunks.join('\n\n');
-                const parsedEntries = parseSRT(mergedChunks);
-
-                const totalEstimatedEntries = Math.floor(estimatedTotalTokens / 50); // Rough estimate
-                const completedEntries = parsedEntries.length;
-
-                // Provide the merged partial content for partial caching
-                await onProgress({
-                  totalEntries: totalEstimatedEntries,
-                  completedEntries: completedEntries,
-                  currentBatch: info.index + 1,
-                  totalBatches: info.total,
-                  entry: null, // No individual entry
-                  partialContent: mergedChunks // Provide accumulated chunks for partial caching
-                });
-              }
-            } catch (err) {
-              log.warn(() => ['[TranslationEngine] Progress callback error:', err.message]);
-            }
-          }
-        }
-      );
-
-      log.debug(() => `[TranslationEngine] Gemini chunking completed successfully`);
-      return translatedSrt;
-    }
-
-    // Step 2: Split entries into batches
+    // Step 2: Create batches
     const batches = this.createBatches(entries, this.batchSize);
-    log.debug(() => `[TranslationEngine] Created ${batches.length} batches (${this.batchSize} entries each)`);
+    log.debug(() => `[TranslationEngine] Created ${batches.length} batches (${this.batchSize} entries per batch)`);
 
-    // Step 3: Translate each batch
+    // Step 3: Translate each batch with real-time progress
     const translatedEntries = [];
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -167,6 +68,7 @@ class TranslationEngine {
       log.debug(() => `[TranslationEngine] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} entries)`);
 
       try {
+        // Translate batch (with auto-chunking if needed)
         const translatedBatch = await this.translateBatch(
           batch,
           targetLanguage,
@@ -175,29 +77,13 @@ class TranslationEngine {
           batches.length
         );
 
-        // Note: translateBatch now handles entry count mismatches internally
-        // and ensures the returned array always matches batch.length
-        if (translatedBatch.length !== batch.length) {
-          log.error(() => `[TranslationEngine] UNEXPECTED: translateBatch returned ${translatedBatch.length} entries, expected ${batch.length}`);
-          log.error(() => `[TranslationEngine] This should have been fixed by translateBatch - continuing anyway`);
-        }
-
         // Merge translated text with original structure
         for (let i = 0; i < batch.length; i++) {
           const original = batch[i];
           const translated = translatedBatch[i];
 
-          // Clean translated text: remove any embedded timecodes that Gemini might have included
-          // Gemini sometimes preserves original timecodes in translation output
-          let cleanedText = translated.text.trim();
-          // Pattern: HH:MM:SS,MMM --> HH:MM:SS,MMM followed by optional newline
-          // Use global flag to remove ALL occurrences (Gemini sometimes includes multiple)
-          const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
-          cleanedText = cleanedText.replace(timecodePattern, '').trim();
-
-          // Normalize line endings: Convert CRLF (\r\n) to LF (\n) only
-          // This fixes the issue on Linux where CRLF causes extra spacing between subtitle lines
-          cleanedText = cleanedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          // Clean translated text
+          const cleanedText = this.cleanTranslatedText(translated.text);
 
           // Create entry with original timing and cleaned translated text
           const translatedEntry = {
@@ -208,7 +94,7 @@ class TranslationEngine {
 
           translatedEntries.push(translatedEntry);
 
-          // Call progress callback if provided
+          // Real-time progress callback - called immediately after each entry
           if (typeof onProgress === 'function') {
             try {
               await onProgress({
@@ -216,7 +102,9 @@ class TranslationEngine {
                 completedEntries: translatedEntries.length,
                 currentBatch: batchIndex + 1,
                 totalBatches: batches.length,
-                entry: translatedEntry
+                entry: translatedEntry,
+                // Provide partial SRT for progressive saving
+                partialSRT: toSRT(translatedEntries)
               });
             } catch (err) {
               log.warn(() => ['[TranslationEngine] Progress callback error:', err.message]);
@@ -224,12 +112,7 @@ class TranslationEngine {
           }
         }
 
-        log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1}/${batches.length} completed successfully`);
-
-        // Small delay between batches to avoid rate limiting
-        if (batchIndex < batches.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1}/${batches.length} completed (${translatedEntries.length}/${entries.length} total entries)`);
 
       } catch (error) {
         log.error(() => [`[TranslationEngine] Error in batch ${batchIndex + 1}:`, error.message]);
@@ -238,10 +121,8 @@ class TranslationEngine {
     }
 
     // Step 4: Final validation
-    // Note: Entry count mismatches are now handled gracefully in translateBatch
     if (translatedEntries.length !== entries.length) {
-      log.warn(() => `[TranslationEngine] Final validation: expected ${entries.length} entries, got ${translatedEntries.length}`);
-      log.warn(() => `[TranslationEngine] This should have been fixed by translateBatch, but continuing with what we have`);
+      log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${entries.length}, got ${translatedEntries.length}`);
     }
 
     log.debug(() => `[TranslationEngine] Translation completed: ${translatedEntries.length} entries translated`);
@@ -254,9 +135,6 @@ class TranslationEngine {
 
   /**
    * Create batches from entries
-   * @param {Array} entries - Subtitle entries
-   * @param {number} batchSize - Number of entries per batch
-   * @returns {Array<Array>} - Array of batches
    */
   createBatches(entries, batchSize) {
     const batches = [];
@@ -267,53 +145,45 @@ class TranslationEngine {
   }
 
   /**
-   * Translate a batch of entries
-   * @param {Array} batch - Batch of subtitle entries
-   * @param {string} targetLanguage - Target language name
-   * @param {string} customPrompt - Optional custom prompt
-   * @param {number} batchIndex - Current batch index
-   * @param {number} totalBatches - Total number of batches
-   * @returns {Promise<Array>} - Array of translated entries
+   * Translate a batch of entries (with auto-chunking if needed)
    */
   async translateBatch(batch, targetLanguage, customPrompt, batchIndex, totalBatches) {
-    // Check cache first (includes customPrompt in cache key)
+    // Check cache first
     const cacheResults = this.checkBatchCache(batch, targetLanguage, customPrompt);
-
-    // If all entries are cached, return immediately
     if (cacheResults.allCached) {
       log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} fully cached (${batch.length} entries)`);
       return cacheResults.entries;
     }
 
-    // Prepare batch for translation
+    // Prepare batch text
     const batchText = this.prepareBatchText(batch);
-
-    // Create translation prompt
     const prompt = this.createBatchPrompt(batchText, targetLanguage, customPrompt, batch.length);
 
-    // Check if we need to chunk due to large input (> 30k tokens)
-    const estimatedInputTokens = this.gemini.estimateTokenCount(batchText + prompt);
+    // Check if we need to split due to token limits
+    const estimatedTokens = this.gemini.estimateTokenCount(batchText + prompt);
 
-    if (estimatedInputTokens > 30000 && batch.length > 1) {
-      // Split batch in half to avoid output token limit
-      log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} has ${estimatedInputTokens} estimated input tokens (> 30k), splitting into 2 parts`);
+    if (estimatedTokens > this.maxTokensPerBatch && batch.length > 1) {
+      // Auto-chunk: Split batch in half recursively
+      log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} too large (${estimatedTokens} tokens), auto-chunking...`);
 
       const midpoint = Math.floor(batch.length / 2);
       const firstHalf = batch.slice(0, midpoint);
       const secondHalf = batch.slice(midpoint);
 
-      log.debug(() => `[TranslationEngine] Split batch ${batchIndex + 1}: Part 1 has ${firstHalf.length} entries, Part 2 has ${secondHalf.length} entries`);
+      log.debug(() => `[TranslationEngine] Split into ${firstHalf.length} + ${secondHalf.length} entries`);
 
       // Recursively translate each half
-      const firstHalfTranslated = await this.translateBatch(firstHalf, targetLanguage, customPrompt, batchIndex, totalBatches);
-      const secondHalfTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches);
+      const [firstTranslated, secondTranslated] = await Promise.all([
+        this.translateBatch(firstHalf, targetLanguage, customPrompt, batchIndex, totalBatches),
+        this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches)
+      ]);
 
-      // Combine results
-      return [...firstHalfTranslated, ...secondHalfTranslated];
+      return [...firstTranslated, ...secondTranslated];
     }
 
-    // Translate without retries - fail fast to avoid wasting time and API quota
-    log.debug(() => `[TranslationEngine] Translating batch ${batchIndex + 1}/${totalBatches}`);
+    // Translate batch
+    log.debug(() => `[TranslationEngine] Translating batch ${batchIndex + 1}/${totalBatches} (${estimatedTokens} tokens)`);
+
     const translatedText = await this.gemini.translateSubtitle(
       batchText,
       'detected',
@@ -324,126 +194,44 @@ class TranslationEngine {
     // Parse translated text back into entries
     const translatedEntries = this.parseBatchResponse(translatedText, batch.length);
 
-    // Handle entry count mismatches gracefully instead of throwing away translations
+    // Handle entry count mismatches gracefully
     if (translatedEntries.length !== batch.length) {
-      log.warn(() => `[TranslationEngine] Batch validation: expected ${batch.length} entries, got ${translatedEntries.length}`);
+      log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${batch.length}, got ${translatedEntries.length}`);
+      this.fixEntryCountMismatch(translatedEntries, batch);
+    }
 
-      if (translatedEntries.length < batch.length) {
-        // Missing entries - fill in with original text (untranslated)
-        const missingCount = batch.length - translatedEntries.length;
-        log.warn(() => `[TranslationEngine] ${missingCount} entries missing in translation, using original text for those entries`);
-
-        // Create a map of translated entries by index
-        const translatedMap = new Map();
-        for (const entry of translatedEntries) {
-          translatedMap.set(entry.index, entry.text);
-        }
-
-        // Build complete array, using original text for missing entries
-        const completeEntries = [];
-        for (let i = 0; i < batch.length; i++) {
-          if (translatedMap.has(i)) {
-            completeEntries.push({
-              index: i,
-              text: translatedMap.get(i)
-            });
-          } else {
-            // Use original text for missing entry (no per-entry logging to avoid spam)
-            completeEntries.push({
-              index: i,
-              text: batch[i].text
-            });
-          }
-        }
-
-        // Replace translatedEntries with the complete version
-        translatedEntries.length = 0;
-        translatedEntries.push(...completeEntries);
-
-      } else if (translatedEntries.length > batch.length) {
-        // Too many entries - match by index and use original text for any mismatches
-        // This preserves sync by ensuring we have exactly the right number of entries
-        // in the correct order, even if Gemini returned duplicates or extra entries
-        const extraCount = translatedEntries.length - batch.length;
-        log.warn(() => `[TranslationEngine] ${extraCount} extra entries in translation, matching by index to preserve sync`);
-
-        // Create a map of translated entries by index
-        const translatedMap = new Map();
-        for (const entry of translatedEntries) {
-          // Only keep the first occurrence of each index
-          if (!translatedMap.has(entry.index)) {
-            translatedMap.set(entry.index, entry.text);
-          }
-        }
-
-        // Build complete array with exactly batch.length entries, matching by index
-        const completeEntries = [];
-        for (let i = 0; i < batch.length; i++) {
-          if (translatedMap.has(i)) {
-            completeEntries.push({
-              index: i,
-              text: translatedMap.get(i)
-            });
-          } else {
-            // Use original text if this index is missing (e.g., Gemini skipped it)
-            completeEntries.push({
-              index: i,
-              text: batch[i].text
-            });
-          }
-        }
-
-        // Replace translatedEntries with the complete version
-        translatedEntries.length = 0;
-        translatedEntries.push(...completeEntries);
+    // Cache individual entries
+    if (CACHE_TRANSLATIONS) {
+      for (let i = 0; i < batch.length && i < translatedEntries.length; i++) {
+        this.cacheEntry(batch[i].text, targetLanguage, translatedEntries[i].text, customPrompt);
       }
-
-      log.debug(() => `[TranslationEngine] Entry count fixed: now have ${translatedEntries.length} entries`);
     }
 
-    // Cache individual entries (includes customPrompt in cache key)
-    for (let i = 0; i < batch.length; i++) {
-      this.cacheEntry(batch[i].text, targetLanguage, translatedEntries[i].text, customPrompt);
-    }
-
-    log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} translated and validated (${translatedEntries.length} entries)`);
+    log.debug(() => `[TranslationEngine] Batch ${batchIndex + 1} translated (${translatedEntries.length} entries)`);
 
     return translatedEntries;
   }
 
   /**
-   * Prepare batch text for translation
-   * Format: numbered list of texts
-   * @param {Array} batch - Batch of subtitle entries
-   * @returns {string} - Formatted batch text
+   * Prepare batch text for translation (numbered list format)
    */
   prepareBatchText(batch) {
-    const lines = batch.map((entry, index) => {
+    return batch.map((entry, index) => {
       const num = index + 1;
-      // Clean text: remove extra whitespace, normalize line breaks
       const cleanText = entry.text.trim().replace(/\n+/g, '\n');
       return `${num}. ${cleanText}`;
-    });
-
-    return lines.join('\n\n');
+    }).join('\n\n');
   }
 
   /**
    * Create translation prompt for a batch
-   * @param {string} batchText - Formatted batch text
-   * @param {string} targetLanguage - Target language name
-   * @param {string} customPrompt - Optional custom prompt
-   * @param {number} expectedCount - Expected number of entries
-   * @returns {string} - Complete prompt
    */
   createBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount) {
     if (customPrompt) {
-      // Use custom prompt if provided
       return customPrompt.replace('{target_language}', targetLanguage);
     }
 
-    // Default structured prompt
-    const prompt = `You are translating subtitle text to ${targetLanguage}.
+    return `You are translating subtitle text to ${targetLanguage}.
 
 CRITICAL RULES:
 1. Translate ONLY the text content
@@ -454,13 +242,12 @@ CRITICAL RULES:
 6. Use appropriate colloquialisms for ${targetLanguage}
 
 DO NOT:
-- Add ANY explanations, notes, or commentary before, after, or between entries
-- Add alternative translations or suggestions
-- Include meta-text like "Here are the translations:" or "Translation notes:"
+- Add ANY explanations, notes, or commentary
+- Add alternative translations
 - Skip any entries
 - Merge or split entries
 - Change the numbering
-- Add extra entries beyond ${expectedCount}
+- Add extra entries
 
 YOUR RESPONSE MUST:
 - Start immediately with "1." (the first entry)
@@ -472,36 +259,25 @@ INPUT (${expectedCount} entries):
 ${batchText}
 
 OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
-
-    return prompt;
   }
 
   /**
    * Parse batch translation response
-   * @param {string} translatedText - Raw translated text from Gemini
-   * @param {number} expectedCount - Expected number of entries
-   * @returns {Array} - Array of translated entries (with index and text)
    */
   parseBatchResponse(translatedText, expectedCount) {
-    // Clean the response
     let cleaned = translatedText.trim();
 
-    // Remove markdown code blocks if present (CRLF-aware)
+    // Remove markdown code blocks
     cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
 
-    // Try to extract numbered entries
-    // Pattern: "1. text" or "1) text" or "1 - text"
     const entries = [];
-
-    // Split by double newlines first (entry separator) - CRLF-aware
     const blocks = cleaned.split(/(?:\r?\n){2,}/);
 
     for (const block of blocks) {
-      // Don't stop at expectedCount - parse everything we can
       const trimmed = block.trim();
       if (!trimmed) continue;
 
-      // Try to match numbered entry: "N. text" or "N) text" or "N - text"
+      // Match numbered entry: "N. text" or "N) text"
       const match = trimmed.match(/^(\d+)[.):\s-]+(.+)$/s);
 
       if (match) {
@@ -509,75 +285,71 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
         const text = match[2].trim();
 
         entries.push({
-          index: num - 1, // Convert to 0-based index
+          index: num - 1,
           text: text
         });
       }
-      // REMOVED: Don't add unnumbered blocks as entries - they're likely explanations
     }
 
-    // Sort by index to ensure correct order
+    // Sort by index
     entries.sort((a, b) => a.index - b.index);
-
-    // Validate: must have expected count
-    if (entries.length !== expectedCount) {
-      log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${expectedCount}, parsed ${entries.length}`);
-
-      // Try alternative parsing: split by newlines and look for patterns (CRLF-aware)
-      const lines = cleaned.split(/\r?\n/);
-      const altEntries = [];
-      let currentEntry = null;
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        const match = trimmed.match(/^(\d+)[.):\s-]+(.+)$/);
-
-        if (match) {
-          // Save previous entry if we have one
-          if (currentEntry) {
-            altEntries.push(currentEntry);
-          }
-          const num = parseInt(match[1]);
-          currentEntry = {
-            index: num - 1,
-            text: match[2].trim()
-          };
-        } else if (currentEntry) {
-          // Continue current entry (multi-line text)
-          currentEntry.text += '\n' + trimmed;
-        }
-        // REMOVED: Don't add non-numbered lines as new entries
-      }
-
-      // Add final entry
-      if (currentEntry) {
-        altEntries.push(currentEntry);
-      }
-
-      if (altEntries.length > 0) {
-        log.debug(() => `[TranslationEngine] Alternative parsing found ${altEntries.length} entries`);
-        altEntries.sort((a, b) => a.index - b.index);
-
-        // Use alternative parsing if it's better than the first attempt
-        if (altEntries.length > entries.length) {
-          return altEntries;
-        }
-      }
-    }
 
     return entries;
   }
 
   /**
+   * Fix entry count mismatches by filling missing entries with original text
+   */
+  fixEntryCountMismatch(translatedEntries, originalBatch) {
+    if (translatedEntries.length === originalBatch.length) {
+      return; // Already correct
+    }
+
+    if (translatedEntries.length < originalBatch.length) {
+      // Missing entries - fill with original text
+      const translatedMap = new Map();
+      for (const entry of translatedEntries) {
+        translatedMap.set(entry.index, entry.text);
+      }
+
+      translatedEntries.length = 0;
+      for (let i = 0; i < originalBatch.length; i++) {
+        if (translatedMap.has(i)) {
+          translatedEntries.push({ index: i, text: translatedMap.get(i) });
+        } else {
+          translatedEntries.push({ index: i, text: originalBatch[i].text });
+        }
+      }
+    } else {
+      // Too many entries - keep only first N
+      translatedEntries.length = originalBatch.length;
+    }
+  }
+
+  /**
+   * Clean translated text (remove timecodes, normalize line endings)
+   */
+  cleanTranslatedText(text) {
+    let cleaned = text.trim();
+
+    // Remove any embedded timecodes
+    const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
+    cleaned = cleaned.replace(timecodePattern, '').trim();
+
+    // Normalize line endings (CRLF → LF)
+    cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    return cleaned;
+  }
+
+  /**
    * Check if batch entries are cached
-   * @param {Array} batch - Batch of entries
-   * @param {string} targetLanguage - Target language
-   * @param {string} customPrompt - Custom prompt (affects cache key)
-   * @returns {Object} - { allCached: boolean, entries: Array }
    */
   checkBatchCache(batch, targetLanguage, customPrompt) {
+    if (!CACHE_TRANSLATIONS) {
+      return { allCached: false, entries: [] };
+    }
+
     const cachedEntries = [];
     let cacheHits = 0;
 
@@ -597,41 +369,33 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       log.debug(() => `[TranslationEngine] Cache: ${cacheHits}/${batch.length} entries cached`);
     }
 
-    return {
-      allCached,
-      entries: allCached ? cachedEntries : []
-    };
+    return { allCached, entries: allCached ? cachedEntries : [] };
   }
 
   /**
    * Get cached entry translation
-   * @param {string} sourceText - Source text
-   * @param {string} targetLanguage - Target language
-   * @param {string} customPrompt - Custom prompt (affects cache key)
-   * @returns {string|null} - Cached translation or null
    */
   getCachedEntry(sourceText, targetLanguage, customPrompt) {
+    if (!CACHE_TRANSLATIONS) return null;
+
     const key = this.createCacheKey(sourceText, targetLanguage, customPrompt);
     return entryCache.get(key) || null;
   }
 
   /**
    * Cache an entry translation
-   * @param {string} sourceText - Source text
-   * @param {string} targetLanguage - Target language
-   * @param {string} translatedText - Translated text
-   * @param {string} customPrompt - Custom prompt (affects cache key)
    */
   cacheEntry(sourceText, targetLanguage, translatedText, customPrompt) {
-    // Enforce cache size limit (LRU-like behavior)
+    if (!CACHE_TRANSLATIONS) return;
+
+    // Enforce cache size limit
     if (entryCache.size >= MAX_ENTRY_CACHE_SIZE) {
-      // Remove oldest entries (first 10% of max size to reduce eviction frequency)
       const evictionCount = Math.floor(MAX_ENTRY_CACHE_SIZE * 0.1);
       const keysToDelete = Array.from(entryCache.keys()).slice(0, evictionCount);
       for (const key of keysToDelete) {
         entryCache.delete(key);
       }
-      log.debug(() => `[TranslationEngine] Evicted ${evictionCount} entries from cache (size: ${entryCache.size})`);
+      log.debug(() => `[TranslationEngine] Evicted ${evictionCount} entries from cache`);
     }
 
     const key = this.createCacheKey(sourceText, targetLanguage, customPrompt);
@@ -640,16 +404,12 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Create cache key for an entry
-   * @param {string} sourceText - Source text
-   * @param {string} targetLanguage - Target language
-   * @param {string} customPrompt - Custom prompt (affects cache key)
-   * @returns {string} - Cache key
    */
   createCacheKey(sourceText, targetLanguage, customPrompt) {
     const normalized = sourceText.trim().toLowerCase();
-    // Include customPrompt in cache key to prevent using cached translations
-    // when retranslating with different prompts/settings
-    const promptHash = customPrompt ? crypto.createHash('md5').update(customPrompt).digest('hex').substring(0, 8) : 'default';
+    const promptHash = customPrompt
+      ? crypto.createHash('md5').update(customPrompt).digest('hex').substring(0, 8)
+      : 'default';
     const hash = crypto.createHash('md5')
       .update(`${normalized}:${targetLanguage}:${promptHash}`)
       .digest('hex');
@@ -666,7 +426,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Get cache statistics
-   * @returns {Object} - Cache stats
    */
   getCacheStats() {
     return {

@@ -1785,84 +1785,30 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
     // Initialize new Translation Engine (structure-first approach)
     const translationEngine = new TranslationEngine(gemini);
 
-    log.debug(() => '[Translation] Using new structure-first translation engine');
+    log.debug(() => '[Translation] Using unified translation engine');
 
-    // Setup progressive partial saving with adaptive timing
-    const translatedEntries = [];
-    let lastFlush = Date.now();
-    let partialSaveCount = 0; // Track how many times we've saved partial results
-    let lastPartialContent = null; // Track last partial content for final flush (chunked mode)
-
-    // Adaptive flush timing:
-    // - First partial: 15s (quick initial feedback to user)
-    // - Subsequent partials: 30-60s (reduce I/O overhead)
-    const firstFlushInterval = parseInt(process.env.PARTIAL_FIRST_FLUSH_MS) || 15000; // 15s for first partial
-    const subsequentFlushInterval = parseInt(process.env.PARTIAL_FLUSH_INTERVAL_MS) || 30000; // 30s for subsequent partials
-
-    const getFlushInterval = () => {
-      return partialSaveCount === 0 ? firstFlushInterval : subsequentFlushInterval;
-    };
-
-    const savePartial = async () => {
-      if (translatedEntries.length === 0) return;
-
-      // Build partial SRT with translated entries so far
-      const partialSrt = buildPartialSrtWithTail(toSRT(translatedEntries));
-      if (partialSrt && partialSrt.length > 0) {
-        await saveToPartialCacheAsync(cacheKey, {
-          content: partialSrt,
-          expiresAt: Date.now() + 60 * 60 * 1000
-        });
-        partialSaveCount++;
-        const interval = partialSaveCount === 1 ? 'first' : 'subsequent';
-        log.debug(() => `[Translation] Saved partial (${interval}): ${translatedEntries.length} entries (${partialSrt.length} chars)`);
-      }
-    };
-
-    // Translate using structure-first engine with progress callback
+    // Translate with real-time progress - save partial results after each batch
     let translatedContent;
+    let lastSavedBatch = 0;
+
     try {
       translatedContent = await translationEngine.translateSubtitle(
         sourceContent,
         targetLangName,
         config.translationPrompt,
         async (progress) => {
-          // Store translated entry (if available - batch mode provides individual entries)
-          if (progress.entry) {
-            translatedEntries.push(progress.entry);
-          }
+          // Save partial results immediately after each batch completes
+          // This provides real-time progressive delivery without arbitrary time delays
+          if (progress.partialSRT && progress.currentBatch > lastSavedBatch) {
+            lastSavedBatch = progress.currentBatch;
 
-          // For chunked mode: save partial content with adaptive timing (respects flush intervals)
-          if (progress.partialContent) {
-            // Always track the latest partial content for final flush
-            lastPartialContent = progress.partialContent;
-
-            const now = Date.now();
-            const currentInterval = getFlushInterval();
-
-            // Only save if enough time has passed since last flush (prevents rapid bursts with parallel processing)
-            if (now - lastFlush > currentInterval) {
-              lastFlush = now;
-
-              const partialSrt = buildPartialSrtWithTail(progress.partialContent);
-              if (partialSrt && partialSrt.length > 0) {
-                await saveToPartialCacheAsync(cacheKey, {
-                  content: partialSrt,
-                  expiresAt: Date.now() + 60 * 60 * 1000
-                });
-                partialSaveCount++;
-                const interval = partialSaveCount === 1 ? 'first' : 'subsequent';
-                log.debug(() => `[Translation] Saved partial (chunked, ${interval}): ${progress.completedEntries} entries (${partialSrt.length} chars)`);
-                lastPartialContent = null; // Clear since we just saved it
-              }
-            }
-          } else {
-            // For batch mode: flush periodically with adaptive timing
-            const now = Date.now();
-            const currentInterval = getFlushInterval();
-            if (now - lastFlush > currentInterval) {
-              lastFlush = now;
-              await savePartial();
+            const partialSrt = buildPartialSrtWithTail(progress.partialSRT);
+            if (partialSrt && partialSrt.length > 0) {
+              await saveToPartialCacheAsync(cacheKey, {
+                content: partialSrt,
+                expiresAt: Date.now() + 60 * 60 * 1000
+              });
+              log.debug(() => `[Translation] Saved partial: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.completedEntries}/${progress.totalEntries} entries (${partialSrt.length} chars)`);
             }
           }
 
@@ -1873,22 +1819,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
         }
       );
 
-      // Final flush
-      await savePartial();
-
-      // For chunked mode: ensure the last partial content is saved if it wasn't already
-      if (lastPartialContent) {
-        const partialSrt = buildPartialSrtWithTail(lastPartialContent);
-        if (partialSrt && partialSrt.length > 0) {
-          await saveToPartialCacheAsync(cacheKey, {
-            content: partialSrt,
-            expiresAt: Date.now() + 60 * 60 * 1000
-          });
-          log.debug(() => `[Translation] Saved final partial (chunked): ${partialSrt.length} chars`);
-        }
-      }
-
-      log.debug(() => '[Translation] Structure-first translation completed successfully');
+      log.debug(() => '[Translation] Translation completed successfully');
 
     } catch (error) {
       log.error(() => ['[Translation] Structure-first translation failed:', error.message]);
