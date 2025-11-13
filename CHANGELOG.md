@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 **Translation Engine - Complete Rewrite:**
 - Completely rewrote subtitle translation workflow with structure-first approach to eliminate sync problems
 - NEW: Translation engine now preserves original SRT timing (timings never sent to AI, can't be modified)
-- Hardcoded gemini-flash-lite-09-2025 for consistency across all translations
+- Hardcoded gemini-2.5-flash-lite-09-2025 for consistency across all translations
 - Model selection UI will return in future versions with workflow optimization for different models
 
 **New Features and Updates:**
