@@ -314,17 +314,24 @@ Translate to {target_language}.`;
      */
     function updateBypassCacheForAdvancedSettings() {
         const bypassEl = document.getElementById('bypassCache');
-        if (!bypassEl) return;
+        const cacheEl = document.getElementById('cacheEnabled');
+        if (!bypassEl || !cacheEl) return;
 
         const isModified = areAdvancedSettingsModified();
 
         if (isModified) {
             // Advanced settings are modified: force and lock bypass cache
+            // 1) Turn OFF main cache so mutual exclusivity logic can set bypass ON
+            cacheEl.checked = false;
+            // 2) Refresh mutual exclusivity UI
+            updateCacheToggles();
+            // 3) Explicitly check + lock bypass
             bypassEl.checked = true;
             bypassEl.disabled = true;
         } else {
-            // Advanced settings at defaults: unlock bypass cache
+            // Advanced settings at defaults: unlock bypass cache and refresh UI
             bypassEl.disabled = false;
+            updateCacheToggles();
         }
     }
 
