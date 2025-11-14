@@ -1558,6 +1558,73 @@
                 </div>
             </div>
 
+            <!-- Advanced Settings -->
+            <div class="card collapsed" data-card="advanced" id="advancedSettingsCard" style="display: none;">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <div class="card-icon">🔬</div>
+                        <h2 class="card-title">
+                            <input type="checkbox" id="advancedSettingsEnabled" style="margin-right: 8px; vertical-align: middle;">
+                            Advanced Settings (EXPERIMENTAL)
+                        </h2>
+                    </div>
+                    <button type="button" class="collapse-btn collapsed" data-collapse="advanced"></button>
+                </div>
+
+                <div class="card-content">
+                    <div class="highlight-box" style="margin-bottom: 1.5rem;">
+                        <p style="font-size: 0.9rem; margin: 0;">
+                            <strong>Fine-tune AI behavior:</strong> Override default model, sampling parameters, and enable experimental features. Changes here affect translation quality, speed, and uniqueness.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="advancedModel">
+                            Translation Model Override
+                            <span class="label-description">Override the default model. Leave empty to use system default (gemini-2.5-flash-lite-preview-09-2025).</span>
+                        </label>
+                        <select id="advancedModel">
+                            <option value="">Use Default Model</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="advancedThinkingBudget">
+                            Thinking Budget (Extended Reasoning)
+                            <span class="label-description">0 = disabled, -1 = dynamic (auto-adjust), or fixed token count (1-32768). Higher values = deeper reasoning but slower.</span>
+                        </label>
+                        <input type="number" id="advancedThinkingBudget" min="-1" max="32768" step="1" value="0" placeholder="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="advancedTemperature">
+                            Temperature (Creativity)
+                            <span class="label-description">Controls randomness (0.0-2.0). Lower = more deterministic, Higher = more creative. Default: 0.8</span>
+                        </label>
+                        <input type="number" id="advancedTemperature" min="0" max="2" step="0.1" value="0.8" placeholder="0.8">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="advancedTopP">
+                            Top-P (Nucleus Sampling)
+                            <span class="label-description">Probability threshold (0.0-1.0). Lower = more focused, Higher = more diverse. Default: 0.95</span>
+                        </label>
+                        <input type="number" id="advancedTopP" min="0" max="1" step="0.05" value="0.95" placeholder="0.95">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="advancedQQ">
+                            <strong>QQ Mode (Quantum Quality)</strong>
+                            <span class="label-description" style="display: block; margin-top: 0.5rem;">
+                                <strong style="color: var(--warning);">⚠️ Automatically enables Bypass Cache.</strong><br>
+                                Each translation uses unique parameters for maximum quality variation. Translations won't be shared in the main database.
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <!-- Actions -->
             <div class="btn-group">
                 <button type="submit" class="btn btn-primary" accesskey="enter">
@@ -1582,7 +1649,7 @@
     <footer class="footer">
         <div class="footer-content">
             <p>
-                Made with <span class="footer-heart">❤️</span> for Stremio users everywhere
+                Made with <span class="footer-heart" id="secretHeart" style="cursor: pointer; user-select: none;">❤️</span> for Stremio users everywhere
             </p>
             <p style="font-size: 0.875rem;">
                 Thank you for using SubMaker! Your support helps make content accessible to everyone.

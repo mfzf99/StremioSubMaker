@@ -283,10 +283,17 @@ Translate to {target_language}.`;
             },
             fileTranslationEnabled: false, // enable file upload translation feature
             advancedSettings: {
+                enabled: false, // Enable advanced settings override
+                geminiModel: '', // Override model (empty = use default)
                 maxOutputTokens: 65536,
                 chunkSize: 12000,
                 translationTimeout: 600, // seconds
-                maxRetries: 5
+                maxRetries: 5,
+                thinkingBudget: 0, // 0 = disabled, -1 = dynamic, >0 = fixed
+                temperature: 0.8,
+                topP: 0.95,
+                topK: 40,
+                qq: false // Quantum Quality mode (forces bypass cache)
             }
         };
     }
@@ -647,6 +654,41 @@ Translate to {target_language}.`;
                 showFileTranslationModal();
             }
         });
+
+        // Advanced Settings - QQ mode auto-enables bypass cache
+        const advQQEl = document.getElementById('advancedQQ');
+        if (advQQEl) {
+            advQQEl.addEventListener('change', (e) => {
+                const bypassEl = document.getElementById('bypassCache');
+                if (bypassEl) {
+                    if (e.target.checked) {
+                        // QQ mode ON: force bypass cache and lock it
+                        bypassEl.checked = true;
+                        bypassEl.disabled = true;
+                        showAlert('QQ Mode enabled! Bypass Cache is now automatically enabled and locked.', 'info');
+                    } else {
+                        // QQ mode OFF: unlock bypass cache
+                        bypassEl.disabled = false;
+                    }
+                }
+            });
+        }
+
+        // Secret experimental mode: Click the heart to reveal advanced settings
+        const secretHeart = document.getElementById('secretHeart');
+        if (secretHeart) {
+            secretHeart.addEventListener('click', () => {
+                const advancedCard = document.getElementById('advancedSettingsCard');
+                if (advancedCard && advancedCard.style.display === 'none') {
+                    advancedCard.style.display = 'block';
+                    showAlert('🔬 Experimental Mode ON', 'success');
+                    // Scroll to the advanced settings card
+                    setTimeout(() => {
+                        advancedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 300);
+                }
+            });
+        }
 
         // Note: Modal close buttons are handled by delegated event listeners (lines 188-206)
         // No need to attach individual listeners here
@@ -1009,6 +1051,9 @@ Translate to {target_language}.`;
                 statusDiv.className = 'model-status';
             }, 3000);
 
+            // Also populate advanced model dropdown
+            await populateAdvancedModels(models, filteredModels);
+
         } catch (error) {
             statusDiv.innerHTML = '✗ Failed to fetch models. Check your API key.';
             statusDiv.className = 'model-status error';
@@ -1018,6 +1063,28 @@ Translate to {target_language}.`;
                 statusDiv.className = 'model-status';
             }, 5000);
         }
+    }
+
+    async function populateAdvancedModels(allModels, filteredModels) {
+        const advModelSelect = document.getElementById('advancedModel');
+        if (!advModelSelect) return;
+
+        // Clear and populate advanced model dropdown
+        advModelSelect.innerHTML = '<option value="">Use Default Model</option>';
+
+        // Use filtered models (pro/flash only)
+        filteredModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.name;
+            option.textContent = `${model.displayName}`;
+
+            // Check if this model is selected in advanced settings
+            if (currentConfig.advancedSettings?.geminiModel === model.name) {
+                option.selected = true;
+            }
+
+            advModelSelect.appendChild(option);
+        });
     }
 
     function handleQuickAction(e) {
@@ -1283,6 +1350,31 @@ Translate to {target_language}.`;
         if (advChunkSizeEl) advChunkSizeEl.value = currentConfig.advancedSettings?.chunkSize || 10000;
         if (advTimeoutEl) advTimeoutEl.value = currentConfig.advancedSettings?.translationTimeout || 600;
         if (advRetriesEl) advRetriesEl.value = currentConfig.advancedSettings?.maxRetries || 5;
+
+        // Load new advanced settings fields
+        const advEnabledEl = document.getElementById('advancedSettingsEnabled');
+        const advModelEl = document.getElementById('advancedModel');
+        const advThinkingEl = document.getElementById('advancedThinkingBudget');
+        const advTempEl = document.getElementById('advancedTemperature');
+        const advTopPEl = document.getElementById('advancedTopP');
+        const advQQEl = document.getElementById('advancedQQ');
+
+        if (advEnabledEl) advEnabledEl.checked = currentConfig.advancedSettings?.enabled || false;
+        if (advModelEl) {
+            // Will be populated by fetchAvailableModels
+            advModelEl.value = currentConfig.advancedSettings?.geminiModel || '';
+        }
+        if (advThinkingEl) advThinkingEl.value = currentConfig.advancedSettings?.thinkingBudget ?? 0;
+        if (advTempEl) advTempEl.value = currentConfig.advancedSettings?.temperature ?? 0.8;
+        if (advTopPEl) advTopPEl.value = currentConfig.advancedSettings?.topP ?? 0.95;
+        if (advQQEl) {
+            advQQEl.checked = currentConfig.advancedSettings?.qq || false;
+            // If QQ is enabled, auto-enable bypass cache
+            if (advQQEl.checked && bypassEl) {
+                bypassEl.checked = true;
+                bypassEl.disabled = true; // Lock it when QQ is enabled
+            }
+        }
     }
 
     async function handleSubmit(e) {
@@ -1302,7 +1394,8 @@ Translate to {target_language}.`;
             noTranslationMode: currentConfig.noTranslationMode,
             noTranslationLanguages: currentConfig.noTranslationLanguages,
             geminiApiKey: document.getElementById('geminiApiKey').value.trim(),
-            geminiModel: document.getElementById('geminiModel').value,
+            // Always use default model (advanced settings will override if enabled)
+            geminiModel: 'gemini-2.5-flash-lite-preview-09-2025',
             promptStyle: promptStyle,
             translationPrompt: translationPrompt,
             sourceLanguages: currentConfig.sourceLanguages,
@@ -1328,21 +1421,43 @@ Translate to {target_language}.`;
                 duration: 0,
                 persistent: true
             },
-            bypassCache: (!document.getElementById('cacheEnabled').checked) || (document.getElementById('bypassCache') && document.getElementById('bypassCache').checked) || false,
+            bypassCache: (function() {
+                const qqEnabled = document.getElementById('advancedQQ')?.checked || false;
+                const cacheDisabled = !document.getElementById('cacheEnabled').checked;
+                const bypassChecked = document.getElementById('bypassCache')?.checked || false;
+                return qqEnabled || cacheDisabled || bypassChecked;
+            })(),
             bypassCacheConfig: {
-                enabled: (!document.getElementById('cacheEnabled').checked) || (document.getElementById('bypassCache') && document.getElementById('bypassCache').checked) || false,
+                enabled: (function() {
+                    const qqEnabled = document.getElementById('advancedQQ')?.checked || false;
+                    const cacheDisabled = !document.getElementById('cacheEnabled').checked;
+                    const bypassChecked = document.getElementById('bypassCache')?.checked || false;
+                    return qqEnabled || cacheDisabled || bypassChecked;
+                })(),
                 duration: 12
             },
             tempCache: { // Deprecated: kept for backward compatibility
-                enabled: (!document.getElementById('cacheEnabled').checked) || (document.getElementById('bypassCache') && document.getElementById('bypassCache').checked) || false,
+                enabled: (function() {
+                    const qqEnabled = document.getElementById('advancedQQ')?.checked || false;
+                    const cacheDisabled = !document.getElementById('cacheEnabled').checked;
+                    const bypassChecked = document.getElementById('bypassCache')?.checked || false;
+                    return qqEnabled || cacheDisabled || bypassChecked;
+                })(),
                 duration: 12
             },
             fileTranslationEnabled: document.getElementById('fileTranslationEnabled').checked,
             advancedSettings: {
+                enabled: (function(){ const el = document.getElementById('advancedSettingsEnabled'); return el ? el.checked : false; })(),
+                geminiModel: (function(){ const el = document.getElementById('advancedModel'); return el ? el.value : ''; })(),
                 maxOutputTokens: (function(){ const el = document.getElementById('maxOutputTokens'); return parseInt(el ? el.value : '') || 65536; })(),
                 chunkSize: (function(){ const el = document.getElementById('chunkSize'); return parseInt(el ? el.value : '') || 10000; })(),
                 translationTimeout: (function(){ const el = document.getElementById('translationTimeout'); return parseInt(el ? el.value : '') || 600; })(),
-                maxRetries: (function(){ const el = document.getElementById('maxRetries'); return parseInt(el ? el.value : '') || 5; })()
+                maxRetries: (function(){ const el = document.getElementById('maxRetries'); return parseInt(el ? el.value : '') || 5; })(),
+                thinkingBudget: (function(){ const el = document.getElementById('advancedThinkingBudget'); return el ? parseInt(el.value) : 0; })(),
+                temperature: (function(){ const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.8; })(),
+                topP: (function(){ const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
+                topK: 40, // Keep default topK
+                qq: (function(){ const el = document.getElementById('advancedQQ'); return el ? el.checked : false; })()
             }
         };
 

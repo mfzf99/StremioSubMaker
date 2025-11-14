@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker 1.1.2
+
+**New Features:**
+- Added Advanced Settings (EXPERIMENTAL) section to configuration page for fine-tuning AI behavior
+- Model selection override: Choose any available Gemini model to override the default (gemini-2.5-flash-lite-preview-09-2025)
+- Thinking Budget control: Configure extended reasoning (0 = disabled, -1 = dynamic, or fixed token count up to 32768)
+- Temperature and Top-P sampling parameters: Adjust translation creativity and determinism
+- QQ Mode (Quantum Quality): Experimental mode that forces bypass cache to ensure unique translation parameters per request
+
+**Configuration Enhancements:**
+- Advanced settings configuration now overrides both default model and environment variable settings when enabled
+- QQ Mode automatically enables and locks bypass cache to prevent translation sharing in the main database
+- All advanced settings properly integrated with existing translation pipeline (file translation and subtitle translation)
+
 ## SubMaker 1.1.1
 
 **Bug Fixes:**

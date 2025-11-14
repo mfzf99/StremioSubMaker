@@ -157,6 +157,12 @@ function normalizeConfig(config) {
     mergedConfig.geminiModel = defaults.geminiModel;
   }
 
+  // Apply advanced settings model override if enabled
+  if (mergedConfig.advancedSettings?.enabled && mergedConfig.advancedSettings?.geminiModel) {
+    log.debug(() => `[Config] Advanced settings enabled: Overriding model '${mergedConfig.geminiModel}' with '${mergedConfig.advancedSettings.geminiModel}'`);
+    mergedConfig.geminiModel = mergedConfig.advancedSettings.geminiModel;
+  }
+
   // Enforce permanent disk caching regardless of client config
   mergedConfig.translationCache.enabled = true;
   mergedConfig.translationCache.persistent = true;
