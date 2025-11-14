@@ -205,7 +205,7 @@ Please recreate your SubMaker configuration to continue using the addon.
 
 4
 00:00:09,001 --> 04:00:00,000
-Visit the addon configuration page and set up your preferences again.
+Visit the addon configuration page, set up your preferences again and re-install.
 `;
 
   return srt;

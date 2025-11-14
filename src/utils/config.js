@@ -339,13 +339,28 @@ function validateConfig(config) {
 const { version } = require('./version');
 
 function buildManifest(config, baseUrl = '') {
-  const sourceLanguageNames = config.sourceLanguages
-    .map(code => code.toUpperCase())
-    .join(', ');
+  // Check if this is a session token error
+  const hasSessionTokenError = config.__sessionTokenError === true;
 
-  const targetLanguageNames = config.targetLanguages
-    .map(code => code.toUpperCase())
-    .join(', ');
+  // For session token errors, use placeholder languages to ensure Stremio calls the subtitle handler
+  // This allows the handler to display error subtitles to the user
+  let sourceLanguageNames, targetLanguageNames, description;
+
+  if (hasSessionTokenError) {
+    sourceLanguageNames = 'ERROR';
+    targetLanguageNames = 'ERROR';
+    description = '⚠️ Configuration Error: Session token not found or expired.\n\nPlease reconfigure the addon to continue using it.';
+  } else {
+    sourceLanguageNames = config.sourceLanguages
+      .map(code => code.toUpperCase())
+      .join(', ');
+
+    targetLanguageNames = config.targetLanguages
+      .map(code => code.toUpperCase())
+      .join(', ');
+
+    description = `Fetches subtitles from OpenSubtitles and translates them using Gemini AI.\n\nSource languages: ${sourceLanguageNames}\nTarget languages: ${targetLanguageNames}`;
+  }
 
   // Check if this is a configured instance (has API key)
   const isConfigured = config.geminiApiKey && config.geminiApiKey.trim() !== '';
@@ -358,7 +373,7 @@ function buildManifest(config, baseUrl = '') {
     id: 'com.stremio.submaker',
     version: version,
     name: 'SubMaker - Subtitle Translator',
-    description: `Fetches subtitles from OpenSubtitles and translates them using Gemini AI.\n\nSource languages: ${sourceLanguageNames}\nTarget languages: ${targetLanguageNames}`,
+    description: description,
 
     catalogs: [],
     resources: ['subtitles'],
