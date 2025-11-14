@@ -14,11 +14,12 @@ services:
       - STORAGE_TYPE=filesystem
 
       # Encryption key file path (persisted in bind mount)
-      - ENCRYPTION_KEY_FILE=/app/data/.encryption-key
+      - ENCRYPTION_KEY_FILE=/app/keys/.encryption-key
 
     volumes:
       # Persist cache and data directories
       - ./data:/app/data
       - ./.cache:/app/.cache
       - ./logs:/app/logs
+      - ./keys:/app/keys
     restart: unless-stopped
