@@ -40,8 +40,8 @@ Output ONLY the translated content, nothing else.`;
 class GeminiService {
   constructor(apiKey, model = '', advancedSettings = {}) {
     this.apiKey = apiKey;
-    // Use passed model, environment variable, or hardcoded default
-    this.model = model || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite-09-2025';
+    // Fallback to default if model not provided (config.js handles env var override)
+    this.model = model || 'gemini-2.5-flash-lite-preview-09-2025';
     this.baseUrl = GEMINI_API_URL;
 
     // Advanced settings with environment variable fallbacks

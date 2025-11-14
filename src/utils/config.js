@@ -4,6 +4,26 @@ const { getSessionManager } = require('./sessionManager');
 const log = require('./logger');
 
 /**
+ * Feature flag: Override deprecated/old model names with current default
+ * Set to false in the future to allow users to select any model they want
+ * Currently enabled to ensure all users get the latest stable model
+ */
+const OVERRIDE_DEPRECATED_MODELS = true;
+
+/**
+ * List of deprecated model names that should be replaced with the current default
+ * This prevents old saved configs from using outdated or experimental models
+ */
+const DEPRECATED_MODEL_NAMES = [
+  'gemini-flash-latest',
+  'gemini-2.0-flash-exp',
+  'gemini-2.5-flash-lite-09-2025', // Old name before preview version
+  'gemini-2.5-flash-latest',
+  'gemini-pro-latest',
+  'gemini-2.5-pro-latest'
+];
+
+/**
  * Parse configuration from config string or session token
  * @param {string} configStr - Base64 encoded config string OR session token
  * @param {Object} options - Options { isLocalhost: boolean }
@@ -130,6 +150,13 @@ function normalizeConfig(config) {
     }
   };
 
+  // Override deprecated model names with current default (if feature flag enabled)
+  // TO RE-ENABLE USER MODEL SELECTION: Set OVERRIDE_DEPRECATED_MODELS = false at top of file
+  if (OVERRIDE_DEPRECATED_MODELS && mergedConfig.geminiModel && DEPRECATED_MODEL_NAMES.includes(mergedConfig.geminiModel)) {
+    log.debug(() => `[Config] Overriding deprecated model '${mergedConfig.geminiModel}' with default '${defaults.geminiModel}'`);
+    mergedConfig.geminiModel = defaults.geminiModel;
+  }
+
   // Enforce permanent disk caching regardless of client config
   mergedConfig.translationCache.enabled = true;
   mergedConfig.translationCache.persistent = true;
@@ -222,7 +249,7 @@ function getDefaultConfig() {
     targetLanguages: [],
     geminiApiKey: '',
     // Use env variable for model if set, otherwise use default
-    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite-09-2025',
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite-preview-09-2025',
     translationPrompt: DEFAULT_TRANSLATION_PROMPT,
     subtitleProviders: {
       opensubtitles: {
