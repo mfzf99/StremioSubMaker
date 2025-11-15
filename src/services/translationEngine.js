@@ -113,7 +113,10 @@ class TranslationEngine {
         }
 
       } catch (error) {
-        log.error(() => [`[TranslationEngine] Error in batch ${batchIndex + 1}:`, error.message]);
+        // Only log if not already logged by upstream handler
+        if (!error._alreadyLogged) {
+          log.error(() => [`[TranslationEngine] Error in batch ${batchIndex + 1}:`, error.message]);
+        }
         // Wrap error but preserve original error properties (translationErrorType, statusCode, etc.)
         const wrappedError = new Error(`Translation failed at batch ${batchIndex + 1}: ${error.message}`);
         // Copy all properties from original error to preserved type information
@@ -122,6 +125,8 @@ class TranslationEngine {
         if (error.type) wrappedError.type = error.type;
         if (error.isRetryable !== undefined) wrappedError.isRetryable = error.isRetryable;
         if (error.originalError) wrappedError.originalError = error.originalError;
+        // Preserve the already-logged flag
+        if (error._alreadyLogged) wrappedError._alreadyLogged = true;
         throw wrappedError;
       }
     }

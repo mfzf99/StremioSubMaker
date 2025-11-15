@@ -1908,7 +1908,10 @@ async function handleTranslation(sourceFileId, targetLanguage, config) {
 
     // Start translation in background (don't await here)
     translationPromise.catch(error => {
-      log.error(() => ['[Translation] Background translation failed:', error.message]);
+      // Only log if not already logged by upstream handler
+      if (!error._alreadyLogged) {
+        log.error(() => ['[Translation] Background translation failed:', error.message]);
+      }
       // Mark as failed so it can be retried
       try {
         translationStatus.delete(cacheKey);
@@ -2060,7 +2063,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
       log.debug(() => '[Translation] Translation completed successfully');
 
     } catch (error) {
-      log.error(() => ['[Translation] Structure-first translation failed:', error.message]);
+      // Only log if not already logged by upstream handler
+      if (!error._alreadyLogged) {
+        log.error(() => ['[Translation] Structure-first translation failed:', error.message]);
+      }
       throw error;
     }
 
@@ -2127,7 +2133,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, cacheKey
     log.debug(() => '[Translation] Translation cached and ready to serve');
 
   } catch (error) {
-    log.error(() => ['[Translation] Background translation error:', error.message]);
+    // Only log if not already logged by upstream handler
+    if (!error._alreadyLogged) {
+      log.error(() => ['[Translation] Background translation error:', error.message]);
+    }
 
     // Determine error type for user-friendly message
     let errorType = 'other';

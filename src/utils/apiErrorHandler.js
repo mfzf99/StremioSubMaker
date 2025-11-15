@@ -206,6 +206,9 @@ function handleTranslationError(error, serviceName, options = {}) {
   customError.type = parsed.type;
   customError.isRetryable = parsed.isRetryable;
 
+  // Mark error as already logged to prevent duplicate logs in downstream handlers
+  customError._alreadyLogged = true;
+
   // Add translation-specific error flags for all error types
   // These are checked by performTranslation() and used to create user-friendly error messages
   if (parsed.statusCode === 403) {
