@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Sessions now use a sliding inactivity TTL: expire only after 90 days without access. Persistent storage TTL is refreshed on use, and original createdAt is preserved.
+- Fixed config page blank fields when opened from Stremio gear: frontend now resolves session tokens in `?config=` via new `GET /api/get-session/:token` to prefill saved settings.
+
 ## SubMaker 1.1.8 (sessions-experimental-refactor branch)
 
 **Critical Session Persistence & Reliability Improvements**

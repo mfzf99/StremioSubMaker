@@ -194,9 +194,10 @@ class RedisStorageAdapter extends StorageAdapter {
         }
       }
 
-      // Get existing entry size if updating
+      // Get existing entry size/createdAt if updating
       const existingMeta = await this.client.hgetall(metaKey);
       const oldSize = existingMeta.size ? parseInt(existingMeta.size, 10) : 0;
+      const preservedCreatedAt = existingMeta.createdAt ? parseInt(existingMeta.createdAt, 10) : null;
 
       // Use a pipeline for atomic operations
       const pipeline = this.client.pipeline();
@@ -213,7 +214,7 @@ class RedisStorageAdapter extends StorageAdapter {
       const expiresAt = ttl ? now + (ttl * 1000) : null;
       pipeline.hmset(metaKey, {
         size: contentSize,
-        createdAt: now,
+        createdAt: preservedCreatedAt || now,
         expiresAt: expiresAt || 'null'
       });
 

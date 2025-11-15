@@ -98,8 +98,10 @@ Translate to {target_language}.`;
         // Priority: cached config > URL config > default config
         // This ensures browser cache is respected unless explicitly shared via URL
         const cachedConfig = loadConfigFromCache();
+        const params = new URLSearchParams(window.location.search);
+        const rawConfigParam = params.get('config');
+        const hasExplicitUrlConfig = params.has('config');
         const urlConfig = parseConfigFromUrl();
-        const hasExplicitUrlConfig = new URLSearchParams(window.location.search).has('config');
         // Determine if this is the user's first config run
         isFirstRun = !cachedConfig && !hasExplicitUrlConfig;
 
@@ -107,8 +109,24 @@ Translate to {target_language}.`;
             // Use cached config - this is the most common case
             currentConfig = cachedConfig;
         } else if (hasExplicitUrlConfig) {
-            // URL has explicit config - use it (for sharing/linking)
+            // URL has explicit config - could be base64 or a session token
             currentConfig = urlConfig;
+
+            // New: If URL param looks like a session token, fetch stored config from server
+            if (isValidSessionToken(rawConfigParam)) {
+                try {
+                    const resp = await fetch(`/api/get-session/${rawConfigParam}`, { cache: 'no-store' });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data && data.config) {
+                            currentConfig = data.config;
+                        }
+                        try { localStorage.setItem(TOKEN_KEY, rawConfigParam); } catch (_) {}
+                    }
+                } catch (e) {
+                    // Ignore fetch errors; fallback to urlConfig/defaults
+                }
+            }
         }
         // else: currentConfig already initialized from parseConfigFromUrl() at top
 

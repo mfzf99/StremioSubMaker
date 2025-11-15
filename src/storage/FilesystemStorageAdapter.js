@@ -195,10 +195,23 @@ class FilesystemStorageAdapter extends StorageAdapter {
       const now = Date.now();
       const expiresAt = ttl ? now + (ttl * 1000) : null;
 
+      // Preserve createdAt if file already exists
+      let preservedCreatedAt = null;
+      try {
+        if (fs.existsSync(filePath)) {
+          const existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          if (existing && typeof existing.createdAt === 'number') {
+            preservedCreatedAt = existing.createdAt;
+          }
+        }
+      } catch (_) {
+        // ignore read/parse errors and fall back to now
+      }
+
       const data = {
         key,
         content: value,
-        createdAt: now,
+        createdAt: preservedCreatedAt || now,
         expiresAt
       };
 

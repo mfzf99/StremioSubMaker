@@ -153,7 +153,9 @@ class SessionManager {
         // Persist immediately (per-token) for durability across restarts and instances
         Promise.resolve().then(async () => {
             const adapter = await getStorageAdapter();
-            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION);
+            // Set sliding persistence TTL equal to maxAge
+            const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
         }).catch(err => {
             log.error(() => ['[SessionManager] Failed to persist new session:', err?.message || String(err)]);
         });
@@ -180,6 +182,15 @@ class SessionManager {
         sessionData.lastAccessedAt = Date.now();
         this.cache.set(token, sessionData);
         this.dirty = true;
+
+        // Persist touch to refresh persistent TTL
+        Promise.resolve().then(async () => {
+            const adapter = await getStorageAdapter();
+            const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+        }).catch(err => {
+            log.error(() => ['[SessionManager] Failed to refresh session TTL on access:', err?.message || String(err)]);
+        });
 
         // Decrypt sensitive fields in config before returning
         const decryptedConfig = decryptUserConfig(sessionData.config);
@@ -225,7 +236,8 @@ class SessionManager {
         // Persist immediately (per-token)
         Promise.resolve().then(async () => {
             const adapter = await getStorageAdapter();
-            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION);
+            const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
         }).catch(err => {
             log.error(() => ['[SessionManager] Failed to persist updated session:', err?.message || String(err)]);
         });
@@ -281,14 +293,21 @@ class SessionManager {
             const stored = await adapter.get(token, StorageAdapter.CACHE_TYPES.SESSION);
             if (!stored) return null;
             const now = Date.now();
-            const absoluteAge = now - stored.createdAt;
-            if (Number.isFinite(this.maxAge) && absoluteAge > this.maxAge) {
+            const inactivityAge = now - (stored.lastAccessedAt || stored.createdAt);
+            if (Number.isFinite(this.maxAge) && inactivityAge > this.maxAge) {
                 try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
                 return null;
             }
             // Refresh last accessed and cache it
             stored.lastAccessedAt = now;
             this.cache.set(token, stored);
+            // Refresh persistent TTL on successful load
+            try {
+                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            } catch (e) {
+                log.error(() => ['[SessionManager] Failed to refresh TTL during load from storage:', e?.message || String(e)]);
+            }
             // Return decrypted config
             return decryptUserConfig(stored.config);
         } catch (err) {
@@ -312,7 +331,8 @@ class SessionManager {
             let saved = 0;
             for (const [token, sessionData] of this.cache.entries()) {
                 // Persist each session independently to avoid multi-instance clobbering
-                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION);
+                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
                 saved++;
             }
 
@@ -369,8 +389,8 @@ class SessionManager {
                 const sessionData = await adapter.get(token, StorageAdapter.CACHE_TYPES.SESSION);
                 if (!sessionData) continue;
 
-                const absoluteAge = now - sessionData.createdAt;
-                if (Number.isFinite(this.maxAge) && absoluteAge > this.maxAge) {
+                const inactivityAge = now - (sessionData.lastAccessedAt || sessionData.createdAt);
+                if (Number.isFinite(this.maxAge) && inactivityAge > this.maxAge) {
                     expiredCount++;
                     try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
                     continue;
@@ -380,7 +400,8 @@ class SessionManager {
                     try {
                         sessionData.config = encryptUserConfig(sessionData.config);
                         migratedCount++;
-                        await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION);
+                        const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                        await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
                     } catch (error) {
                         log.error(() => [`[SessionManager] Failed to encrypt config for token ${token}:`, error.message]);
                     }

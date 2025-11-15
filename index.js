@@ -377,6 +377,8 @@ app.use((req, res, next) => {
         '/api/languages',
         '/api/test-opensubtitles',
         '/api/gemini-models',
+        // Read-only session fetch to prefill config page when opened from Stremio
+        '/api/get-session',
         // Allow config page to call validation/test endpoints from browser
         '/api/validate-gemini',
         '/api/validate-subsource',
@@ -1065,6 +1067,38 @@ app.get('/api/session-stats', (req, res) => {
     } catch (error) {
         log.error(() => '[Session API] Error getting stats:', error);
         res.status(500).json({ error: 'Failed to get session statistics' });
+    }
+});
+
+// API endpoint to fetch a stored session configuration by token (for UI prefill)
+app.get('/api/get-session/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        if (!token || !/^[a-f0-9]{32}$/.test(token)) {
+            return res.status(400).json({ error: 'Invalid session token format' });
+        }
+
+        // Try in-memory first
+        let cfg = sessionManager.getSession(token);
+        // Fallback to storage for cross-instance scenarios
+        if (!cfg) {
+            try {
+                cfg = await sessionManager.loadSessionFromStorage(token);
+            } catch (e) {
+                // ignore and treat as not found
+            }
+        }
+
+        if (!cfg) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        // Normalize before returning to keep UI consistent
+        const normalized = normalizeConfig(cfg);
+        return res.json({ config: normalized, token });
+    } catch (error) {
+        log.error(() => '[Session API] Error fetching session:', error);
+        res.status(500).json({ error: 'Failed to fetch session configuration' });
     }
 });
 
