@@ -17,8 +17,11 @@ async function getStorageAdapter() {
   return storageAdapter;
 }
 
-// Redis pub/sub client for cross-instance cache invalidation (only in Redis mode)
-let pubSubClient = null;
+// Redis pub/sub clients for cross-instance cache invalidation (only in Redis mode)
+// Note: Separate clients needed because Redis clients in subscriber mode can only use pub/sub commands
+let pubSubClient = null; // For subscribing to channels
+let publishClient = null; // For publishing messages (normal mode)
+
 async function getPubSubClient() {
   const storageType = process.env.STORAGE_TYPE || 'filesystem';
   if (storageType !== 'redis') {
@@ -51,6 +54,42 @@ async function getPubSubClient() {
     return pubSubClient;
   } catch (err) {
     log.error(() => ['[SessionManager] Failed to create pub/sub client:', err.message]);
+    return null;
+  }
+}
+
+async function getPublishClient() {
+  const storageType = process.env.STORAGE_TYPE || 'filesystem';
+  if (storageType !== 'redis') {
+    return null; // Not needed in filesystem mode
+  }
+
+  if (publishClient) {
+    return publishClient;
+  }
+
+  try {
+    publishClient = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      password: process.env.REDIS_PASSWORD || undefined,
+      db: process.env.REDIS_DB ? parseInt(process.env.REDIS_DB, 10) : 0,
+      keyPrefix: process.env.REDIS_KEY_PREFIX || 'stremio:',
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      }
+    });
+
+    // Set up error handlers
+    publishClient.on('error', (err) => {
+      log.error(() => ['[SessionManager] Publish client error:', err.message]);
+    });
+
+    return publishClient;
+  } catch (err) {
+    log.error(() => ['[SessionManager] Failed to create publish client:', err.message]);
     return null;
   }
 }
@@ -200,13 +239,13 @@ class SessionManager {
         }
 
         try {
-            const pubSub = await getPubSubClient();
-            if (!pubSub) {
+            const publisher = await getPublishClient();
+            if (!publisher) {
                 return;
             }
 
             const message = JSON.stringify({ token, action, timestamp: Date.now() });
-            await pubSub.publish('session:invalidate', message);
+            await publisher.publish('session:invalidate', message);
             log.debug(() => `[SessionManager] Published invalidation event: ${token} (${action})`);
         } catch (err) {
             log.error(() => ['[SessionManager] Failed to publish invalidation event:', err.message]);
@@ -746,13 +785,21 @@ class SessionManager {
                 log.error(() => '[SessionManager] All save attempts failed during shutdown - sessions may be lost');
             }
 
-            // Close pub/sub connection if initialized
+            // Close pub/sub and publish connections if initialized
             if (pubSubClient) {
                 try {
                     await pubSubClient.quit();
                     log.warn(() => '[SessionManager] Pub/Sub connection closed');
                 } catch (err) {
                     log.error(() => ['[SessionManager] Error closing pub/sub connection:', err.message]);
+                }
+            }
+            if (publishClient) {
+                try {
+                    await publishClient.quit();
+                    log.warn(() => '[SessionManager] Publish connection closed');
+                } catch (err) {
+                    log.error(() => ['[SessionManager] Error closing publish connection:', err.message]);
                 }
             }
 
