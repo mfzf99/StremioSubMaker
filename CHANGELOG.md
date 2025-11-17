@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 **Bug Fixes:**
 - Fixed sutitle sources from returning subtitles from all episodes in a season instead of only the requested episode
 - Fixed session lookup after server restart: `getSession()` and `updateSession()` now automatically fall back to Redis/storage when sessions are not in memory cache
+- Fixed Redis pub/sub self-invalidation: instances now ignore their own invalidation events to prevent sessions from expiring immediately after updates
 
 ## SubMaker 1.2.0, 1.2.1
 

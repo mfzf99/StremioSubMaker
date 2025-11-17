@@ -100,6 +100,9 @@ async function getPublishClient() {
  */
 class SessionManager {
     constructor(options = {}) {
+        // Generate unique instance ID to prevent self-invalidation in pub/sub
+        this.instanceId = crypto.randomBytes(8).toString('hex');
+
         // If maxSessions is not provided or invalid, leave cache unbounded by count
         this.maxSessions = (Number.isFinite(options.maxSessions) && options.maxSessions > 0)
             ? options.maxSessions
@@ -178,7 +181,7 @@ class SessionManager {
             }
 
             this.isReady = true;
-            log.debug(() => `[SessionManager] Ready to accept requests (in-memory sessions: ${this.cache.size})`);
+            log.debug(() => `[SessionManager] Ready to accept requests (instance: ${this.instanceId}, in-memory sessions: ${this.cache.size})`);
 
             // In Redis lazy-load mode, add helpful message about cross-instance fallback
             if (storageType === 'redis' && !sessionPreloadEnabled) {
@@ -209,7 +212,13 @@ class SessionManager {
             if (channel === invalidationChannel) {
                 try {
                     const data = JSON.parse(message);
-                    const { token, action } = data;
+                    const { token, action, instanceId } = data;
+
+                    // Ignore messages from ourselves to prevent self-invalidation
+                    if (instanceId === this.instanceId) {
+                        log.debug(() => `[SessionManager] Ignoring own invalidation event: ${token} (action: ${action})`);
+                        return;
+                    }
 
                     if (token && this.cache.has(token)) {
                         this.cache.delete(token);
@@ -244,7 +253,12 @@ class SessionManager {
                 return;
             }
 
-            const message = JSON.stringify({ token, action, timestamp: Date.now() });
+            const message = JSON.stringify({
+                token,
+                action,
+                instanceId: this.instanceId,
+                timestamp: Date.now()
+            });
             await publisher.publish('session:invalidate', message);
             log.debug(() => `[SessionManager] Published invalidation event: ${token} (${action})`);
         } catch (err) {
