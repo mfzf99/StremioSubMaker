@@ -10,15 +10,21 @@ All notable changes to this project will be documented in this file.
 - SubSource Bayesian rating algorithm: Confidence-weighted ratings prevent low-vote subtitles from ranking unfairly high
 - Subtitle format conversion: SubDL and SubSource now support .vtt, .ass, .ssa formats with automatic conversion to .srt
 - OpenSubtitles language support: Added mappings for Asturian, Manipuri, Syriac, Tetum, Santali, Extremaduran, Toki Pona, and regional variants (pt-PT, Spanish Latin America)
+- DNS caching: Integrated cacheable-lookup for faster DNS resolution across all subtitle services
+- Composite quality scoring: Weighted ranking algorithm (downloads 40%, rating 40%, upload date 20%) for better subtitle prioritization
+- SubDL release matching: Enhanced ranking by checking all compatible release names from API for improved filename matching
 
 **Bug Fixes:**
 - Fixed SubSource returning subtitles from ALL episodes in a season instead of only the requested episode
+- Fixed OpenSubtitles V3 and SubDL returning wrong episode subtitles despite episode parameter
 
 **Performance Improvements:**
 - SubSource reputation increased from 1 to 2 (equal to SubDL) based on rich API features and quality metadata
 - SubSource sorting changed from rating to popular (downloads) for better filename/release matching
 - SubSource result limit increased to 100 for better diversity and matching quality
 - OpenSubtitles V3 filename extraction now batched (10 concurrent requests per batch) to reduce rate limiting errors
+- Reduced max subtitles per language from 16 to 12 for improved UI performance
+- Enhanced HTTP client configuration with compression and optimized headers across all services
 
 ## SubMaker 1.2.0, 1.2.1
 
