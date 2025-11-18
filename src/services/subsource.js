@@ -539,6 +539,33 @@ class SubSourceService {
         filteredSubtitles = subtitles.filter(sub => {
           const name = (sub.name || '').toLowerCase();
 
+          // Check for season pack patterns (season without specific episode)
+          // Patterns: "season 3", "third season", "complete season 3", "s03 complete", etc.
+          const seasonPackPatterns = [
+            new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\d)`, 'i'),
+            new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
+            new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
+          ];
+
+          const isSeasonPack = seasonPackPatterns.some(pattern => pattern.test(name)) &&
+                               !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(name); // Exclude if has episode number
+
+          if (isSeasonPack) {
+            // Mark as season pack and include it (don't filter out)
+            sub.is_season_pack = true;
+            sub.season_pack_season = targetSeason;
+            sub.season_pack_episode = targetEpisode; // Store requested episode for download
+
+            // Encode season/episode info in fileId for download extraction
+            // Format: subsource_<id>_seasonpack_s<season>e<episode>
+            const originalFileId = sub.fileId || sub.id;
+            sub.fileId = `${originalFileId}_seasonpack_s${targetSeason}e${targetEpisode}`;
+            sub.id = sub.fileId; // Keep id in sync
+
+            log.debug(() => `[SubSource] Detected season pack: ${sub.name}`);
+            return true;
+          }
+
           // Check for season/episode patterns in subtitle name
           // Patterns: S02E01, s02e01, 2x01, S02.E01, etc.
           const seasonEpisodePatterns = [
@@ -582,7 +609,7 @@ class SubSourceService {
           log.debug(() => '[SubSource] No matches after episode filtering; returning no results for this episode');
         }
 
-        log.debug(() => [`[SubSource] After episode filtering: ${filteredSubtitles.length} subtitles`]);
+        log.debug(() => [`[SubSource] After episode filtering: ${filteredSubtitles.length} subtitles (including ${filteredSubtitles.filter(s => s.is_season_pack).length} season packs)`]);
       }
 
       // Limit to 20 results per language to control response size
@@ -610,7 +637,7 @@ class SubSourceService {
 
   /**
    * Download subtitle content
-   * @param {string} fileId - File ID from search results (format: subsource_<id>)
+   * @param {string} fileId - File ID from search results (format: subsource_<id> or subsource_<id>_seasonpack_s<season>e<episode>)
    * @param {string} subsource_id - SubSource subtitle ID
    * @returns {Promise<string>} - Subtitle content as text
    */
@@ -618,11 +645,28 @@ class SubSourceService {
     try {
       log.debug(() => ['[SubSource] Downloading subtitle:', fileId]);
 
-      // Parse the fileId to extract subsource_id if not provided
+      // Check if this is a season pack download
+      let isSeasonPack = false;
+      let seasonPackSeason = null;
+      let seasonPackEpisode = null;
+
+      // Parse the fileId to extract subsource_id and season pack info if not provided
       if (!subsource_id) {
         const parts = fileId.split('_');
         if (parts.length >= 2 && parts[0] === 'subsource') {
           subsource_id = parts[1];
+
+          // Check for season pack format: subsource_<id>_seasonpack_s<season>e<episode>
+          if (parts.length >= 4 && parts[2] === 'seasonpack') {
+            isSeasonPack = true;
+            // Parse s<season>e<episode> from parts[3]
+            const match = parts[3].match(/s(\d+)e(\d+)/i);
+            if (match) {
+              seasonPackSeason = parseInt(match[1]);
+              seasonPackEpisode = parseInt(match[2]);
+              log.debug(() => `[SubSource] Season pack download requested: S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
+            }
+          }
         } else {
           throw new Error('Invalid SubSource file ID format');
         }
@@ -667,19 +711,80 @@ class SubSourceService {
         const zip = await JSZip.loadAsync(responseBuffer, { base64: false });
 
         const entries = Object.keys(zip.files);
-        // Prefer .srt if available (return as-is). If not, try .vtt or convert .ass/.ssa -> .vtt
-        const srtEntry = entries.find(filename => filename.toLowerCase().endsWith('.srt'));
-        if (srtEntry) {
-          const subtitleContent = await zip.files[srtEntry].async('string');
-          log.debug(() => '[SubSource] Subtitle downloaded and extracted successfully from ZIP (.srt)');
+
+        // Helper function to find episode file in season pack
+        const findEpisodeFile = (files, season, episode) => {
+          const seasonEpisodePatterns = [
+            new RegExp(`s0*${season}e0*${episode}(?![0-9])`, 'i'),        // S02E01, s02e01
+            new RegExp(`${season}x0*${episode}(?![0-9])`, 'i'),           // 2x01
+            new RegExp(`s0*${season}\\.e0*${episode}(?![0-9])`, 'i'),     // S02.E01
+            new RegExp(`season[\\s._-]*0*${season}[\\s._-]*episode[\\s._-]*0*${episode}(?![0-9])`, 'i')  // Season 2 Episode 1
+          ];
+
+          // Find file that matches the episode pattern
+          for (const filename of files) {
+            const lowerName = filename.toLowerCase();
+            // Skip directories
+            if (zip.files[filename].dir) continue;
+
+            // Check if file matches episode patterns
+            if (seasonEpisodePatterns.some(pattern => pattern.test(lowerName))) {
+              return filename;
+            }
+          }
+
+          return null;
+        };
+
+        let targetEntry = null;
+
+        // If this is a season pack, find the specific episode file
+        if (isSeasonPack && seasonPackSeason && seasonPackEpisode) {
+          log.debug(() => `[SubSource] Searching for S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')} in season pack ZIP`);
+          log.debug(() => `[SubSource] Available files in ZIP: ${entries.join(', ')}`);
+
+          targetEntry = findEpisodeFile(entries, seasonPackSeason, seasonPackEpisode);
+
+          if (targetEntry) {
+            log.debug(() => `[SubSource] Found episode file in season pack: ${targetEntry}`);
+          } else {
+            log.error(() => `[SubSource] Could not find S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')} in season pack ZIP`);
+            throw new Error(`Episode S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')} not found in season pack`);
+          }
+        } else {
+          // Not a season pack - use the first .srt file
+          targetEntry = entries.find(filename => filename.toLowerCase().endsWith('.srt'));
+        }
+
+        // Extract and return the target .srt file if found
+        if (targetEntry && targetEntry.toLowerCase().endsWith('.srt')) {
+          const subtitleContent = await zip.files[targetEntry].async('string');
+          log.debug(() => `[SubSource] Subtitle downloaded and extracted successfully from ZIP (.srt): ${targetEntry}`);
           return subtitleContent;
         }
 
-        // Fallback: support common formats
-        const altEntry = entries.find(filename => {
-          const f = filename.toLowerCase();
-          return f.endsWith('.vtt') || f.endsWith('.ass') || f.endsWith('.ssa') || f.endsWith('.sub');
-        });
+        // Fallback: support common formats (.vtt, .ass, .ssa, .sub)
+        let altEntry = null;
+
+        if (isSeasonPack && seasonPackSeason && seasonPackEpisode) {
+          // For season packs, search for episode file with alternate formats
+          const altFormatFiles = entries.filter(filename => {
+            const f = filename.toLowerCase();
+            return (f.endsWith('.vtt') || f.endsWith('.ass') || f.endsWith('.ssa') || f.endsWith('.sub')) && !zip.files[filename].dir;
+          });
+
+          altEntry = findEpisodeFile(altFormatFiles, seasonPackSeason, seasonPackEpisode);
+
+          if (altEntry) {
+            log.debug(() => `[SubSource] Found episode file with alternate format in season pack: ${altEntry}`);
+          }
+        } else {
+          // Not a season pack - use the first alternate format file
+          altEntry = entries.find(filename => {
+            const f = filename.toLowerCase();
+            return f.endsWith('.vtt') || f.endsWith('.ass') || f.endsWith('.ssa') || f.endsWith('.sub');
+          });
+        }
 
         if (altEntry) {
           // Read raw bytes and decode with BOM awareness

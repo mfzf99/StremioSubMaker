@@ -1218,6 +1218,17 @@ function rankSubtitlesByFilename(subtitles, streamFilename, videoInfo = null) {
     }
   }
 
+  // Apply penalty for season pack subtitles (rank them last)
+  // Season packs are downloaded on-demand and we only know the filename after download
+  // They should appear last in the list as a fallback option
+  for (const sub of withScores) {
+    if (sub.is_season_pack) {
+      // PENALTY: Season pack subtitle - rank last as fallback
+      sub._matchScore -= 5000; // Heavy penalty to ensure they appear last
+      log.debug(() => `[Ranking] Season pack penalty applied: ${sub.name} (new score: ${sub._matchScore})`);
+    }
+  }
+
   // Provider reputation scores (used as final tiebreaker when all else is equal)
   const providerReputation = {
     'opensubtitles-v3': 3, // Highest reputation (largest database, most reliable)
