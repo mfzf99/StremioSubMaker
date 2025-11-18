@@ -129,7 +129,7 @@ SubMaker Addon (Express + Stremio SDK)
     ├── Translation Engine → [Google Gemini AI]
     └── Cache Manager → [Memory LRU + Redis/Filesystem]
 
----
+```
 
 ## ⚙️ Configuration Guide
 
