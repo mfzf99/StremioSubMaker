@@ -39,26 +39,9 @@ function preprocessASS(content, format = 'ass') {
     .filter(line => !line.trim().startsWith(';'))
     .join('\n');
 
-  // 6. Fix actor/name tags that might interfere with parsing
-  // Some ASS files have actor names that contain special characters
-  processed = processed.split('\n').map(line => {
-    if (/^Dialogue:/i.test(line)) {
-      // Extract and clean the text portion
-      const parts = line.split(',');
-      if (parts.length >= 10) {
-        // The text is usually in the last part(s) after 9 comma-separated fields
-        const textStartIndex = 9;
-        const beforeText = parts.slice(0, textStartIndex).join(',');
-        const textParts = parts.slice(textStartIndex);
-        const text = textParts.join(',');
-
-        // Clean the text portion
-        const cleanedText = cleanDialogueText(text);
-        return beforeText + ',' + cleanedText;
-      }
-    }
-    return line;
-  }).join('\n');
+  // Note: We do NOT clean dialogue text here because it interferes with subsrt-ts parsing
+  // and can cause the first character of subtitle entries to be lost.
+  // Instead, we clean up ASS tags in the VTT output during post-processing.
 
   return processed;
 }
@@ -215,13 +198,41 @@ function postprocessVTT(vttContent) {
 
   processed = cleanedLines.join('\n');
 
-  // 3. Clean up excessive blank lines (more than 2 consecutive)
+  // 3. Remove any remaining ASS/SSA override tags from the subtitle text
+  // These tags might have been left by subsrt-ts conversion
+  // Pattern: {\tag} where tag starts with backslash
+  processed = processed.split('\n').map(line => {
+    // Only clean subtitle text lines (not timestamps or headers)
+    if (line.trim() &&
+        !line.startsWith('WEBVTT') &&
+        !/^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}/.test(line) &&
+        !/^NOTE\s/.test(line) &&
+        !/^\d+$/.test(line.trim())) {
+
+      let cleaned = line;
+
+      // Remove ASS override tags: {\...}
+      cleaned = cleaned.replace(/\{\\[^}]*\}/g, '');
+
+      // Remove any remaining braces that might be malformed tags
+      cleaned = cleaned.replace(/\{[^}]*\}/g, '');
+
+      // Handle escaped characters
+      cleaned = cleaned.replace(/\\h/g, ' '); // non-breaking space
+      cleaned = cleaned.replace(/\\N/g, '\n'); // line break
+
+      return cleaned;
+    }
+    return line;
+  }).join('\n');
+
+  // 4. Clean up excessive blank lines (more than 2 consecutive)
   processed = processed.replace(/\n{3,}/g, '\n\n');
 
-  // 4. Ensure file ends with a single newline
+  // 5. Ensure file ends with a single newline
   processed = processed.trim() + '\n';
 
-  // 5. Fix any remaining encoding issues
+  // 6. Fix any remaining encoding issues
   processed = processed.replace(/\uFFFD/g, ''); // Remove replacement characters
 
   return processed;
