@@ -13,9 +13,6 @@ All notable changes to this project will be documented in this file.
 - Translation engine now retries batch 1 time on MAX_TOKENS errors before failing to avoid discarding the whole translation
 - Enhanced debug logging: Comprehensive Gemini API configuration display showing all parameters (model, temperature, topK, topP, thinkingBudget, maxOutputTokens, timeout, maxRetries)
 - Updated config page beta warning: Changed from "Flash" to "2.5 Pro" to reflect current beta status
-- Enhanced OpenSubtitles configuration UI:
-  - Added "(Recommended)" label to Auth implementation option
-  - Added warning message to V3 option: "V3 doesn't show all OpenSubtitles results. Auth is faster and less problematic."
 - Improved Kitsu API reliability: Added retry logic (2 retries at 2s and 6s delays) for all Kitsu and Cinemeta API calls to handle temporary server errors (500) and network issues
 
 **Bug Fixes:**
