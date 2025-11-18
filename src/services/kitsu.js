@@ -22,7 +22,16 @@ class KitsuService {
   }
 
   /**
-   * Get anime info from Kitsu API
+   * Sleep helper for retry delays
+   * @param {number} ms - Milliseconds to sleep
+   * @returns {Promise<void>}
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get anime info from Kitsu API with retry logic
    * @param {string} kitsuId - Kitsu ID
    * @returns {Promise<Object>} - Anime info including mappings
    */
@@ -41,42 +50,78 @@ class KitsuService {
       return cached.data;
     }
 
-    try {
-      log.debug(() => [`[Kitsu] Fetching anime info for ID: ${numericId}`]);
+    // Retry configuration: 2 retries with delays of 2s and 6s
+    const retryDelays = [2000, 6000]; // milliseconds
+    let lastError = null;
 
-      // Fetch anime data with mappings included
-      const response = await axios.get(`${this.baseUrl}/anime/${numericId}`, {
-        params: {
-          include: 'mappings'
-        },
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'StremioSubMaker/1.0',
-          'Accept': 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json'
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        if (attempt === 0) {
+          log.debug(() => [`[Kitsu] Fetching anime info for ID: ${numericId}`]);
+        } else {
+          log.debug(() => [`[Kitsu] Retry ${attempt}/${retryDelays.length} for ID: ${numericId}`]);
         }
-      });
 
-      const animeData = response.data;
+        // Fetch anime data with mappings included
+        const response = await axios.get(`${this.baseUrl}/anime/${numericId}`, {
+          params: {
+            include: 'mappings'
+          },
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'StremioSubMaker/1.0',
+            'Accept': 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json'
+          }
+        });
 
-      // Cache the result
-      this.cache.set(cacheKey, {
-        data: animeData,
-        timestamp: Date.now()
-      });
+        const animeData = response.data;
 
-      return animeData;
-    } catch (error) {
-      log.warn(() => [`[Kitsu] Failed to fetch anime info for ID ${numericId}:`, error.message]);
+        // Cache the result
+        this.cache.set(cacheKey, {
+          data: animeData,
+          timestamp: Date.now()
+        });
 
-      // Cache null result to avoid repeated failed requests
-      this.cache.set(cacheKey, {
-        data: null,
-        timestamp: Date.now()
-      });
+        if (attempt > 0) {
+          log.info(() => [`[Kitsu] Successfully fetched anime info for ID ${numericId} on retry ${attempt}`]);
+        }
 
-      return null;
+        return animeData;
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a retryable error (5xx server errors or network errors)
+        const isRetryable =
+          error.response?.status >= 500 || // 5xx server errors
+          error.code === 'ECONNRESET' ||   // Connection reset
+          error.code === 'ETIMEDOUT' ||    // Timeout
+          error.code === 'ENOTFOUND' ||    // DNS lookup failed
+          !error.response;                 // Network error (no response)
+
+        // If we have retries left and the error is retryable, wait and retry
+        if (attempt < retryDelays.length && isRetryable) {
+          const delay = retryDelays[attempt];
+          log.debug(() => [`[Kitsu] Retryable error for ID ${numericId} (${error.message}), waiting ${delay}ms before retry ${attempt + 1}/${retryDelays.length}`]);
+          await this.sleep(delay);
+          continue;
+        }
+
+        // No more retries or non-retryable error
+        break;
+      }
     }
+
+    // All retries failed
+    log.warn(() => [`[Kitsu] Failed to fetch anime info for ID ${numericId} after ${retryDelays.length} retries:`, lastError?.message]);
+
+    // Cache null result to avoid repeated failed requests
+    this.cache.set(cacheKey, {
+      data: null,
+      timestamp: Date.now()
+    });
+
+    return null;
   }
 
   /**
@@ -176,31 +221,55 @@ class KitsuService {
    * @returns {Promise<string|null>} - IMDB ID if found
    */
   async getImdbFromTmdb(tmdbId, mediaType = 'tv') {
-    try {
-      // Use Cinemeta (Stremio's official metadata addon) to get IMDB ID from TMDB ID
-      // Format: https://v3-cinemeta.strem.io/meta/{type}/tmdb:{id}.json
-      const stremioType = mediaType === 'movie' ? 'movie' : 'series';
-      const response = await axios.get(
-        `https://v3-cinemeta.strem.io/meta/${stremioType}/tmdb:${tmdbId}.json`,
-        {
-          timeout: 10000,
-          headers: {
-            'User-Agent': 'StremioSubMaker/1.0'
+    const retryDelays = [2000, 6000]; // milliseconds
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        // Use Cinemeta (Stremio's official metadata addon) to get IMDB ID from TMDB ID
+        // Format: https://v3-cinemeta.strem.io/meta/{type}/tmdb:{id}.json
+        const stremioType = mediaType === 'movie' ? 'movie' : 'series';
+        const response = await axios.get(
+          `https://v3-cinemeta.strem.io/meta/${stremioType}/tmdb:${tmdbId}.json`,
+          {
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'StremioSubMaker/1.0'
+            }
           }
+        );
+
+        const imdbId = response.data?.meta?.imdb_id;
+        if (imdbId) {
+          log.debug(() => [`[Kitsu] Mapped TMDB ${mediaType} ${tmdbId} to IMDB ${imdbId} via Cinemeta`]);
+          return imdbId;
         }
-      );
 
-      const imdbId = response.data?.meta?.imdb_id;
-      if (imdbId) {
-        log.debug(() => [`[Kitsu] Mapped TMDB ${mediaType} ${tmdbId} to IMDB ${imdbId} via Cinemeta`]);
-        return imdbId;
+        return null;
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a retryable error
+        const isRetryable =
+          error.response?.status >= 500 ||
+          error.code === 'ECONNRESET' ||
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ENOTFOUND' ||
+          !error.response;
+
+        if (attempt < retryDelays.length && isRetryable) {
+          const delay = retryDelays[attempt];
+          log.debug(() => [`[Kitsu] Retryable error getting IMDB from TMDB ${mediaType} ${tmdbId}, waiting ${delay}ms before retry ${attempt + 1}/${retryDelays.length}`]);
+          await this.sleep(delay);
+          continue;
+        }
+
+        break;
       }
-
-      return null;
-    } catch (error) {
-      log.warn(() => [`[Kitsu] Failed to get IMDB from TMDB ${mediaType} ${tmdbId}:`, error.message]);
-      return null;
     }
+
+    log.warn(() => [`[Kitsu] Failed to get IMDB from TMDB ${mediaType} ${tmdbId} after ${retryDelays.length} retries:`, lastError?.message]);
+    return null;
   }
 
   /**
@@ -220,41 +289,71 @@ class KitsuService {
       ];
 
       for (const url of searchQueries) {
-        try {
-          const response = await axios.get(url, {
-            timeout: 10000,
-            headers: {
-              'User-Agent': 'StremioSubMaker/1.0'
-            }
-          });
+        const retryDelays = [2000, 6000]; // milliseconds
+        let lastError = null;
+        let metas = null;
 
-          const metas = response.data?.metas || [];
-
-          // Try to find an exact or close match
-          for (const meta of metas) {
-            const metaName = meta.name?.toLowerCase();
-            const searchTitleLower = title.toLowerCase();
-
-            // Check for exact match or very close match
-            if (metaName === searchTitleLower ||
-                metaName?.includes(searchTitleLower) ||
-                searchTitleLower.includes(metaName)) {
-
-              if (meta.imdb_id) {
-                log.debug(() => [`[Kitsu] Found match: "${meta.name}" (${meta.imdb_id})`]);
-                return meta.imdb_id;
+        // Retry logic for each URL
+        for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+          try {
+            const response = await axios.get(url, {
+              timeout: 10000,
+              headers: {
+                'User-Agent': 'StremioSubMaker/1.0'
               }
+            });
+
+            metas = response.data?.metas || [];
+            break; // Success, exit retry loop
+          } catch (error) {
+            lastError = error;
+
+            // Check if this is a retryable error
+            const isRetryable =
+              error.response?.status >= 500 ||
+              error.code === 'ECONNRESET' ||
+              error.code === 'ETIMEDOUT' ||
+              error.code === 'ENOTFOUND' ||
+              !error.response;
+
+            if (attempt < retryDelays.length && isRetryable) {
+              const delay = retryDelays[attempt];
+              log.debug(() => [`[Kitsu] Retryable error searching Cinemeta "${title}", waiting ${delay}ms before retry ${attempt + 1}/${retryDelays.length}`]);
+              await this.sleep(delay);
+              continue;
+            }
+
+            break;
+          }
+        }
+
+        // If all retries failed, continue to next search type
+        if (!metas) {
+          log.debug(() => [`[Kitsu] Search failed for URL ${url} after retries:`, lastError?.message]);
+          continue;
+        }
+
+        // Try to find an exact or close match
+        for (const meta of metas) {
+          const metaName = meta.name?.toLowerCase();
+          const searchTitleLower = title.toLowerCase();
+
+          // Check for exact match or very close match
+          if (metaName === searchTitleLower ||
+              metaName?.includes(searchTitleLower) ||
+              searchTitleLower.includes(metaName)) {
+
+            if (meta.imdb_id) {
+              log.debug(() => [`[Kitsu] Found match: "${meta.name}" (${meta.imdb_id})`]);
+              return meta.imdb_id;
             }
           }
+        }
 
-          // If no exact match, try the first result as a fallback
-          if (metas.length > 0 && metas[0].imdb_id) {
-            log.debug(() => [`[Kitsu] Using first result: "${metas[0].name}" (${metas[0].imdb_id})`]);
-            return metas[0].imdb_id;
-          }
-        } catch (error) {
-          // Continue to next search type
-          log.debug(() => [`[Kitsu] Search failed for URL ${url}:`, error.message]);
+        // If no exact match, try the first result as a fallback
+        if (metas.length > 0 && metas[0].imdb_id) {
+          log.debug(() => [`[Kitsu] Using first result: "${metas[0].name}" (${metas[0].imdb_id})`]);
+          return metas[0].imdb_id;
         }
       }
 
@@ -272,27 +371,55 @@ class KitsuService {
    * @returns {Promise<Array>} - Array of matching anime
    */
   async searchAnime(title) {
-    try {
-      log.debug(() => [`[Kitsu] Searching for anime: ${title}`]);
+    const retryDelays = [2000, 6000]; // milliseconds
+    let lastError = null;
 
-      const response = await axios.get(`${this.baseUrl}/anime`, {
-        params: {
-          filter: { text: title },
-          page: { limit: 5 }
-        },
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'StremioSubMaker/1.0',
-          'Accept': 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json'
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        if (attempt === 0) {
+          log.debug(() => [`[Kitsu] Searching for anime: ${title}`]);
+        } else {
+          log.debug(() => [`[Kitsu] Retry ${attempt}/${retryDelays.length} searching for anime: ${title}`]);
         }
-      });
 
-      return response.data?.data || [];
-    } catch (error) {
-      log.warn(() => [`[Kitsu] Failed to search anime "${title}":`, error.message]);
-      return [];
+        const response = await axios.get(`${this.baseUrl}/anime`, {
+          params: {
+            filter: { text: title },
+            page: { limit: 5 }
+          },
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'StremioSubMaker/1.0',
+            'Accept': 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json'
+          }
+        });
+
+        return response.data?.data || [];
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a retryable error
+        const isRetryable =
+          error.response?.status >= 500 ||
+          error.code === 'ECONNRESET' ||
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ENOTFOUND' ||
+          !error.response;
+
+        if (attempt < retryDelays.length && isRetryable) {
+          const delay = retryDelays[attempt];
+          log.debug(() => [`[Kitsu] Retryable error searching anime "${title}", waiting ${delay}ms before retry ${attempt + 1}/${retryDelays.length}`]);
+          await this.sleep(delay);
+          continue;
+        }
+
+        break;
+      }
     }
+
+    log.warn(() => [`[Kitsu] Failed to search anime "${title}" after ${retryDelays.length} retries:`, lastError?.message]);
+    return [];
   }
 
   /**
