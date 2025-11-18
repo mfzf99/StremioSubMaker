@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - Model-specific default configurations: individual default settings for each model on the configuration page for different translation workflows
 - Model-specific thinking budget and temperature defaults
-- Dynamic batch sizing: Changed from static to model-based function (Flash: 200, Flash-Lite: 150)
+- Dynamic batch sizing: Changed from static to model-based function (Flash: 250, Flash-Lite: 200)
 - Default translation model changed from Flash-Lite to Flash on configuration page
 - Translation engine now retries batch 1 time on MAX_TOKENS errors before failing to avoid discarding the whole translation
 - Enhanced debug logging: Comprehensive Gemini API configuration display showing all parameters (model, temperature, topK, topP, thinkingBudget, maxOutputTokens, timeout, maxRetries)

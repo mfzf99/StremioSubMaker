@@ -33,12 +33,12 @@ const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/
 
 /**
  * Get batch size for model (model-specific optimization)
- * Priority: Environment variable > Model-specific > Default (200)
+ * Priority: Environment variable > Model-specific > Default (250)
  *
  * Model-specific batch sizes are hardcoded in backend and safe from client manipulation.
  * Different models have different processing speeds and capabilities:
- * - Flash models: 200 entries (faster, more capable)
- * - Flash-lite models: 150 entries (more conservative for stability)
+ * - Flash models: 250 entries (faster, more capable)
+ * - Flash-lite models: 200 entries (more conservative for stability)
  *
  * @param {string} model - Gemini model name
  * @returns {number} - Batch size for this model
@@ -54,16 +54,16 @@ function getBatchSizeForModel(model) {
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 150;
+    return 200;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 200;
+    return 250;
   }
 
   // Default batch size for unknown models
-  return 200;
+  return 250;
 }
 
 class TranslationEngine {
