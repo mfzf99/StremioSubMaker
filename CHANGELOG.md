@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 
 **Bug Fixes:**
 
+- Fixed ASS/SSA to VTT conversion losing first character in ~50% of subtitle entries: Removed dialogue text preprocessing that interfered with subsrt-ts parser, moved ASS tag cleanup to post-processing stage
 - Enhanced ASS/SSA to VTT conversion quality: Added comprehensive preprocessing and postprocessing to prevent text loss, missing first letters, and formatting issues
   - New enhanced converter with BOM removal, malformed tag fixing, and smart override tag handling
   - Updated subsrt-ts from 2.0.1 to 2.1.2 for improved conversion reliability
@@ -25,6 +26,7 @@ All notable changes to this project will be documented in this file.
 
 **New Features:**
 
+- Gemini 2.5 Pro model support: Added Gemini 2.5 Pro (gemini-2.5-pro-preview-05-06) to translation model dropdown with optimized defaults (dynamic thinking, temperature 0.5)
 - Optional batch context feature: Include original surrounding entries and previous translations when processing batches for improved translation coherence across batch boundaries (disabled by default, can be enabled in Advanced Settings with configurable context size 1-10)
 - MicroDVD .sub format support: All subtitle providers now support MicroDVD .sub files with automatic conversion
 - Season pack subtitle support: SubSource and SubDL now automatically extract individual episodes from season pack ZIP archives
