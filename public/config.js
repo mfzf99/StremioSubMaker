@@ -61,7 +61,7 @@ Translate to {target_language}.`;
             temperature: 0.5
         },
         'gemini-2.5-pro': {
-            thinkingBudget: 0,
+            thinkingBudget: 1000,
             temperature: 0.5
         }
     };
@@ -818,23 +818,27 @@ Translate to {target_language}.`;
         document.getElementById('geminiModel').addEventListener('change', validateGeminiModel);
 
         // Update advanced settings when model changes (apply model-specific defaults)
+        // When user selects a new model, always reset advanced settings to that model's defaults
+        // This overrides any cached values from previous model selections
+        // Manual changes made AFTER model selection will persist until next model change
         document.getElementById('geminiModel').addEventListener('change', function(e) {
             const selectedModel = e.target.value;
             const modelDefaults = getModelSpecificDefaults(selectedModel);
+            const fullDefaults = getDefaultConfig(selectedModel).advancedSettings;
 
-            // Update advanced settings with model-specific defaults (if not explicitly modified by user)
+            // Reset ALL advanced settings fields to the new model's defaults
+            const advModelEl = document.getElementById('advancedModel');
             const advThinkingEl = document.getElementById('advancedThinkingBudget');
             const advTempEl = document.getElementById('advancedTemperature');
+            const advTopPEl = document.getElementById('advancedTopP');
 
-            if (advThinkingEl && advTempEl) {
-                // Only update if user hasn't explicitly modified these in advanced settings
-                // Check if current values match the previous model's defaults
-                advThinkingEl.value = modelDefaults.thinkingBudget;
-                advTempEl.value = modelDefaults.temperature;
+            if (advModelEl) advModelEl.value = ''; // Reset to "Use Default Model"
+            if (advThinkingEl) advThinkingEl.value = modelDefaults.thinkingBudget;
+            if (advTempEl) advTempEl.value = modelDefaults.temperature;
+            if (advTopPEl) advTopPEl.value = fullDefaults.topP;
 
-                // Update bypass cache state based on new defaults
-                updateBypassCacheForAdvancedSettings();
-            }
+            // Update bypass cache state based on new defaults
+            updateBypassCacheForAdvancedSettings();
         });
 
         // API Key Validation Buttons

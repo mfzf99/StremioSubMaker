@@ -39,6 +39,7 @@ const DEFAULT_TRANSLATION_PROMPT = `Translate the following subtitles while:
 Translate to {target_language}.
 
 Do NOT include acknowledgements, explanations, notes or alternative translations.
+Do NOT overthink. Do NOT overplan.
 
 Output ONLY the translated content, nothing else.`;
 
@@ -264,11 +265,19 @@ class GeminiService {
         const thinkingReserve = this.thinkingBudget > 0 ? this.thinkingBudget : 0;
         const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin - thinkingReserve));
 
-        // Use 3.5x multiplier for subtitle content (translations can expand 2-3x+)
-        const estimatedOutputTokens = Math.floor(Math.min(
-          availableForOutput,
-          Math.max(8192, estimatedSubtitleTokens * 3.5)
-        ));
+        // When thinking is enabled (dynamic or fixed budget), don't limit output based on subtitle size
+        // Thinking can consume significant tokens, so we need the full available output capacity
+        let estimatedOutputTokens;
+        if (this.thinkingBudget !== 0) {
+          // Thinking enabled: use full available output (thinking will consume part of maxOutputTokens)
+          estimatedOutputTokens = availableForOutput;
+        } else {
+          // Thinking disabled: use 3.5x multiplier for subtitle content (translations can expand 2-3x+)
+          estimatedOutputTokens = Math.floor(Math.min(
+            availableForOutput,
+            Math.max(8192, estimatedSubtitleTokens * 3.5)
+          ));
+        }
 
         // Prepare generation config
         const generationConfig = {
