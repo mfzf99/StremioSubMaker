@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker 1.3.1
+
+**Security & Reliability Improvements:**
+
+- Session creation rate limiting: Added per-IP rate limiting (10 sessions/hour) to prevent session flooding attacks and monopolization of the global session pool
+- Storage session limits: Implemented hard cap of 60,000 sessions in persistent storage (Redis/filesystem) with automatic purge of oldest-accessed sessions to prevent unbounded growth
+- Memory session cap reduction: Reduced in-memory session limit from 50,000 to 30,000 for better memory management while maintaining production scale
+- Session monitoring & alerting: Added comprehensive monitoring with alerts for storage utilization (warning at >80%, critical at ≥90%), abnormal session growth (>20%/hour), and eviction spikes (>3x average)
+- Automatic storage cleanup: Hourly cleanup process that purges 100 oldest-accessed sessions when storage utilization reaches 90%, targeting 85% utilization
+- Defense-in-depth session management: Dual limits on both memory (30k, LRU eviction) and storage (60k, oldest-accessed purge) for robust resource protection
+
+**Environment Variables:**
+
+- `SESSION_MAX_SESSIONS`: Updated default from 50,000 to 30,000 (in-memory limit)
+- `SESSION_STORAGE_MAX_SESSIONS`: New variable, default 60,000 (storage limit)
+- `SESSION_STORAGE_MAX_AGE`: New variable, default 90 days (storage retention period)
+
+**API Enhancements:**
+
+- Enhanced `/api/session-stats` endpoint with storage session count, utilization percentage, and eviction tracking
+- Session statistics now async to support storage-based counting
+
 ## SubMaker 1.3.0
 
 **Improvements:**
