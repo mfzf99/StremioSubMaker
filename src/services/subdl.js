@@ -107,12 +107,16 @@ class SubDLService {
       const queryParams = {
         api_key: this.apiKey,
         imdb_id: imdb_id, // SubDL accepts 'tt' prefix
-        languages: convertedLanguages.join(','),
         type: type, // 'movie' or 'tv'
         subs_per_page: 30, // Get maximum results for better ranking (max is 30)
         releases: 1, // Get releases list for better matching with user's files
         hi: 1 // Get hearing impaired flag for filtering
       };
+
+      // Only add languages parameter if languages are specified (for "just fetch" mode)
+      if (convertedLanguages.length > 0) {
+        queryParams.languages = convertedLanguages.join(',');
+      }
 
       // For TV shows and anime episodes, add season and episode parameters
       if ((type === 'episode' || type === 'anime-episode') && episode) {

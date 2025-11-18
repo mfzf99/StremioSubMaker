@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker 1.2.5
+
+**Bug Fixes:**
+- Fixed Spanish (Latin America) language code collision: Changed 'spn' mapping from 'sx' to 'ea' to resolve conflict with Santali language and ensure proper display in Stremio language lists
+- Fixed "just fetch subtitles (no translation)" mode returning zero results: Subtitle handler now properly uses `noTranslationLanguages` from config instead of empty `sourceLanguages`/`targetLanguages` arrays
+
 ## SubMaker 1.2.4
 
 **New Features:**

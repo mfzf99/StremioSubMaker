@@ -211,7 +211,7 @@ const languageMap = {
   'pob': { code1: 'pt-br', name: 'Portuguese (Brazilian)', isCustom: true },
   'ptbr': { code1: 'pt-br', name: 'Portuguese (Brazilian)', isCustom: true },
   'pt-br': { code1: 'pt-br', name: 'Portuguese (Brazilian)', isCustom: true },
-  'spn': { code1: 'sx', name: 'Spanish (Latin America)', isCustom: true },
+  'spn': { code1: 'ea', name: 'Spanish (Latin America)', isCustom: true },
   'mne': { code1: 'me', name: 'Montenegrin', isCustom: true },
   'zht': { code1: 'zh-tw', name: 'Chinese (traditional)', isCustom: true },
   'zhs': { code1: 'zh-cn', name: 'Chinese (simplified)', isCustom: true },

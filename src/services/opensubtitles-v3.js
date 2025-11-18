@@ -97,6 +97,7 @@ class OpenSubtitlesV3Service {
       log.debug(() => ['[OpenSubtitles V3] Requested languages (normalized):', Array.from(normalizedRequestedLangs).join(', ')]);
 
       // Filter subtitles by requested languages
+      // When no languages are configured (just fetch mode), accept all subtitles
       const filteredSubtitles = allSubtitles
         .map(sub => {
           const normalizedLang = this.normalizeLanguageCode(sub.lang);
@@ -106,8 +107,8 @@ class OpenSubtitlesV3Service {
           };
         })
         .filter(sub => {
-          // Keep subtitles that match requested languages
-          return sub.normalizedLang && normalizedRequestedLangs.has(sub.normalizedLang);
+          // Keep subtitles that match requested languages, or all if no languages specified
+          return normalizedRequestedLangs.size === 0 || (sub.normalizedLang && normalizedRequestedLangs.has(sub.normalizedLang));
         });
 
       // Extract real filenames from Content-Disposition headers (parallel HEAD requests)

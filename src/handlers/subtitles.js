@@ -1391,9 +1391,12 @@ function createSubtitleHandler(config) {
         log.debug(() => `[Subtitles] Stream filename for matching: ${streamFilename}`);
       }
 
-      // Get all languages (source + target) for searching
-      // This way users can find subtitles already in target languages and use them directly
-      const allLanguages = [...new Set([...config.sourceLanguages, ...config.targetLanguages])];
+      // Get all languages for searching
+      // In no-translation mode (just fetch), use noTranslationLanguages
+      // In translation mode, use source + target languages
+      const allLanguages = config.noTranslationMode
+        ? [...new Set(config.noTranslationLanguages || [])]
+        : [...new Set([...config.sourceLanguages, ...config.targetLanguages])];
 
       // Build search parameters for all providers
       const searchParams = {
@@ -1531,8 +1534,26 @@ function createSubtitleHandler(config) {
       // Normalize all configured languages (source + target) for filtering
       const normalizedAllLangs = new Set([...new Set(allLanguages.map(lang => normalizeLanguageCode(lang)))]);
 
-      // Filter results to only allowed languages
-      let filteredFoundSubtitles = foundSubtitles.filter(sub => sub.languageCode && normalizedAllLangs.has(sub.languageCode));
+      // Add language equivalents for providers that don't distinguish regional variants
+      // E.g., SubDL treats Spanish (Spain) and Spanish (Latin America) the same way
+      const languageEquivalents = {
+        'spa': ['spn'],  // Spanish (Spain) ↔ Spanish (Latin America)
+        'spn': ['spa']
+      };
+
+      // Expand normalizedAllLangs to include equivalents
+      const expandedLangs = new Set(normalizedAllLangs);
+      normalizedAllLangs.forEach(lang => {
+        if (languageEquivalents[lang]) {
+          languageEquivalents[lang].forEach(equiv => expandedLangs.add(equiv));
+        }
+      });
+
+      // Filter results to only allowed languages (including equivalents)
+      // When no languages are configured (just fetch mode), accept all subtitles
+      let filteredFoundSubtitles = allLanguages.length > 0
+        ? foundSubtitles.filter(sub => sub.languageCode && expandedLangs.has(sub.languageCode))
+        : foundSubtitles;
 
       // Rank subtitles by filename match + quality metrics before creating response lists
       // This ensures the best matches appear first in Stremio UI
@@ -1597,46 +1618,48 @@ function createSubtitleHandler(config) {
           return subtitle;
         });
 
-            // Add translation buttons for each target language
-       // Normalize and deduplicate target languages
-      const normalizedTargetLangs = [...new Set(config.targetLanguages.map(lang => {
-        const normalized = normalizeLanguageCode(lang);
-        if (normalized !== lang) {
-          log.debug(() => `[Subtitles] Normalized language code: "${lang}" -> "${normalized}"`);
-        }
-        return normalized;
-      }))];
-
-      // Create translation entries: for each target language, create entries for top source language subtitles
-      // Note: filteredFoundSubtitles is already limited to 16 per language (including source languages)
-      const sourceSubtitles = filteredFoundSubtitles.filter(sub =>
-        config.sourceLanguages.some(sourceLang => {
-          const normalized = normalizeLanguageCode(sourceLang);
-          return sub.languageCode === normalized;
-        })
-      );
-
-      log.debug(() => `[Subtitles] Found ${sourceSubtitles.length} source language subtitles for translation (already limited to ${MAX_SUBS_PER_LANGUAGE} per language)`);
-
-      // For each target language, create a translation entry for each source subtitle
-      // Translation entries are created from the already-limited source subtitles (16 per source language)
+      // Add translation buttons for each target language (skip in no-translation mode)
       const translationEntries = [];
-      for (const targetLang of normalizedTargetLangs) {
-        const baseName = getLanguageName(targetLang);
-        const displayName = `Make ${baseName}`;
-        log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
+      if (!config.noTranslationMode) {
+        // Normalize and deduplicate target languages
+        const normalizedTargetLangs = [...new Set(config.targetLanguages.map(lang => {
+          const normalized = normalizeLanguageCode(lang);
+          if (normalized !== lang) {
+            log.debug(() => `[Subtitles] Normalized language code: "${lang}" -> "${normalized}"`);
+          }
+          return normalized;
+        }))];
 
-        for (const sourceSub of sourceSubtitles) {
-          const translationEntry = {
-            id: `translate_${sourceSub.fileId}_to_${targetLang}`,
-            lang: displayName, // Display as "Make Language" in Stremio UI
-            url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}`
-          };
-          translationEntries.push(translationEntry);
+        // Create translation entries: for each target language, create entries for top source language subtitles
+        // Note: filteredFoundSubtitles is already limited to 16 per language (including source languages)
+        const sourceSubtitles = filteredFoundSubtitles.filter(sub =>
+          config.sourceLanguages.some(sourceLang => {
+            const normalized = normalizeLanguageCode(sourceLang);
+            return sub.languageCode === normalized;
+          })
+        );
+
+        log.debug(() => `[Subtitles] Found ${sourceSubtitles.length} source language subtitles for translation (already limited to ${MAX_SUBS_PER_LANGUAGE} per language)`);
+
+        // For each target language, create a translation entry for each source subtitle
+        // Translation entries are created from the already-limited source subtitles (16 per source language)
+        for (const targetLang of normalizedTargetLangs) {
+          const baseName = getLanguageName(targetLang);
+          const displayName = `Make ${baseName}`;
+          log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
+
+          for (const sourceSub of sourceSubtitles) {
+            const translationEntry = {
+              id: `translate_${sourceSub.fileId}_to_${targetLang}`,
+              lang: displayName, // Display as "Make Language" in Stremio UI
+              url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}`
+            };
+            translationEntries.push(translationEntry);
+          }
         }
-      }
 
-      log.debug(() => `[Subtitles] Created ${translationEntries.length} translation options from ${sourceSubtitles.length} source subtitles`);
+        log.debug(() => `[Subtitles] Created ${translationEntries.length} translation options from ${sourceSubtitles.length} source subtitles`);
+      }
 
       // Add xSync entries (synced subtitles from cache)
       const xSyncEntries = [];
@@ -1645,7 +1668,9 @@ function createSubtitleHandler(config) {
         const videoHash = crypto.createHash('md5').update(streamFilename).digest('hex').substring(0, 16);
 
         // Get synced subtitles for each language
-        const allLangsForSync = [...new Set([...config.sourceLanguages, ...config.targetLanguages])];
+        const allLangsForSync = config.noTranslationMode
+          ? [...new Set(config.noTranslationLanguages || [])]
+          : [...new Set([...config.sourceLanguages, ...config.targetLanguages])];
 
         for (const lang of allLangsForSync) {
           try {
@@ -1678,18 +1703,21 @@ function createSubtitleHandler(config) {
       // Add special action buttons
       let allSubtitles = [...stremioSubtitles, ...translationEntries, ...xSyncEntries];
 
-      // If OpenSubtitles auth failed, append a final entry per source language with a helpful SRT
+      // If OpenSubtitles auth failed, append a final entry per language with a helpful SRT
       if (openSubsAuthFailed === true) {
         try {
-          const normalizedSourceLangs = [...new Set(config.sourceLanguages.map(lang => normalizeLanguageCode(lang)))].filter(Boolean);
-          const authEntries = normalizedSourceLangs.map(lang => ({
+          const languagesForAuthError = config.noTranslationMode
+            ? (config.noTranslationLanguages || [])
+            : config.sourceLanguages;
+          const normalizedLangs = [...new Set(languagesForAuthError.map(lang => normalizeLanguageCode(lang)))].filter(Boolean);
+          const authEntries = normalizedLangs.map(lang => ({
             id: `opensubtitles_auth_error_${lang}`,
             lang: lang,
             url: `{{ADDON_URL}}/error-subtitle/opensubtitles-auth.srt`
           }));
           if (authEntries.length > 0) {
             allSubtitles = [...allSubtitles, ...authEntries];
-            log.debug(() => `[Subtitles] Appended ${authEntries.length} OpenSubtitles auth-fix entries at end of source language lists`);
+            log.debug(() => `[Subtitles] Appended ${authEntries.length} OpenSubtitles auth-fix entries at end of language lists`);
           }
         } catch (e) {
           log.warn(() => `[Subtitles] Failed to append OpenSubtitles auth hint entries: ${e.message}`);
