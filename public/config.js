@@ -59,6 +59,10 @@ Translate to {target_language}.`;
         'gemini-2.5-flash-preview-09-2025': {
             thinkingBudget: -1,     // Dynamic thinking for flash model
             temperature: 0.5        // Lower temperature for consistency
+        },
+        'gemini-2.5-pro-preview-05-06': {
+            thinkingBudget: -1,     // Dynamic thinking for pro model
+            temperature: 0.5        // Lower temperature for consistency
         }
     };
 
@@ -1532,7 +1536,8 @@ Translate to {target_language}.`;
         // Define hardcoded multi-model options
         const hardcodedModels = [
             { name: 'gemini-2.5-flash-lite-preview-09-2025', displayName: 'Gemini 2.5 Flash-Lite' },
-            { name: 'gemini-2.5-flash-preview-09-2025', displayName: 'Gemini 2.5 Flash' }
+            { name: 'gemini-2.5-flash-preview-09-2025', displayName: 'Gemini 2.5 Flash' },
+            { name: 'gemini-2.5-pro-preview-05-06', displayName: 'Gemini 2.5 Pro' }
         ];
 
         // Track added models to avoid duplicates
