@@ -712,7 +712,7 @@ app.post('/api/validate-subsource', async (req, res) => {
         }
 
         const axios = require('axios');
-        const { httpAgent, httpsAgent } = require('./src/utils/httpAgents');
+        const { httpAgent, httpsAgent, dnsLookup } = require('./src/utils/httpAgents');
 
         // Make direct API call to test the key
         // First get movie ID
@@ -727,7 +727,8 @@ app.post('/api/validate-subsource', async (req, res) => {
                 },
                 timeout: 10000,
                 httpAgent,
-                httpsAgent
+                httpsAgent,
+                lookup: dnsLookup
             });
 
             const movies = Array.isArray(movieResponse.data) ? movieResponse.data : (movieResponse.data.data || []);
@@ -745,7 +746,8 @@ app.post('/api/validate-subsource', async (req, res) => {
                     },
                     timeout: 10000,
                     httpAgent,
-                    httpsAgent
+                    httpsAgent,
+                    lookup: dnsLookup
                 });
 
                 // If we got here without errors, API key is valid
