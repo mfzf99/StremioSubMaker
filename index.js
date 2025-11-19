@@ -1492,6 +1492,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
             if (partialCached && typeof partialCached.content === 'string' && partialCached.content.length > 0) {
                 log.debug(() => `[Translation] Found in-flight partial in partial cache for ${sourceFileId} (${partialCached.content.length} chars)`);
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="translating_${targetLang}.srt"`);
                 res.setHeader('Cache-Control', 'no-cache, must-revalidate');
                 res.setHeader('Pragma', 'no-cache');
                 return res.send(partialCached.content);
@@ -1505,6 +1506,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
             if (bypassCached && typeof bypassCached.content === 'string' && bypassCached.content.length > 0) {
                 log.debug(() => `[Translation] Found bypass cache result for ${sourceFileId} (${bypassCached.content.length} chars)`);
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.srt"`);
                 res.setHeader('Cache-Control', 'no-cache, must-revalidate');
                 res.setHeader('Pragma', 'no-cache');
                 return res.send(bypassCached.content);
@@ -1514,6 +1516,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
             log.debug(() => `[Translation] No partial found yet, serving loading message to duplicate request for ${sourceFileId}`);
             const loadingMsg = createLoadingSubtitle();
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="translating_${targetLang}.srt"`);
             res.setHeader('Cache-Control', 'no-cache, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             return res.send(loadingMsg);
@@ -1540,16 +1543,15 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
         log.debug(() => `[Translation] Serving ${isLoadingMessage ? 'loading message' : 'translated content'} for ${sourceFileId} (was duplicate: ${isAlreadyInFlight})`);
         log.debug(() => `[Translation] Content length: ${subtitleContent.length} characters, first 200 chars: ${subtitleContent.substring(0, 200)}`);
 
-        // Don't use 'attachment' for loading messages - we want them to display inline
+        // Always use 'attachment' header for Android compatibility
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${isLoadingMessage ? 'translating' : 'translated'}_${targetLang}.srt"`);
 
         // Disable caching for loading messages so Stremio can poll for updates
         if (isLoadingMessage) {
             res.setHeader('Cache-Control', 'no-cache, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             log.debug(() => `[Translation] Set no-cache headers for loading message`);
-        } else {
-            res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.srt"`);
         }
 
         res.send(subtitleContent);
