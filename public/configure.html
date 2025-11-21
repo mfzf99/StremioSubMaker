@@ -6,7 +6,6 @@
     <title>SubMaker - Configure</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="shortcut icon" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <!-- Retro fonts for ghost hint -->
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Tiny5&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
@@ -17,9 +16,7 @@
             box-sizing: border-box;
         }
 
-        html {
-            scroll-behavior: smooth;
-        }
+        /* Removed global smooth scrolling to reduce perceived lag */
 
         :root {
             --primary: #08A4D5;
@@ -259,21 +256,33 @@
             color: var(--text-primary);
             min-height: 100vh;
             overflow-x: hidden;
+            /* Reserve scrollbar space to prevent layout shift when modals lock/unlock scroll */
+            scrollbar-gutter: stable both-edges;
         }
 
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                radial-gradient(circle at 20% 50%, rgba(8, 164, 213, 0.12) 0%, transparent 50%),
-                radial-gradient(circle at 80% 50%, rgba(51, 185, 225, 0.12) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: 0;
+        /* Page scrollbar styling to match modal */
+        html, body {
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary) var(--surface-light);
         }
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+            width: 10px;
+        }
+        html::-webkit-scrollbar-track,
+        body::-webkit-scrollbar-track {
+            background: var(--surface-light);
+        }
+        html::-webkit-scrollbar-thumb,
+        body::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 8px;
+            border: 2px solid var(--surface-light);
+        }
+        /* Lock background scroll when modal is open */
+        body.modal-open { overflow: hidden; }
+
+        /* Removed heavy fixed gradient layer to avoid full-viewport repaints on scroll */
 
         .container {
             max-width: 1400px;
@@ -299,45 +308,218 @@
             justify-content: center;
             box-shadow: 0 20px 60px var(--glow);
             animation: float 3s ease-in-out infinite;
+            /* Hint compositing to keep animation smooth */
+            will-change: transform;
+            transform: translateZ(0);
             position: relative;
+            border: 2px solid var(--border); /* add depth without changing color */
+            border-radius: 24px;
+            /* emboss edges similar to block (neutral tones only) */
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.15),
+                inset 0 -3px 0 rgba(0,0,0,0.12),
+                0 6px 0 rgba(0,0,0,0.12),
+                0 20px 60px var(--glow);
         }
 
         .logo::before {
             content: '';
             position: absolute;
             inset: -2px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            /* Replace heavy blur with a radial glow and soft halo */
+            background: radial-gradient(closest-side, var(--primary) 0%, rgba(8, 164, 213, 0.45) 35%, transparent 70%);
             border-radius: 24px;
             z-index: -1;
-            opacity: 0.5;
-            filter: blur(20px);
+            opacity: 0.6;
+            box-shadow: 0 0 60px rgba(8, 164, 213, 0.25);
         }
-
-        .logo img {
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
+        .logo img { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
 
         h1 {
             font-size: 3rem;
             font-weight: 800;
-            background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 0.5rem;
+            margin: 0 auto 0.5rem auto;
             letter-spacing: -0.02em;
+            position: relative;
+            padding: 0.75rem 2rem;
+            border-radius: 16px;
+            border: 3px solid rgba(0,0,0,0.22);
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.08) 100%),
+                linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            /* 3D beveled effect matching buttons */
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.45),
+                inset 0 -4px 0 rgba(0,0,0,0.3),
+                0 8px 0 rgba(0,0,0,0.25),
+                0 12px 40px var(--glow),
+                0 0 60px rgba(8, 164, 213, 0.3);
+            color: white;
+            text-shadow:
+                0 2px 4px rgba(0,0,0,0.4),
+                0 4px 12px rgba(0,0,0,0.2),
+                0 -1px 2px rgba(255,255,255,0.3);
+            transform-style: preserve-3d;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: titlePulse 3s ease-in-out infinite;
+            width: fit-content;
+            overflow: hidden;
+        }
+
+        /* Epic animated shimmer overlay */
+        h1::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                135deg,
+                transparent 0%,
+                transparent 40%,
+                rgba(255,255,255,0.4) 50%,
+                transparent 60%,
+                transparent 100%
+            );
+            border-radius: 16px;
+            opacity: 0;
+            animation: shimmer 4s ease-in-out infinite;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+
+        /* Hover effect for interactivity */
+        h1:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.5),
+                inset 0 -4px 0 rgba(0,0,0,0.3),
+                0 10px 0 rgba(0,0,0,0.25),
+                0 16px 48px var(--glow),
+                0 0 80px rgba(8, 164, 213, 0.5);
+        }
+
+        /* Pulsing glow animation */
+        @keyframes titlePulse {
+            0%, 100% {
+                box-shadow:
+                    inset 0 3px 0 rgba(255,255,255,0.45),
+                    inset 0 -4px 0 rgba(0,0,0,0.3),
+                    0 8px 0 rgba(0,0,0,0.25),
+                    0 12px 40px var(--glow),
+                    0 0 60px rgba(8, 164, 213, 0.3);
+            }
+            50% {
+                box-shadow:
+                    inset 0 3px 0 rgba(255,255,255,0.45),
+                    inset 0 -4px 0 rgba(0,0,0,0.3),
+                    0 8px 0 rgba(0,0,0,0.25),
+                    0 12px 40px var(--glow),
+                    0 0 80px rgba(8, 164, 213, 0.5);
+            }
+        }
+
+        /* Shimmer animation */
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) skewX(-15deg);
+                opacity: 0;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateX(200%) skewX(-15deg);
+                opacity: 0;
+            }
+        }
+
+        /* Dark mode adjustments for h1 */
+        [data-theme="dark"] h1 {
+            border-color: rgba(0,0,0,0.4);
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.15) 100%),
+                linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.35),
+                inset 0 -4px 0 rgba(0,0,0,0.5),
+                0 8px 0 rgba(0,0,0,0.5),
+                0 12px 40px var(--glow),
+                0 0 60px rgba(8, 164, 213, 0.4);
+        }
+
+        [data-theme="dark"] h1:hover {
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.4),
+                inset 0 -4px 0 rgba(0,0,0,0.5),
+                0 10px 0 rgba(0,0,0,0.5),
+                0 16px 48px var(--glow),
+                0 0 90px rgba(8, 164, 213, 0.6);
+        }
+
+        /* Blackhole mode - MAXIMUM DRAMA */
+        [data-theme="true-dark"] h1 {
+            border-color: rgba(8, 164, 213, 0.3);
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.4) 100%),
+                linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.25),
+                inset 0 -4px 0 rgba(0,0,0,0.8),
+                0 8px 0 rgba(0,0,0,0.9),
+                0 12px 40px var(--glow),
+                0 0 80px rgba(8, 164, 213, 0.6),
+                0 0 120px rgba(51, 185, 225, 0.3);
+            text-shadow:
+                0 2px 4px rgba(0,0,0,0.8),
+                0 4px 12px rgba(8, 164, 213, 0.4),
+                0 -1px 2px rgba(255,255,255,0.2);
+        }
+
+        [data-theme="true-dark"] h1:hover {
+            box-shadow:
+                inset 0 3px 0 rgba(255,255,255,0.3),
+                inset 0 -4px 0 rgba(0,0,0,0.8),
+                0 10px 0 rgba(0,0,0,0.9),
+                0 16px 48px var(--glow),
+                0 0 100px rgba(8, 164, 213, 0.8),
+                0 0 150px rgba(51, 185, 225, 0.4);
+        }
+
+        [data-theme="true-dark"] h1::before {
+            background: linear-gradient(
+                135deg,
+                transparent 0%,
+                transparent 40%,
+                rgba(8, 164, 213, 0.6) 50%,
+                transparent 60%,
+                transparent 100%
+            );
         }
 
         .subtitle {
             color: var(--text-secondary);
             font-size: 1.125rem;
-            font-weight: 500;
+            font-weight: 600;
+            display: inline-block;
+            padding: 0.45rem 0.85rem;
+            margin: 0;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            position: relative;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.03) 100%);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.15),
+                inset 0 -3px 0 rgba(0,0,0,0.12),
+                0 4px 0 rgba(0,0,0,0.10);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.25);
         }
 
         /* Card System */
         .card {
             background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
             border-radius: 20px;
             padding: 2rem;
             margin-bottom: 1.5rem;
@@ -359,6 +541,7 @@
 
         .card.collapsed {
             padding: 1.5rem 2rem;
+            cursor: pointer; /* Make entire collapsed card clickable */
         }
 
         .card-header {
@@ -370,7 +553,11 @@
             border-bottom: 1px solid var(--border);
             cursor: pointer;
             user-select: none;
+            position: relative;
+            z-index: 1;
         }
+
+        .card-header * { cursor: inherit; }
 
         .card-title-group {
             display: flex;
@@ -379,8 +566,8 @@
         }
 
         .card-icon {
-            width: 48px;
-            height: 48px;
+            width: 56px;
+            height: 56px;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             border-radius: 12px;
             display: flex;
@@ -785,7 +972,12 @@
         .btn-primary {
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
-            box-shadow: 0 8px 24px var(--glow);
+            border: 2px solid rgba(0,0,0,0.22);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.35),
+                inset 0 -3px 0 rgba(0,0,0,0.22),
+                0 6px 0 rgba(0,0,0,0.22),
+                0 8px 24px var(--glow);
         }
 
         .btn-primary:hover {
@@ -797,6 +989,10 @@
             background: var(--surface-light);
             color: var(--text-primary);
             border: 2px solid var(--border);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.35),
+                inset 0 -3px 0 rgba(0,0,0,0.12),
+                0 6px 0 rgba(0,0,0,0.12);
         }
 
         .btn-secondary:hover {
@@ -808,6 +1004,27 @@
             opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
+        }
+
+        /* Subtle rivets to echo the Mario block feel (do not change colors) */
+        .btn::after {
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            top: 6px; left: 6px;
+            background: rgba(0,0,0,0.18);
+            box-shadow:
+                calc(100% - 12px) 0 0 rgba(0,0,0,0.18),
+                0 calc(100% - 12px) 0 rgba(255,255,255,0.35),
+                calc(100% - 12px) calc(100% - 12px) 0 rgba(0,0,0,0.18);
+            pointer-events: none;
+        }
+        /* Reduce prominence for secondary to keep its neutral color */
+        .btn-secondary::after { background: rgba(0,0,0,0.12); box-shadow:
+            calc(100% - 12px) 0 0 rgba(0,0,0,0.12),
+            0 calc(100% - 12px) 0 rgba(255,255,255,0.25),
+            calc(100% - 12px) calc(100% - 12px) 0 rgba(0,0,0,0.12);
         }
 
         .btn-danger {
@@ -843,7 +1060,6 @@
             z-index: 9999;
             animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             box-shadow: 0 12px 48px var(--shadow);
-            backdrop-filter: blur(20px);
         }
 
         .alert-success {
@@ -875,7 +1091,6 @@
             position: fixed;
             inset: 0;
             background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(6px);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1008,7 +1223,6 @@
             left: 2rem;
             padding: 0.75rem 1rem;
             background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
             border: 1px solid var(--border);
             border-radius: 12px;
             font-size: 0.875rem;
@@ -1301,7 +1515,6 @@
             position: fixed;
             inset: 0;
             background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1339,7 +1552,6 @@
             position: relative;
             display: flex;
             flex-direction: column;
-            backdrop-filter: blur(10px);
         }
 
         .modal-header {
@@ -1349,35 +1561,11 @@
             position: sticky;
             top: 0;
             z-index: 1;
-            backdrop-filter: blur(10px);
         }
 
-        /* Instructions mini floating button (FAB) */
-        .instructions-fab {
-            position: fixed;
-            bottom: 1.25rem;
-            right: 1.25rem;
-            width: 52px;
-            height: 52px;
-            border-radius: 50%;
-            border: 2px solid var(--border);
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: #ffffff;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.4rem;
-            box-shadow: 0 12px 36px var(--glow);
-            z-index: 10001;
-            cursor: pointer;
-            transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-            animation: fabPulse 2.2s ease-in-out infinite;
-        }
-        .instructions-fab:hover {
-            transform: translateY(-2px) scale(1.03);
-            box-shadow: 0 18px 48px var(--glow);
-        }
-        .instructions-fab.show { display: flex; }
+        /* Legacy instructions-fab removed; map show/hide to .help-button */
+        .help-button { opacity: 1; }
+        .help-button.show { opacity: 1; }
 
         /* Animations for overlay fade and fly trajectory */
         @keyframes fadeOut {
@@ -1389,10 +1577,7 @@
             60%  { transform: translate(calc(28vw - 28px), calc(26vh)) scale(0.55); opacity: 0.98; }
             100% { transform: translate(calc(40vw - 40px), calc(40vh)) scale(0.2); opacity: 0.95; }
         }
-        @keyframes fabPulse {
-            0%, 100% { box-shadow: 0 12px 36px var(--glow); opacity: 0.95; }
-            50% { box-shadow: 0 18px 64px var(--glow); opacity: 1; }
-        }
+        /* Removed pulsing shadow animation for smoother scrolling */
 
         .modal-header h2 {
             font-size: 1.5rem;
@@ -1406,6 +1591,8 @@
             align-items: center;
             gap: 0.75rem;
         }
+
+        /* (modal-header emboss reverted to original) */
 
         .modal-close {
             position: absolute;
@@ -1498,7 +1685,6 @@
             position: sticky;
             bottom: 0;
             background: var(--bg-secondary);
-            backdrop-filter: blur(10px);
         }
 
         /* In-modal scrollbar styling (WebKit/Blink) */
@@ -1607,27 +1793,66 @@
         }
 
         .version-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white !important;
-            -webkit-text-fill-color: white !important;
-            border: none;
-            border-radius: 999px;
-            padding: 0.35rem 0.85rem;
-            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.82rem;
             font-weight: 700;
-            margin-left: 0.75rem;
-            vertical-align: middle;
-            box-shadow: 0 4px 12px rgba(8, 164, 213, 0.4);
+            padding: 0.45rem 0.85rem;
+            margin: 0;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.03) 100%);
+            border: 2px solid var(--border);
+            color: var(--text-secondary) !important;
+            -webkit-text-fill-color: var(--text-secondary) !important;
             letter-spacing: 0.5px;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            text-transform: uppercase;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow:
+                inset 0 2px 0 rgba(255, 255, 255, 0.15),
+                inset 0 -3px 0 rgba(0, 0, 0, 0.12),
+                0 4px 0 rgba(0, 0, 0, 0.10);
+        }
+
+        .version-badge::before {
+            content: none;
+        }
+
+        .version-badge:hover {
+            border-color: var(--primary);
+            color: var(--text-primary) !important;
+            -webkit-text-fill-color: var(--text-primary) !important;
+            box-shadow:
+                inset 0 2px 0 rgba(255, 255, 255, 0.15),
+                inset 0 -3px 0 rgba(0, 0, 0, 0.12),
+                0 4px 12px rgba(8, 164, 213, 0.18);
+        }
+
+        .version-badge:hover::before {
+            content: none;
+        }
+
+        .version-badge-wrapper {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.65rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Prevent text selection on hero title, subtitle, and version badge */
+        .header h1,
+        .header .subtitle,
+        .header .version-badge {
+            user-select: none;
         }
 
         /* Validation Buttons */
         .validate-api-btn {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             color: white;
-            border: none;
+            border: 2px solid rgba(0,0,0,0.22);
             border-radius: 10px;
             padding: 0.625rem 1rem;
             font-size: 0.875rem;
@@ -1638,14 +1863,35 @@
             gap: 0.375rem;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             white-space: nowrap;
-            box-shadow: 0 2px 8px rgba(8, 164, 213, 0.25);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.35),
+                inset 0 -3px 0 rgba(0,0,0,0.22),
+                0 6px 0 rgba(0,0,0,0.18),
+                0 2px 8px rgba(8, 164, 213, 0.25);
             min-width: 85px;
             justify-content: center;
+            }
+
+        .validate-api-btn::after {
+            content: '';
+            position: absolute;
+            width: 4px; height: 4px; border-radius: 50%;
+            top: 6px; left: 6px;
+            background: rgba(0,0,0,0.18);
+            box-shadow:
+                calc(100% - 12px) 0 0 rgba(0,0,0,0.18),
+                0 calc(100% - 12px) 0 rgba(255,255,255,0.35),
+                calc(100% - 12px) calc(100% - 12px) 0 rgba(0,0,0,0.18);
+            pointer-events: none;
         }
 
         .validate-api-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(8, 164, 213, 0.4);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.4),
+                inset 0 -3px 0 rgba(0,0,0,0.22),
+                0 6px 0 rgba(0,0,0,0.18),
+                0 4px 16px rgba(8, 164, 213, 0.4);
             background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary) 100%);
         }
 
@@ -1681,10 +1927,74 @@
             display: inline-block;
         }
 
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        /* OpenSubtitles auth layout */
+        .opensubs-auth-layout {
+            display: grid;
+            grid-template-columns: 1fr minmax(240px, 280px);
+            gap: 1rem;
+            align-items: stretch;
+            margin-top: 0.5rem;
         }
+        @media (max-width: 900px) {
+            .opensubs-auth-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+        .opensubs-auth-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .validate-tile {
+            position: relative;
+            padding: 1rem;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background:
+                linear-gradient(135deg, rgba(8, 164, 213, 0.12), rgba(51, 185, 225, 0.08)),
+                var(--surface);
+            box-shadow: 0 10px 32px var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            justify-content: center;
+            align-self: stretch;
+            overflow: hidden;
+        }
+        .validate-tile::before {
+            content: '';
+            position: absolute;
+            inset: -40% auto auto -40%;
+            width: 120%;
+            height: 120%;
+            background: radial-gradient(circle at center, rgba(8, 164, 213, 0.18), transparent 55%);
+            opacity: 0.75;
+            pointer-events: none;
+            filter: blur(16px);
+        }
+        .validate-tile .tile-eyebrow {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+        }
+        .validate-tile .tile-title {
+            font-weight: 800;
+            font-size: 1.1rem;
+            letter-spacing: -0.01em;
+        }
+        .validate-tile .tile-copy {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .validate-tile .validate-api-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        
 
         .validation-feedback {
             margin-top: 0.5rem;
@@ -1745,7 +2055,6 @@
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             z-index: 9999;
             box-shadow: 0 4px 12px var(--shadow);
-            backdrop-filter: blur(10px);
         }
 
         [data-theme="dark"] .theme-toggle {
@@ -1817,13 +2126,280 @@
             }
         }
     </style>
+    <style>
+        /* Mario-style block + coin animation (perf-friendly: transforms only) */
+        .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+            position: fixed;
+        }
+        .theme-toggle.mario::before {
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px; border-radius: 50%;
+            background: #b47a11;
+            top: 6px; left: 6px;
+            box-shadow:
+                calc(100% - 12px) 0 0 #b47a11,
+                0 calc(100% - 12px) 0 #b47a11,
+                calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+            opacity: .9;
+        }
+        .theme-toggle.mario:active { transform: translateY(2px) scale(0.98); box-shadow:
+            inset 0 1px 0 #fff3b0,
+            inset 0 -1px 0 #b47a11,
+            0 4px 0 #7a4d00,
+            0 8px 14px rgba(0,0,0,0.3);
+        }
+        .theme-toggle-icon { transition: transform 0.25s ease; display: grid; place-items: center; }
+        .theme-toggle-icon svg { display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2)); }
+        /* Coin effect */
+        .coin { position: fixed; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; z-index: 10000; transform: translate(-50%, -50%); will-change: transform, opacity; contain: layout paint style; }
+        .coin::before { content: ''; display: block; width: 100%; height: 100%; border-radius: 50%;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.2) 55%) ,
+                radial-gradient(40% 40% at 35% 30%, #fff6bf 0%, rgba(255,255,255,0) 70%),
+                linear-gradient(180deg, #ffd24a 0%, #ffc125 50%, #e2a415 100%);
+            border: 2px solid #8a5a00; box-shadow: 0 2px 0 #7a4d00, inset 0 1px 0 #fff8c6;
+        }
+        @keyframes coin-pop {
+            0% { opacity: 0; transform: translate(-50%, -50%) translateY(0) scale(0.9) rotateY(0deg); }
+            10% { opacity: 1; }
+            60% { transform: translate(-50%, -50%) translateY(-52px) scale(1.0) rotateY(360deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) translateY(-70px) scale(0.95) rotateY(540deg); }
+        }
+        .coin.animate { animation: coin-pop 0.7s cubic-bezier(.2,.8,.2,1) forwards; }
+        @media (prefers-reduced-motion: reduce) { .coin.animate { animation: none; opacity: 0; } }
+
+        /* Theme-based variants for Mario toggle */
+        [data-theme="light"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+        }
+        [data-theme="light"] .theme-toggle.mario::before {
+            background: #b47a11;
+            box-shadow:
+                calc(100% - 12px) 0 0 #b47a11,
+                0 calc(100% - 12px) 0 #b47a11,
+                calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+        }
+
+        [data-theme="dark"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            border-color: #1b2a78;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.6);
+        }
+        [data-theme="dark"] .theme-toggle.mario::before {
+            background: #213a9a;
+            box-shadow:
+                calc(100% - 12px) 0 0 #213a9a,
+                0 calc(100% - 12px) 0 #213a9a,
+                calc(100% - 12px) calc(100% - 12px) 0 #213a9a;
+        }
+
+        [data-theme="true-dark"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #1b1029 0%, #110b1a 60%, #0b0711 100%);
+            border-color: #3b2a5d;
+            box-shadow:
+                inset 0 2px 0 #6b65ff33,
+                inset 0 -3px 0 #2b2044,
+                0 6px 0 #2a1e43,
+                0 0 18px rgba(107,101,255,0.35);
+        }
+        [data-theme="true-dark"] .theme-toggle.mario::before {
+            background: #2b2044;
+            box-shadow:
+                calc(100% - 12px) 0 0 #2b2044,
+                0 calc(100% - 12px) 0 #2b2044,
+                calc(100% - 12px) calc(100% - 12px) 0 #2b2044;
+        }
+
+        /* Mario-style section icons: same as toggle, slightly different (radius, rivets size) */
+        .card-icon {
+            position: relative;
+            width: 50px; height: 50px;
+            border: none;
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-radius: 12px; /* chunkier block edges for the bigger icons */
+            color: #3b2a00;
+            text-shadow: none;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.25);
+            display: grid;
+            place-items: center;
+        }
+        .card-icon svg {
+            width: 34px;
+            height: 34px;
+            display: block;
+        }
+        .card-icon .card-icon-symbol {
+            font-size: 1.6rem;
+            line-height: 1;
+            transform: translateY(0.5px);
+        }
+        .card-header:hover .card-icon { transform: translateY(-1px); }
+        .card-icon::before {
+            display: none;
+        }
+        [data-theme="dark"] .card-icon { 
+            border: none; 
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            color: #0f1a4a;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.35);
+        }
+        [data-theme="dark"] .card-icon::before { display: none; }
+        [data-theme="true-dark"] .card-icon {
+            border: none;
+            background: linear-gradient(180deg, #1b1029 0%, #110b1a 60%, #0b0711 100%);
+            color: #bdb4ff;
+            box-shadow:
+                inset 0 2px 0 #6b65ff33,
+                inset 0 -3px 0 #2b2044,
+                0 6px 0 #2a1e43,
+                0 0 18px rgba(107,101,255,0.25);
+        }
+        [data-theme="true-dark"] .card-icon::before { display: none; }
+
+        /* Help button — match toggle style, slightly different (radius, rivets) */
+        .help-button {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .help-button:hover { transform: translateY(-2px); }
+        .help-button.mario {
+            border: 2px solid #8a5a00;
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            color: #3b2a00;
+            border-radius: 14px; /* slight diff vs toggle */
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+            position: fixed;
+        }
+        .help-button.mario::before {
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px; border-radius: 50%; opacity: .9;
+            background: #b47a11; top: 6px; left: 6px;
+            box-shadow: calc(100% - 12px) 0 0 #b47a11;
+        }
+        [data-theme="dark"] .help-button.mario {
+            border-color: #1b2a78;
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            color: #0f1a4a;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.6);
+        }
+        [data-theme="dark"] .help-button.mario::before { background: #213a9a; box-shadow: calc(100% - 12px) 0 0 #213a9a; }
+        [data-theme="true-dark"] .help-button.mario {
+            border-color: #3b2a5d;
+            background: linear-gradient(180deg, #1b1029 0%, #110b1a 60%, #0b0711 100%);
+            color: #bdb4ff;
+            box-shadow:
+                inset 0 2px 0 #6b65ff33,
+                inset 0 -3px 0 #2b2044,
+                0 6px 0 #2a1e43,
+                0 0 18px rgba(107,101,255,0.35);
+        }
+        [data-theme="true-dark"] .help-button.mario::before { background: #2b2044; box-shadow: calc(100% - 12px) 0 0 #2b2044; }
+    </style>
 </head>
 <body>
     <!-- Theme Toggle Button -->
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <span class="theme-toggle-icon sun">☀️</span>
-        <span class="theme-toggle-icon moon">🌙</span>
-        <span class="theme-toggle-icon blackhole">🕳️</span>
+    <button class="theme-toggle mario" id="themeToggle" aria-label="Toggle theme">
+        <span class="theme-toggle-icon sun" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gSun" cx="50%" cy="50%" r="60%">
+                        <stop offset="0%" stop-color="#fff4b0"/>
+                        <stop offset="60%" stop-color="#f7d13e"/>
+                        <stop offset="100%" stop-color="#e0a81e"/>
+                    </radialGradient>
+                </defs>
+                <g fill="none" stroke="#8a5a00" stroke-linecap="round">
+                    <circle cx="32" cy="32" r="13" fill="url(#gSun)" stroke-width="3"/>
+                    <g stroke-width="3">
+                        <line x1="32" y1="6" x2="32" y2="14"/>
+                        <line x1="32" y1="50" x2="32" y2="58"/>
+                        <line x1="6" y1="32" x2="14" y2="32"/>
+                        <line x1="50" y1="32" x2="58" y2="32"/>
+                        <line x1="13" y1="13" x2="19" y2="19"/>
+                        <line x1="45" y1="45" x2="51" y2="51"/>
+                        <line x1="13" y1="51" x2="19" y2="45"/>
+                        <line x1="45" y1="19" x2="51" y2="13"/>
+                    </g>
+                </g>
+            </svg>
+        </span>
+        <span class="theme-toggle-icon moon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gMoon" cx="40%" cy="35%" r="65%">
+                        <stop offset="0%" stop-color="#fff7cc"/>
+                        <stop offset="70%" stop-color="#f1c93b"/>
+                        <stop offset="100%" stop-color="#d19b16"/>
+                    </radialGradient>
+                    <mask id="mMoon">
+                        <rect width="100%" height="100%" fill="#ffffff"/>
+                        <circle cx="44" cy="22" r="18" fill="#000000"/>
+                    </mask>
+                </defs>
+                <g fill="none" stroke="#8a5a00">
+                    <circle cx="32" cy="32" r="22" fill="url(#gMoon)" stroke-width="3" mask="url(#mMoon)"/>
+                </g>
+            </svg>
+        </span>
+        <span class="theme-toggle-icon blackhole" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gRing" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#6b65ff"/>
+                        <stop offset="60%" stop-color="#4b2ed6"/>
+                        <stop offset="100%" stop-color="#1a103a"/>
+                    </radialGradient>
+                </defs>
+                <circle cx="32" cy="32" r="12" fill="#000"/>
+                <circle cx="32" cy="32" r="20" fill="none" stroke="url(#gRing)" stroke-width="6"/>
+            </svg>
+        </span>
     </button>
 
     <div class="container">
@@ -1831,11 +2407,18 @@
             <div class="logo">
                 <img src="logo.png" alt="SubMaker Logo" style="width: 80px; height: 80px; border-radius: 20px;">
             </div>
-            <h1>SubMaker <span id="version-badge" class="version-badge" style="display:none;"></span></h1>
-            <p class="subtitle">AI-Powered Subtitle Translation</p>
+            <h1>SubMaker</h1>
+            <div class="version-badge-wrapper">
+                <p class="subtitle">AI-Powered Subtitle Translation</p>
+                <span id="version-badge" class="version-badge" style="display:none;"></span>
+            </div>
         </div>
 
+
         <div id="alertContainer"></div>
+
+        <!-- Floating Help Button (Config page) -->
+        <button class="help-button mario" id="configHelp" title="Help">?</button>
 
         <script>
         (function(){
@@ -1847,7 +2430,7 @@
 
                         // Show version badge
                         var el = document.getElementById('version-badge');
-                        if (el) { el.textContent = 'v' + d.version; el.style.display = 'inline-block'; }
+                        if (el) { el.textContent = 'v' + d.version; el.style.display = 'inline-flex'; }
                         // Optionally cache-bust logo image
                         var logo = document.querySelector('.logo img');
                         if (logo && logo.src && logo.src.indexOf('?v=') === -1) {
@@ -1877,12 +2460,21 @@
             <div class="card collapsed" data-card="subtitle-api">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">📚</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="14" width="14" height="12" rx="2.5" ry="2.5" />
+                                    <path d="M12 14v-2a4 4 0 0 1 8 0v2" />
+                                    <circle cx="16" cy="20" r="2" />
+                                    <path d="M16 22v2" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">Subtitles API Keys</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="subtitle-api"></button>
                 </div>
-                <div class="card-content">
+<div class="card-content">
                                         <!-- OpenSubtitles -->
                     <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
@@ -1946,16 +2538,29 @@
 
                             <!-- Auth Configuration (shown when Auth is selected) -->
                             <div id="opensubtitlesAuthConfig" style="display: none;">
-                                <label style="display: block; margin-bottom: 0.5rem;">Username</label>
-                                <input type="text" id="opensubtitlesUsername" placeholder="Enter your OpenSubtitles username" style="margin-bottom: 0.75rem;">
+                                <div class="opensubs-auth-layout">
+                                    <div class="opensubs-auth-fields">
+                                        <label style="display: block;">Username</label>
+                                        <input type="text" id="opensubtitlesUsername" placeholder="Enter OpenSubtitles Username">
 
-                                <label style="display: block; margin-bottom: 0.5rem;">Password</label>
-                                <div class="password-field-wrapper" style="margin-bottom: 0.75rem;">
-                                    <input type="password" id="opensubtitlesPassword" placeholder="Enter your OpenSubtitles password">
-                                    <span class="password-toggle-icon" id="toggleOpenSubsPassword" title="Show/hide password">👁️</span>
+                                        <label style="display: block;">Password</label>
+                                        <div class="password-field-wrapper">
+                                            <input type="password" id="opensubtitlesPassword" placeholder="Enter OpenSubtitles Password">
+                                            <span class="password-toggle-icon" id="toggleOpenSubsPassword" title="Show/hide password">&#128274;&#128065;</span>
+                                        </div>
+
+                                        <span class="label-description"><a href="https://www.opensubtitles.com/en/newuser" target="_blank" style="color: var(--primary-light);">Create a free account</a> if you don't have one.</span>
+                                    </div>
+
+                                    <div class="validate-tile">
+                                        <div class="tile-eyebrow" style="text-align:center;">Run a quick ping before saving to spot typos instantly.</div>
+                                        <button type="button" class="validate-api-btn" id="validateOpenSubtitles" title="Validate OpenSubtitles credentials">
+                                            <span class="validate-icon">&#10003;</span>
+                                            <span class="validate-text">Run Test</span>
+                                        </button>
+                                    </div>
                                 </div>
-
-                                <span class="label-description"><a href="https://www.opensubtitles.com/en/newuser" target="_blank" style="color: var(--primary-light);">Create a free account</a> if you don't have one.</span>
+                                <div class="validation-feedback" id="opensubtitlesValidationFeedback"></div>
                             </div>
                         </div>
                     </div>
@@ -2020,13 +2625,20 @@
             <div class="card collapsed" id="noTranslationCard" style="display: none;" data-card="notranslation">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">📺</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="16" cy="16" r="10" />
+                                    <path d="M16 6v20M6 16h20" />
+                                    <path d="M10 10c2 4 4 6 6 6s4-2 6-6M10 22c2-4 4-6 6-6s4 2 6 6" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">Languages</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="notranslation"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label>
                             Subtitle Languages
@@ -2055,13 +2667,22 @@
             <div class="card collapsed" id="geminiCard" data-card="gemini">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">✨</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="16" cy="16" r="10.5" stroke-width="2.2" />
+                                    <circle cx="16" cy="16" r="5" stroke-width="1.8" />
+                                    <path d="M16 6v-2M22.5 8.2l1.4-1.4M26 15h2M22.5 23.8l1.4 1.4M16 26v2M9.5 23.8l-1.4 1.4M6 15H4M9.5 8.2 8.1 6.8" stroke-width="1.15" />
+                                    <path d="M16 11v4.2l2.8 1.6" stroke-width="1.8" />
+                                    <path d="M12.8 21.4c0.7 1 1.9 1.6 3.2 1.6s2.5-0.6 3.2-1.6" stroke-width="1.2" opacity="0.8" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">AI Translation API Keys</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="gemini"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label for="geminiApiKey">
                             Gemini API Key
@@ -2173,14 +2794,22 @@
             <div class="card collapsed" id="sourceCard" data-card="source">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">🌍</div>
-                        <h2 class="card-title">Source Language</h2>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="16" cy="11" r="4" />
+                                    <path d="M10 18c0-2.5 2.7-4 6-4s6 1.5 6 4" />
+                                    <path d="M8 23c-.5-1-1.5-2-3-2M24 23c.5-1 1.5-2 3-2" />
+                                    <path d="M6 26h20" />
+                                </g>
+                            </svg>
+                        </div>
+                        <h2 class="card-title">Source Languages</h2>
                         <span class="card-badge" id="sourceBadge">0</span>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="source"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label>
                             * Source languages for translations
@@ -2204,14 +2833,22 @@
             <div class="card collapsed" id="targetCard" data-card="target">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">🎯</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="16" cy="16" r="10" />
+                                    <circle cx="16" cy="16" r="6" />
+                                    <circle cx="16" cy="16" r="2" fill="currentColor" />
+                                    <path d="M16 6v4M16 22v4M6 16h4M22 16h4" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">Target Languages</h2>
                         <span class="card-badge" id="targetBadge">0</span>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="target"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label>
                             * Target languages for subtitles and translations
@@ -2237,22 +2874,93 @@
                 </div>
             </div>
 
+            <!-- Learn Target Languages -->
+            <div class="card collapsed" id="learnTargetsCard" style="display: none;" data-card="learn">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <defs>
+                                    <linearGradient id="learnAurora" x1="10%" y1="15%" x2="90%" y2="85%">
+                                        <stop offset="0%" stop-color="currentColor" stop-opacity="0.15" />
+                                        <stop offset="45%" stop-color="currentColor" stop-opacity="0.05" />
+                                        <stop offset="100%" stop-color="currentColor" stop-opacity="0.18" />
+                                    </linearGradient>
+                                </defs>
+                                <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M6 12.6c1.5-2 4.8-3 8.2-1.8L16 12.8l1.8-2c3.4-1.2 6.7-0.2 8.2 1.8v11.7c-1.5-2-4.8-3-8.2-1.8L16 24.9l-1.8-2.4c-3.4-1.2-6.7-0.2-8.2 1.8V12.6z" stroke-width="2.2" fill="url(#learnAurora)" />
+                                    <path d="M16 13v11.9" stroke-width="2.2" />
+                                    <path d="M13 21.6l-3 2m9-2l3 2" stroke-width="1.1" opacity="0.5" />
+                                    <path d="M16 5.9l1.1 1.5L16 7.8l-1.1-0.4z" fill="currentColor" />
+                                    <path d="M16 6.9l0.5 1.3 1.3 0.3-1.1 0.8 0.1 1.3L16 9.8l-0.8 0.8 0.1-1.3-1.1-0.8 1.3-0.3z" fill="currentColor" opacity="0.9" />
+                                </g>
+                            </svg>
+                        </div>
+                        <h2 class="card-title">Learn Target Languages</h2>
+                        <span class="card-badge" id="learnBadge">0</span>
+                    </div>
+                    <button type="button" class="collapse-btn collapsed" data-collapse="learn"></button>
+                </div>
+<div class="card-content">
+                    <div class="form-group">
+                        <label>
+                            Select Learn Mode Languages
+                            <span class="label-description">Creates "Learn (Language)" entries that pair source + translated lines in WebVTT.</span>
+                        </label>
+
+                        <div class="language-search">
+                            <span class="language-search-icon">🔍</span>
+                            <input type="text" id="learnSearch" placeholder="Search languages...">
+                        </div>
+
+                        <div id="selectedLearnLanguages" class="selected-languages empty"></div>
+                        <div class="field-error" id="learnLanguagesError">Please select at least one learn language</div>
+
+                        <div class="quick-actions">
+                            <button type="button" class="quick-btn" data-action="select-popular-learn">⭐ Popular</button>
+                            <button type="button" class="quick-btn" data-action="select-all-learn">✓ All</button>
+                            <button type="button" class="quick-btn" data-action="clear-learn">✗ Clear</button>
+                        </div>
+
+                        <div id="learnLanguages" class="language-grid"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Other Settings -->
             <div class="card collapsed" data-card="cache">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">⚙️</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M6 9h8M18 9h8" />
+                                    <circle cx="15" cy="9" r="2" fill="currentColor" />
+                                    <path d="M6 16h8M18 16h8" />
+                                    <circle cx="15" cy="16" r="2" fill="currentColor" />
+                                    <path d="M6 23h4M14 23h12" />
+                                    <circle cx="11" cy="23" r="2" fill="currentColor" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">Other Settings</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="cache"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="fileTranslationEnabled">
                             Enable "Translate SRT"
                             <span class="label-description">Show the "Translate SRT" option in the subtitles list to upload and translate subtitles files directly.</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="mobileMode">
+                            Mobile mode
+                            <span class="label-description">Holds translation requests and sends the final subtitle only when ready. Use this if you're watching on Android.</span>
                         </label>
                     </div>
 
@@ -2271,6 +2979,32 @@
                             <span class="label-description">Skips reading our database cache and do not save translated subtitles to it. Translations will be stored in a temporary cache (for 12 hours).</span>
                         </label>
                     </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="learnModeEnabled">
+                            Enable Learn Mode
+                            <span class="label-description">Adds "Learn (Language)" entries that output dual-language WebVTT with source and translated lines for language learning.</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group" id="learnOrderGroup" style="display: none;">
+                        <label>
+                            Learn Mode Subtitle Order
+                            <span class="label-description">Choose which language appears at the top and bottom of the screen.</span>
+                        </label>
+                        <div class="option-group" style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
+                            <label style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="learnOrder" value="source-top" checked>
+                                Source Top • Target Bottom
+                            </label>
+                            <label style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="learnOrder" value="target-top">
+                                Target Top • Source Bottom
+                            </label>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -2278,15 +3012,32 @@
             <div class="card collapsed" data-card="advanced" id="advancedSettingsCard" style="display: none;">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">🔬</div>
-                        <h2 class="card-title">
-                            Advanced Settings (EXPERIMENTAL)
-                        </h2>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <defs>
+                                    <linearGradient id="advCore" x1="30%" y1="0%" x2="70%" y2="100%">
+                                        <stop offset="0%" stop-color="currentColor" stop-opacity="0.18" />
+                                        <stop offset="100%" stop-color="currentColor" stop-opacity="0.05" />
+                                    </linearGradient>
+                                </defs>
+                                <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="16" cy="16" r="10.5" stroke-width="2.2" />
+                                    <path d="M16 4.5v2.5M16 25v2.5M7 9.5l2.2 1.3M22.8 21.2l2.2 1.3M7 22.5l2.2-1.3M22.8 10.8l2.2-1.3M4.5 16h2.6M24.9 16h2.6" stroke-width="1.4" />
+                                    <path d="M16 7.2c2.3 1.7 3.8 4.6 3.1 7.8L16 27l-3.1-12c-0.7-3.2 0.8-6.1 3.1-7.8z" stroke-width="1.7" fill="url(#advCore)" />
+                                    <path d="M13.3 15.6c-1.6 0.5-3 1.6-3 3.2 0 1 0.4 1.9 1.2 2.5" stroke-width="1.2" />
+                                    <path d="M18.7 15.6c1.6 0.5 3 1.6 3 3.2 0 1-0.4 1.9-1.2 2.5" stroke-width="1.2" />
+                                    <circle cx="16" cy="13.5" r="1.8" stroke-width="1.5" fill="currentColor" />
+                                    <path d="M16 21.2l-2 2.5 2 1.4 2-1.4z" stroke-width="1.3" />
+                                    <path d="M12 10.2c1-1.2 2.5-2.1 4-2.2" stroke-width="1.2" opacity="0.6" />
+                                    <path d="M20 10.2c-1-1.2-2.5-2.1-4-2.2" stroke-width="1.2" opacity="0.6" />
+                                </g>
+                            </svg>
+                        </div>
+                        <h2 class="card-title">Advanced Settings (EXPERIMENTAL)</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="advanced"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="info-box" style="margin-bottom: 0.75rem;">
                         <p style="font-size: 0.95rem; margin: 0;">
                             <strong>Fine-tune AI behavior:</strong> Override default model and sampling parameters.
@@ -2355,13 +3106,19 @@
             <div class="card collapsed" data-card="dev" id="devSettingsCard" style="display: none;">
                 <div class="card-header">
                     <div class="card-title-group">
-                        <div class="card-icon">🧪</div>
+                        <div class="card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                                <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 6l-8 10 8 10M20 6l8 10-8 10" />
+                                    <path d="M19 4l-6 24" />
+                                </g>
+                            </svg>
+                        </div>
                         <h2 class="card-title">Dev</h2>
                     </div>
                     <button type="button" class="collapse-btn collapsed" data-collapse="dev"></button>
                 </div>
-
-                <div class="card-content">
+<div class="card-content">
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="syncSubtitlesEnabled">
@@ -2424,10 +3181,7 @@
         Press <span class="kbd">?</span> for keyboard shortcuts
     </div>
 
-    <!-- Instructions Mini-FAB (appears after auto-collapse) -->
-    <button class="instructions-fab" id="instructionsFab" aria-label="Info" title="Info">
-        ℹ️
-    </button>
+    <!-- Old Instructions Mini-FAB removed; replaced by .help-button (configHelp) -->
 
     <!-- Main Instructions Modal -->
     <div class="modal-overlay" id="instructionsModal">
@@ -2587,8 +3341,20 @@
         setTheme(initialTheme);
 
         // Toggle theme on button click - cycles through light → dark → true-dark → light
+        function spawnCoin(x, y) {
+            try {
+                const c = document.createElement('div');
+                c.className = 'coin animate';
+                c.style.left = x + 'px';
+                c.style.top = y + 'px';
+                document.body.appendChild(c);
+                c.addEventListener('animationend', () => c.remove(), { once: true });
+                setTimeout(() => { if (c && c.parentNode) c.remove(); }, 1200);
+            } catch (_) {}
+        }
+
         if (themeToggle) {
-            themeToggle.addEventListener('click', function() {
+            themeToggle.addEventListener('click', function(e) {
                 const currentTheme = html.getAttribute('data-theme') || 'light';
                 let newTheme;
 
@@ -2601,6 +3367,9 @@
                 }
 
                 setTheme(newTheme);
+                if (e && e.clientX != null && e.clientY != null) {
+                    spawnCoin(e.clientX, e.clientY);
+                }
             });
         }
 
@@ -2616,6 +3385,38 @@
     })();
     </script>
 
+    <!-- Help/Instructions wiring (config page) -->
+    <script>
+    (function(){
+        try {
+            var helpBtn = document.getElementById('configHelp');
+            var overlay = document.getElementById('instructionsModal');
+            var closeBtn = document.getElementById('closeInstructionsBtn');
+            var gotItBtn = document.getElementById('gotItInstructionsBtn');
+            var dontShow = document.getElementById('dontShowInstructions');
+
+            function openModal(){ if (overlay) overlay.classList.add('show'); }
+            function closeModal(){ if (overlay){ overlay.classList.remove('show'); overlay.classList.remove('fly-out'); } }
+
+            if (helpBtn) helpBtn.addEventListener('click', openModal);
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            if (overlay) overlay.addEventListener('click', function(e){ if (e.target === overlay) closeModal(); });
+            document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeModal(); });
+            if (gotItBtn) gotItBtn.addEventListener('click', function(){
+                if (dontShow && dontShow.checked) localStorage.setItem('hideConfigInstructions', '1');
+                closeModal();
+            });
+
+            // Optional: auto-open once unless dismissed
+            try {
+                if (!localStorage.getItem('hideConfigInstructions')) {
+                    // Do not auto-open to avoid interrupting; keep for future if desired
+                }
+            } catch (_) {}
+        } catch (_) {}
+    })();
+    </script>
+
     <!-- Service Worker Registration for Cache Management -->
     <script>
         /**
@@ -2626,35 +3427,21 @@
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js', { scope: '/' })
                     .then(function(reg) {
-                        console.log('[SW Registration] Service worker registered successfully:', reg);
-
                         // Check for updates periodically (every hour)
                         setInterval(function() {
-                            reg.update().then(function() {
-                                console.log('[SW Update Check] Service worker update check completed');
-                            }).catch(function(err) {
-                                console.warn('[SW Update Check] Failed to check for updates:', err);
-                            });
-                        }, 60 * 60 * 1000); // 1 hour
+                            reg.update().catch(function(){});
+                        }, 60 * 60 * 1000);
 
                         // Listen for controller change (indicates new SW activated)
                         navigator.serviceWorker.addEventListener('controllerchange', function() {
-                            console.log('[SW] Controller changed - new version activated');
-                            // Optionally notify user of update
-                            // You could show a banner here asking user to reload
+                            // no-op
                         });
                     })
-                    .catch(function(err) {
-                        console.warn('[SW Registration] Failed to register service worker:', err);
-                    });
+                    .catch(function(){ /* no-op */ });
             });
 
             // Listen for messages from service worker
-            navigator.serviceWorker.addEventListener('message', function(event) {
-                console.log('[SW Message]', event.data);
-            });
-        } else {
-            console.log('[SW] Service workers not supported in this browser');
+            navigator.serviceWorker.addEventListener('message', function(){});
         }
     </script>
 </body>

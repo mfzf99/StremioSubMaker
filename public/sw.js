@@ -18,7 +18,6 @@ async function getAppVersion() {
         const data = await response.json();
         return data.version || 'unknown';
     } catch (e) {
-        console.warn('[SW] Failed to fetch app version:', e.message);
         return 'unknown';
     }
 }
@@ -26,7 +25,6 @@ async function getAppVersion() {
 // Initialize version
 getAppVersion().then(v => {
     APP_VERSION = v;
-    console.log(`[SW] Service Worker initialized with version: ${APP_VERSION}`);
 });
 
 const CACHE_PREFIX = 'submaker';
@@ -46,7 +44,6 @@ const ASSET_URLS = [
  * Install event: Cache static assets
  */
 self.addEventListener('install', (event) => {
-    console.log('[SW] Install event triggered');
 
     event.waitUntil(
         getAppVersion().then(version => {
@@ -54,9 +51,7 @@ self.addEventListener('install', (event) => {
             const cacheName = getVersionedCacheName(version);
 
             return caches.open(cacheName).then(cache => {
-                console.log(`[SW] Caching assets in ${cacheName}`);
                 return cache.addAll(ASSET_URLS).catch(err => {
-                    console.warn('[SW] Failed to cache some assets:', err.message);
                     // Don't fail install if some assets can't be cached
                     return Promise.resolve();
                 });
@@ -72,7 +67,6 @@ self.addEventListener('install', (event) => {
  * Activate event: Clean up old cache versions
  */
 self.addEventListener('activate', (event) => {
-    console.log('[SW] Activate event triggered');
 
     event.waitUntil(
         getAppVersion().then(currentVersion => {
@@ -81,19 +75,16 @@ self.addEventListener('activate', (event) => {
 
             // Delete old version caches
             return caches.keys().then(cacheNames => {
-                console.log(`[SW] Current version: ${currentVersion}, Current cache: ${currentCacheName}`);
 
                 return Promise.all(
                     cacheNames.map(cacheName => {
                         // Keep current version cache and API cache
                         if (cacheName === currentCacheName || cacheName === API_CACHE_NAME) {
-                            console.log(`[SW] Keeping cache: ${cacheName}`);
                             return Promise.resolve();
                         }
 
                         // Delete old version caches
                         if (cacheName.startsWith(CACHE_PREFIX)) {
-                            console.log(`[SW] Deleting old cache: ${cacheName}`);
                             return caches.delete(cacheName);
                         }
 
@@ -155,7 +146,6 @@ async function handleApiRequest(request) {
         // Network failed, try cache
         const cached = await caches.match(request);
         if (cached) {
-            console.log(`[SW] Serving API from cache: ${request.url}`);
             return cached;
         }
 
@@ -180,9 +170,16 @@ async function handleHtmlRequest(request) {
         const response = await fetch(request, { cache: 'no-store' });
 
         if (response.ok) {
-            // Cache successful HTML responses
-            const cache = await caches.open(getVersionedCacheName(APP_VERSION));
-            cache.put(request, response.clone());
+            // Check if response has no-cache headers
+            const cacheControl = response.headers.get('Cache-Control');
+            const shouldCache = !cacheControl || (!cacheControl.includes('no-cache') && !cacheControl.includes('no-store'));
+
+            // Only cache HTML if it doesn't have no-cache headers
+            // This ensures configure.html and config.js are always fresh
+            if (shouldCache) {
+                const cache = await caches.open(getVersionedCacheName(APP_VERSION));
+                cache.put(request, response.clone());
+            }
         }
 
         return response;
@@ -190,7 +187,6 @@ async function handleHtmlRequest(request) {
         // Network failed, try cache
         const cached = await caches.match(request);
         if (cached) {
-            console.log(`[SW] Serving HTML from cache: ${request.url}`);
             return cached;
         }
 
@@ -251,7 +247,6 @@ function isStaticAsset(pathname) {
  * Message handler for cache control from clients
  */
 self.addEventListener('message', (event) => {
-    console.log('[SW] Received message:', event.data);
 
     if (event.data && event.data.type === 'CLEAR_CACHE') {
         handleClearCache();
@@ -268,15 +263,12 @@ async function handleClearCache() {
         const cacheNames = await caches.keys();
         const deletePromises = cacheNames.map(cacheName => {
             if (cacheName.startsWith(CACHE_PREFIX)) {
-                console.log(`[SW] Clearing cache: ${cacheName}`);
                 return caches.delete(cacheName);
             }
             return Promise.resolve();
         });
 
         await Promise.all(deletePromises);
-        console.log('[SW] All caches cleared');
     } catch (error) {
-        console.error('[SW] Error clearing cache:', error);
     }
 }

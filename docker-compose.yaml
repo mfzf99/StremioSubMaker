@@ -50,6 +50,8 @@ services:
       --save 300 10
       --save 60 10000
       --appendonly yes
+      --appendfsync everysec
+      --no-appendfsync-on-rewrite no
     ports:
       - "6379:6379"
     volumes:

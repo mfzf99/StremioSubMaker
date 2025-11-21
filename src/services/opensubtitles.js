@@ -1,8 +1,9 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const { toISO6391, toISO6392 } = require('../utils/languages');
-const { handleSearchError, handleDownloadError, handleAuthError } = require('../utils/apiErrorHandler');
+const { handleSearchError, handleDownloadError, handleAuthError, parseApiError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { version } = require('../utils/version');
 const log = require('../utils/logger');
 
@@ -71,6 +72,35 @@ function clearCachedAuthFailure(cacheKey) {
   }
 
   credentialFailureCache.delete(cacheKey);
+}
+
+/**
+ * Create an informative SRT subtitle when an episode is not found in a season pack
+ * @param {number} episode - Episode number that was not found
+ * @param {number} season - Season number
+ * @param {Array<string>} availableFiles - List of files that were found in the pack
+ * @returns {string} - SRT subtitle content
+ */
+function createEpisodeNotFoundSubtitle(episode, season, availableFiles = []) {
+  try {
+    const seasonEpisodeStr = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+
+    const foundEpisodes = (availableFiles || [])
+      .map(filename => {
+        const match = String(filename || '').match(/(?:episode|ep|e|oad|ova)\s*(\d+)/i);
+        return match ? parseInt(match[1], 10) : null;
+      })
+      .filter(ep => ep !== null)
+      .sort((a, b) => a - b);
+
+    const availableInfo = foundEpisodes.length > 0
+      ? `\nAvailable: Episodes ${foundEpisodes.join(', ')}`
+      : '';
+
+    return `1\n00:00:00,000 --> 04:00:00,000\nEpisode ${seasonEpisodeStr} not found in this subtitle pack.${availableInfo}`;
+  } catch (_) {
+    return `1\n00:00:00,000 --> 00:00:10,000\nEpisode not found in this subtitle pack.`;
+  }
 }
 
 /**
@@ -194,9 +224,24 @@ class OpenSubtitlesService {
       return this.token;
 
     } catch (error) {
-      if (isAuthenticationFailure(error)) {
+      // Classify the error so we don't mis-treat rate limits as bad credentials
+      const parsed = parseApiError(error, 'OpenSubtitles');
+
+      // Never cache an auth failure for retryable cases like 429/503
+      if (parsed.type !== 'rate_limit' && parsed.statusCode !== 503 && isAuthenticationFailure(error)) {
         cacheAuthFailure(this.credentialsCacheKey);
       }
+
+      // For rate limits or service unavailability, bubble up so callers can render a proper message
+      if (parsed.statusCode === 429 || parsed.type === 'rate_limit' || parsed.statusCode === 503) {
+        const e = new Error(parsed.userMessage || parsed.message || 'Service temporarily unavailable');
+        e.statusCode = parsed.statusCode || 503;
+        e.type = parsed.type || 'service_unavailable';
+        e.isRetryable = true;
+        throw e;
+      }
+
+      // For genuine auth failures and other client errors, log via auth handler and return null
       return handleAuthError(error, 'OpenSubtitles');
     }
   }
@@ -314,7 +359,7 @@ class OpenSubtitlesService {
         return [];
       }
 
-      const subtitles = response.data.data.map(sub => {
+      let subtitles = response.data.data.map(sub => {
 
         const originalLang = sub.attributes.language;
         const normalizedLang = this.normalizeLanguageCode(originalLang);
@@ -338,6 +383,77 @@ class OpenSubtitlesService {
           provider: 'opensubtitles'
         };
       });
+
+      // Client-side episode filtering and season pack detection
+      if ((type === 'episode' || type === 'anime-episode') && episode) {
+        const targetSeason = season || 1;
+        const targetEpisode = episode;
+
+        const beforeCount = subtitles.length;
+
+        subtitles = subtitles.filter(sub => {
+          const name = String(sub.name || '').toLowerCase();
+
+          // Season pack patterns
+          const seasonPackPatterns = [
+            new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\\d)`, 'i'),
+            new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
+            new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
+          ];
+
+          // Anime pack patterns
+          const animeSeasonPackPatterns = [
+            /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
+            /\[(?:batch|complete|full)\]/i,
+            /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i
+          ];
+
+          let isSeasonPack = false;
+          if (type === 'anime-episode') {
+            isSeasonPack = animeSeasonPackPatterns.some(p => p.test(name)) &&
+              !new RegExp(`(?:^|[^0-9])0*${targetEpisode}(?:v\\d+)?(?:[^0-9]|$)`, 'i').test(name);
+          } else {
+            isSeasonPack = seasonPackPatterns.some(p => p.test(name)) &&
+              !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(name);
+          }
+
+          if (isSeasonPack) {
+            sub.is_season_pack = true;
+            sub.season_pack_season = targetSeason;
+            sub.season_pack_episode = targetEpisode;
+            const originalFileId = sub.fileId || sub.id;
+            sub.fileId = `${originalFileId}_seasonpack_s${targetSeason}e${targetEpisode}`;
+            sub.id = sub.fileId;
+            log.debug(() => `[OpenSubtitles] Detected season pack: ${sub.name}`);
+            return true;
+          }
+
+          // Episode match patterns
+          const seasonEpisodePatterns = [
+            new RegExp(`s0*${targetSeason}e0*${targetEpisode}(?![0-9])`, 'i'),
+            new RegExp(`${targetSeason}x0*${targetEpisode}(?![0-9])`, 'i'),
+            new RegExp(`s0*${targetSeason}\\.e0*${targetEpisode}(?![0-9])`, 'i'),
+            new RegExp(`season\\s*0*${targetSeason}.*episode\\s*0*${targetEpisode}(?![0-9])`, 'i')
+          ];
+          if (seasonEpisodePatterns.some(p => p.test(name))) return true;
+
+          // If it explicitly references a different episode, exclude
+          const m = name.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
+          if (m) {
+            const subSeason = parseInt(m[1] || m[3], 10);
+            const subEpisode = parseInt(m[2] || m[4], 10);
+            if (subSeason === targetSeason && subEpisode !== targetEpisode) return false;
+          }
+
+          return true; // keep ambiguous
+        });
+
+        const filteredOut = beforeCount - subtitles.length;
+        const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
+        if (filteredOut > 0 || seasonPackCount > 0) {
+          log.debug(() => `[OpenSubtitles] Episode filtering kept ${subtitles.length}/${beforeCount} (season packs: ${seasonPackCount})`);
+        }
+      }
 
       // Limit to 20 results per language to control response size
       const MAX_RESULTS_PER_LANGUAGE = 20;
@@ -371,6 +487,20 @@ class OpenSubtitlesService {
     try {
       log.debug(() => ['[OpenSubtitles] Downloading subtitle via REST API:', fileId]);
 
+      // Parse season pack info encoded in fileId if present
+      let baseFileId = String(fileId);
+      let isSeasonPack = false;
+      let seasonPackSeason = null;
+      let seasonPackEpisode = null;
+      const seasonPackMatch = String(fileId).match(/^(.*)_seasonpack_s(\d+)e(\d+)$/i);
+      if (seasonPackMatch) {
+        isSeasonPack = true;
+        baseFileId = seasonPackMatch[1];
+        seasonPackSeason = parseInt(seasonPackMatch[2], 10);
+        seasonPackEpisode = parseInt(seasonPackMatch[3], 10);
+        log.debug(() => `[OpenSubtitles] Season pack download detected for S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
+      }
+
       // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
         log.error(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
@@ -393,7 +523,7 @@ class OpenSubtitlesService {
 
       // First, request download link
       const downloadResponse = await this.client.post('/download', {
-        file_id: parseInt(fileId)
+        file_id: parseInt(baseFileId)
       });
 
       if (!downloadResponse.data || !downloadResponse.data.link) {
@@ -421,9 +551,157 @@ class OpenSubtitlesService {
         const JSZip = require('jszip');
         const zip = await JSZip.loadAsync(buf, { base64: false });
         const entries = Object.keys(zip.files);
+        // Season pack handling: select the requested episode inside the ZIP
+        if (isSeasonPack && seasonPackSeason && seasonPackEpisode) {
+          log.debug(() => `[OpenSubtitles] Searching for S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')} in season pack ZIP`);
+          log.debug(() => `[OpenSubtitles] Available files in ZIP: ${entries.join(', ')}`);
+
+          const findEpisodeFile = (files, season, episode) => {
+            const patterns = [
+              new RegExp(`s0*${season}e0*${episode}(?:v\\d+)?`, 'i'),
+              new RegExp(`${season}x0*${episode}(?:v\\d+)?`, 'i'),
+              new RegExp(`season\\s*0*${season}.*episode\\s*0*${episode}`, 'i'),
+              new RegExp(`s0*${season}\\.e0*${episode}(?:v\\d+)?`, 'i')
+            ];
+            for (const filename of files) {
+              if (zip.files[filename].dir) continue;
+              const lower = filename.toLowerCase();
+              if (patterns.some(p => p.test(lower))) return filename;
+            }
+            return null;
+          };
+
+          const findEpisodeFileAnime = (files, episode) => {
+            const patterns = [
+              new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e(?:p(?:isode)?)?[\\s._-]*0*${episode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
+              new RegExp(`(?:^|[\\s\\[\\(\\-_.])0*${episode}(?:v\\d+)?(?=$|[\\s\\]\\)\\-_.])`, 'i'),
+              new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${episode}(?:v\\d+)?[a-z]{2,3}(?=\\.|[\\s\\]\\)\\-_.]|$)`, 'i'),
+              new RegExp(`(?:episode|episodio|ep|cap(?:itulo)?)\\s*0*${episode}(?![0-9])`, 'i'),
+              new RegExp(`第?\\s*0*${episode}\\s*(?:話|集|화)`, 'i'),
+              new RegExp(`^(?!.*(?:720|1080|480|2160)p).*[\\[\\(\\-_\\s]0*${episode}[\\]\\)\\-_\\s\\.]`, 'i')
+            ];
+            for (const filename of files) {
+              if (zip.files[filename].dir) continue;
+              const lower = filename.toLowerCase();
+              if (/(?:720|1080|480|2160)p|(?:19|20)\d{2}/.test(lower)) {
+                const episodeStr = String(episode).padStart(2, '0');
+                if (lower.includes(`${episodeStr}p`) || lower.includes(`20${episodeStr}`)) {
+                  continue;
+                }
+              }
+              if (patterns.some(p => p.test(lower))) return filename;
+            }
+            return null;
+          };
+
+          // Prefer SRT files
+          const srtFiles = entries.filter(n => n.toLowerCase().endsWith('.srt') && !zip.files[n].dir);
+          let targetEntry = findEpisodeFileAnime(srtFiles, seasonPackEpisode) ||
+                            findEpisodeFile(srtFiles, seasonPackSeason, seasonPackEpisode);
+
+          if (!targetEntry) {
+            targetEntry = findEpisodeFileAnime(entries, seasonPackEpisode) ||
+                          findEpisodeFile(entries, seasonPackSeason, seasonPackEpisode);
+          }
+
+          if (!targetEntry) {
+            log.warn(() => `[OpenSubtitles] Could not find requested episode in season pack ZIP`);
+            return createEpisodeNotFoundSubtitle(seasonPackEpisode, seasonPackSeason, entries);
+          }
+
+          if (targetEntry.toLowerCase().endsWith('.srt')) {
+            const buffer = await zip.files[targetEntry].async('nodebuffer');
+            const srt = detectAndConvertEncoding(buffer, 'OpenSubtitles');
+            log.debug(() => '[OpenSubtitles] Extracted episode .srt from season pack');
+            return srt;
+          }
+
+          // Non-SRT in season pack: fall through to alternate-format path by emulating altEntry
+          const altEntry = targetEntry;
+          const uint8 = await zip.files[altEntry].async('uint8array');
+          const abuf = Buffer.from(uint8);
+          let raw;
+          if (abuf.length >= 2 && abuf[0] === 0xFF && abuf[1] === 0xFE) raw = abuf.slice(2).toString('utf16le');
+          else if (abuf.length >= 2 && abuf[0] === 0xFE && abuf[1] === 0xFF) {
+            const swapped = Buffer.allocUnsafe(Math.max(0, abuf.length - 2));
+            for (let i = 2, j = 0; i + 1 < abuf.length; i += 2, j += 2) { swapped[j] = abuf[i + 1]; swapped[j + 1] = abuf[i]; }
+            raw = swapped.toString('utf16le');
+          } else raw = abuf.toString('utf8');
+
+          const lname = altEntry.toLowerCase();
+          if (lname.endsWith('.vtt')) return raw;
+
+          if (lname.endsWith('.sub')) {
+            const isMicroDVD = /^\s*\{\d+\}\{\d+\}/.test(raw);
+            if (!isMicroDVD) {
+              log.warn(() => `[OpenSubtitles] Detected VobSub .sub format (binary/image-based): ${altEntry} - not supported`);
+            } else {
+              try {
+                const subsrt = require('subsrt-ts');
+                const fps = 25;
+                const converted = subsrt.convert(raw, { to: 'vtt', from: 'sub', fps });
+                if (converted && typeof converted === 'string' && converted.trim().length > 0) return converted;
+              } catch (_) { /* ignore */ }
+            }
+          }
+
+          if (lname.endsWith('.ass') || lname.endsWith('.ssa')) {
+            const assConverter = require('../utils/assConverter');
+            const format = lname.endsWith('.ass') ? 'ass' : 'ssa';
+            const result = assConverter.convertASSToVTT(raw, format);
+            if (result.success) return result.content;
+          }
+          try {
+            const subsrt = require('subsrt-ts');
+            let converted;
+            if (lname.endsWith('.ass')) converted = subsrt.convert(raw, { to: 'vtt', from: 'ass' });
+            else if (lname.endsWith('.ssa')) converted = subsrt.convert(raw, { to: 'vtt', from: 'ssa' });
+            else converted = subsrt.convert(raw, { to: 'vtt' });
+            if (!converted || typeof converted !== 'string' || converted.trim().length === 0) {
+              const sanitized = (raw || '').replace(/\u0000/g, '');
+              if (lname.endsWith('.ass')) converted = subsrt.convert(sanitized, { to: 'vtt', from: 'ass' });
+              else if (lname.endsWith('.ssa')) converted = subsrt.convert(sanitized, { to: 'vtt', from: 'ssa' });
+              else converted = subsrt.convert(sanitized, { to: 'vtt' });
+            }
+            if (converted && converted.trim().length > 0) return converted;
+          } catch (_) { /* ignore */ }
+
+          const manual = (function assToVttFallback(input) {
+            if (!input || !/\[events\]/i.test(input)) return null;
+            const lines = input.split(/\r?\n/); let format = []; let inEvents = false;
+            for (const line of lines) {
+              const l = line.trim(); if (/^\[events\]/i.test(l)) { inEvents = true; continue; }
+              if (!inEvents) continue; if (/^\[.*\]/.test(l)) break;
+              if (/^format\s*:/i.test(l)) format = l.split(':')[1].split(',').map(s => s.trim().toLowerCase());
+            }
+            const idxStart = Math.max(0, format.indexOf('start'));
+            const idxEnd = Math.max(1, format.indexOf('end'));
+            const idxText = format.length > 0 ? Math.max(format.indexOf('text'), format.length - 1) : 9;
+            const out = ['WEBVTT', ''];
+            const parseTime = (t) => {
+              const m = t.trim().match(/(\d+):(\d{2}):(\d{2})[\.\:](\d{2})/);
+              if (!m) return null; const h=+m[1]||0, mi=+m[2]||0, s=+m[3]||0, cs=+m[4]||0;
+              const ms=(h*3600+mi*60+s)*1000+cs*10; const hh=String(Math.floor(ms/3600000)).padStart(2,'0');
+              const mm=String(Math.floor((ms%3600000)/60000)).padStart(2,'0'); const ss=String(Math.floor((ms%60000)/1000)).padStart(2,'0');
+              const mmm=String(ms%1000).padStart(3,'0'); return `${hh}:${mm}:${ss}.${mmm}`;
+            };
+            const cleanText = (txt) => { let t = txt.replace(/\{[^}]*\}/g,''); t = t.replace(/\\N/g,'\n').replace(/\\n/g,'\n').replace(/\\h/g,' ');
+              t = t.replace(/[\u0000-\u001F]/g,''); return t.trim(); };
+            for (const line of lines) {
+              if (!/^dialogue\s*:/i.test(line)) continue; const payload=line.split(':').slice(1).join(':');
+              const parts=[]; let cur=''; let splits=0; for (let i=0;i<payload.length;i++){const ch=payload[i]; if(ch===',' && splits<Math.max(idxText,9)){parts.push(cur);cur='';splits++;} else {cur+=ch;}}
+              parts.push(cur); const st=parseTime(parts[idxStart]); const et=parseTime(parts[idxEnd]); if(!st||!et) continue;
+              const ct=cleanText(parts[idxText]??''); if(!ct) continue; out.push(`${st} --> ${et}`); out.push(ct); out.push('');
+            }
+            return out.length>2?out.join('\n'):null;
+          })(raw);
+          if (manual && manual.trim().length>0) return manual;
+          throw new Error('Failed to extract or convert subtitle from season pack ZIP');
+        }
         const srtEntry = entries.find(f => f.toLowerCase().endsWith('.srt'));
         if (srtEntry) {
-          const srt = await zip.files[srtEntry].async('string');
+          const buffer = await zip.files[srtEntry].async('nodebuffer');
+          const srt = detectAndConvertEncoding(buffer, 'OpenSubtitles');
           log.debug(() => '[OpenSubtitles] Extracted .srt from ZIP');
           return srt;
         }

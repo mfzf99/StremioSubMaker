@@ -153,6 +153,9 @@ function normalizeConfig(config) {
     }
   };
 
+  // Force Learn Mode placement to top-of-screen now that the UI no longer exposes this toggle
+  mergedConfig.learnPlacement = 'top';
+
   // If geminiModel is empty/null, use defaults (respects .env)
   if (!mergedConfig.geminiModel || mergedConfig.geminiModel.trim() === '') {
     mergedConfig.geminiModel = defaults.geminiModel;
@@ -199,6 +202,9 @@ function normalizeConfig(config) {
 
   // Keep old tempCache for backward compatibility
   mergedConfig.tempCache = mergedConfig.bypassCacheConfig;
+
+  // Normalize mobile mode flag
+  mergedConfig.mobileMode = mergedConfig.mobileMode === true;
 
   // Show all Gemini API configs that will be used
   const thinkingDisplay = mergedConfig.advancedSettings.thinkingBudget === -1 ? 'dynamic' :
@@ -313,11 +319,24 @@ function getDefaultConfig(modelName = null) {
     contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE) || 3 // Number of surrounding entries to include as context
   };
 
+  // UI/results limits
+  // Limit the number of subtitles returned per language in the list to avoid UI slowdown
+  // Clamp to a safe range [1, 50] with default 12
+  const envSubsPerLang = parseInt(process.env.MAX_SUBTITLES_PER_LANGUAGE, 10);
+  const maxSubtitlesPerLanguage = (Number.isFinite(envSubsPerLang) && envSubsPerLang > 0)
+    ? Math.min(50, envSubsPerLang)
+    : 12;
+
   return {
     noTranslationMode: false, // If true, skip translation and just fetch subtitles
     noTranslationLanguages: [], // Languages to fetch when in no-translation mode
     sourceLanguages: [],
     targetLanguages: [],
+    // Learn Mode: create dual-language WebVTT entries
+    learnMode: false,
+    learnTargetLanguages: [],
+    learnOrder: 'source-top',
+    learnPlacement: 'top', // default: pin top language at top of screen
     geminiApiKey: '',
     // Use effective model (from parameter, env variable, or default)
     geminiModel: effectiveModel,
@@ -353,9 +372,13 @@ function getDefaultConfig(modelName = null) {
     },
     fileTranslationEnabled: false, // enable file upload translation feature
     syncSubtitlesEnabled: false, // enable 'Sync Subtitles' action in subtitles list
+    mobileMode: false, // Hold translation responses until full translation is ready (Android cache workaround)
     // Minimum size for a subtitle file to be considered valid (bytes)
     // Prevents attempting to load/translate obviously broken files
     minSubtitleSizeBytes: 200,
+    // Maximum number of subtitles to display per language in Stremio UI
+    // Configurable via env var MAX_SUBTITLES_PER_LANGUAGE (default 12, max 50)
+    maxSubtitlesPerLanguage,
     advancedSettings
   };
 }

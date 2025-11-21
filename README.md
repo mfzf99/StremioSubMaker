@@ -52,7 +52,7 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 
 - **Node.js** 18+ ([Download](https://nodejs.org))
 - **Gemini API Key** ([Get one free](https://makersuite.google.com/app/apikey))
-- **OpenSubtitles** API Key and account for higher limits ([Sign up](https://www.opensubtitles.com/en/newuser))
+- **OpenSubtitles Account** ([Sign up](https://www.opensubtitles.com/en/newuser))
 - **SubSource API Key** ([Get one free](https://subsource.net/api-docs))
 - **SubDL API Key** ([Get one free](https://subdl.com/panel/api)) 
 
@@ -134,15 +134,15 @@ SubMaker Addon (Express + Stremio SDK)
 ## ⚙️ Configuration Guide
 
 ### Source Languages
-Languages to **fetch** subtitles in (Single language recommended)
+Languages to **translate subtitles from** (Single language recommended)
 - Example: English, Spanish, Portuguese (BR)
 
 ### Target Languages
-Languages to **translate to** (unlimited)
+Languages to **translate subtitles to**
 - Example: French, German, Japanese
 
 **Provider Configuration**
-- OpenSubtitles: Optional username/password for higher limits
+- OpenSubtitles: Optional username/password
 - SubDL: Requires API key
 - SubSource: Requires API key
 

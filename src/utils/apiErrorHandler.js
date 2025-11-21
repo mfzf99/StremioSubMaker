@@ -66,6 +66,21 @@ function parseApiError(error, serviceName = 'API') {
       parsed.isRetryable = true;
       parsed.userMessage = 'Server error. Please try again later.';
     }
+    // OpenSubtitles daily quota exceeded (406 Not Acceptable used for 20/24h quota)
+    else if (parsed.statusCode === 406 && serviceName === 'OpenSubtitles') {
+      const msg = String(error.response?.data?.message || error.message || '').toLowerCase();
+      const looksLikeQuota = msg.includes('allowed 20 subtitles') || (msg.includes('quota') && msg.includes('renew'));
+      if (looksLikeQuota) {
+        parsed.type = 'quota_exceeded';
+        parsed.isRetryable = false;
+        parsed.userMessage = 'OpenSubtitles daily download limit reached (20 per 24h). Try again after the next UTC midnight.';
+      } else {
+        // Fallback to generic client error if not quota text
+        parsed.type = 'client_error';
+        parsed.isRetryable = false;
+        parsed.userMessage = 'Invalid request. Please check your configuration.';
+      }
+    }
     // Client errors (400-499)
     else if (parsed.statusCode >= 400) {
       parsed.type = 'client_error';
@@ -186,6 +201,8 @@ function handleDownloadError(error, serviceName, options = {}) {
   customError.statusCode = parsed.statusCode;
   customError.type = parsed.type;
   customError.isRetryable = parsed.isRetryable;
+  // Mark as already logged to avoid duplicate logs in higher layers
+  customError._alreadyLogged = true;
 
   throw customError;
 }

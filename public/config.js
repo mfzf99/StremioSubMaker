@@ -86,6 +86,11 @@ Translate to {target_language}.`;
             noTranslationLanguages: [], // Languages to fetch when in no-translation mode
             sourceLanguages: ['eng'], // Up to 3 source languages allowed
             targetLanguages: [],
+            // Learn mode (dual-language VTT output)
+            learnMode: false,
+            learnTargetLanguages: [],
+            learnOrder: 'source-top', // 'source-top' | 'target-top'
+            learnPlacement: 'top',
             geminiApiKey: DEFAULT_API_KEYS.GEMINI,
             geminiModel: modelName,
             promptStyle: 'strict', // 'natural' or 'strict'
@@ -122,6 +127,7 @@ Translate to {target_language}.`;
             },
             fileTranslationEnabled: false, // enable file upload translation feature
             syncSubtitlesEnabled: false, // enable 'Sync Subtitles' action in subtitles list
+            mobileMode: false, // On Android: wait for full translation before responding
             advancedSettings: {
                 enabled: false, // Auto-set to true if any setting differs from defaults (forces bypass cache)
                 geminiModel: '', // Override model (empty = use default)
@@ -136,7 +142,7 @@ Translate to {target_language}.`;
     }
 
     // State management
-    let currentConfig = parseConfigFromUrl();
+    let currentConfig = null;
     let allLanguages = [];
     let isFirstRun = false;
     let modelsFetchTimeout = null;
@@ -175,7 +181,6 @@ Translate to {target_language}.`;
     function clearInvalidToken(reason = 'unknown') {
         const token = localStorage.getItem(TOKEN_KEY);
         if (token && !isValidSessionToken(token)) {
-            console.warn(`[Config] Clearing invalid session token (${reason}): ${token.substring(0, 8)}...`);
             localStorage.removeItem(TOKEN_KEY);
             return true;
         }
@@ -245,6 +250,9 @@ Translate to {target_language}.`;
         currentConfig.sourceLanguages = normalizeLanguageCodes(currentConfig.sourceLanguages || []);
         currentConfig.targetLanguages = normalizeLanguageCodes(currentConfig.targetLanguages || []);
         currentConfig.noTranslationLanguages = normalizeLanguageCodes(currentConfig.noTranslationLanguages || []);
+        currentConfig.learnTargetLanguages = normalizeLanguageCodes(currentConfig.learnTargetLanguages || []);
+        currentConfig.learnPlacement = 'top';
+        currentConfig.mobileMode = currentConfig.mobileMode === true;
 
         // Show instructions ASAP (do not block on network/UI work)
         showInstructionsModalIfNeeded();
@@ -280,6 +288,37 @@ Translate to {target_language}.`;
     }
 
     // Modal management functions
+    function updateBodyScrollLock() {
+        try {
+            const instr = document.getElementById('instructionsModal');
+            const reset = document.getElementById('resetConfirmModal');
+            const shouldLock = (instr && instr.classList.contains('show')) || (reset && reset.classList.contains('show'));
+
+            // Measure scrollbar width BEFORE toggling lock to get the correct value
+            const scrollbarWidth = Math.max(0, (window.innerWidth || 0) - (document.documentElement ? document.documentElement.clientWidth : 0));
+
+            // Toggle scroll lock class
+            document.body.classList.toggle('modal-open', !!shouldLock);
+
+            // Prevent layout shift by compensating for scrollbar width when locking
+            if (shouldLock) {
+                if (scrollbarWidth > 0) {
+                    if (document.body.dataset.prOriginal === undefined) {
+                        document.body.dataset.prOriginal = document.body.style.paddingRight || '';
+                    }
+                    document.body.style.paddingRight = scrollbarWidth + 'px';
+                }
+            } else {
+                if (document.body.dataset.prOriginal !== undefined) {
+                    document.body.style.paddingRight = document.body.dataset.prOriginal;
+                    delete document.body.dataset.prOriginal;
+                } else {
+                    document.body.style.paddingRight = '';
+                }
+            }
+        } catch (_) {}
+    }
+
     function openModalById(id) {
         const el = document.getElementById(id);
         if (!el) return false;
@@ -287,6 +326,10 @@ Translate to {target_language}.`;
         el.classList.add('show');
         el.style.display = 'flex';
         el.style.zIndex = '10000';
+        // Lock body scroll for instructions/reset modals
+        if (id === 'instructionsModal' || id === 'resetConfirmModal') {
+            updateBodyScrollLock();
+        }
         return true;
     }
     function showInstructionsModalIfNeeded() {
@@ -331,6 +374,8 @@ Translate to {target_language}.`;
             modal.classList.remove('show');
             modal.style.display = 'none';
         }
+        // Update scroll lock after closing
+        updateBodyScrollLock();
         // If user opted to not show again, hide FAB as well
         if (dontShow) {
             hideInstructionsFab();
@@ -351,7 +396,12 @@ Translate to {target_language}.`;
             overlay.classList.remove('show');
             overlay.classList.remove('fly-out');
             overlay.style.display = 'none';
-            showInstructionsFab();
+            // Unlock scroll BEFORE showing the FAB to avoid visible shift moving the icon
+            updateBodyScrollLock();
+            // Defer showing FAB to next frame so layout is stable post-scrollbar
+            requestAnimationFrame(() => {
+                showInstructionsFab();
+            });
         }, 480);
     }
 
@@ -380,13 +430,13 @@ Translate to {target_language}.`;
     }
 
     function showInstructionsFab() {
-        const fab = document.getElementById('instructionsFab');
+        const fab = document.getElementById('configHelp') || document.getElementById('instructionsFab');
         if (!fab) return;
         fab.classList.add('show');
     }
 
     function hideInstructionsFab() {
-        const fab = document.getElementById('instructionsFab');
+        const fab = document.getElementById('configHelp') || document.getElementById('instructionsFab');
         if (!fab) return;
         fab.classList.remove('show');
     }
@@ -418,47 +468,45 @@ Translate to {target_language}.`;
 
     // (Removed extra window load fallback to reduce complexity)
 
-    // Close modals when clicking outside
+    // Unified delegated click handler (capture) for modals/FAB
     document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('modal-overlay')) {
-            if (e.target.id === 'instructionsModal') {
+        const target = e.target;
+        const overlay = target && target.closest ? target.closest('.modal-overlay') : null;
+
+        if (overlay) {
+            if (overlay.id === 'instructionsModal') {
                 closeInstructionsModal();
-            } else if (e.target.id === 'fileTranslationModal') {
+                return;
+            } else if (overlay.id === 'fileTranslationModal') {
                 closeFileTranslationModal();
-            } else if (e.target.id === 'resetConfirmModal') {
+                return;
+            } else if (overlay.id === 'resetConfirmModal') {
                 const modal = document.getElementById('resetConfirmModal');
-                if (modal) { modal.classList.remove('show'); modal.style.display = 'none'; }
+                if (modal) { modal.classList.remove('show'); modal.style.display = 'none'; updateBodyScrollLock(); }
+                return;
             }
         }
-    });
 
-    // Delegated handlers for modal close buttons (robust against earlier init failures)
-    document.addEventListener('click', function(e) {
-        const actionEl = e.target && e.target.closest
-            ? e.target.closest('#closeInstructionsBtn, #gotItInstructionsBtn, #closeFileTranslationBtn, #gotItFileTranslationBtn, .modal-close')
+        const actionEl = target && target.closest
+            ? target.closest('#closeInstructionsBtn, #gotItInstructionsBtn, #closeFileTranslationBtn, #gotItFileTranslationBtn, .modal-close')
             : null;
-        if (!actionEl) return;
-
-        // If it's any instructions close control
-        if (actionEl.id === 'closeInstructionsBtn' || actionEl.id === 'gotItInstructionsBtn' || actionEl.classList.contains('modal-close') && actionEl.closest('#instructionsModal')) {
-            window.closeInstructionsModal();
-            return;
+        if (actionEl) {
+            if (actionEl.id === 'closeInstructionsBtn' || actionEl.id === 'gotItInstructionsBtn' || (actionEl.classList.contains('modal-close') && actionEl.closest('#instructionsModal'))) {
+                window.closeInstructionsModal();
+                return;
+            }
+            if (actionEl.id === 'closeFileTranslationBtn' || actionEl.id === 'gotItFileTranslationBtn' || (actionEl.classList.contains('modal-close') && actionEl.closest('#fileTranslationModal'))) {
+                window.closeFileTranslationModal();
+                return;
+            }
         }
 
-        // If it's any file translation close control
-        if (actionEl.id === 'closeFileTranslationBtn' || actionEl.id === 'gotItFileTranslationBtn' || actionEl.classList.contains('modal-close') && actionEl.closest('#fileTranslationModal')) {
-            window.closeFileTranslationModal();
+        const fab = target && target.closest ? target.closest('#configHelp, #instructionsFab') : null;
+        if (fab) {
+            hideInstructionsFab();
+            openModalById('instructionsModal');
             return;
         }
-    }, true); // capture phase to survive stopPropagation in bubble
-
-    // FAB click handler to reopen instructions
-    document.addEventListener('click', function(e) {
-        const fab = e.target && e.target.closest ? e.target.closest('#instructionsFab') : null;
-        if (!fab) return;
-        hideInstructionsFab();
-        // Reopen modal; do not auto-minimize immediately when user explicitly opens
-        openModalById('instructionsModal');
     }, true);
 
     // Close modals with Escape key (priority handler)
@@ -481,6 +529,7 @@ Translate to {target_language}.`;
                 e.stopPropagation();
                 resetConfirmModal.classList.remove('show');
                 resetConfirmModal.style.display = 'none';
+                updateBodyScrollLock();
             }
         }
     }, true); // Use capture phase to handle before other listeners
@@ -592,11 +641,13 @@ Translate to {target_language}.`;
                 renderLanguageGrid('sourceLanguages', 'selectedSourceLanguages', allLanguages);
                 renderLanguageGrid('targetLanguages', 'selectedTargetLanguages', allLanguages);
                 renderLanguageGrid('noTranslationLanguages', 'selectedNoTranslationLanguages', allLanguages);
+                renderLanguageGrid('learnLanguages', 'selectedLearnLanguages', allLanguages);
 
                 // Update selected chips
                 updateSelectedChips('source', currentConfig.sourceLanguages);
                 updateSelectedChips('target', currentConfig.targetLanguages);
                 updateSelectedChips('notranslation', currentConfig.noTranslationLanguages);
+                updateSelectedChips('learn', currentConfig.learnTargetLanguages);
 
                 return; // Success - exit function
             } catch (error) {
@@ -660,6 +711,9 @@ Translate to {target_language}.`;
         } else if (gridId === 'noTranslationLanguages') {
             configKey = 'noTranslationLanguages';
             type = 'notranslation';
+        } else if (gridId === 'learnLanguages') {
+            configKey = 'learnTargetLanguages';
+            type = 'learn';
         } else {
             configKey = 'targetLanguages';
             type = 'target';
@@ -667,17 +721,11 @@ Translate to {target_language}.`;
 
         languages.forEach(lang => {
             const isSelected = currentConfig[configKey].includes(lang.code);
-
             const item = document.createElement('div');
             item.className = `language-item ${isSelected ? 'selected' : ''}`;
             item.dataset.code = lang.code;
             item.dataset.name = lang.name.toLowerCase();
             item.textContent = `${lang.name} (${lang.code.toUpperCase()})`;
-
-            item.addEventListener('click', () => {
-                toggleLanguage(type, lang.code, item);
-            });
-
             grid.appendChild(item);
         });
     }
@@ -688,6 +736,8 @@ Translate to {target_language}.`;
             configKey = 'sourceLanguages';
         } else if (type === 'notranslation') {
             configKey = 'noTranslationLanguages';
+        } else if (type === 'learn') {
+            configKey = 'learnTargetLanguages';
         } else {
             configKey = 'targetLanguages';
         }
@@ -727,6 +777,9 @@ Translate to {target_language}.`;
         } else if (type === 'notranslation') {
             containerId = 'selectedNoTranslationLanguages';
             badgeId = null; // No badge for no-translation
+        } else if (type === 'learn') {
+            containerId = 'selectedLearnLanguages';
+            badgeId = 'learnBadge';
         } else {
             containerId = 'selectedTargetLanguages';
             badgeId = 'targetBadge';
@@ -745,25 +798,20 @@ Translate to {target_language}.`;
         }
 
         // Live validation
-        if (type === 'source' || type === 'target') {
+        if (type === 'source' || type === 'target' || type === 'learn') {
             validateLanguageSelection(type);
         }
 
         languageCodes.forEach(code => {
             const lang = allLanguages.find(l => l.code === code);
             if (!lang) return;
-
             const chip = document.createElement('div');
             chip.className = 'language-chip';
+            chip.dataset.code = code;
             chip.innerHTML = `
                 <span>${lang.name} (${lang.code.toUpperCase()})</span>
                 <span class="remove">×</span>
             `;
-
-            chip.addEventListener('click', () => {
-                removeLanguage(type, code);
-            });
-
             container.appendChild(chip);
         });
     }
@@ -776,6 +824,9 @@ Translate to {target_language}.`;
         } else if (type === 'notranslation') {
             configKey = 'noTranslationLanguages';
             gridId = 'noTranslationLanguages';
+        } else if (type === 'learn') {
+            configKey = 'learnTargetLanguages';
+            gridId = 'learnLanguages';
         } else {
             configKey = 'targetLanguages';
             gridId = 'targetLanguages';
@@ -799,6 +850,47 @@ Translate to {target_language}.`;
     function setupEventListeners() {
         // Form submission
         document.getElementById('configForm').addEventListener('submit', handleSubmit);
+
+        // Delegate language grid item clicks to containers (reduces per-item listeners)
+        const gridMap = [
+            ['sourceLanguages', 'source'],
+            ['targetLanguages', 'target'],
+            ['learnLanguages', 'learn'],
+            ['noTranslationLanguages', 'notranslation']
+        ];
+        gridMap.forEach(([id, type]) => {
+            const grid = document.getElementById(id);
+            if (grid && !grid.__delegated) {
+                grid.addEventListener('click', (e) => {
+                    const item = e.target && e.target.closest ? e.target.closest('.language-item') : null;
+                    if (!item || !grid.contains(item)) return;
+                    const code = item.dataset.code;
+                    if (!code) return;
+                    toggleLanguage(type, code, item);
+                });
+                grid.__delegated = true;
+            }
+        });
+
+        // Delegate chip removal clicks to selected containers
+        const selectedMap = [
+            ['selectedSourceLanguages', 'source'],
+            ['selectedTargetLanguages', 'target'],
+            ['selectedLearnLanguages', 'learn'],
+            ['selectedNoTranslationLanguages', 'notranslation']
+        ];
+        selectedMap.forEach(([id, type]) => {
+            const box = document.getElementById(id);
+            if (box && !box.__delegated) {
+                box.addEventListener('click', (e) => {
+                    const chip = e.target && e.target.closest ? e.target.closest('.language-chip') : null;
+                    if (!chip || !box.contains(chip)) return;
+                    const code = chip.dataset.code;
+                    if (code) removeLanguage(type, code);
+                });
+                box.__delegated = true;
+            }
+        });
 
         // Gemini API key auto-fetch - triggers when API key is typed/pasted
         const apiKeyInput = document.getElementById('geminiApiKey');
@@ -863,6 +955,14 @@ Translate to {target_language}.`;
             });
         }
 
+        // Learn language search
+        const learnSearch = document.getElementById('learnSearch');
+        if (learnSearch) {
+            learnSearch.addEventListener('input', (e) => {
+                filterLanguages('learnLanguages', e.target.value);
+            });
+        }
+
         // Quick action buttons
         document.querySelectorAll('.quick-btn').forEach(btn => {
             btn.addEventListener('click', handleQuickAction);
@@ -917,17 +1017,54 @@ Translate to {target_language}.`;
         document.getElementById('installBtn').addEventListener('click', installAddon);
         document.getElementById('copyBtn').addEventListener('click', copyInstallUrl);
 
-        // Card headers - toggle collapse when clicked (including the arrow button)
+        // Card collapse behavior
+        // 1) Header click toggles (and stops propagation)
         document.querySelectorAll('.card-header').forEach(header => {
             header.addEventListener('click', (e) => {
                 const card = e.currentTarget.closest('.card');
                 const collapseBtn = card.querySelector('.collapse-btn');
-
-                // Toggle collapsed state
                 card.classList.toggle('collapsed');
-                collapseBtn.classList.toggle('collapsed');
+                if (collapseBtn) collapseBtn.classList.toggle('collapsed');
+                e.stopPropagation();
             });
         });
+        // 2) Make entire collapsed card clickable to expand; when expanded, clicks in content do nothing
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const isCollapsed = card.classList.contains('collapsed');
+                const content = card.querySelector('.card-content');
+                const collapseBtn = card.querySelector('.collapse-btn');
+                if (!isCollapsed && content && content.contains(e.target)) return;
+                card.classList.toggle('collapsed');
+                if (collapseBtn) collapseBtn.classList.toggle('collapsed');
+            });
+        });
+
+        // Learn Mode toggle and order
+        const learnToggle = document.getElementById('learnModeEnabled');
+        const learnOrderGroup = document.getElementById('learnOrderGroup');
+        const learnPlacementGroup = document.getElementById('learnPlacementGroup');
+        const learnTargetsCard = document.getElementById('learnTargetsCard');
+        if (learnToggle) {
+            learnToggle.addEventListener('change', (e) => {
+                const enabled = !!e.target.checked;
+                currentConfig.learnMode = enabled;
+                if (learnOrderGroup) learnOrderGroup.style.display = enabled ? '' : 'none';
+                if (learnPlacementGroup) learnPlacementGroup.style.display = enabled ? '' : 'none';
+                if (learnTargetsCard) learnTargetsCard.style.display = enabled ? '' : 'none';
+                validateLanguageSelection('learn');
+                saveConfig();
+            });
+        }
+        document.querySelectorAll('input[name="learnOrder"]').forEach(r => {
+            r.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentConfig.learnOrder = e.target.value;
+                    saveConfig();
+                }
+            });
+        });
+        currentConfig.learnPlacement = 'top';
 
         // Advanced settings toggle (element may not exist in current UI)
         const showAdv = document.getElementById('showAdvancedSettings');
@@ -964,6 +1101,10 @@ Translate to {target_language}.`;
         });
 
         // API Key Validation Buttons
+        const validateOpenSubsBtn = document.getElementById('validateOpenSubtitles');
+        if (validateOpenSubsBtn) {
+            validateOpenSubsBtn.addEventListener('click', () => validateApiKey('opensubtitles'));
+        }
         document.getElementById('validateSubSource').addEventListener('click', () => validateApiKey('subsource'));
         document.getElementById('validateSubDL').addEventListener('click', () => validateApiKey('subdl'));
         document.getElementById('validateGemini').addEventListener('click', () => validateApiKey('gemini'));
@@ -987,7 +1128,6 @@ Translate to {target_language}.`;
                 const apiKey = document.getElementById('geminiApiKey').value.trim();
                 // Only fetch if we have an API key and haven't fetched yet
                 if (apiKey && apiKey.length >= 10 && apiKey !== lastFetchedApiKey) {
-                    console.log('[Advanced Settings] Fetching models on dropdown focus...');
                     await autoFetchModels(apiKey);
                 }
             });
@@ -1238,8 +1378,16 @@ Translate to {target_language}.`;
     }
 
     function validateLanguageSelection(type) {
-        const configKey = type === 'source' ? 'sourceLanguages' : 'targetLanguages';
-        const errorId = type === 'source' ? 'sourceLanguagesError' : 'targetLanguagesError';
+        const configKey = type === 'source'
+            ? 'sourceLanguages'
+            : type === 'target'
+                ? 'targetLanguages'
+                : 'learnTargetLanguages';
+        const errorId = type === 'source'
+            ? 'sourceLanguagesError'
+            : type === 'target'
+                ? 'targetLanguagesError'
+                : 'learnLanguagesError';
         const errorDiv = document.getElementById(errorId);
 
         if (type === 'source') {
@@ -1253,14 +1401,14 @@ Translate to {target_language}.`;
                 return true;
             }
         } else {
-            // Target languages must have at least one
-            if (currentConfig[configKey].length === 0) {
+            // Target and learn languages must have at least one when applicable
+            const requiresSelection = type === 'target' ? true : !!currentConfig.learnMode;
+            if (requiresSelection && currentConfig[configKey].length === 0) {
                 errorDiv.classList.add('show');
                 return false;
-            } else {
-                errorDiv.classList.remove('show');
-                return true;
             }
+            errorDiv.classList.remove('show');
+            return true;
         }
     }
 
@@ -1326,7 +1474,19 @@ Translate to {target_language}.`;
             feedback = document.getElementById('opensubtitlesValidationFeedback');
             username = document.getElementById('opensubtitlesUsername').value.trim();
             password = document.getElementById('opensubtitlesPassword').value.trim();
+            const opensubsEnabled = document.getElementById('enableOpenSubtitles')?.checked;
+            const impl = document.querySelector('input[name="opensubtitlesImplementation"]:checked')?.value;
             endpoint = '/api/validate-opensubtitles';
+
+            // Surface a user-facing message if Auth mode isn't active
+            if (!opensubsEnabled) {
+                showValidationFeedback(feedback, 'error', 'Enable OpenSubtitles before testing credentials.');
+                return;
+            }
+            if (impl !== 'auth') {
+                showValidationFeedback(feedback, 'error', 'Switch to Auth mode to test your credentials.');
+                return;
+            }
         } else if (provider === 'gemini') {
             btn = document.getElementById('validateGemini');
             feedback = document.getElementById('geminiValidationFeedback');
@@ -1439,7 +1599,6 @@ Translate to {target_language}.`;
             }
 
         } catch (error) {
-            console.error('[Validation] Error:', error);
             btn.classList.remove('validating');
             btn.classList.add('error');
             btn.disabled = false;
@@ -1616,6 +1775,11 @@ Translate to {target_language}.`;
         const targetCard = document.getElementById('targetCard');
         const geminiCard = document.getElementById('geminiCard');
         const secretHeart = document.getElementById('secretHeart');
+        const learnTargetsCard = document.getElementById('learnTargetsCard');
+        const learnModeCheckbox = document.getElementById('learnModeEnabled');
+        const learnOrderGroup = document.getElementById('learnOrderGroup');
+        const learnPlacementGroup = document.getElementById('learnPlacementGroup');
+        const learnGrid = document.getElementById('learnLanguages');
 
         if (enabled) {
             // Disable heart interactions and hide hint
@@ -1637,6 +1801,14 @@ Translate to {target_language}.`;
             if (targetCard) targetCard.style.display = 'none';
             if (geminiCard) geminiCard.style.display = 'none';
 
+            // Hide learn mode UI elements in just-fetch mode
+            if (learnTargetsCard) learnTargetsCard.style.display = 'none';
+            if (learnModeCheckbox) {
+                learnModeCheckbox.parentElement.style.display = 'none';
+            }
+            if (learnOrderGroup) learnOrderGroup.style.display = 'none';
+            if (learnPlacementGroup) learnPlacementGroup.style.display = 'none';
+
             // Clear validation errors for fields that aren't required in no-translation mode
             const geminiApiKeyInput = document.getElementById('geminiApiKey');
             const geminiApiKeyError = document.getElementById('geminiApiKeyError');
@@ -1644,6 +1816,7 @@ Translate to {target_language}.`;
             const geminiModelError = document.getElementById('geminiModelError');
             const sourceLanguagesError = document.getElementById('sourceLanguagesError');
             const targetLanguagesError = document.getElementById('targetLanguagesError');
+            const learnLanguagesError = document.getElementById('learnLanguagesError');
 
             if (geminiApiKeyInput) {
                 geminiApiKeyInput.classList.remove('invalid', 'valid');
@@ -1663,11 +1836,16 @@ Translate to {target_language}.`;
             if (targetLanguagesError) {
                 targetLanguagesError.classList.remove('show');
             }
+            if (learnLanguagesError) {
+                learnLanguagesError.classList.remove('show');
+            }
 
             // Clear source and target languages when switching to no-translation mode
             // This prevents translation-mode languages from being saved in no-translation config
             currentConfig.sourceLanguages = [];
             currentConfig.targetLanguages = [];
+            currentConfig.learnTargetLanguages = [];
+            currentConfig.learnMode = false;
 
             // Update UI to reflect cleared languages
             const sourceGrid = document.getElementById('sourceLanguages');
@@ -1683,9 +1861,18 @@ Translate to {target_language}.`;
                     item.classList.remove('selected');
                 });
             }
+            if (learnGrid) {
+                learnGrid.querySelectorAll('.language-item.selected').forEach(item => {
+                    item.classList.remove('selected');
+                });
+            }
+            if (learnModeCheckbox) {
+                learnModeCheckbox.checked = false;
+            }
 
             updateSelectedChips('source', []);
             updateSelectedChips('target', []);
+            updateSelectedChips('learn', []);
         } else {
             // Re-enable heart interactions
             if (secretHeart) {
@@ -1699,6 +1886,22 @@ Translate to {target_language}.`;
             if (sourceCard) sourceCard.style.display = 'block';
             if (targetCard) targetCard.style.display = 'block';
             if (geminiCard) geminiCard.style.display = 'block';
+
+            // Show learn mode checkbox in translation mode
+            if (learnModeCheckbox) {
+                learnModeCheckbox.parentElement.style.display = '';
+                // Show learn targets card only if learn mode is enabled
+                const isLearnModeEnabled = learnModeCheckbox.checked;
+                if (learnTargetsCard) {
+                    learnTargetsCard.style.display = isLearnModeEnabled ? '' : 'none';
+                }
+                if (learnOrderGroup) {
+                    learnOrderGroup.style.display = isLearnModeEnabled ? '' : 'none';
+                }
+                if (learnPlacementGroup) {
+                    learnPlacementGroup.style.display = isLearnModeEnabled ? '' : 'none';
+                }
+            }
 
             // Clear no-translation languages when switching to translation mode
             // This prevents no-translation-mode languages from being saved in translation config
@@ -1717,17 +1920,7 @@ Translate to {target_language}.`;
         }
     }
 
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
+    
 
     function filterLanguages(gridId, searchTerm) {
         const grid = document.getElementById(gridId);
@@ -1784,7 +1977,6 @@ Translate to {target_language}.`;
             await populateAdvancedModels(models);
 
         } catch (error) {
-            console.error('Failed to fetch models:', error);
             if (statusDiv) {
                 statusDiv.innerHTML = '✗ Failed to fetch models. Check your API key.';
                 statusDiv.className = 'model-status error';
@@ -1800,11 +1992,8 @@ Translate to {target_language}.`;
     async function populateAdvancedModels(models) {
         const advModelSelect = document.getElementById('advancedModel');
         if (!advModelSelect) {
-            console.log('[Advanced Settings] Model dropdown not found in DOM');
             return;
         }
-
-        console.log(`[Advanced Settings] Populating dropdown with ${models.length} models`);
 
         // Clear and populate advanced model dropdown with ALL models
         advModelSelect.innerHTML = '<option value="">Use Default Model</option>';
@@ -1850,7 +2039,7 @@ Translate to {target_language}.`;
             }
         });
 
-        console.log('[Advanced Settings] Dropdown populated successfully');
+        
     }
 
     function handleQuickAction(e) {
@@ -1875,6 +2064,9 @@ Translate to {target_language}.`;
         } else if (type === 'notranslation') {
             gridId = 'noTranslationLanguages';
             configKey = 'noTranslationLanguages';
+        } else if (type === 'learn') {
+            gridId = 'learnLanguages';
+            configKey = 'learnTargetLanguages';
         } else {
             gridId = 'targetLanguages';
             configKey = 'targetLanguages';
@@ -1915,7 +2107,7 @@ Translate to {target_language}.`;
                         });
                     }
                 } else {
-                    // Target and no-translation languages: Allow multiple selections
+                    // Target, learn and no-translation languages: Allow multiple selections
                     if (action.includes('popular')) {
                         // Select only popular languages
                         currentConfig[configKey] = [];
@@ -1967,6 +2159,12 @@ Translate to {target_language}.`;
             inputs.forEach(input => {
                 input.disabled = !enabled;
             });
+
+            // Keep validation buttons clickable so we can surface helpful errors even when disabled
+            const validateButtons = configDiv.querySelectorAll('button.validate-api-btn');
+            validateButtons.forEach(btn => {
+                btn.disabled = false;
+            });
             
             // Always update auth fields visibility (whether enabled or disabled)
             // This ensures correct state in all scenarios: enabled/disabled, v3/auth, with/without credentials
@@ -1986,10 +2184,7 @@ Translate to {target_language}.`;
             const response = await fetch('/api/session-stats', { cache: 'no-store' });
             const data = await response.json();
             return data.version || 'unknown';
-        } catch (error) {
-            console.warn('[Config] Failed to fetch app version:', error.message);
-            return 'unknown';
-        }
+        } catch (error) { return 'unknown'; }
     }
 
     /**
@@ -2003,15 +2198,8 @@ Translate to {target_language}.`;
 
             // Get and save current app version
             getCurrentAppVersion().then(version => {
-                try {
-                    localStorage.setItem(CACHE_VERSION_KEY, version);
-                    console.log('[Config] Cache saved with version:', version);
-                } catch (error) {
-                    console.warn('[Config] Failed to save cache version:', error.message);
-                }
-            }).catch(err => {
-                console.warn('[Config] Error getting version for cache:', err.message);
-            });
+                try { localStorage.setItem(CACHE_VERSION_KEY, version); } catch (error) {}
+            }).catch(function(){});
         } catch (error) {
             // Continue anyway - caching is optional
         }
@@ -2022,16 +2210,10 @@ Translate to {target_language}.`;
      * Returns null if invalid, otherwise returns the config
      */
     function validateConfig(config) {
-        if (!config || typeof config !== 'object') {
-            console.warn('[Config] Invalid config: not an object');
-            return null;
-        }
+        if (!config || typeof config !== 'object') { return null; }
 
         // Check for critical required fields
-        if (typeof config.subtitleProviders !== 'object') {
-            console.warn('[Config] Invalid config: missing subtitleProviders');
-            return null;
-        }
+        if (typeof config.subtitleProviders !== 'object') { return null; }
 
         // Config is valid
         return config;
@@ -2043,7 +2225,6 @@ Translate to {target_language}.`;
      */
     function clearVisualStateCache() {
         try {
-            console.log('[Config] Clearing visual state cache');
             VISUAL_STATE_KEYS.forEach(key => {
                 try {
                     localStorage.removeItem(key);
@@ -2051,9 +2232,7 @@ Translate to {target_language}.`;
                     // Ignore individual removals
                 }
             });
-        } catch (error) {
-            console.warn('[Config] Failed to clear visual state:', error.message);
-        }
+        } catch (error) { }
     }
 
     /**
@@ -2113,13 +2292,13 @@ Translate to {target_language}.`;
             newConfig.translationCache.enabled = oldCacheEnabled;
             // - bypass cache
             newConfig.bypassCache = oldConfig.bypassCache === true;
+            // - mobile mode
+            newConfig.mobileMode = oldConfig.mobileMode === true;
 
             // Reset selected model to default (do NOT preserve old) and reset advanced settings to defaults
             newConfig.geminiModel = defaults.geminiModel;
             newConfig.advancedSettings = { ...defaults.advancedSettings };
-        } catch (e) {
-            console.warn('[Config] Migration encountered an issue, using safe defaults for missing parts:', e.message);
-        }
+        } catch (e) { }
 
         return newConfig;
     }
@@ -2139,7 +2318,6 @@ Translate to {target_language}.`;
 
             // Validate config structure
             if (!validateConfig(config)) {
-                console.warn('[Config] Cached config is invalid, clearing cache');
                 clearConfigCache();
                 clearVisualStateCache();
                 return null;
@@ -2150,7 +2328,6 @@ Translate to {target_language}.`;
             const currentVersion = await getCurrentAppVersion();
 
             if (cachedVersion && cachedVersion !== currentVersion) {
-                console.log(`[Config] Version change detected: ${cachedVersion} -> ${currentVersion}`);
                 // Clear visual state like collapsed sections, hints, scroll, etc.
                 clearVisualStateCache();
 
@@ -2170,10 +2347,7 @@ Translate to {target_language}.`;
             }
 
             return config;
-        } catch (error) {
-            console.error('[Config] Error loading cached config:', error.message);
-            return null;
-        }
+        } catch (error) { return null; }
     }
 
     /**
@@ -2269,6 +2443,8 @@ Translate to {target_language}.`;
         // Load Dev: Sync Subtitles setting (if panel exists)
         const syncEl = document.getElementById('syncSubtitlesEnabled');
         if (syncEl) syncEl.checked = currentConfig.syncSubtitlesEnabled === true;
+        const mobileModeEl = document.getElementById('mobileMode');
+        if (mobileModeEl) mobileModeEl.checked = currentConfig.mobileMode === true;
 
         // Load translation cache settings
         if (!currentConfig.translationCache) {
@@ -2314,12 +2490,37 @@ Translate to {target_language}.`;
 
         // Check if advanced settings are modified and update bypass cache accordingly
         updateBypassCacheForAdvancedSettings();
+
+        // Learn Mode UI state
+        try {
+            const learnToggle = document.getElementById('learnModeEnabled');
+            const learnOrderGroup = document.getElementById('learnOrderGroup');
+            const learnPlacementGroup = document.getElementById('learnPlacementGroup');
+            const learnTargetsCard = document.getElementById('learnTargetsCard');
+            if (learnToggle) learnToggle.checked = !!currentConfig.learnMode;
+            if (learnOrderGroup) learnOrderGroup.style.display = currentConfig.learnMode ? '' : 'none';
+            if (learnPlacementGroup) learnPlacementGroup.style.display = currentConfig.learnMode ? '' : 'none';
+            if (learnTargetsCard) learnTargetsCard.style.display = currentConfig.learnMode ? '' : 'none';
+            const order = currentConfig.learnOrder || 'source-top';
+            const orderInput = document.querySelector(`input[name=\"learnOrder\"][value=\"${order}\"]`);
+            if (orderInput) orderInput.checked = true;
+            const placement = currentConfig.learnPlacement || 'stacked';
+            const placementInput = document.querySelector(`input[name=\"learnPlacement\"][value=\"${placement}\"]`);
+            if (placementInput) placementInput.checked = true;
+        } catch (_) {}
+
+        // Track mobile mode toggle in state
+        const mobileToggle = document.getElementById('mobileMode');
+        if (mobileToggle) {
+            mobileToggle.checked = currentConfig.mobileMode === true;
+            mobileToggle.addEventListener('change', (e) => {
+                currentConfig.mobileMode = e.target.checked;
+            }, { once: true });
+        }
     }
 
     async function handleSubmit(e) {
         e.preventDefault();
-        console.log('[handleSubmit] Form submission started');
-        console.log('[handleSubmit] currentConfig:', currentConfig);
 
         const promptStyle = document.getElementById('promptStyle').value;
         let translationPrompt = '';
@@ -2331,8 +2532,6 @@ Translate to {target_language}.`;
             translationPrompt = NATURAL_TRANSLATION_PROMPT;
         }
 
-        console.log('[handleSubmit] noTranslationMode:', currentConfig.noTranslationMode);
-        console.log('[handleSubmit] noTranslationLanguages:', currentConfig.noTranslationLanguages);
 
         const config = {
             noTranslationMode: currentConfig.noTranslationMode,
@@ -2345,6 +2544,10 @@ Translate to {target_language}.`;
             translationPrompt: translationPrompt,
             sourceLanguages: currentConfig.sourceLanguages,
             targetLanguages: currentConfig.targetLanguages,
+            learnMode: currentConfig.learnMode === true,
+            learnTargetLanguages: currentConfig.learnTargetLanguages || [],
+            learnOrder: currentConfig.learnOrder || 'source-top',
+            learnPlacement: 'top', // Force top-of-screen placement
             subtitleProviders: {
                 opensubtitles: {
                     enabled: document.getElementById('enableOpenSubtitles').checked,
@@ -2392,6 +2595,11 @@ Translate to {target_language}.`;
             },
             fileTranslationEnabled: document.getElementById('fileTranslationEnabled').checked,
             syncSubtitlesEnabled: (function(){ const el = document.getElementById('syncSubtitlesEnabled'); return el ? el.checked : false; })(),
+            mobileMode: (function(){
+                const el = document.getElementById('mobileMode');
+                if (el) return el.checked;
+                return currentConfig?.mobileMode === true;
+            })(),
             advancedSettings: {
                 enabled: areAdvancedSettingsModified(), // Auto-detect if any setting differs from defaults
                 geminiModel: (function(){ const el = document.getElementById('advancedModel'); return el ? el.value : ''; })(),
@@ -2406,18 +2614,18 @@ Translate to {target_language}.`;
 
         // Validation with visual feedback - collect all errors
         const errors = [];
-        console.log('[handleSubmit] Starting validation');
+        
 
         const anyProviderEnabled = Object.values(config.subtitleProviders).some(p => p.enabled);
         if (!anyProviderEnabled) {
             errors.push('⚠️ Please enable at least one subtitle provider');
         }
-        console.log('[handleSubmit] anyProviderEnabled:', anyProviderEnabled);
+        
 
         // Validate that at least one of cache options is enabled
         const cacheEnabled = document.getElementById('cacheEnabled').checked;
         const bypassCache = document.getElementById('bypassCache')?.checked || false;
-        console.log('[handleSubmit] cacheEnabled:', cacheEnabled, 'bypassCache:', bypassCache);
+        
         if (!cacheEnabled && !bypassCache) {
             errors.push('⚠️ At least one cache option must be enabled: either "Enable SubMaker Database" or "Bypass SubMaker Database Cache"');
         }
@@ -2431,7 +2639,7 @@ Translate to {target_language}.`;
         }
 
         // If not in no-translation mode, validate Gemini API and model
-        console.log('[handleSubmit] config.noTranslationMode:', config.noTranslationMode);
+        
         if (!config.noTranslationMode) {
             if (!validateGeminiApiKey(true)) {
                 errors.push('⚠️ Gemini API key is required');
@@ -2448,20 +2656,24 @@ Translate to {target_language}.`;
             if (!validateLanguageSelection('target')) {
                 errors.push('⚠️ Please select at least one target language');
             }
+
+            if (config.learnMode && !validateLanguageSelection('learn')) {
+                errors.push('⚠️ Please select at least one learn target language (or disable Learn Mode)');
+            }
         } else {
             // In no-translation mode, validate that at least one language is selected
-            console.log('[handleSubmit] No-translation mode: checking languages');
+            
             if (!config.noTranslationLanguages || config.noTranslationLanguages.length === 0) {
                 errors.push('⚠️ Please select at least one language in no-translation mode');
-                console.log('[handleSubmit] ERROR: No languages selected in no-translation mode');
+                
             }
         }
 
-        console.log('[handleSubmit] Validation errors:', errors);
+        
         if (errors.length > 0) {
             // Show all errors as a single alert
             const errorMessage = errors.join('<br>');
-            console.log('[handleSubmit] Showing validation errors');
+            
             showAlert(errorMessage, 'error');
 
             // Focus on first invalid field
@@ -2479,23 +2691,22 @@ Translate to {target_language}.`;
         let existingToken = localStorage.getItem(TOKEN_KEY);
         let configToken;
         let isUpdate = false;
-        console.log('[handleSubmit] Session handling started');
-        console.log('[handleSubmit] Existing token:', existingToken ? existingToken.substring(0, 8) + '...' : 'none');
+        
 
         try {
             if (existingToken) {
                 // FIXED: Validate token format before attempting update
                 // Session tokens should be 32-character hex strings
                 const isValidTokenFormat = /^[a-f0-9]{32}$/.test(existingToken);
-                console.log('[handleSubmit] Token format valid:', isValidTokenFormat);
+                
 
                 if (!isValidTokenFormat) {
-                    console.warn('[Config] Invalid token format in localStorage, clearing and creating new session');
+                    
                     localStorage.removeItem(TOKEN_KEY);
                     existingToken = null;
                 } else {
                     // Try to update existing session first
-                    console.log('[handleSubmit] Attempting to update existing session');
+                    
                     try {
                         const updateResponse = await fetch(`/api/update-session/${existingToken}`, {
                             method: 'POST',
@@ -2507,24 +2718,22 @@ Translate to {target_language}.`;
                         });
 
                         // FIXED: Better error handling for different response codes
-                        console.log('[handleSubmit] Update response status:', updateResponse.status);
+                        
                         if (updateResponse.status === 404 || updateResponse.status === 410) {
                             // Token not found or expired - create new session
-                            console.warn('[Config] Session token not found on server (404/410), creating new session');
+                            
                             showAlert('Session expired. Creating new session...', 'info');
                             localStorage.removeItem(TOKEN_KEY);
                             existingToken = null;
                         } else if (!updateResponse.ok) {
                             // Other errors - log and try to create new session
                             const errorText = await updateResponse.text();
-                            console.error(`[Config] Update session failed (${updateResponse.status}):`, errorText);
                             showAlert('Session update failed. Creating new session...', 'warning');
                             localStorage.removeItem(TOKEN_KEY);
                             existingToken = null;
                         } else {
                             // Success
                             const sessionData = await updateResponse.json();
-                            console.log('[handleSubmit] Update response success, got token:', sessionData.token ? sessionData.token.substring(0, 8) + '...' : 'none');
                             configToken = sessionData.token;
                             isUpdate = sessionData.updated;
 
@@ -2537,8 +2746,7 @@ Translate to {target_language}.`;
                             }
                         }
                     } catch (updateError) {
-                        // Network error or timeout - log and fall back to create new session
-                        console.error('[Config] Failed to update session:', updateError.message);
+                        // Network error or timeout - fall back to create new session
                         showAlert('Network error updating session. Creating new session...', 'warning');
                         localStorage.removeItem(TOKEN_KEY);
                         existingToken = null;
@@ -2548,7 +2756,7 @@ Translate to {target_language}.`;
 
             // If we don't have a valid token, create new session
             if (!existingToken) {
-                console.log('[handleSubmit] Creating new session');
+                
                 try {
                     const createResponse = await fetch('/api/create-session', {
                         method: 'POST',
@@ -2559,14 +2767,13 @@ Translate to {target_language}.`;
                         timeout: 10000 // 10 second timeout
                     });
 
-                    console.log('[handleSubmit] Create response status:', createResponse.status);
+                    
                     if (!createResponse.ok) {
                         const errorText = await createResponse.text();
                         throw new Error(`Failed to create session (${createResponse.status}): ${errorText}`);
                     }
 
                     const sessionData = await createResponse.json();
-                    console.log('[handleSubmit] Session created, token:', sessionData.token ? sessionData.token.substring(0, 8) + '...' : 'none');
 
                     // FIXED: Validate response token format
                     if (!sessionData.token || !/^[a-f0-9]{32}$/.test(sessionData.token)) {
@@ -2576,7 +2783,6 @@ Translate to {target_language}.`;
                     configToken = sessionData.token;
                     isUpdate = false;
                 } catch (createError) {
-                    console.error('[Config] Failed to create session:', createError.message);
                     showAlert('Failed to save configuration: ' + createError.message, 'error');
                     return;
                 }
@@ -2590,7 +2796,6 @@ Translate to {target_language}.`;
             // Store token for future updates (only if valid)
             localStorage.setItem(TOKEN_KEY, configToken);
         } catch (error) {
-            console.error('[Config] Unexpected error during session handling:', error);
             showAlert('Failed to save configuration: ' + error.message, 'error');
             return;
         }
@@ -2599,14 +2804,12 @@ Translate to {target_language}.`;
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const baseUrl = isLocalhost ? 'http://localhost:7001' : window.location.origin;
         const installUrl = `${baseUrl}/addon/${configToken}/manifest.json`;
-        console.log('[handleSubmit] Install URL generated:', installUrl);
 
         // Save to current config
         currentConfig = config;
 
         // Cache the configuration to localStorage
         saveConfigToCache(config);
-        console.log('[handleSubmit] Config cached to localStorage');
 
         // Enable install and copy buttons
         document.getElementById('installBtn').disabled = false;
@@ -2629,9 +2832,6 @@ Translate to {target_language}.`;
         // Show appropriate message based on update vs new install
         if (!isUpdate) {
             showAlert('Configuration saved! You can now install the addon in Stremio.', 'success');
-            console.log('[handleSubmit] Save completed successfully (new config)');
-        } else {
-            console.log('[handleSubmit] Save completed successfully (updated config)');
         }
         // Update message already shown above
     }
@@ -2685,9 +2885,7 @@ Translate to {target_language}.`;
         alert.innerHTML = `<span style="font-size: 1.25rem;">${icon}</span><div style="flex: 1;">${message}</div>`;
 
         container.appendChild(alert);
-
-        // Show errors longer (8s) than success messages (5s)
-        const displayTime = type === 'error' ? 5000 : 5000;
+        const displayTime = 5000;
 
         setTimeout(() => {
             alert.style.animation = 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) reverse';

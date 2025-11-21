@@ -2,6 +2,7 @@ const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { version } = require('../utils/version');
 const log = require('../utils/logger');
 
@@ -138,6 +139,8 @@ class OpenSubtitlesV3Service {
           const animeEpisodePatterns = [
             new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e?p?\\s*0*${episode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
             new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${episode}(?:v\\d+)?(?=$|[\\s\\]\\)\\-_.])`, 'i'),
+            // 01en / 01eng (language suffix immediately after episode number before extension)
+            new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${episode}(?:v\\d+)?[a-z]{2,3}(?=\\.|[\\s\\]\\)\\-_.]|$)`, 'i'),
             new RegExp(`(?:^|[\\s\\[\\(\\-_])episode\\s*0*${episode}(?=$|[\\s\\]\\)\\-_.])`, 'i'),
             new RegExp(`(?:^|[\\s\\[\\(\\-_])ep\\s*0*${episode}(?=$|[\\s\\]\\)\\-_.])`, 'i'),
             new RegExp(`(?:^|[\\s\\[\\(\\-_])cap(?:itulo|\\.)?\\s*0*${episode}(?=$|[\\s\\]\\)\\-_.])`, 'i'),
@@ -212,8 +215,8 @@ class OpenSubtitlesV3Service {
           if (contentDisposition) {
             const match = contentDisposition.match(/filename="(.+?)"/);
             if (match && match[1]) {
-              // Remove .srt extension for cleaner display
-              const filename = match[1].replace(/\.srt$/i, '');
+              // Keep full filename (with extension) so we can infer format later
+              const filename = match[1];
               return filename;
             }
           }
@@ -222,6 +225,30 @@ class OpenSubtitlesV3Service {
           return null;
 
         } catch (error) {
+          // If rate-limited, retry once after 2 seconds (V3 filename extraction only)
+          const status = error?.response?.status;
+          if (status === 429) {
+            log.debug(() => `[OpenSubtitles V3] 429 while extracting filename for ${sub.id} - retrying once after 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+              const response = await this.client.head(sub.url, {
+                headers: { 'User-Agent': USER_AGENT },
+                timeout: 3000
+              });
+              const contentDisposition = response.headers['content-disposition'];
+              if (contentDisposition) {
+                const match = contentDisposition.match(/filename=\"(.+?)\"/);
+                if (match && match[1]) {
+                  const filename = match[1];
+                  return filename;
+                }
+              }
+              return null;
+            } catch (retryErr) {
+              log.debug(() => `[OpenSubtitles V3] Failed to extract filename for ${sub.id} after retry: ${retryErr.message}`);
+              return null;
+            }
+          }
           // Fallback on error (timeout, network issue, etc.)
           log.debug(() => `[OpenSubtitles V3] Failed to extract filename for ${sub.id}: ${error.message}`);
           return null;
@@ -242,13 +269,34 @@ class OpenSubtitlesV3Service {
       const encodedUrl = Buffer.from(sub.url).toString('base64url');
       const fileId = `v3_${encodedUrl}`;
 
-      // Use extracted name if available, otherwise fallback to generic name
+      // Determine format from extracted filename or URL (best-effort) and set display name
+      const extracted = extractedNames[index];
+      let detectedFormat = null;
       let finalName;
-      if (extractedNames[index]) {
-        finalName = extractedNames[index];
+      if (extracted) {
+        const lower = String(extracted).toLowerCase();
+        const m = lower.match(/\.([a-z0-9]{2,4})$/);
+        if (m) {
+          const ext = m[1];
+          if (['srt', 'vtt', 'ass', 'ssa', 'sub'].includes(ext)) detectedFormat = ext;
+        }
+        // Display name without extension for cleaner UI
+        finalName = extracted.replace(/\.[^.]+$/,'');
       } else {
-        const langName = this.getLanguageDisplayName(sub.lang);
-        finalName = `OpenSubtitles (${langName}) - #${sub.id}`;
+        // Try to detect from URL
+        try {
+          const urlLower = String(sub.url || '').toLowerCase();
+          const um = urlLower.match(/(?:^|\/)([^\/?#]+)\.(srt|vtt|ass|ssa|sub)(?:$|[?#])/);
+          if (um) {
+            detectedFormat = um[2];
+            finalName = um[1];
+          }
+        } catch (_) {}
+
+        if (!finalName) {
+          const langName = this.getLanguageDisplayName(sub.lang);
+          finalName = `OpenSubtitles (${langName}) - #${sub.id}`;
+        }
       }
 
       return {
@@ -259,7 +307,7 @@ class OpenSubtitlesV3Service {
         downloads: 0, // V3 API doesn't provide download counts
         rating: 0, // V3 API doesn't provide ratings
         uploadDate: null,
-        format: 'srt',
+        format: detectedFormat || 'srt',
         fileId: fileId,
         downloadLink: sub.url,
         hearing_impaired: sub.hearing_impaired || sub.hi || false,
@@ -313,7 +361,8 @@ class OpenSubtitlesV3Service {
           const entries = Object.keys(zip.files);
           const srtEntry = entries.find(f => f.toLowerCase().endsWith('.srt'));
           if (srtEntry) {
-            const srt = await zip.files[srtEntry].async('string');
+            const buffer = await zip.files[srtEntry].async('nodebuffer');
+            const srt = detectAndConvertEncoding(buffer, 'OpenSubtitles V3');
             log.debug(() => '[OpenSubtitles V3] Extracted .srt from ZIP');
             return srt;
           }

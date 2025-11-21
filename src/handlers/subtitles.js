@@ -232,6 +232,41 @@ OpenSubtitles login failed
 Please fix your username/password in addon config`;
 }
 
+/**
+ * Create an error subtitle for OpenSubtitles daily quota exceeded (20 downloads/24h)
+ * Single cue from 0 to 4h with concise guidance
+ * @returns {string}
+ */
+function createOpenSubtitlesQuotaExceededSubtitle() {
+  return `1
+00:00:00,000 --> 04:00:00,000
+OpenSubtitles daily download limit reached
+You have downloaded the allowed 20 subtitles in the last 24 hours.
+Wait until the next UTC midnight (00:00) for quota reset, then try again.`;
+}
+
+/**
+ * Create a single-cue error subtitle for OpenSubtitles V3 rate limiting
+ * @returns {string}
+ */
+function createOpenSubtitlesV3RateLimitSubtitle() {
+  return `1
+00:00:00,000 --> 04:00:00,000
+OpenSubtitles V3 download error (429)
+Too many requests to the V3 service. Please wait a few minutes and try again.`;
+}
+
+/**
+ * Create a single-cue error subtitle for OpenSubtitles V3 temporary unavailability
+ * @returns {string}
+ */
+function createOpenSubtitlesV3ServiceUnavailableSubtitle() {
+  return `1
+00:00:00,000 --> 04:00:00,000
+OpenSubtitles V3 download error (503)
+Service temporarily unavailable. Try again in a few minutes.`;
+}
+
 // Create a concise error subtitle when a source file looks invalid/corrupted
 function createInvalidSubtitleMessage(reason = 'The subtitle file appears to be invalid or incomplete.') {
   const srt = `1
@@ -480,6 +515,59 @@ async function readFromBypassStorage(cacheKey) {
 
 // DEPRECATED: Removed - use async readFromBypassStorage() instead
 // This function caused blocking I/O. Legacy code has been migrated.
+
+// Helper: calculate wait timeout for mobile mode (clamp to sensible range)
+function getMobileWaitTimeoutMs(config) {
+  const timeoutSeconds = parseInt(config?.advancedSettings?.translationTimeout) || 600;
+  const clampedSeconds = Math.max(30, Math.min(timeoutSeconds, 300)); // at least 30s, cap at 5m
+  return clampedSeconds * 1000;
+}
+
+// Helper: fetch final translation/error from cache respecting bypass isolation
+async function getFinalCachedTranslation(cacheKey, { bypass, bypassEnabled, userHash }) {
+  try {
+    if (bypass && bypassEnabled) {
+      const bypassCached = await readFromBypassStorage(cacheKey);
+      if (bypassCached) {
+        if (bypassCached.configHash && bypassCached.configHash !== userHash) {
+          log.warn(() => `[Translation] Bypass cache configHash mismatch while waiting for final result key=${cacheKey}`);
+          return null;
+        } else if (!bypassCached.configHash) {
+          log.warn(() => `[Translation] Bypass cache entry missing configHash while waiting for final result key=${cacheKey}`);
+          return null;
+        }
+        if (bypassCached.isError === true) {
+          return createTranslationErrorSubtitle(bypassCached.errorType, bypassCached.errorMessage);
+        }
+        return bypassCached.content || bypassCached;
+      }
+    }
+
+    const cached = await readFromStorage(cacheKey);
+    if (cached) {
+      if (cached.isError === true) {
+        return createTranslationErrorSubtitle(cached.errorType, cached.errorMessage);
+      }
+      return cached.content || cached;
+    }
+  } catch (error) {
+    log.warn(() => [`[Translation] Failed to fetch final cached result for ${cacheKey}:`, error.message]);
+  }
+  return null;
+}
+
+// Helper: wait for final translation to appear in cache (used for mobile mode)
+async function waitForFinalCachedTranslation(cacheKey, cacheOptions, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await getFinalCachedTranslation(cacheKey, cacheOptions);
+    if (result) {
+      return result;
+    }
+    await new Promise(res => setTimeout(res, 1000));
+  }
+  return null;
+}
 
 // Save translation to storage (async)
 async function saveToStorage(cacheKey, cachedData) {
@@ -1734,9 +1822,11 @@ function createSubtitleHandler(config) {
         }
       }
 
-      // Limit to top 12 subtitles per language (applied AFTER ranking all sources)
+      // Limit to top N subtitles per language (applied AFTER ranking all sources)
       // This prevents UI slowdown while ensuring best-quality subtitles are shown
-      const MAX_SUBS_PER_LANGUAGE = 12;
+      const MAX_SUBS_PER_LANGUAGE = Number.isFinite(config?.maxSubtitlesPerLanguage)
+        ? config.maxSubtitlesPerLanguage
+        : 12;
       const limitedByLanguage = new Map(); // language -> subtitle array
 
       for (const sub of filteredFoundSubtitles) {
@@ -1769,9 +1859,14 @@ function createSubtitleHandler(config) {
           return true;
         })
         .map(sub => {
+          // Display-friendly label for Stremio UI while preserving code for URL
+          const displayLang = (sub.languageCode && sub.languageCode.toLowerCase() === 'spn')
+            ? 'Spanish (LA)'
+            : sub.languageCode;
+
           const subtitle = {
             id: `${sub.fileId}`,
-            lang: sub.languageCode, // Must be ISO-639-2 (3-letter code)
+            lang: displayLang,
             url: `{{ADDON_URL}}/subtitle/${sub.fileId}/${sub.languageCode}.srt`
           };
 
@@ -1791,7 +1886,7 @@ function createSubtitleHandler(config) {
         }))];
 
         // Create translation entries: for each target language, create entries for top source language subtitles
-        // Note: filteredFoundSubtitles is already limited to 16 per language (including source languages)
+        // Note: filteredFoundSubtitles is already limited to MAX_SUBS_PER_LANGUAGE per language (including source languages)
         const sourceSubtitles = filteredFoundSubtitles.filter(sub =>
           config.sourceLanguages.some(sourceLang => {
             const normalized = normalizeLanguageCode(sourceLang);
@@ -1819,6 +1914,34 @@ function createSubtitleHandler(config) {
         }
 
         log.debug(() => `[Subtitles] Created ${translationEntries.length} translation options from ${sourceSubtitles.length} source subtitles`);
+      }
+
+      // Add Learn Mode entries (dual-language VTT output)
+      const learnEntries = [];
+      try {
+        if (config.learnMode === true) {
+          const normalizedLearnLangs = [...new Set((config.learnTargetLanguages || []).map(lang => normalizeLanguageCode(lang)))];
+          const sourceSubtitles = filteredFoundSubtitles.filter(sub =>
+            config.sourceLanguages.some(sourceLang => normalizeLanguageCode(sourceLang) === sub.languageCode)
+          );
+
+          for (const learnLang of normalizedLearnLangs) {
+            const baseName = getLanguageName(learnLang);
+            const displayName = `Learn ${baseName}`;
+            for (const sourceSub of sourceSubtitles) {
+              learnEntries.push({
+                id: `learn_${sourceSub.fileId}_to_${learnLang}`,
+                lang: displayName,
+                url: `{{ADDON_URL}}/learn/${sourceSub.fileId}/${learnLang}`
+              });
+            }
+          }
+          if (learnEntries.length > 0) {
+            log.debug(() => `[Subtitles] Added ${learnEntries.length} Learn Mode entries`);
+          }
+        }
+      } catch (e) {
+        log.warn(() => `[Subtitles] Failed to add Learn Mode entries: ${e.message}`);
       }
 
       // Add xSync entries (synced subtitles from cache)
@@ -1861,7 +1984,7 @@ function createSubtitleHandler(config) {
       }
 
       // Add special action buttons
-      let allSubtitles = [...stremioSubtitles, ...translationEntries, ...xSyncEntries];
+      let allSubtitles = [...stremioSubtitles, ...translationEntries, ...learnEntries, ...xSyncEntries];
 
       // If OpenSubtitles auth failed, append a final entry per language with a helpful SRT
       if (openSubsAuthFailed === true) {
@@ -2005,10 +2128,37 @@ async function handleSubtitleDownload(fileId, language, config) {
     return content;
 
   } catch (error) {
-    log.error(() => ['[Download] Error:', error.message]);
+    if (!error || !error._alreadyLogged) {
+      log.error(() => ['[Download] Error:', error?.message || String(error)]);
+    }
 
     // Return error message as subtitle so user knows what happened
     const errorStatus = error.response?.status || error.statusCode;
+
+    // Handle 429 errors - provider rate limiting
+    if (errorStatus === 429 || String(error.message || '').includes('429') || error.type === 'rate_limit') {
+      // Special-case OpenSubtitles V3: return a single-cue 0→4h error
+      if (fileId.startsWith('v3_')) {
+        return createOpenSubtitlesV3RateLimitSubtitle();
+      }
+
+      // Determine which service based on fileId (generic two-cue fallback)
+      let serviceName = 'Subtitle Provider';
+      if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
+      else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      else if (!fileId.startsWith('v3_')) serviceName = 'OpenSubtitles';
+
+      return `1
+00:00:00,000 --> 00:00:12,000
+${serviceName} rate limit reached (429)
+
+2
+00:00:12,001 --> 04:00:00,000
+Too many requests in a short period.
+Please wait a few minutes and try again.`;
+    }
+    const rawMsg = (error.response?.data?.message || error.message || '').toString();
+    const lowerMsg = rawMsg.toLowerCase();
 
     // Handle 403 errors - API key authentication failures
     if (errorStatus === 403 || error.message.includes('403') || error.message.includes('Authentication failed')) {
@@ -2066,6 +2216,11 @@ or enable other subtitle providers in settings`;
     }
 
     if (errorStatus === 503) {
+      // Special-case OpenSubtitles V3: return a single-cue 0→4h error
+      if (fileId.startsWith('v3_')) {
+        return createOpenSubtitlesV3ServiceUnavailableSubtitle();
+      }
+
       return `1
 00:00:00,000 --> 00:00:10,000
 OpenSubtitles API is temporarily unavailable (Error 503)
@@ -2080,7 +2235,29 @@ Please try again in a few minutes
 
 4
 00:00:30,001 --> 04:00:40,000
-Or try a different subtitle from the list`;
+      Or try a different subtitle from the list`;
+    }
+
+    // Handle OpenSubtitles daily quota exceeded (HTTP 406 with specific message)
+    // Only applies to OpenSubtitles Auth (v1) path where fileId has no provider prefix
+    if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_')) {
+      const isOsQuota = (errorStatus === 406) ||
+        lowerMsg.includes('allowed 20 subtitles') ||
+        (lowerMsg.includes('quota') && lowerMsg.includes('renew'));
+      if (isOsQuota) {
+        return createOpenSubtitlesQuotaExceededSubtitle();
+      }
+    }
+
+    // Handle SubSource download timeouts with a user-facing subtitle (0 -> 4h)
+    // Detect axios-style timeout/network signals and fileId prefix
+    const isTimeout = (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || /timeout/i.test(String(error.message || '')));
+    if (fileId.startsWith('subsource_') && isTimeout) {
+      log.warn(() => '[SubSource] Request timed out during download — informing user via subtitle');
+      return `1
+00:00:00,000 --> 04:00:00,000
+SubSource download failed (timeout)
+SubSource API did not respond in time. Try again in a few minutes or pick a different subtitle.`;
     }
 
     throw error;
@@ -2093,11 +2270,15 @@ Or try a different subtitle from the list`;
  * @param {string} sourceFileId - Source subtitle file ID
  * @param {string} targetLanguage - Target language code
  * @param {Object} config - Addon configuration
+ * @param {Object} options - Optional behavior flags
  * @returns {Promise<string>} - Translated subtitle content or loading message
  */
-async function handleTranslation(sourceFileId, targetLanguage, config) {
+async function handleTranslation(sourceFileId, targetLanguage, config, options = {}) {
   try {
     log.debug(() => `[Translation] Handling translation request for ${sourceFileId} to ${targetLanguage}`);
+
+    const waitForFullTranslation = options.waitForFullTranslation === true;
+    const mobileWaitTimeoutMs = waitForFullTranslation ? getMobileWaitTimeoutMs(config) : null;
 
     // Generate cache keys using shared utility (single source of truth for cache key scoping)
     const { baseKey, cacheKey, bypass, bypassEnabled, userHash } = generateCacheKeys(
@@ -2185,28 +2366,44 @@ async function handleTranslation(sourceFileId, targetLanguage, config) {
     // All simultaneous requests will share the same promise
     const inFlightPromise = inFlightTranslations.get(cacheKey);
     if (inFlightPromise) {
-      log.debug(() => `[Translation] Detected in-flight translation for key=${cacheKey}; checking for partial results`);
+      log.debug(() => `[Translation] Detected in-flight translation for key=${cacheKey}; ${waitForFullTranslation ? 'waiting for completion (mobile mode)' : 'checking for partial results'}`);
       try {
-        // DON'T WAIT for completion - immediately return available partials instead
-        // Check storage first (in case it just completed)
-        const cachedResult = await readFromStorage(cacheKey);
-        if (cachedResult) {
-          log.debug(() => '[Translation] Final result already cached; returning it');
-          cacheMetrics.hits++;
-          return cachedResult.content || cachedResult;
-        }
+        if (waitForFullTranslation) {
+          const waitedResult = await waitForFinalCachedTranslation(
+            cacheKey,
+            { bypass, bypassEnabled, userHash },
+            mobileWaitTimeoutMs
+          );
 
-        // Check partial cache (most common case - translation in progress)
-        const partialResult = await readFromPartialCache(cacheKey);
-        if (partialResult && typeof partialResult.content === 'string' && partialResult.content.length > 0) {
-          log.debug(() => `[Translation] Returning partial result (${partialResult.content.length} chars) without waiting for completion`);
-          return partialResult.content;
-        }
+          if (waitedResult) {
+            log.debug(() => `[Translation] Mobile mode: returning final result after wait for key=${cacheKey}`);
+            return waitedResult;
+          }
 
-        // No cached/partial result yet - return loading message and let user retry
-        const loadingMsg = createLoadingSubtitle();
-        log.debug(() => `[Translation] No partial result yet for duplicate request; returning loading message`);
-        return loadingMsg;
+          log.warn(() => `[Translation] Mobile mode wait timed out without final result for key=${cacheKey}`);
+          return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.');
+        } else {
+          // DON'T WAIT for completion - immediately return available partials instead
+          // Check storage first (in case it just completed)
+          const cachedResult = await readFromStorage(cacheKey);
+          if (cachedResult) {
+            log.debug(() => '[Translation] Final result already cached; returning it');
+            cacheMetrics.hits++;
+            return cachedResult.content || cachedResult;
+          }
+
+          // Check partial cache (most common case - translation in progress)
+          const partialResult = await readFromPartialCache(cacheKey);
+          if (partialResult && typeof partialResult.content === 'string' && partialResult.content.length > 0) {
+            log.debug(() => `[Translation] Returning partial result (${partialResult.content.length} chars) without waiting for completion`);
+            return partialResult.content;
+          }
+
+          // No cached/partial result yet - return loading message and let user retry
+          const loadingMsg = createLoadingSubtitle();
+          log.debug(() => `[Translation] No partial result yet for duplicate request; returning loading message`);
+          return loadingMsg;
+        }
       } catch (err) {
         log.warn(() => [`[Translation] Error checking partials for duplicate request (${cacheKey}):`, err.message]);
         // Return loading message on any error
@@ -2219,17 +2416,33 @@ async function handleTranslation(sourceFileId, targetLanguage, config) {
     const status = translationStatus.get(cacheKey);
     if (status && status.inProgress) {
       const elapsedTime = Math.floor((Date.now() - status.startedAt) / 1000);
-      log.debug(() => `[Translation] In-progress existing translation key=${cacheKey} (elapsed ${elapsedTime}s); attempting partial SRT`);
-      try {
-        const partial = await readFromPartialCache(cacheKey);
-        if (partial && typeof partial.content === 'string' && partial.content.length > 0) {
-          log.debug(() => '[Translation] Serving partial SRT from partial cache');
-          return partial.content;
+      log.debug(() => `[Translation] In-progress existing translation key=${cacheKey} (elapsed ${elapsedTime}s); ${waitForFullTranslation ? 'waiting for final result (mobile mode)' : 'attempting partial SRT'}`);
+      if (waitForFullTranslation) {
+        const waitedResult = await waitForFinalCachedTranslation(
+          cacheKey,
+          { bypass, bypassEnabled, userHash },
+          mobileWaitTimeoutMs
+        );
+
+        if (waitedResult) {
+          log.debug(() => `[Translation] Mobile mode: returning final result after waiting for status-only path key=${cacheKey}`);
+          return waitedResult;
         }
-      } catch (_) {}
-      const loadingMsg = createLoadingSubtitle();
-      log.debug(() => `[Translation] No partial available, returning loading SRT (size=${loadingMsg.length})`);
-      return loadingMsg;
+
+        log.warn(() => `[Translation] Mobile mode wait timed out on status-only path for key=${cacheKey}`);
+        return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.');
+      } else {
+        try {
+          const partial = await readFromPartialCache(cacheKey);
+          if (partial && typeof partial.content === 'string' && partial.content.length > 0) {
+            log.debug(() => '[Translation] Serving partial SRT from partial cache');
+            return partial.content;
+          }
+        } catch (_) {}
+        const loadingMsg = createLoadingSubtitle();
+        log.debug(() => `[Translation] No partial available, returning loading SRT (size=${loadingMsg.length})`);
+        return loadingMsg;
+      }
     }
 
     // Enforce per-user concurrency limit only when starting a new translation
@@ -2299,7 +2512,9 @@ async function handleTranslation(sourceFileId, targetLanguage, config) {
       log.debug(() => `[Translation] Pre-flight validation passed: ${sourceContent.length} bytes`);
 
     } catch (error) {
-      log.error(() => ['[Translation] Pre-flight validation failed:', error.message]);
+      if (!error || !error._alreadyLogged) {
+        log.error(() => ['[Translation] Pre-flight validation failed:', error?.message || String(error)]);
+      }
       // Return error message instead of loading message
       return createInvalidSubtitleMessage(`Download failed: ${error.message}`);
     }
@@ -2330,7 +2545,24 @@ async function handleTranslation(sourceFileId, targetLanguage, config) {
       inFlightTranslations.delete(cacheKey);
     });
 
-    // Return loading message immediately
+    // In mobile mode, hold the response until the translation finishes to avoid stale Android caching
+    if (waitForFullTranslation) {
+      const waitedResult = await waitForFinalCachedTranslation(
+        cacheKey,
+        { bypass, bypassEnabled, userHash },
+        mobileWaitTimeoutMs
+      );
+
+      if (waitedResult) {
+        log.debug(() => `[Translation] Mobile mode: returning final translation after wait for new request key=${cacheKey}`);
+        return waitedResult;
+      }
+
+      log.warn(() => `[Translation] Mobile mode wait timed out for new translation key=${cacheKey}`);
+      return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.');
+    }
+
+    // Return loading message immediately (desktop/standard behavior)
     const loadingMsg = createLoadingSubtitle();
     log.debug(() => `[Translation] Returning initial loading message (${loadingMsg.length} characters)`);
     return loadingMsg;
@@ -2831,6 +3063,7 @@ module.exports = {
   createLoadingSubtitle, // Export for loading message in translation endpoint
   createSessionTokenErrorSubtitle, // Export for session token error subtitle
   createOpenSubtitlesAuthErrorSubtitle, // Export for OpenSubtitles auth error subtitle
+  createOpenSubtitlesQuotaExceededSubtitle, // Export for OpenSubtitles daily quota exceeded subtitle
   createInvalidSubtitleMessage, // Export for corrupted/invalid subtitle error message
   readFromPartialCache, // Export for checking in-flight partial results during duplicate requests
   translationStatus, // Export for safety block to check if translation is in progress
@@ -2970,4 +3203,3 @@ module.exports = {
    */
   inFlightTranslations
 };
-

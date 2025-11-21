@@ -55,6 +55,149 @@ function toSRT(entries) {
 }
 
 /**
+ * Convert SRT time (HH:MM:SS,mmm) to VTT time (HH:MM:SS.mmm)
+ */
+function srtTimeToVttTime(tc) {
+  return String(tc || '').replace(/,/g, '.');
+}
+
+// Parse SRT timecode duration in milliseconds (00:00:00,000 --> 00:00:05,000)
+function srtDurationMs(tc) {
+  const m = /^(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/.exec(String(tc || '').trim());
+  if (!m) return 0;
+  const toMs = (h, mm, s, ms) => (((parseInt(h, 10) || 0) * 60 + (parseInt(mm, 10) || 0)) * 60 + (parseInt(s, 10) || 0)) * 1000 + (parseInt(ms, 10) || 0);
+  return Math.max(0, toMs(m[5], m[6], m[7], m[8]) - toMs(m[1], m[2], m[3], m[4]));
+}
+
+/**
+ * Convert two aligned SRT strings into a dual-language WebVTT output
+ * - Emits two cues per entry with overlapping timecodes
+ * - Positions based on order: 'source-top' (source at top) or 'target-top'
+ */
+function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement = 'stacked') {
+  try {
+    const srcEntries = parseSRT(sourceSrt);
+    const trgEntries = parseSRT(targetSrt);
+    const srcTop = order === 'source-top';
+    const isStatusCue = (text) => /TRANSLATION IN PROGRESS|Reload this subtitle/i.test(String(text || ''));
+
+    // When we only have a partial translation, limit cues to what the target has (including the status tail)
+    const statusIndex = trgEntries.findIndex(e => isStatusCue(e.text));
+    const hasStatusTail = statusIndex !== -1;
+    const translatedCount = hasStatusTail ? Math.max(0, statusIndex) : trgEntries.length;
+    const isPartial = hasStatusTail || (trgEntries.length > 0 && trgEntries.length < srcEntries.length);
+    const count = isPartial
+      ? Math.min(translatedCount, srcEntries.length)
+      : Math.max(srcEntries.length, trgEntries.length);
+
+    const lines = ['WEBVTT', ''];
+
+    const normalizedPlacement = placement === 'top' ? 'top' : 'stacked';
+
+    // Some Stremio players partially ignore raw cue line settings. When users request "Top",
+    // also emit a REGION anchored to the top of the viewport. Players that support regions will
+    // honor it; others still have the explicit line values below.
+    const useTopRegion = normalizedPlacement === 'top';
+    if (useTopRegion) {
+      lines.push('REGION');
+      lines.push('id:submaker-top');
+      lines.push('width:100%');
+      lines.push('lines:3');
+      lines.push('regionanchor:50% 0%');
+      lines.push('viewportanchor:50% 0%');
+      lines.push('scroll:up');
+      lines.push('');
+    }
+
+    // Stremio is more consistent with snap-to-lines integers; combine with a top region so
+    // compatible players pin the first cue to the true top instead of stacking near the bottom.
+    const positions = (place) => {
+      if (place === 'top') {
+        return { top: 'region:submaker-top line:0 align:center position:50%', bottom: 'line:-1 align:center position:50%' };
+      }
+      return { top: 'line:-5 align:center position:50%', bottom: 'line:-1 align:center position:50%' };
+    };
+    const pos = positions(normalizedPlacement);
+
+    for (let i = 0; i < count; i++) {
+      const s = srcEntries[i];
+      const t = trgEntries[i];
+      if (!s && !t) continue;
+
+      // Detect status cues so we keep their long durations intact
+      // Choose timecode: prefer target when it exists and is a status cue or longer than source
+      let chosenTimecode = (s && s.timecode) || '';
+      if (t && t.timecode) {
+        if (!chosenTimecode) {
+          chosenTimecode = t.timecode;
+        } else if (isStatusCue(t.text) || srtDurationMs(t.timecode) > srtDurationMs(chosenTimecode)) {
+          chosenTimecode = t.timecode;
+        }
+      }
+
+      if (!chosenTimecode) {
+        chosenTimecode = '00:00:00,000 --> 00:00:05,000';
+      }
+
+      const vttTime = srtTimeToVttTime(chosenTimecode);
+
+      // Status cues should render alone so they don't get paired with source text
+      if (isStatusCue(t && t.text)) {
+        lines.push(`${vttTime} ${pos.bottom}`);
+        lines.push(sanitizeSubtitleText(t.text));
+        lines.push('');
+        continue;
+      }
+
+      let topCue = srcTop ? (s && s.text) : (t && t.text);
+      let bottomCue = srcTop ? (t && t.text) : (s && s.text);
+
+      // Fallbacks so status cues still render even if only one side exists
+      if (!topCue && bottomCue) {
+        topCue = bottomCue;
+        bottomCue = '';
+      }
+
+      if (!topCue && !bottomCue) continue;
+
+      // Top cue
+      lines.push(`${vttTime} ${pos.top}`);
+      lines.push(sanitizeSubtitleText(topCue));
+      lines.push('');
+
+      // Bottom cue
+      if (bottomCue) {
+        lines.push(`${vttTime} ${pos.bottom}`);
+        lines.push(sanitizeSubtitleText(bottomCue));
+        lines.push('');
+      }
+    }
+    // If we had a status tail that wasn't consumed in the main loop (e.g., no translations yet),
+    // render it here so users still see progress without extra source lines mixed in.
+    if (hasStatusTail && (count === 0 || statusIndex >= count)) {
+      const statusEntry = trgEntries[statusIndex];
+      const fallbackTime = srcEntries[count - 1]?.timecode || '00:00:00,000 --> 04:00:00,000';
+      const vttTime = srtTimeToVttTime(statusEntry.timecode || fallbackTime);
+      lines.push(`${vttTime} ${pos.bottom}`);
+      lines.push(sanitizeSubtitleText(statusEntry.text));
+      lines.push('');
+    }
+
+    if (count === 0 && !hasStatusTail) {
+      // Fallback minimal cue
+      lines.push('00:00:00.000 --> 04:00:00.000 line:95% align:center position:50%');
+      lines.push('No content available');
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  } catch (_) {
+    // Simple fallback VTT
+    return 'WEBVTT\n\n00:00:00.000 --> 04:00:00.000\nLearn Mode: Unable to build VTT';
+  }
+}
+
+/**
  * Validate SRT subtitle content
  * @param {string} srtContent - SRT content to validate
  * @returns {boolean} - True if valid SRT format
@@ -206,5 +349,6 @@ module.exports = {
   normalizeImdbId,
   parseStremioId,
   createSubtitleUrl,
-  sanitizeSubtitleText
+  sanitizeSubtitleText,
+  srtPairToWebVTT
 };

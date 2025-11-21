@@ -2,6 +2,7 @@ const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { redactSensitiveData } = require('../utils/logger');
 const log = require('../utils/logger');
 
@@ -469,6 +470,8 @@ class SubDLService {
           new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e(?:p(?:isode)?)?[\\s._-]*0*${episode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
           // [01] / (01) / - 01 / _01 / .01. (with boundaries)
           new RegExp(`(?:^|[\\s\\[\\(\\-_.])0*${episode}(?:v\\d+)?(?=$|[\\s\\]\\)\\-_.])`, 'i'),
+          // 01en / 01eng (language suffix immediately after episode number before extension)
+          new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${episode}(?:v\\d+)?[a-z]{2,3}(?=\\.|[\\s\\]\\)\\-_.]|$)`, 'i'),
           // Episode 01 / Episodio 01 / Capitulo 01
           new RegExp(`(?:episode|episodio|ep|cap(?:itulo)?)\\s*0*${episode}(?![0-9])`, 'i'),
           // Japanese/Chinese/Korean: 第01話 / 01話 / 01集 / 1화
@@ -550,7 +553,9 @@ class SubDLService {
 
       // Extract and return the target .srt file if found
       if (targetEntry && targetEntry.toLowerCase().endsWith('.srt')) {
-        const subtitleContent = await zip.files[targetEntry].async('string');
+        // Read as buffer to detect encoding properly
+        const buffer = await zip.files[targetEntry].async('nodebuffer');
+        const subtitleContent = detectAndConvertEncoding(buffer, 'SubDL');
         log.debug(() => `[SubDL] Subtitle downloaded and extracted successfully (.srt): ${targetEntry}`);
         return subtitleContent;
       }

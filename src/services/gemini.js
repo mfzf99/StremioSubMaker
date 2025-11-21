@@ -346,7 +346,22 @@ class GeminiService {
         }
 
         if (!response.data.candidates || response.data.candidates.length === 0) {
+          // Some safety blocks return promptFeedback without candidates
+          const pf = response.data.promptFeedback || {};
+          const blockReason = pf.blockReason || null;
+          const safetyRatings = pf.safetyRatings || null;
+
           log.error(() => ['[Gemini] No candidates in response:', JSON.stringify(response.data, null, 2)]);
+
+          // If Gemini flagged safety, classify explicitly so upstream shows proper error subtitles
+          if (blockReason || safetyRatings) {
+            const err = new Error(`PROHIBITED_CONTENT: ${blockReason || 'SAFETY'}`);
+            // Hint downstream handlers to produce the right UX
+            err.translationErrorType = 'PROHIBITED_CONTENT';
+            throw err;
+          }
+
+          // Otherwise, propagate a generic error
           throw new Error('No response candidates from Gemini API');
         }
 

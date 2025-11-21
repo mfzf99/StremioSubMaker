@@ -12,11 +12,13 @@ const axios = require('axios');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError, logApiError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const zlib = require('zlib');
 const log = require('../utils/logger');
 
 const SUBSOURCE_API_URL = 'https://api.subsource.net/api/v1';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const MAX_LINK_CACHE = 2000; // in-memory direct-link cache size
 
 /**
  * Create an informative SRT subtitle when an episode is not found in a season pack
@@ -51,6 +53,7 @@ class SubSourceService {
   constructor(apiKey = null) {
     this.apiKey = apiKey;
     this.baseURL = SUBSOURCE_API_URL;
+    this._linkCache = new Map(); // subsource_id -> direct download URL
 
     // Configure axios with default headers
     // Include Client Hints headers for better compatibility
@@ -99,6 +102,19 @@ class SubSourceService {
       maxRedirects: 5,
       decompress: true
     });
+  }
+
+  rememberDownloadLink(id, url) {
+    try {
+      if (!id || !url || typeof url !== 'string') return;
+      if (!/^https?:\/\//i.test(url)) return;
+      // Insert and prune oldest if over limit
+      this._linkCache.set(String(id), url);
+      if (this._linkCache.size > MAX_LINK_CACHE) {
+        const firstKey = this._linkCache.keys().next().value;
+        if (firstKey !== undefined) this._linkCache.delete(firstKey);
+      }
+    } catch (_) { /* ignore */ }
   }
 
   /**
@@ -198,12 +214,83 @@ class SubSourceService {
         return movieId;
       }
 
+      // Primary search returned no results – try deriving from subtitles/search endpoints
+      try {
+        const derived = await this._deriveMovieIdFromImdb(imdb_id, season);
+        if (derived) return derived;
+      } catch (_) { /* ignore and fall through */ }
+
       log.debug(() => ['[SubSource] No movie found for IMDB ID:', imdb_id, season ? `Season ${season}` : '']);
       return null;
     } catch (error) {
       logApiError(error, 'SubSource', 'Get movie ID', { skipResponseData: true, skipUserMessage: true });
+
+      // If timeout/network – attempt a lightweight fallback using endpoints that accept imdb directly
+      const code = error?.code || '';
+      const msg = String(error?.message || '').toLowerCase();
+      const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || msg.includes('timeout');
+      const isNetwork = code === 'ECONNRESET' || code === 'ECONNREFUSED';
+      if (isTimeout || isNetwork) {
+        try {
+          const derived = await this._deriveMovieIdFromImdb(imdb_id, season);
+          if (derived) return derived;
+        } catch (_) { /* ignore */ }
+      }
+
       return null;
     }
+  }
+
+  /**
+   * Attempt to derive movieId by querying endpoints that accept imdb directly
+   * Tries /subtitles?imdb=… then /search?imdb=…
+   * @param {string} imdb_id
+   * @param {number|null} season
+   * @returns {Promise<string|null>}
+   */
+  async _deriveMovieIdFromImdb(imdb_id, season = null) {
+    try {
+      const params = new URLSearchParams();
+      params.set('imdb', imdb_id);
+      if (season) params.set('season', String(season));
+      params.set('limit', '5');
+
+      const endpoints = ['/subtitles', '/search'];
+      for (const endpoint of endpoints) {
+        const url = `${this.baseURL}${endpoint}?${params.toString()}`;
+        log.debug(() => `[SubSource] Deriving movieId via ${endpoint} for ${imdb_id}${season ? ` S${season}` : ''}`);
+        try {
+          const { data } = await this.client.get(url, { responseType: 'json', timeout: 5000 });
+
+          let list = null;
+          if (Array.isArray(data)) list = data;
+          else if (data?.subtitles) list = data.subtitles;
+          else if (Array.isArray(data?.data)) list = data.data;
+          else if (Array.isArray(data?.results)) list = data.results;
+
+          if (Array.isArray(list) && list.length > 0) {
+            for (const item of list) {
+              const id = item?.movieId || item?.movie_id || item?.movie?.id || item?.movie?.movieId || item?.movie?.movie_id || null;
+              if (id) {
+                log.debug(() => `[SubSource] Derived movieId=${id} from ${endpoint} imdb=${imdb_id}${season ? ` S${season}` : ''}`);
+                return id;
+              }
+            }
+          }
+        } catch (innerErr) {
+          const status = innerErr?.response?.status;
+          const code = innerErr?.code || '';
+          const msg = String(innerErr?.message || '').toLowerCase();
+          const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || msg.includes('timeout');
+          const isNetwork = code === 'ECONNRESET' || code === 'ECONNREFUSED';
+          if (status === 404 || isTimeout || isNetwork) {
+            continue;
+          }
+          break;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    return null;
   }
 
   /**
@@ -525,6 +612,12 @@ class SubSourceService {
           extractedRating = parseFloat(sub.rating || sub.score || 0) || 0;
         }
 
+        const directUrl = sub.download_url || sub.downloadUrl || sub.url;
+        // Cache direct link for CDN-first download attempts
+        if (subtitleId && directUrl) {
+          try { this.rememberDownloadLink(subtitleId, directUrl); } catch (_) {}
+        }
+
         return {
           id: fileId,
           language: originalLang,
@@ -535,7 +628,7 @@ class SubSourceService {
           uploadDate: extractedDate,
           format: sub.format || 'srt',
           fileId: fileId,
-          downloadLink: sub.download_url || sub.downloadUrl || sub.url,
+          downloadLink: directUrl,
           hearing_impaired: sub.hearingImpaired || sub.hearing_impaired || sub.hi || false,
           foreign_parts_only: sub.foreignParts || false,
           machine_translated: false,
@@ -627,6 +720,8 @@ class SubSourceService {
             // E01 / EP01 / E 01 / EP 01 / (01) / [01] / - 01 / _01 / 01v2
             new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e?p?\\s*0*${targetEpisode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
             new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${targetEpisode}(?:v\\d+)?(?=$|[\\s\\]\\)\\-_.])`, 'i'),
+            // 01en / 01eng (language suffix immediately after episode number before extension)
+            new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${targetEpisode}(?:v\\d+)?[a-z]{2,3}(?=\\.|[\\s\\]\\)\\-_.]|$)`, 'i'),
 
             // Explicit words
             new RegExp(`(?:^|[\\s\\[\\(\\-_])episode\\s*0*${targetEpisode}(?=$|[\\s\\]\\)\\-_.])`, 'i'),
@@ -725,21 +820,128 @@ class SubSourceService {
         throw new Error('Invalid or missing SubSource subtitle ID');
       }
 
-      // Request download from SubSource API (API key is in headers)
-      // According to API docs: GET /subtitles/{id}/download
-      const url = `/subtitles/${subsource_id}/download`;
-      // Allow CDN caching; avoid forcing no-cache on downloads
-      const downloadHeaders = { ...this.defaultHeaders };
-      delete downloadHeaders['Cache-Control'];
-      delete downloadHeaders['Pragma'];
-      const response = await this.retryWithBackoff((attemptTimeout) => this.client.get(url, {
-        headers: downloadHeaders,
-        responseType: 'arraybuffer',
-        timeout: attemptTimeout
-      }), { totalTimeoutMs: 10000, maxRetries: 2, baseDelay: 800, minAttemptTimeoutMs: 2500 });
+      // Attempt CDN/direct download first if we cached a direct URL from search
+      let response;
+      try {
+        const cachedDirect = this._linkCache.get(String(subsource_id));
+        if (cachedDirect && /^https?:\/\//i.test(cachedDirect)) {
+          log.debug(() => `[SubSource] Trying CDN/direct link first: ${cachedDirect.replace(/\?.*$/, '')}`);
+          const axios = require('axios');
+          response = await axios.get(cachedDirect, {
+            responseType: 'arraybuffer',
+            timeout: 4000,
+            headers: {
+              'User-Agent': this.defaultHeaders['User-Agent'],
+              'Accept': this.defaultHeaders['Accept'],
+              'Accept-Encoding': this.defaultHeaders['Accept-Encoding'],
+              'Referer': this.defaultHeaders['Referer'],
+              'Origin': this.defaultHeaders['Origin']
+            },
+            httpAgent,
+            httpsAgent
+          });
+        }
+      } catch (cdnFirstErr) {
+        // Ignore and continue to primary endpoint
+        log.warn(() => ['[SubSource] CDN-first attempt failed:', cdnFirstErr?.message || String(cdnFirstErr)]);
+        response = null;
+      }
+
+      // If CDN-first succeeded, continue to parse
+      if (!response) {
+        // Request download from SubSource API (API key is in headers)
+        // According to API docs: GET /subtitles/{id}/download
+        const url = `/subtitles/${subsource_id}/download`;
+        // Allow CDN caching; avoid forcing no-cache on downloads
+        const downloadHeaders = { ...this.defaultHeaders };
+        delete downloadHeaders['Cache-Control'];
+        delete downloadHeaders['Pragma'];
+
+        // Race primary endpoint (retries within ~7s budget) with a details→CDN fetch
+        // that starts after the first retryable primary failure.
+        let triggerFallbackResolve;
+        let fallbackTriggered = false;
+        const triggerFallback = () => {
+          if (!fallbackTriggered) {
+            fallbackTriggered = true;
+            try { triggerFallbackResolve && triggerFallbackResolve(); } catch (_) {}
+          }
+        };
+
+        const fallbackGate = new Promise((resolve) => { triggerFallbackResolve = resolve; });
+
+        const fallbackPromise = (async () => {
+          // Wait until primary reports the first retryable failure
+          await fallbackGate;
+          log.warn(() => '[SubSource] Primary started failing — launching details→CDN in parallel');
+
+          // Try to fetch subtitle details to obtain a direct download URL (often served via CDN)
+          const detailResp = await this.client.get(`/subtitles/${subsource_id}`, {
+            responseType: 'json',
+            timeout: 5000
+          }).catch(() => null);
+
+          // Extract any plausible direct download URL field
+          let directUrl = null;
+          if (detailResp && detailResp.data) {
+            const d = detailResp.data;
+            // Accept common variants
+            directUrl = d.download_url || d.downloadUrl || d.url || (d.data && (d.data.download_url || d.data.downloadUrl || d.data.url)) || null;
+          }
+
+          if (directUrl && typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
+            log.debug(() => `[SubSource] Using CDN/direct link fallback: ${directUrl.replace(/\?.*$/, '')}`);
+            const axios = require('axios');
+            return axios.get(directUrl, {
+              responseType: 'arraybuffer',
+              timeout: 4000,
+              headers: {
+                'User-Agent': this.defaultHeaders['User-Agent'],
+                'Accept': this.defaultHeaders['Accept'],
+                'Accept-Encoding': this.defaultHeaders['Accept-Encoding'],
+                'Referer': this.defaultHeaders['Referer'],
+                'Origin': this.defaultHeaders['Origin']
+              },
+              httpAgent,
+              httpsAgent
+            });
+          } else {
+            // No direct URL available
+            throw new Error('No direct URL available from details');
+          }
+        })();
+
+        const primaryPromise = (async () => {
+          return this.retryWithBackoff((attemptTimeout) => this.client.get(url, {
+            headers: downloadHeaders,
+            responseType: 'arraybuffer',
+            timeout: attemptTimeout
+          }).catch((err) => {
+            // On retryable failure, trigger the parallel fallback chain
+            const code = err?.code || '';
+            const status = err?.response?.status;
+            const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout/i.test(err.message || '');
+            const isNetwork = code === 'ECONNRESET' || code === 'ECONNREFUSED';
+            const isRetryableStatus = status === 429 || status === 503 || (status >= 500 && status <= 599);
+            if (isTimeout || isNetwork || isRetryableStatus) triggerFallback();
+            throw err;
+          }), { totalTimeoutMs: 7000, maxRetries: 2, baseDelay: 800, minAttemptTimeoutMs: 2500 });
+        })();
+
+        // Resolve with the first successful response (ignore the first rejection)
+        // Use Promise.any to wait for the first fulfillment among primary/fallback
+        try {
+          response = await Promise.any([primaryPromise, fallbackPromise]);
+        } catch (e) {
+          // If both fail, rethrow the first error for user-facing error semantics
+          const firstErr = Array.isArray(e?.errors) && e.errors.length ? e.errors[0] : e;
+          throw firstErr;
+        }
+
+      }
 
       // Check if response is a ZIP file or direct SRT content
-      const contentType = response.headers['content-type'] || '';
+      const contentType = response.headers && (response.headers['content-type'] || response.headers['Content-Type']) || '';
       const responseBody = response.data;
       const responseBuffer = Buffer.isBuffer(responseBody) ? responseBody : Buffer.from(responseBody);
 
@@ -790,6 +992,8 @@ class SubSourceService {
             new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e(?:p(?:isode)?)?[\\s._-]*0*${episode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
             // [01] / (01) / - 01 / _01 / .01. (with boundaries)
             new RegExp(`(?:^|[\\s\\[\\(\\-_.])0*${episode}(?:v\\d+)?(?=$|[\\s\\]\\)\\-_.])`, 'i'),
+            // 01en / 01eng (language suffix immediately after episode number before extension)
+            new RegExp(`(?:^|[\\s\\[\\(\\-_])0*${episode}(?:v\\d+)?[a-z]{2,3}(?=\\.|[\\s\\]\\)\\-_.]|$)`, 'i'),
             // Episode 01 / Episodio 01 / Capitulo 01
             new RegExp(`(?:episode|episodio|ep|cap(?:itulo)?)\\s*0*${episode}(?![0-9])`, 'i'),
             // Japanese/Chinese/Korean: 第01話 / 01話 / 01集 / 1화
@@ -871,7 +1075,9 @@ class SubSourceService {
 
         // Extract and return the target .srt file if found
         if (targetEntry && targetEntry.toLowerCase().endsWith('.srt')) {
-          const subtitleContent = await zip.files[targetEntry].async('string');
+          // Read as buffer to detect encoding properly
+          const buffer = await zip.files[targetEntry].async('nodebuffer');
+          const subtitleContent = detectAndConvertEncoding(buffer, 'SubSource');
           log.debug(() => `[SubSource] Subtitle downloaded and extracted successfully from ZIP (.srt): ${targetEntry}`);
           return subtitleContent;
         }
@@ -1095,9 +1301,9 @@ class SubSourceService {
         log.error(() => ['[SubSource] Available files in ZIP:', entries.join(', ')]);
         throw new Error('Failed to extract or convert subtitle from ZIP (no .srt and conversion to VTT failed)');
       } else {
-        // Direct SRT content - decode as UTF-8
+        // Direct SRT content - detect encoding and convert to UTF-8
         log.debug(() => '[SubSource] Subtitle downloaded successfully');
-        const content = responseBuffer.toString('utf-8');
+        const content = detectAndConvertEncoding(responseBuffer, 'SubSource');
 
         // If content appears to be WebVTT, keep it intact (we serve original to Stremio)
         const ct = contentType.toLowerCase();

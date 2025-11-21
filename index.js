@@ -16,11 +16,12 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig } = require('./src/utils/config');
+const { srtPairToWebVTT } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
 const { getAllLanguages, getLanguageName } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const { translateInParallel } = require('./src/utils/parallelTranslation');
 const syncCache = require('./src/utils/syncCache');
@@ -270,9 +271,10 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for HTML pages
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Allow inline styles and Google Fonts
             scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for HTML pages
             imgSrc: ["'self'", "data:"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"], // Allow Google Fonts
             // Don't upgrade insecure requests for localhost (would break HTTP logo loading)
             upgradeInsecureRequests: null,
         },
@@ -734,13 +736,22 @@ app.post('/api/validate-subsource', async (req, res) => {
             });
         } catch (apiError) {
             const status = apiError.response?.status;
+            const code = apiError.code;
+            const msg = apiError.message || '';
+
+            // Show a concise, formatted timeout message instead of axios' lowercase default
+            const isTimeout = code === 'ECONNABORTED' || /timeout/i.test(msg);
+            if (isTimeout) {
+                return res.json({ valid: false, error: 'Request timed out (7s)' });
+            }
+
             if (status === 401 || status === 403) {
                 return res.json({ valid: false, error: 'Invalid API key - authentication failed' });
             }
 
-            // Surface a concise message
+            // Surface upstream error if present; otherwise the axios message
             const upstream = apiError.response?.data?.error || apiError.response?.data?.message;
-            return res.json({ valid: false, error: upstream || apiError.message || 'Request failed' });
+            return res.json({ valid: false, error: upstream || msg || 'Request failed' });
         }
     } catch (error) {
         res.json({
@@ -1160,6 +1171,44 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
         // Get language name for better translation context
         const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
 
+        // Detect and convert non-SRT uploads to SRT for translation
+        let workingContent = content;
+        try {
+            const trimmed = String(content || '').trimStart();
+            const looksLikeVTT = trimmed.startsWith('WEBVTT');
+            const looksLikeASS = /\[script info\]/i.test(content) || /\[v4\+? styles\]/i.test(content) || /\[events\]/i.test(content) || /^dialogue\s*:/im.test(content);
+            const looksLikeSSA = /\[v4 styles\]/i.test(content) || /\[events\]/i.test(content) || /^dialogue\s*:/im.test(content);
+
+            if (looksLikeVTT) {
+                const subsrt = require('subsrt-ts');
+                workingContent = subsrt.convert(content, { to: 'srt' });
+                log.debug(() => '[File Translation API] Detected VTT upload; converted to SRT');
+            } else if (looksLikeASS || looksLikeSSA) {
+                // Try enhanced ASS/SSA -> VTT first, then VTT -> SRT
+                const assConverter = require('./src/utils/assConverter');
+                const format = looksLikeASS ? 'ass' : 'ssa';
+                const result = assConverter.convertASSToVTT(content, format);
+                if (result && result.success) {
+                    const subsrt = require('subsrt-ts');
+                    workingContent = subsrt.convert(result.content, { to: 'srt' });
+                    log.debug(() => '[File Translation API] Detected ASS/SSA upload; converted to VTT then SRT');
+                } else {
+                    // Fallback: direct conversion via subsrt-ts if possible
+                    try {
+                        const subsrt = require('subsrt-ts');
+                        workingContent = subsrt.convert(content, { to: 'srt', from: looksLikeASS ? 'ass' : 'ssa' });
+                        log.debug(() => '[File Translation API] Fallback ASS/SSA direct conversion to SRT succeeded');
+                    } catch (convErr) {
+                        log.warn(() => ['[File Translation API] ASS/SSA conversion failed; proceeding with raw content:', (result && result.error) || convErr.message]);
+                        workingContent = content;
+                    }
+                }
+            }
+        } catch (convError) {
+            log.warn(() => ['[File Translation API] Format detection/conversion error; proceeding with original content:', convError.message]);
+            workingContent = content;
+        }
+
         // Initialize Gemini service with advanced settings
         const gemini = new GeminiService(
           config.geminiApiKey,
@@ -1168,7 +1217,7 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
         );
 
         // Estimate token count
-        const estimatedTokens = gemini.estimateTokenCount(content);
+        const estimatedTokens = gemini.estimateTokenCount(workingContent);
         log.debug(() => `[File Translation API] Estimated tokens: ${estimatedTokens}`);
 
         // Use parallel translation for large files (>threshold tokens)
@@ -1190,7 +1239,7 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
 
             // Parallel translation with context preservation
             translatedContent = await translateInParallel(
-                content,
+                workingContent,
                 gemini,
                 targetLangName,
                 {
@@ -1208,7 +1257,7 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
 
             // Single API call for smaller files
             translatedContent = await gemini.translateSubtitle(
-                content,
+                workingContent,
                 'detected source language',
                 targetLangName,
                 config.translationPrompt
@@ -1349,6 +1398,9 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', (req, res) => {
             case 'opensubtitles-auth':
                 content = createOpenSubtitlesAuthErrorSubtitle();
                 break;
+            case 'opensubtitles-quota':
+                content = createOpenSubtitlesQuotaExceededSubtitle();
+                break;
             default:
                 content = createSessionTokenErrorSubtitle(); // Default to session token error
                 break;
@@ -1406,6 +1458,11 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
         const { config: configStr, sourceFileId, targetLang } = req.params;
         const config = await resolveConfigAsync(configStr, req);
         config.__configHash = computeConfigHash(configStr);
+        const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+        const isAndroid = userAgent.includes('android');
+        const mobileQuery = String(req.query.mobileMode || req.query.mobile || '').toLowerCase();
+        const queryForcesMobile = ['1', 'true', 'yes', 'on'].includes(mobileQuery);
+        const waitForFullTranslation = (config.mobileMode === true) || queryForcesMobile || (isAndroid && config.mobileMode !== false);
 
         // Create deduplication key based on source file and target language
         const dedupKey = `translate:${configStr}:${sourceFileId}:${targetLang}`;
@@ -1447,7 +1504,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
         // Check if already in flight BEFORE logging to reduce confusion
         const isAlreadyInFlight = inFlightRequests.has(dedupKey);
 
-        if (isAlreadyInFlight) {
+        if (isAlreadyInFlight && waitForFullTranslation) {
+            log.debug(() => `[Translation] Mobile mode duplicate request for ${sourceFileId} to ${targetLang} - waiting for final result`);
+        } else if (isAlreadyInFlight) {
             log.debug(() => `[Translation] Duplicate request detected for ${sourceFileId} to ${targetLang} - checking for partial results`);
 
             // Generate cache keys using shared utility (single source of truth for cache key scoping)
@@ -1493,7 +1552,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
 
         // Deduplicate translation requests - handles the first request
         const subtitleContent = await deduplicate(dedupKey, () =>
-            handleTranslation(sourceFileId, targetLang, config)
+            handleTranslation(sourceFileId, targetLang, config, { waitForFullTranslation })
         );
 
         // Validate content before processing
@@ -1527,6 +1586,114 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', searchLimiter, val
     } catch (error) {
         log.error(() => '[Translation] Error:', error);
         res.status(500).send(`Translation failed: ${error.message}`);
+    }
+});
+
+// Custom route: Learn Mode (dual-language VTT)
+app.get('/addon/:config/learn/:sourceFileId/:targetLang', searchLimiter, validateRequest(translationParamsSchema, 'params'), async (req, res) => {
+    try {
+        const { config: configStr, sourceFileId, targetLang } = req.params;
+        const baseConfig = await resolveConfigAsync(configStr, req);
+        baseConfig.__configHash = computeConfigHash(configStr);
+
+        // Force bypass cache for Learn Mode translations only (does not affect normal translations)
+        // NOTE: normalizeConfig() disables bypassCacheConfig when bypassCache is false, so we must
+        // explicitly re-enable both bypassCacheConfig/tempCache when forcing bypass for Learn mode.
+        const config = {
+            ...baseConfig,
+            bypassCache: true,
+            bypassCacheConfig: {
+                ...(baseConfig.bypassCacheConfig || {}),
+                enabled: true
+            },
+            tempCache: {
+                ...(baseConfig.tempCache || baseConfig.bypassCacheConfig || {}),
+                enabled: true
+            }
+        };
+
+        const { cacheKey } = generateCacheKeys(config, sourceFileId, targetLang);
+
+        // Unusual purge: if same Learn subtitle is loaded 3 times in < 5s, purge cache and retrigger
+        try {
+            const clickKey = `learn-click:${configStr}:${sourceFileId}:${targetLang}`;
+            const now = Date.now();
+            const windowMs = 5_000; // 5 seconds
+            const entry = firstClickTracker.get(clickKey) || { times: [] };
+            // Keep only clicks within window
+            entry.times = (entry.times || []).filter(t => now - t <= windowMs);
+            entry.times.push(now);
+            firstClickTracker.set(clickKey, entry);
+
+            if (entry.times.length >= 3) {
+                // SAFETY CHECK: Block cache reset if translation is in progress
+                const shouldBlock = shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang);
+
+                if (shouldBlock) {
+                    log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
+                } else {
+                    // Reset the counter immediately to avoid loops
+                    firstClickTracker.set(clickKey, { times: [] });
+                    const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
+                    if (hadCache) {
+                        log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging cache and re-triggering translation.`);
+                        await purgeTranslationCache(sourceFileId, targetLang, config);
+                    } else {
+                        log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but no cached translation found for ${sourceFileId}/${targetLang}. Skipping purge.`);
+                    }
+                }
+            }
+        } catch (e) {
+            log.warn(() => '[LearnPurgeTrigger] Click tracking error:', e.message);
+        }
+
+        // Always obtain source content
+        let sourceContent = await getDownloadCached(sourceFileId);
+        if (!sourceContent) {
+            sourceContent = await handleSubtitleDownload(sourceFileId, 'und', config);
+            saveDownloadCached(sourceFileId, sourceContent);
+        }
+
+        // Normalize source to SRT for pairing
+        try {
+            const trimmed = (sourceContent || '').trimStart();
+            if (trimmed.startsWith('WEBVTT')) {
+                const subsrt = require('subsrt-ts');
+                sourceContent = subsrt.convert(sourceContent, { to: 'srt' });
+            }
+        } catch (_) {}
+
+        // If we have partial translation, serve partial VTT immediately
+        const partial = await readFromPartialCache(cacheKey);
+        if (partial && partial.content) {
+            const vtt = srtPairToWebVTT(sourceContent, partial.content, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+            res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
+            return res.send(vtt);
+        }
+
+        // If we already have cached full translation, fetch it quickly via translation handler
+        const hasCache = await hasCachedTranslation(sourceFileId, targetLang, config);
+        if (hasCache) {
+            const translatedSrt = await handleTranslation(sourceFileId, targetLang, config);
+            const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+            res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
+            return res.send(vtt);
+        }
+
+        // Start translation in background and serve a loading VTT (source on top, status on bottom)
+        handleTranslation(sourceFileId, targetLang, config).catch(() => {});
+
+        const loadingSrt = createLoadingSubtitle();
+        const vtt = srtPairToWebVTT(sourceContent, loadingSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
+        return res.send(vtt);
+
+    } catch (error) {
+        log.error(() => '[Learn] Error:', error);
+        res.status(500).send('Failed to build learning subtitles');
     }
 });
 
@@ -1902,12 +2069,212 @@ function generateTranslationSelectorPage(subtitles, videoId, targetLang, configS
             }
         }
     </style>
+    <style>
+        /* Mario-style block + coin animation (perf-friendly: transforms only) */
+        .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+            position: fixed;
+        }
+        .theme-toggle.mario::before {
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px; border-radius: 50%;
+            background: #b47a11;
+            top: 6px; left: 6px;
+            box-shadow:
+                calc(100% - 12px) 0 0 #b47a11,
+                0 calc(100% - 12px) 0 #b47a11,
+                calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+            opacity: .9;
+        }
+        .theme-toggle.mario:active { transform: translateY(2px) scale(0.98); box-shadow:
+            inset 0 1px 0 #fff3b0,
+            inset 0 -1px 0 #b47a11,
+            0 4px 0 #7a4d00,
+            0 8px 14px rgba(0,0,0,0.3);
+        }
+        .theme-toggle-icon { transition: transform 0.25s ease; display: grid; place-items: center; }
+        .theme-toggle-icon svg { display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2)); }
+        /* Coin effect */
+        .coin { position: fixed; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; z-index: 10000; transform: translate(-50%, -50%); will-change: transform, opacity; contain: layout paint style; }
+        .coin::before { content: ''; display: block; width: 100%; height: 100%; border-radius: 50%;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.2) 55%) ,
+                radial-gradient(40% 40% at 35% 30%, #fff6bf 0%, rgba(255,255,255,0) 70%),
+                linear-gradient(180deg, #ffd24a 0%, #ffc125 50%, #e2a415 100%);
+            border: 2px solid #8a5a00; box-shadow: 0 2px 0 #7a4d00, inset 0 1px 0 #fff8c6;
+        }
+        @keyframes coin-pop {
+            0% { opacity: 0; transform: translate(-50%, -50%) translateY(0) scale(0.9) rotateY(0deg); }
+            10% { opacity: 1; }
+            60% { transform: translate(-50%, -50%) translateY(-52px) scale(1.0) rotateY(360deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) translateY(-70px) scale(0.95) rotateY(540deg); }
+        }
+        .coin.animate { animation: coin-pop 0.7s cubic-bezier(.2,.8,.2,1) forwards; }
+        @media (prefers-reduced-motion: reduce) { .coin.animate { animation: none; opacity: 0; } }
+
+        /* Theme variants for subtitle-selection page (light vs default=dark) */
+        [data-theme="light"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+        }
+        :not([data-theme="light"]) .theme-toggle.mario {
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            border-color: #1b2a78;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.6);
+        }
+        [data-theme="light"] .theme-toggle.mario::before { background: #b47a11; box-shadow:
+            calc(100% - 12px) 0 0 #b47a11,
+            0 calc(100% - 12px) 0 #b47a11,
+            calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+        }
+        :not([data-theme="light"]) .theme-toggle.mario::before { background: #213a9a; box-shadow:
+            calc(100% - 12px) 0 0 #213a9a,
+            0 calc(100% - 12px) 0 #213a9a,
+            calc(100% - 12px) calc(100% - 12px) 0 #213a9a;
+        }
+    </style>
+    <style>
+        /* Mario-style block + coin animation (perf-friendly: transforms only) */
+        .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+            position: fixed;
+        }
+        .theme-toggle.mario::before {
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px; border-radius: 50%;
+            background: #b47a11;
+            top: 6px; left: 6px;
+            box-shadow:
+                calc(100% - 12px) 0 0 #b47a11,
+                0 calc(100% - 12px) 0 #b47a11,
+                calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+            opacity: .9;
+        }
+        .theme-toggle.mario:active { transform: translateY(2px) scale(0.98); box-shadow:
+            inset 0 1px 0 #fff3b0,
+            inset 0 -1px 0 #b47a11,
+            0 4px 0 #7a4d00,
+            0 8px 14px rgba(0,0,0,0.3);
+        }
+        .theme-toggle-icon { transition: transform 0.25s ease; display: grid; place-items: center; }
+        .theme-toggle-icon svg { display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2)); }
+        /* Coin effect */
+        .coin { position: fixed; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; z-index: 10000; transform: translate(-50%, -50%); will-change: transform, opacity; contain: layout paint style; }
+        .coin::before { content: ''; display: block; width: 100%; height: 100%; border-radius: 50%;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.2) 55%) ,
+                radial-gradient(40% 40% at 35% 30%, #fff6bf 0%, rgba(255,255,255,0) 70%),
+                linear-gradient(180deg, #ffd24a 0%, #ffc125 50%, #e2a415 100%);
+            border: 2px solid #8a5a00; box-shadow: 0 2px 0 #7a4d00, inset 0 1px 0 #fff8c6;
+        }
+        @keyframes coin-pop {
+            0% { opacity: 0; transform: translate(-50%, -50%) translateY(0) scale(0.9) rotateY(0deg); }
+            10% { opacity: 1; }
+            60% { transform: translate(-50%, -50%) translateY(-52px) scale(1.0) rotateY(360deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) translateY(-70px) scale(0.95) rotateY(540deg); }
+        }
+        .coin.animate { animation: coin-pop 0.7s cubic-bezier(.2,.8,.2,1) forwards; }
+        @media (prefers-reduced-motion: reduce) { .coin.animate { animation: none; opacity: 0; } }
+
+        /* Theme variants for file-translation page (light/dark) */
+        [data-theme="light"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            border-color: #8a5a00;
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+        }
+        [data-theme="dark"] .theme-toggle.mario {
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            border-color: #1b2a78;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.6);
+        }
+        [data-theme="light"] .theme-toggle.mario::before { background: #b47a11; box-shadow:
+            calc(100% - 12px) 0 0 #b47a11,
+            0 calc(100% - 12px) 0 #b47a11,
+            calc(100% - 12px) calc(100% - 12px) 0 #b47a11;
+        }
+        [data-theme="dark"] .theme-toggle.mario::before { background: #213a9a; box-shadow:
+            calc(100% - 12px) 0 0 #213a9a,
+            0 calc(100% - 12px) 0 #213a9a,
+            calc(100% - 12px) calc(100% - 12px) 0 #213a9a;
+        }
+    </style>
 </head>
 <body>
     <!-- Theme Toggle Button -->
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <span class="theme-toggle-icon sun">☀️</span>
-        <span class="theme-toggle-icon moon">🌙</span>
+    <button class="theme-toggle mario" id="themeToggle" aria-label="Toggle theme">
+        <span class="theme-toggle-icon sun" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gSunA" cx="50%" cy="50%" r="60%">
+                        <stop offset="0%" stop-color="#fff4b0"/>
+                        <stop offset="60%" stop-color="#f7d13e"/>
+                        <stop offset="100%" stop-color="#e0a81e"/>
+                    </radialGradient>
+                </defs>
+                <g fill="none" stroke="#8a5a00" stroke-linecap="round">
+                    <circle cx="32" cy="32" r="13" fill="url(#gSunA)" stroke-width="3"/>
+                    <g stroke-width="3">
+                        <line x1="32" y1="6" x2="32" y2="14"/>
+                        <line x1="32" y1="50" x2="32" y2="58"/>
+                        <line x1="6" y1="32" x2="14" y2="32"/>
+                        <line x1="50" y1="32" x2="58" y2="32"/>
+                        <line x1="13" y1="13" x2="19" y2="19"/>
+                        <line x1="45" y1="45" x2="51" y2="51"/>
+                        <line x1="13" y1="51" x2="19" y2="45"/>
+                        <line x1="45" y1="19" x2="51" y2="13"/>
+                    </g>
+                </g>
+            </svg>
+        </span>
+        <span class="theme-toggle-icon moon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gMoonA" cx="40%" cy="35%" r="65%">
+                        <stop offset="0%" stop-color="#fff7cc"/>
+                        <stop offset="70%" stop-color="#f1c93b"/>
+                        <stop offset="100%" stop-color="#d19b16"/>
+                    </radialGradient>
+                    <mask id="mMoonA">
+                        <rect width="100%" height="100%" fill="#ffffff"/>
+                        <circle cx="44" cy="22" r="18" fill="#000000"/>
+                    </mask>
+                </defs>
+                <g fill="none" stroke="#8a5a00">
+                    <circle cx="28" cy="30" r="22" fill="url(#gMoonA)" stroke-width="3" mask="url(#mMoonA)"/>
+                </g>
+            </svg>
+        </span>
     </button>
 
     <div class="container">
@@ -1952,11 +2319,26 @@ function generateTranslationSelectorPage(subtitles, videoId, targetLang, configS
         setTheme(initialTheme);
 
         // Toggle theme on button click
+        function spawnCoin(x, y) {
+            try {
+                const c = document.createElement('div');
+                c.className = 'coin animate';
+                c.style.left = x + 'px';
+                c.style.top = y + 'px';
+                document.body.appendChild(c);
+                c.addEventListener('animationend', () => c.remove(), { once: true });
+                setTimeout(() => { if (c && c.parentNode) c.remove(); }, 1200);
+            } catch (_) {}
+        }
+
         if (themeToggle) {
-            themeToggle.addEventListener('click', function() {
+            themeToggle.addEventListener('click', function(e) {
                 const currentTheme = html.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
                 const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
                 setTheme(newTheme);
+                if (e && e.clientX != null && e.clientY != null) {
+                    spawnCoin(e.clientX, e.clientY);
+                }
             });
         }
 
@@ -2551,10 +2933,60 @@ function generateFileTranslationPage(videoId, configStr, config) {
             justify-content: center;
         }
 
-        .help-button:hover {
-            transform: scale(1.1) rotate(15deg);
-            box-shadow: 0 12px 32px var(--glow);
+        .help-button:hover { transform: translateY(-2px) scale(1.07) rotate(6deg); box-shadow: 0 12px 32px var(--glow); }
+
+        /* Mario-styled help button: same vibe, slightly different (coin-ish, glint) */
+        .help-button.mario {
+            border: 2px solid #8a5a00;
+            background: linear-gradient(180deg, #f7d13e 0%, #e6b526 60%, #d49c1d 100%);
+            color: #3b2a00;
+            border-radius: 14px; /* more rounded than toggle */
+            box-shadow:
+                inset 0 2px 0 #fff3b0,
+                inset 0 -3px 0 #b47a11,
+                0 6px 0 #7a4d00,
+                0 10px 16px rgba(0,0,0,0.35);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6), 0 -1px 0 rgba(0,0,0,0.1);
+            position: fixed;
+            overflow: hidden;
         }
+        .help-button.mario::before { /* rivets, only top corners to differ from toggle */
+            content: '';
+            position: absolute;
+            width: 5px; height: 5px; border-radius: 50%; background: #b47a11; opacity: .9; top: 6px; left: 6px;
+            box-shadow: calc(100% - 12px) 0 0 #b47a11;
+        }
+        /* keep it very similar to toggle; remove glint for minimal difference */
+        .help-button.mario::after { display: none; }
+
+        /* Theme variants */
+        [data-theme="dark"] .help-button.mario {
+            border-color: #1b2a78;
+            background: linear-gradient(180deg, #4c6fff 0%, #2f4ed1 60%, #1e2f8a 100%);
+            color: #0f1a4a;
+            box-shadow:
+                inset 0 2px 0 #b3c4ff,
+                inset 0 -3px 0 #213a9a,
+                0 6px 0 #16246a,
+                0 10px 16px rgba(20,25,49,0.6);
+        }
+        [data-theme="dark"] .help-button.mario::before { background: #213a9a; box-shadow: calc(100% - 12px) 0 0 #213a9a; }
+        [data-theme="dark"] .help-button.mario::after { background: linear-gradient(120deg, rgba(179,196,255,0.22) 0%, rgba(179,196,255,0) 35%); }
+
+        [data-theme="light"] .help-button.mario { /* keep gold but slightly different radius from toggle */ border-radius: 14px; }
+
+        [data-theme="true-dark"] .help-button.mario {
+            border-color: #3b2a5d;
+            background: linear-gradient(180deg, #1b1029 0%, #110b1a 60%, #0b0711 100%);
+            color: #bdb4ff;
+            box-shadow:
+                inset 0 2px 0 #6b65ff33,
+                inset 0 -3px 0 #2b2044,
+                0 6px 0 #2a1e43,
+                0 0 18px rgba(107,101,255,0.35);
+        }
+        [data-theme="true-dark"] .help-button.mario::before { background: #2b2044; box-shadow: calc(100% - 12px) 0 0 #2b2044; }
+        [data-theme="true-dark"] .help-button.mario::after { background: linear-gradient(120deg, rgba(107,101,255,0.25) 0%, rgba(107,101,255,0) 35%); }
 
         .form-group {
             margin-bottom: 1.5rem;
@@ -3110,9 +3542,49 @@ function generateFileTranslationPage(videoId, configStr, config) {
 </head>
 <body>
     <!-- Theme Toggle Button -->
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <span class="theme-toggle-icon sun">☀️</span>
-        <span class="theme-toggle-icon moon">🌙</span>
+    <button class="theme-toggle mario" id="themeToggle" aria-label="Toggle theme">
+        <span class="theme-toggle-icon sun" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gSunB" cx="50%" cy="50%" r="60%">
+                        <stop offset="0%" stop-color="#fff4b0"/>
+                        <stop offset="60%" stop-color="#f7d13e"/>
+                        <stop offset="100%" stop-color="#e0a81e"/>
+                    </radialGradient>
+                </defs>
+                <g fill="none" stroke="#8a5a00" stroke-linecap="round">
+                    <circle cx="32" cy="32" r="13" fill="url(#gSunB)" stroke-width="3"/>
+                    <g stroke-width="3">
+                        <line x1="32" y1="6" x2="32" y2="14"/>
+                        <line x1="32" y1="50" x2="32" y2="58"/>
+                        <line x1="6" y1="32" x2="14" y2="32"/>
+                        <line x1="50" y1="32" x2="58" y2="32"/>
+                        <line x1="13" y1="13" x2="19" y2="19"/>
+                        <line x1="45" y1="45" x2="51" y2="51"/>
+                        <line x1="13" y1="51" x2="19" y2="45"/>
+                        <line x1="45" y1="19" x2="51" y2="13"/>
+                    </g>
+                </g>
+            </svg>
+        </span>
+        <span class="theme-toggle-icon moon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28" role="img">
+                <defs>
+                    <radialGradient id="gMoonB" cx="40%" cy="35%" r="65%">
+                        <stop offset="0%" stop-color="#fff7cc"/>
+                        <stop offset="70%" stop-color="#f1c93b"/>
+                        <stop offset="100%" stop-color="#d19b16"/>
+                    </radialGradient>
+                    <mask id="mMoonB">
+                        <rect width="100%" height="100%" fill="#ffffff"/>
+                        <circle cx="44" cy="22" r="18" fill="#000000"/>
+                    </mask>
+                </defs>
+                <g fill="none" stroke="#8a5a00">
+                    <circle cx="28" cy="30" r="22" fill="url(#gMoonB)" stroke-width="3" mask="url(#mMoonB)"/>
+                </g>
+            </svg>
+        </span>
     </button>
 
     <div class="container">
@@ -3155,7 +3627,7 @@ function generateFileTranslationPage(videoId, configStr, config) {
         </div>
 
         <!-- Floating Help Button -->
-        <button class="help-button" id="showInstructions" title="Show Instructions">?</button>
+        <button class="help-button mario" id="showInstructions" title="Show Instructions">?</button>
 
         <div class="card">
             <form id="translationForm">
@@ -3642,8 +4114,8 @@ function generateFileTranslationPage(videoId, configStr, config) {
                 const translatedContent = await response.text();
 
                 // Get file extension
-                const originalExt = file.name.split('.').pop().toLowerCase();
-                const downloadExt = originalExt || 'srt';
+                // Output is always SRT after translation
+                const downloadExt = 'srt';
 
                 // Create download link
                 const blob = new Blob([translatedContent], { type: 'text/plain;charset=utf-8' });
@@ -3699,11 +4171,26 @@ function generateFileTranslationPage(videoId, configStr, config) {
             setTheme(initialTheme);
 
             // Toggle theme on button click
+            function spawnCoin(x, y) {
+                try {
+                    const c = document.createElement('div');
+                    c.className = 'coin animate';
+                    c.style.left = x + 'px';
+                    c.style.top = y + 'px';
+                    document.body.appendChild(c);
+                    c.addEventListener('animationend', () => c.remove(), { once: true });
+                    setTimeout(() => { if (c && c.parentNode) c.remove(); }, 1200);
+                } catch (_) {}
+            }
+
             if (themeToggle) {
-                themeToggle.addEventListener('click', function() {
+                themeToggle.addEventListener('click', function(e) {
                     const currentTheme = html.getAttribute('data-theme');
                     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
                     setTheme(newTheme);
+                    if (e && e.clientX != null && e.clientY != null) {
+                        spawnCoin(e.clientX, e.clientY);
+                    }
                 });
             }
 
