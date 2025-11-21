@@ -5,24 +5,24 @@ All notable changes to this project will be documented in this file.
 ## SubMaker 1.3.3
 
 **New Features:**
-- Learn Mode: Adds dual-language subtitles outputs ("Learn <Language>") with configurable order for language learning
+- Learn Mode: Adds dual-language subtitles outputs ("Learn [Language]") with configurable order for language learning
 - Mobile Mode: Holds Stremio subtitles requests until the translation is finished before returning it
 
 **SubSource:**
-- Downloads: CDN-first with endpoint fallback. When available, we now fetch the provider's direct download link first (4s timeout) and fall back to the authenticated `/subtitles/{id}/download` endpoint with retries, then details?CDN as a final fallback. This significantly reduces user-facing timeouts on slow endpoints while preserving existing ZIP/VTT/SRT handling.
+- Downloads: CDN-first with endpoint fallback. When available, we now fetch the provider's direct download link first (4s timeout) and fall back to the authenticated `/subtitles/{id}/download` endpoint with retries, then details>CDN as a final fallback. This significantly reduces user-facing timeouts on slow endpoints while preserving existing ZIP/VTT/SRT handling.
 - Latency tuning: Reduced primary `/subtitles/{id}/download` retry budget to ~7s and, on the first retryable failure, launch a parallel details>CDN fetch and return the first success. This caps worst-case latency and improves reliability on slow or flaky endpoints.
 - MovieId lookup resilience: If `/movies/search` returns empty or times out, derive `movieId` via imdb-based endpoints (`/subtitles?imdb=…` then `/search?imdb=…`) as a fallback, reducing transient lookup failures and improving overall subtitle search reliability.
-- Download timeouts: Added a user-facing subtitle (0?4h) when the SubSource API times out during download, informing the user and suggesting a retry or choosing a different subtitle (similar to existing PROHIBITED_CONTENT/429/503 messages).
+- Download timeouts: Added a user-facing subtitle (0>4h) when the SubSource API times out during download, informing the user and suggesting a retry or choosing a different subtitle (similar to existing PROHIBITED_CONTENT/429/503 messages).
 
 **OpenSubtitles Auth:**
 - Detect season packs during search and extract the requested episode from season-pack ZIPs on download (parity with SubDL/SubSource).
 - Add client-side episode filtering to reduce wrong-episode results when API returns broader matches.
 - 429 handling: Rate limit responses are no longer misclassified as authentication failures; we now show a clear “rate limit (429)” subtitle and avoid caching invalid-credential blocks for retryable errors.
 - Login: Improved error classification to bubble up 429/503 so callers can present user-friendly wait-and-retry guidance instead of generic auth errors.
-- Daily quota handling: When OpenSubtitles returns 406 for exceeding the 20 downloads/24h limit, the addon now serves a single-cue error subtitle (0?4h) explaining the quota and advising to retry after the next UTC midnight (mirrors existing PROHIBITED_CONTENT/429/503 behavior).
+- Daily quota handling: When OpenSubtitles returns 406 for exceeding the 20 downloads/24h limit, the addon now serves a single-cue error subtitle (0>4h) explaining the quota and advising to retry after the next UTC midnight (mirrors existing PROHIBITED_CONTENT/429/503 behavior).
 
 **OpenSubtitles v3:**
-- 429/503 handling: V3 download errors now return a single-cue error subtitle (0?4h) with clear wait-and-retry guidance, consistent with other provider and safety messages.
+- 429/503 handling: V3 download errors now return a single-cue error subtitle (0>4h) with clear wait-and-retry guidance, consistent with other provider and safety messages.
 - Filename extraction: add a single retry after 2s when HEAD requests return 429 during filename extraction; per-attempt timeout remains 3s (processed in batches of 10).
 - Format awareness and file-upload translation: infer actual format for OpenSubtitles V3 results from filename/URL (no longer hardcoded SRT); convert uploaded VTT/ASS/SSA to SRT server-side before translation; and always download translated uploads as .srt.
 
