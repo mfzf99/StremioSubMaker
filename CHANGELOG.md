@@ -34,6 +34,7 @@ All notable changes to this project will be documented in this file.
 
 **Other Bug Fixes:**
 - Gemini safety handling: Fixed case where Gemini returned `promptFeedback.blockReason` with no candidates. These are now classified as `PROHIBITED_CONTENT`, enabling the correct error subtitle and retry behavior instead of a generic "No response candidates" error.
+- Various minor bug fixes
 
 ## SubMaker 1.3.2
 

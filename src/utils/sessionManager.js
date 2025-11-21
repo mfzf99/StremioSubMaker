@@ -1,4 +1,5 @@
 const { LRUCache } = require('lru-cache');
+const { EventEmitter } = require('events');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
@@ -98,8 +99,9 @@ async function getPublishClient() {
  * Session Manager with LRU cache and disk persistence
  * Handles user configuration sessions without requiring a database
  */
-class SessionManager {
+class SessionManager extends EventEmitter {
     constructor(options = {}) {
+        super();
         // Generate unique instance ID to prevent self-invalidation in pub/sub
         this.instanceId = crypto.randomBytes(8).toString('hex');
 
@@ -234,6 +236,7 @@ class SessionManager {
 
                     if (token && this.cache.has(token)) {
                         this.cache.delete(token);
+                        this.emit('sessionInvalidated', { token, action, source: 'pubsub' });
                         log.debug(() => `[SessionManager] Invalidated cached session from pub/sub: ${token} (action: ${action})`);
                     }
                 } catch (err) {
@@ -346,6 +349,7 @@ class SessionManager {
             log.error(() => ['[SessionManager] Failed to persist new session:', err?.message || String(err)]);
         });
 
+        this.emit('sessionCreated', { token, source: 'local' });
         log.debug(() => `[SessionManager] Session created: ${token} (in-memory: ${this.cache.size})`);
         return token;
     }
@@ -448,6 +452,7 @@ class SessionManager {
             log.error(() => ['[SessionManager] Failed to persist updated session:', err?.message || String(err)]);
         });
 
+        this.emit('sessionUpdated', { token, source: 'local' });
         log.debug(() => `[SessionManager] Session updated: ${token}`);
         return true;
     }
@@ -471,6 +476,7 @@ class SessionManager {
             }).catch(err => {
                 log.error(() => ['[SessionManager] Failed to delete session from storage:', err?.message || String(err)]);
             });
+            this.emit('sessionDeleted', { token, source: 'local' });
         }
         return existed;
     }

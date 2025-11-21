@@ -69,6 +69,15 @@ const routerCache = new LRUCache({
     updateAgeOnGet: true,
 });
 
+// Centralized helper to invalidate router cache when session configs change
+function invalidateRouterCache(token, reason = '') {
+    if (!token) return;
+    const removed = routerCache.delete(token);
+    if (removed) {
+        log.debug(() => `[RouterCache] Invalidated router for ${token}${reason ? ` (${reason})` : ''}`);
+    }
+}
+
 // Security: LRU cache for request deduplication to prevent duplicate processing (max 500 entries)
 const inFlightRequests = new LRUCache({
     max: 500, // Max 500 in-flight requests
@@ -82,6 +91,19 @@ const firstClickTracker = new LRUCache({
     ttl: 300000, // 5 minutes
     updateAgeOnGet: false,
 });
+
+// Keep router cache aligned with latest session config across updates/deletes (including Redis pub/sub events)
+if (typeof sessionManager.on === 'function') {
+    sessionManager.on('sessionUpdated', ({ token, source }) => {
+        invalidateRouterCache(token, `${source || 'local'} update`);
+    });
+    sessionManager.on('sessionDeleted', ({ token, source }) => {
+        invalidateRouterCache(token, `${source || 'local'} delete`);
+    });
+    sessionManager.on('sessionInvalidated', ({ token, action, source }) => {
+        invalidateRouterCache(token, `${action || 'invalidate'} via ${source || 'pubsub'}`);
+    });
+}
 
 // Download cache is now in src/utils/downloadCache.js (shared with translation flow)
 
@@ -1071,6 +1093,7 @@ app.post('/api/update-session/:token', sessionCreationLimiter, async (req, res) 
             // For localhost base64, just return new encoded config
             const configStr = Buffer.from(JSON.stringify(config), 'utf-8').toString('base64');
             log.debug(() => '[Session API] Localhost detected - creating new base64 token');
+            invalidateRouterCache(token, 'base64 config update');
             return res.json({
                 token: configStr,
                 type: 'base64',
@@ -1086,6 +1109,7 @@ app.post('/api/update-session/:token', sessionCreationLimiter, async (req, res) 
             // Session doesn't exist - create new one instead
             log.debug(() => `[Session API] Session not found, creating new one`);
             const newToken = sessionManager.createSession(config);
+            invalidateRouterCache(token, 'session token expired');
             return res.json({
                 token: newToken,
                 type: 'session',
@@ -1097,6 +1121,7 @@ app.post('/api/update-session/:token', sessionCreationLimiter, async (req, res) 
         }
 
         log.debug(() => `[Session API] Updated session token: ${token}`);
+        invalidateRouterCache(token, 'session update via API');
 
         res.json({
             token,

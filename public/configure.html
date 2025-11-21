@@ -946,6 +946,8 @@
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             display: inline-flex;
             align-items: center;
@@ -2055,11 +2057,20 @@
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             z-index: 9999;
             box-shadow: 0 4px 12px var(--shadow);
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         [data-theme="dark"] .theme-toggle {
             background: rgba(20, 25, 49, 0.9);
             border-color: var(--border);
+        }
+
+        .theme-toggle:focus,
+        .theme-toggle:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(8, 164, 213, 0.35), 0 8px 20px var(--shadow);
         }
 
         .theme-toggle:hover {
@@ -2075,6 +2086,9 @@
         .theme-toggle-icon {
             font-size: 1.5rem;
             transition: all 0.3s ease;
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none;
         }
 
         .theme-toggle-icon.sun {
@@ -2157,7 +2171,13 @@
             0 8px 14px rgba(0,0,0,0.3);
         }
         .theme-toggle-icon { transition: transform 0.25s ease; display: grid; place-items: center; }
-        .theme-toggle-icon svg { display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2)); }
+        .theme-toggle-icon svg {
+            display: block;
+            filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2));
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
         /* Coin effect */
         .coin { position: fixed; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; z-index: 10000; transform: translate(-50%, -50%); will-change: transform, opacity; contain: layout paint style; }
         .coin::before { content: ''; display: block; width: 100%; height: 100%; border-radius: 50%;
@@ -3000,8 +3020,8 @@
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="mobileMode">
-                            Mobile mode (beta)
-                            <span class="label-description">Holds translation requests and sends the final subtitle only when ready. Use this if you're watching on Android/iOS. No partial translations, no loading messages. Might freeze the stream until translation is ready. Flash-lite recommended.</span>
+                            Mobile Mode (beta)
+                            <span class="label-description">Holds translation requests and sends the final subtitle only when ready. Use this if you're watching on Android/iOS. No partial translations, no loading messages. Might freeze the stream until translation is ready. Flash-lite recommended. Wait 1-3 min, if it doesn't load automatically switch subtitles back and forth to load the translation.</span>
                         </label>
                     </div>
 
