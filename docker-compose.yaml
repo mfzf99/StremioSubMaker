@@ -1,7 +1,10 @@
 services:
   # Stremio SubMaker application
   submaker:
-    build: .
+    # Use pre-built image from Docker Hub (recommended)
+    image: xtremexq/submaker:latest
+    # Or build locally (comment out 'image' above and uncomment 'build' below)
+    # build: .
     container_name: submaker
     ports:
       - "${PORT:-7001}:7001"
@@ -42,6 +45,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: stremio-redis
+    # Note: To enable password authentication, uncomment the line below and set REDIS_PASSWORD in .env
+    # - Add this line after redis-server: --requirepass ${REDIS_PASSWORD}
+    # - Update healthcheck to: ["CMD", "redis-cli", "--raw", "incr", "ping"]
     command: >
       redis-server
       --maxmemory 4gb
@@ -52,6 +58,8 @@ services:
       --appendonly yes
       --appendfsync everysec
       --no-appendfsync-on-rewrite no
+      --timeout 300
+      --tcp-keepalive 60
     ports:
       - "6379:6379"
     volumes:

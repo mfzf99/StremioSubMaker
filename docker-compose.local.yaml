@@ -1,7 +1,10 @@
 # Local development setup without Redis (uses filesystem storage)
 services:
   submaker:
-    build: .
+    # Use pre-built image from Docker Hub (recommended)
+    image: xtremexq/submaker:latest
+    # Or build locally (comment out 'image' above and uncomment 'build' below)
+    # build: .
     container_name: submaker-local
     ports:
       - "${PORT:-7001}:7001"

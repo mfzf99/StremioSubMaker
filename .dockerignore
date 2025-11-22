@@ -14,7 +14,11 @@ logs
 .env
 .env.local
 .env.*.local
+
+# Encryption keys (sensitive data - prevent copying to image)
 .encryption-key
+keys/
+keys
 
 # IDE
 .vscode
