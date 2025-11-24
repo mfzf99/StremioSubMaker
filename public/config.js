@@ -3667,6 +3667,14 @@ Translate to {target_language}.`;
             errors.push('⚠️ SubSource is enabled but API key is missing');
         }
 
+        // Validate that every enabled AI provider has an API key
+        Object.entries(config.providers || {}).forEach(([providerKey, providerCfg]) => {
+            if (providerCfg?.enabled && !providerCfg.apiKey?.trim()) {
+                const label = PROVIDERS[providerKey]?.label || providerKey;
+                errors.push(`Warning: ${label} is enabled but API key is missing`);
+            }
+        });
+
         // OpenSubtitles Auth requires credentials; block save if missing
         const openSubCfg = config.subtitleProviders.opensubtitles;
         const usingOpenSubsAuth = openSubCfg?.enabled && openSubCfg.implementationType === 'auth';

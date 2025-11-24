@@ -39,6 +39,29 @@ class OpenAICompatibleProvider {
     return allowed.includes(normalized) ? normalized : undefined;
   }
 
+  isCfTranslationModel() {
+    const model = String(this.model || '').toLowerCase();
+    return (
+      model.includes('m2m100') ||
+      model.includes('nllb-200')
+    );
+  }
+
+  normalizeCfModelId() {
+    const raw = String(this.model || '').trim();
+    const lower = raw.toLowerCase();
+    // If already has @cf/ prefix, keep as-is
+    if (lower.startsWith('@cf/')) {
+      return raw;
+    }
+    // If already has meta/ prefix, add @cf/
+    if (lower.startsWith('meta/')) {
+      return `@cf/${raw}`;
+    }
+    // Default translation models live under meta namespace
+    return `@cf/meta/${raw}`;
+  }
+
   /**
    * Normalize target language name in prompt for better model guidance
    */
@@ -117,8 +140,54 @@ class OpenAICompatibleProvider {
     }
   }
 
-  buildChatRequest(userPrompt, stream = false) {
+  normalizeCfLanguage(code) {
+    const normalized = this.normalizeLanguageCode(code);
+    if (!normalized || normalized === 'detected' || normalized === 'auto') return '';
+    const base = normalized.split('-')[0];
+    return base || normalized;
+  }
+
+  buildCfTranslationRequest(subtitleContent, sourceLanguage, targetLanguage) {
+    const modelId = this.normalizeCfModelId();
+    const url = `${this.baseUrl.replace(/\/v1$/, '')}/run/${modelId}`;
+    const targetLang = this.normalizeCfLanguage(targetLanguage) || 'en';
+    const sourceLang = this.normalizeCfLanguage(sourceLanguage);
+
+    const body = {
+      text: subtitleContent || '',
+      target_lang: targetLang
+    };
+
+    if (sourceLang) {
+      body.source_lang = sourceLang;
+    }
+
+    if (this.temperature !== undefined) {
+      body.temperature = this.temperature;
+    }
+    if (this.topP !== undefined) {
+      body.top_p = this.topP;
+    }
+    if (this.maxOutputTokens) {
+      body.max_tokens = this.maxOutputTokens;
+    }
+
+    return { body, url };
+  }
+
+  buildChatRequest(userPrompt, stream = false, meta = {}) {
     const isCfRun = this.isCfWorkersRunModel();
+    const isCfTranslation = isCfRun && this.isCfTranslationModel();
+
+    if (isCfTranslation) {
+      const { body, url } = this.buildCfTranslationRequest(
+        meta.subtitleContent,
+        meta.sourceLanguage,
+        meta.targetLanguage
+      );
+      return { body, url, isCfRun: true, isCfTranslation: true };
+    }
+
     const body = isCfRun
       ? {
           prompt: userPrompt,
@@ -160,7 +229,7 @@ class OpenAICompatibleProvider {
       ? `${this.baseUrl.replace(/\/v1$/, '')}/run/${this.model}`
       : `${this.baseUrl}/chat/completions`;
 
-    return { body, url, isCfRun };
+    return { body, url, isCfRun, isCfTranslation: false };
   }
 
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {
@@ -184,7 +253,7 @@ class OpenAICompatibleProvider {
   }
 
   isCfWorkersRunModel() {
-    return this.providerName === 'cfWorkers' && /^@cf\//i.test(String(this.model || ''));
+    return this.providerName === 'cfWorkers';
   }
 
   normalizeLanguageCode(code) {
@@ -338,7 +407,15 @@ class OpenAICompatibleProvider {
 
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null) {
     const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
-    const { body, url, isCfRun } = this.buildChatRequest(userPrompt, false);
+    const { body, url, isCfRun } = this.buildChatRequest(
+      userPrompt,
+      false,
+      {
+        subtitleContent,
+        sourceLanguage,
+        targetLanguage
+      }
+    );
 
     let lastError;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -388,7 +465,25 @@ class OpenAICompatibleProvider {
 
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null) {
     const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
-    const { body, url, isCfRun } = this.buildChatRequest(userPrompt, true);
+    const request = this.buildChatRequest(
+      userPrompt,
+      true,
+      {
+        subtitleContent,
+        sourceLanguage,
+        targetLanguage
+      }
+    );
+
+    if (request.isCfTranslation) {
+      const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
+      if (typeof onPartial === 'function') {
+        try { await onPartial(full); } catch (_) {}
+      }
+      return full;
+    }
+
+    const { body, url, isCfRun } = request;
 
     const executeStream = async () => {
       const response = await axios.post(
