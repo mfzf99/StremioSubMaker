@@ -2,12 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## SubMaker v1.4.1 (unreleased)
-
-**Bug Fixes:**
-
-- Config page: prevent expanded cards from collapsing when clicking their borders so only header clicks toggle sections.
-
 ## SubMaker v1.4.0
 
 **New Features:**
