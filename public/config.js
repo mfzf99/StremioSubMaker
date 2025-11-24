@@ -411,11 +411,13 @@ Translate to {target_language}.`;
     }
 
     function isBetaModeEnabled() {
-        const betaToggle = document.getElementById('betaMode');
-        if (betaToggle) {
-            return betaToggle.checked === true;
+        // Prefer the state stored in currentConfig (set during initial load) so we
+        // don't accidentally read an unchecked toggle before the UI is populated.
+        if (currentConfig && currentConfig.betaModeEnabled !== undefined) {
+            return currentConfig.betaModeEnabled === true;
         }
-        return currentConfig?.betaModeEnabled === true;
+        const betaToggle = document.getElementById('betaMode');
+        return betaToggle ? betaToggle.checked === true : false;
     }
 
     function hasActiveMultiProviderState(config) {
@@ -1435,12 +1437,14 @@ Translate to {target_language}.`;
         // 2) Make entire collapsed card clickable to expand; when expanded, clicks in content do nothing
         document.querySelectorAll('.card').forEach(card => {
             card.addEventListener('click', (e) => {
-                const isCollapsed = card.classList.contains('collapsed');
-                const content = card.querySelector('.card-content');
                 const collapseBtn = card.querySelector('.collapse-btn');
-                if (!isCollapsed && content && content.contains(e.target)) return;
-                card.classList.toggle('collapsed');
-                if (collapseBtn) collapseBtn.classList.toggle('collapsed');
+                const isCollapsed = card.classList.contains('collapsed');
+
+                // Only handle clicks on collapsed cards; expanded cards should only collapse via the header
+                if (!isCollapsed) return;
+
+                card.classList.remove('collapsed');
+                if (collapseBtn) collapseBtn.classList.remove('collapsed');
             });
         });
 
@@ -1930,6 +1934,10 @@ Translate to {target_language}.`;
         const fields = document.getElementById(`provider-${providerKey}-fields`);
         if (fields) {
             fields.style.display = enabled ? 'grid' : 'none';
+        }
+        const loadBtn = document.querySelector(`.provider-block[data-provider="${providerKey}"] .validate-api-btn`);
+        if (loadBtn) {
+            loadBtn.style.display = enabled ? 'flex' : 'none';
         }
     }
 
