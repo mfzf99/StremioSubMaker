@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.5 (unreleased)
+
+**Bug Fixes:**
+- OpenSubtitles config migrations now preserve Auth credentials (username/password and implementation) when a new version is detected so saved logins are not cleared on upgrade while still resetting unsafe visual state.
+
+**UI Improvements:**
+- Combobox dropdown now uses fixed positioning with high z-index, repositions on scroll/resize, and cleans up on close; added printable-key typeahead/open behavior and safer disabled handling for smoother keyboard navigation.
+
 ## SubMaker v1.4.4
 
 **New Features:**

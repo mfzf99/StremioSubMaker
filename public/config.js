@@ -3289,7 +3289,7 @@ Translate to {target_language}.`;
     /**
      * Build a migrated config for a new version, preserving only whitelisted fields.
      * - Resets selected model and ALL advanced settings to defaults
-     * - Preserves: Gemini API key, subtitle sources enabled/disabled, provider API keys (if provider still exists),
+     * - Preserves: Gemini API key, subtitle sources enabled/disabled, provider API keys/credentials (if provider still exists),
      *   source/target languages, and Other Settings checkboxes (Sub Toolbox, cacheEnabled, bypassCache)
      */
     function migrateConfigForNewVersion(oldConfig) {
@@ -3311,7 +3311,7 @@ Translate to {target_language}.`;
             newConfig.subtitleProviders = { ...defaults.subtitleProviders };
 
             if (oldConfig.subtitleProviders && typeof oldConfig.subtitleProviders === 'object') {
-                // OpenSubtitles: preserve enabled only (username/password are intentionally not persisted here)
+                // OpenSubtitles: preserve enabled, implementation, and credentials
                 if (defaults.subtitleProviders.opensubtitles) {
                     const oldOpen = oldConfig.subtitleProviders.opensubtitles || {};
                     newConfig.subtitleProviders.opensubtitles.enabled = oldOpen.enabled !== false;
@@ -3319,6 +3319,9 @@ Translate to {target_language}.`;
                     if (oldOpen.implementationType) {
                         newConfig.subtitleProviders.opensubtitles.implementationType = oldOpen.implementationType;
                     }
+                    // Preserve credentials for Auth implementation
+                    newConfig.subtitleProviders.opensubtitles.username = (oldOpen.username || '').trim();
+                    newConfig.subtitleProviders.opensubtitles.password = (oldOpen.password || '').trim();
                 }
 
                 // SubDL: preserve enabled and apiKey if provider exists

@@ -25,6 +25,16 @@
         if (!select || select.dataset.comboInitialized === 'true') return null;
         if (!select.parentNode) return null;
 
+        function isPrintableKey(e) {
+            return (
+                e.key &&
+                e.key.length === 1 &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.altKey
+            );
+        }
+
         var wrapper = document.createElement('div');
         wrapper.className = 'combo';
         ['compact-select', 'target-select', 'subtitle-list'].forEach(function(cls) {
@@ -62,12 +72,60 @@
         wrapper.appendChild(button);
         wrapper.appendChild(panel);
 
+        function positionPanel() {
+            if (!wrapper.classList.contains('open')) return;
+            // Ensure the panel can be measured before placing it
+            panel.style.display = 'block';
+            panel.style.position = 'fixed';
+            panel.style.visibility = 'hidden';
+
+            var rect = button.getBoundingClientRect();
+            var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+            var viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+
+            var width = rect.width;
+            var left = rect.left;
+            // Keep panel on-screen horizontally
+            left = Math.max(8, Math.min(left, viewportWidth - width - 8));
+
+            panel.style.width = width + 'px';
+            panel.style.left = left + 'px';
+
+            var panelHeight = panel.getBoundingClientRect().height || panel.scrollHeight || 0;
+            var spaceBelow = viewportHeight - rect.bottom - 10;
+            var spaceAbove = rect.top - 10;
+            var top = rect.bottom + 6;
+
+            // Flip upward when there is more space above
+            if (panelHeight > spaceBelow && spaceAbove > spaceBelow) {
+                top = Math.max(8, rect.top - 6 - panelHeight);
+            } else {
+                top = Math.min(top, viewportHeight - panelHeight - 8);
+            }
+
+            panel.style.top = top + 'px';
+            panel.style.visibility = '';
+        }
+
+        function bindFloatingListeners() {
+            window.addEventListener('scroll', positionPanel, true);
+            window.addEventListener('resize', positionPanel, true);
+        }
+
+        function unbindFloatingListeners() {
+            window.removeEventListener('scroll', positionPanel, true);
+            window.removeEventListener('resize', positionPanel, true);
+        }
+
         function updateDisabled() {
             var disabled = select.disabled === true || select.getAttribute('disabled') === 'true';
             button.disabled = disabled;
             button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
             if (disabled) {
                 wrapper.classList.remove('open');
+                if (state) {
+                    state.close();
+                }
             }
         }
 
@@ -134,6 +192,50 @@
             }
         }
 
+        var typeBuffer = '';
+        var lastTypeTime = 0;
+        var TYPEAHEAD_RESET_MS = 800;
+
+        function focusByTypeahead(char) {
+            var now = Date.now();
+            if (now - lastTypeTime > TYPEAHEAD_RESET_MS) {
+                typeBuffer = '';
+            }
+            lastTypeTime = now;
+            typeBuffer += char.toLowerCase();
+
+            var options = Array.prototype.slice.call(panel.querySelectorAll('.combo-option'));
+            if (!options.length) return;
+
+            var startIndex = options.indexOf(document.activeElement);
+            if (startIndex < 0) {
+                startIndex = options.findIndex(function(opt) { return opt.getAttribute('aria-selected') === 'true'; });
+            }
+            if (startIndex < 0) {
+                startIndex = -1;
+            }
+
+            function findMatch(prefix) {
+                for (var i = 1; i <= options.length; i++) {
+                    var idx = (startIndex + i) % options.length;
+                    var text = (options[idx].textContent || '').trim().toLowerCase();
+                    if (text.indexOf(prefix) === 0) {
+                        return options[idx];
+                    }
+                }
+                return null;
+            }
+
+            var match = findMatch(typeBuffer);
+            if (!match && typeBuffer.length > 1) {
+                typeBuffer = typeBuffer.slice(-1);
+                match = findMatch(typeBuffer);
+            }
+            if (match) {
+                match.focus({ preventScroll: true });
+            }
+        }
+
         var state = {
             wrapper: wrapper,
             button: button,
@@ -142,6 +244,14 @@
             close: function() {
                 wrapper.classList.remove('open');
                 button.setAttribute('aria-expanded', 'false');
+                typeBuffer = '';
+                unbindFloatingListeners();
+                panel.style.display = 'none';
+                panel.style.top = '';
+                panel.style.left = '';
+                panel.style.width = '';
+                panel.style.visibility = '';
+                panel.style.position = '';
                 if (activeCombo === state) {
                     activeCombo = null;
                 }
@@ -151,6 +261,9 @@
                 closeActiveCombo(state);
                 activeCombo = state;
                 wrapper.classList.add('open');
+                panel.style.display = 'block';
+                positionPanel();
+                bindFloatingListeners();
                 button.setAttribute('aria-expanded', 'true');
                 var selected = panel.querySelector('[aria-selected="true"]');
                 var first = panel.querySelector('.combo-option');
@@ -182,6 +295,12 @@
             } else if (e.key === 'Escape' && wrapper.classList.contains('open')) {
                 e.preventDefault();
                 state.close();
+            } else if (isPrintableKey(e)) {
+                e.preventDefault();
+                if (!wrapper.classList.contains('open')) {
+                    state.open();
+                }
+                focusByTypeahead(e.key);
             }
         });
 
@@ -218,6 +337,9 @@
                     state.close();
                     button.focus({ preventScroll: true });
                 }
+            } else if (isPrintableKey(e)) {
+                e.preventDefault();
+                focusByTypeahead(e.key);
             }
         });
 
