@@ -510,7 +510,8 @@ Translate to {target_language}.`;
                     // CRITICAL: Add cache-busting timestamp to prevent cross-user config contamination
                     // Without this, aggressive browsers/proxies might cache and serve wrong user's config
                     const cacheBuster = `_cb=${Date.now()}`;
-                    const resp = await fetch(`/api/get-session/${rawConfigParam}?${cacheBuster}`, {
+                    // Request with autoRegenerate=true to get fresh config if session is missing/corrupted
+                    const resp = await fetch(`/api/get-session/${rawConfigParam}?${cacheBuster}&autoRegenerate=true`, {
                         cache: 'no-store',
                         headers: {
                             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -521,11 +522,30 @@ Translate to {target_language}.`;
                         const data = await resp.json();
                         if (data && data.config) {
                             currentConfig = data.config;
+
+                            // Check if the server regenerated a fresh token due to corruption/missing session
+                            if (data.regenerated && data.token && data.token !== rawConfigParam) {
+                                console.warn('[Config] Server regenerated config:', data.reason);
+                                console.log('[Config] Switching to fresh token:', data.token);
+
+                                // Update URL to use the regenerated token
+                                const newPath = `/configure/${data.token}`;
+                                window.history.replaceState({}, '', newPath);
+
+                                // Store the new token
+                                try { localStorage.setItem(TOKEN_KEY, data.token); } catch (_) {}
+
+                                // Show a brief warning to the user
+                                showAlert('Config was regenerated due to corruption. Please reconfigure your settings.', 'warning');
+                            } else {
+                                // Normal path - store the original token
+                                try { localStorage.setItem(TOKEN_KEY, rawConfigParam); } catch (_) {}
+                            }
                         }
-                        try { localStorage.setItem(TOKEN_KEY, rawConfigParam); } catch (_) {}
                     }
                 } catch (e) {
                     // Ignore fetch errors; fallback to urlConfig/defaults
+                    console.warn('[Config] Failed to fetch session:', e);
                 }
             }
         }
@@ -4228,6 +4248,21 @@ Translate to {target_language}.`;
     async function performFullReset() {
         showLoading(true);
         try {
+            // 0) Request a fresh default config token from the server before clearing everything
+            let freshToken = null;
+            try {
+                const response = await fetch('/api/get-session/00000000000000000000000000000000?autoRegenerate=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.regenerated && data.token) {
+                        freshToken = data.token;
+                        console.log('[Reset] Generated fresh default config token:', freshToken);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Reset] Failed to request fresh token, will reload without one:', err);
+            }
+
             // 1) Best-effort: ask SW to clear caches
             try {
                 if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -4274,10 +4309,11 @@ Translate to {target_language}.`;
                 }
             } catch (_) {}
         } finally {
-            // 7) Reload with cache-busting param to ensure a clean bootstrap
-            const basePath = window.location.pathname || '/';
+            // 7) Reload with fresh token in path (if available) and cache-busting param
+            const basePath = '/configure';
+            const tokenSegment = freshToken ? `/${freshToken}` : '';
             const qs = `?reset=${Date.now()}`;
-            window.location.replace(basePath + qs);
+            window.location.replace(basePath + tokenSegment + qs);
         }
     }
 })();

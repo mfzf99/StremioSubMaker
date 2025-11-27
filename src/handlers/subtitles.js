@@ -221,16 +221,29 @@ function buildPartialSrtWithTail(mergedSrt) {
 
 /**
  * Create an error subtitle for session token not found
+ * @param {string|null} regeneratedToken - Optional regenerated token for quick reinstall link
+ * @param {string|null} baseUrl - Optional base URL for generating reinstall link
  * @returns {string} - SRT formatted error subtitle
  */
-function createSessionTokenErrorSubtitle() {
+function createSessionTokenErrorSubtitle(regeneratedToken = null, baseUrl = null) {
+  let reinstallInstruction = 'Please reconfig and reinstall the addon.';
+
+  // If we have a regenerated token, provide a direct reinstall link
+  if (regeneratedToken && baseUrl) {
+    const reinstallUrl = `${baseUrl}/configure/${regeneratedToken}`;
+    reinstallInstruction = `Quick fix: Open this link to reinstall with fresh config:\n${reinstallUrl}`;
+  } else if (regeneratedToken) {
+    // Token available but no base URL - just mention the token
+    reinstallInstruction = `A fresh config was created. Use this token to reinstall:\n${regeneratedToken}`;
+  }
+
   const srt = `1
 00:00:00,000 --> 00:00:03,000
 Configuration Error\nYour session token was not found or has expired.
 
 2
 00:00:03,001 --> 00:00:06,000
-Please recreate your SubMaker configuration to continue using the addon.
+${reinstallInstruction}
 
 3
 00:00:06,001 --> 04:00:00,000

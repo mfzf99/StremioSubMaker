@@ -1878,9 +1878,12 @@ app.get('/api/validate-session/:token', async (req, res) => {
 });
 
 // API endpoint to fetch a stored session configuration by token (for UI prefill)
+// Supports autoRegenerate=true query param to create a fresh default session if the stored one is missing/corrupted
 app.get('/api/get-session/:token', async (req, res) => {
     try {
         const { token } = req.params;
+        const autoRegenerate = req.query.autoRegenerate === 'true';
+
         if (!token || !/^[a-f0-9]{32}$/.test(token)) {
             return res.status(400).json({ error: 'Invalid session token format' });
         }
@@ -1893,12 +1896,47 @@ app.get('/api/get-session/:token', async (req, res) => {
         const cfg = await sessionManager.getSession(token);
 
         if (!cfg) {
+            // Session not found - check if we should auto-regenerate
+            if (autoRegenerate) {
+                log.info(() => `[Session API] Session not found for ${redactToken(token)}, auto-regenerating fresh default config`);
+
+                const { config: freshConfig, token: freshToken } = regenerateDefaultConfig();
+
+                // Invalidate any cached routers for the old token
+                invalidateRouterCache(token, 'session not found, regenerated');
+
+                return res.json({
+                    config: freshConfig,
+                    token: freshToken,
+                    regenerated: true,
+                    reason: 'Session not found or expired'
+                });
+            }
+
             return res.status(404).json({ error: 'Session not found' });
         }
 
-        // Normalize before returning to keep UI consistent
+        // Check if this config resolves to empty_config_00 (corrupted payload)
         const normalized = normalizeConfig(cfg);
-        return res.json({ config: normalized, token });
+        const configHash = ensureConfigHash(normalized, token);
+
+        if (configHash === 'empty_config_00' && autoRegenerate) {
+            log.warn(() => `[Session API] Session ${redactToken(token)} resolved to empty_config_00, auto-regenerating`);
+
+            const { config: freshConfig, token: freshToken } = regenerateDefaultConfig();
+
+            // Invalidate cached router for the old token
+            invalidateRouterCache(token, 'empty_config_00 detected, regenerated');
+
+            return res.json({
+                config: freshConfig,
+                token: freshToken,
+                regenerated: true,
+                reason: 'Config payload was empty or corrupted (empty_config_00)'
+            });
+        }
+
+        return res.json({ config: normalized, token, regenerated: false });
     } catch (error) {
         log.error(() => '[Session API] Error fetching session:', error);
         res.status(500).json({ error: 'Failed to fetch session configuration' });
@@ -2277,6 +2315,28 @@ function createAddonWithConfig(config, baseUrl = '') {
     return builder;
 }
 
+/**
+ * Helper: Regenerate a fresh default config session
+ * Used when a config is corrupted (empty_config_00) or session token is missing/expired
+ * @returns {Object} { config: Object, token: string } - Fresh default config and new session token
+ */
+function regenerateDefaultConfig() {
+    const defaultConfig = getDefaultConfig();
+    // Tag with metadata so downstream handlers know this came from regeneration
+    defaultConfig.__regenerated = true;
+    defaultConfig.__regeneratedAt = new Date().toISOString();
+
+    // Create a fresh session for this default config
+    const newToken = sessionManager.createSession(defaultConfig);
+
+    log.info(() => `[ConfigRegeneration] Created fresh default config session: ${redactToken(newToken)}`);
+
+    return {
+        config: defaultConfig,
+        token: newToken
+    };
+}
+
 // Resolve config synchronously for base64, and asynchronously for session tokens
 async function resolveConfigAsync(configStr, req) {
     const localhost = isLocalhost(req);
@@ -2321,8 +2381,13 @@ async function resolveConfigAsync(configStr, req) {
         log.warn(() => `[Stremio Kai] Session token not found: ${configStr.substring(0, 8)}...`);
     }
 
-    const defaultConfig = getDefaultConfig();
+    // Session token not found - generate a fresh default config with regeneration metadata
+    log.warn(() => `[ConfigResolver] Session token not found: ${configStr.substring(0, 8)}..., generating default config with error flag`);
+
+    const { config: defaultConfig, token: regeneratedToken } = regenerateDefaultConfig();
     defaultConfig.__sessionTokenError = true;
+    defaultConfig.__regeneratedToken = regeneratedToken; // Attach the new token for reinstall links
+    defaultConfig.__originalToken = configStr; // Keep track of the failed token
     ensureConfigHash(defaultConfig, configStr);
     resolveConfigCache.set(configStr, defaultConfig);
     return defaultConfig;
@@ -2414,7 +2479,7 @@ app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validate
 });
 
 // Custom route: Serve error subtitles for config errors (BEFORE SDK router to take precedence)
-app.get('/addon/:config/error-subtitle/:errorType.srt', (req, res) => {
+app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (defense-in-depth)
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
     res.setHeader('Pragma', 'no-cache');
@@ -2424,14 +2489,21 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', (req, res) => {
         // Defense-in-depth: Prevent caching (already set by early middleware, but explicit is safer)
         setNoStore(res);
 
-        const { errorType } = req.params;
+        const { config: configStr, errorType } = req.params;
 
         log.debug(() => `[Error Subtitle] Serving error subtitle for: ${errorType}`);
+
+        // Resolve config to get regenerated token metadata (if available)
+        const config = await resolveConfigAsync(configStr, req);
+        const regeneratedToken = config.__regeneratedToken || null;
+
+        // Build base URL for reinstall links
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         let content;
         switch (errorType) {
             case 'session-token-not-found':
-                content = createSessionTokenErrorSubtitle();
+                content = createSessionTokenErrorSubtitle(regeneratedToken, baseUrl);
                 break;
             case 'opensubtitles-auth':
                 content = createOpenSubtitlesAuthErrorSubtitle();
@@ -2440,7 +2512,7 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', (req, res) => {
                 content = createOpenSubtitlesQuotaExceededSubtitle();
                 break;
             default:
-                content = createSessionTokenErrorSubtitle(); // Default to session token error
+                content = createSessionTokenErrorSubtitle(regeneratedToken, baseUrl); // Default to session token error
                 break;
         }
 
