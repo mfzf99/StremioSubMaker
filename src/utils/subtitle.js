@@ -284,13 +284,56 @@ function normalizeImdbId(id) {
 
 /**
  * Extract video info from Stremio ID
- * @param {string} id - Stremio video ID (e.g., "tt1234567:1:2" for episode, "anidb:123:1:2" for anime)
- * @returns {Object} - Parsed video info
+ * @param {string} id - Stremio video ID (e.g., "tt1234567:1:2" for episode, "anidb:123:1:2" for anime, "tmdb:1234" for TMDB)
+ * @param {string} [stremioType] - Optional Stremio meta type hint ("movie" or "series")
+ * @returns {Object|null} - Parsed video info
  */
-function parseStremioId(id) {
+function parseStremioId(id, stremioType) {
   if (!id) return null;
 
   const parts = id.split(':');
+
+  // Handle TMDB IDs (movie or TV/episode)
+  if (parts[0] === 'tmdb') {
+    const tmdbId = parts[1];
+    if (!tmdbId) return null;
+
+    // Derive media type from Stremio meta type when available
+    const tmdbMediaType = stremioType === 'series' ? 'tv'
+      : stremioType === 'movie' ? 'movie'
+      : undefined;
+
+    if (parts.length === 2) {
+      // Movie: tmdb:{id}
+      return {
+        tmdbId,
+        tmdbMediaType,
+        type: 'movie'
+      };
+    }
+
+    if (parts.length === 3) {
+      // Episode with implicit season 1: tmdb:{id}:{episode}
+      return {
+        tmdbId,
+        tmdbMediaType,
+        type: 'episode',
+        season: 1,
+        episode: parseInt(parts[2], 10)
+      };
+    }
+
+    if (parts.length === 4) {
+      // Episode with season: tmdb:{id}:{season}:{episode}
+      return {
+        tmdbId,
+        tmdbMediaType,
+        type: 'episode',
+        season: parseInt(parts[2], 10),
+        episode: parseInt(parts[3], 10)
+      };
+    }
+  }
 
   // Handle anime IDs (anidb, kitsu, mal, anilist)
   if (parts[0] && /^(anidb|kitsu|mal|anilist)/.test(parts[0])) {

@@ -73,6 +73,19 @@ function responseHasVaryStar(response) {
     return !!vary && vary.includes('*');
 }
 
+// Centralized helper to avoid crashing on responses that cannot be cached
+async function safeCachePut(cache, request, response) {
+    if (!response || responseHasNoStore(response) || responseHasVaryStar(response)) {
+        return;
+    }
+
+    try {
+        await cache.put(request, response);
+    } catch (error) {
+        // Some CDNs/proxies add Vary: * dynamically; skip caching instead of throwing
+    }
+}
+
 // Purge any previously cached sensitive API entries so legacy data isn't retained
 async function purgeSensitiveApiCacheEntries() {
     try {
@@ -115,10 +128,16 @@ self.addEventListener('install', (event) => {
             const cacheName = getVersionedCacheName(version);
 
             return caches.open(cacheName).then(cache => {
-                return cache.addAll(ASSET_URLS).catch(err => {
-                    // Don't fail install if some assets can't be cached
-                    return Promise.resolve();
-                });
+                return Promise.all(ASSET_URLS.map(async (assetUrl) => {
+                    try {
+                        const response = await fetch(assetUrl, { cache: 'no-store' });
+                        if (response && response.ok) {
+                            await safeCachePut(cache, assetUrl, response.clone());
+                        }
+                    } catch (err) {
+                        // Ignore individual asset failures to keep install resilient
+                    }
+                }));
             });
         })
     );
@@ -236,7 +255,7 @@ async function handleHtmlRequest(request) {
             // This ensures configure.html and config.js are always fresh
             if (shouldCache) {
                 const cache = await caches.open(getVersionedCacheName(APP_VERSION));
-                cache.put(request, response.clone());
+                await safeCachePut(cache, request, response.clone());
             }
         }
 
@@ -304,7 +323,7 @@ async function handleStaticAsset(request) {
             const cache = await caches.open(cacheName);
             const shouldCache = !responseHasNoStore(response) && !responseHasVaryStar(response);
             if (shouldCache) {
-                cache.put(request, response.clone());
+                await safeCachePut(cache, request, response.clone());
             }
         }
 

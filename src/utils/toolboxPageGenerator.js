@@ -2434,9 +2434,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             <span class="step-chip">Step 1</span>
             <h3>Extension & Extraction</h3>
             <p class="muted" style="margin:4px 0 0;">Ensure xSync is detected, paste a stream URL, and pull embedded subtitle tracks.</p>
-            <div class="notice warn" style="margin-top:8px;">
-              <strong>MKV caution:</strong> embedded subs can be scattered across the file. Extraction may need large fetches (hundreds of MB) and take longer; very large files or slow clients might struggle.
-            </div>
           </div>
         </div>
         <div class="step-stack">
@@ -2448,6 +2445,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           <div class="field-block">
             <label for="stream-url">Stream URL</label>
             <input type="text" id="stream-url" placeholder="Paste the video/stream URL from Stremio or your browser">
+          </div>
+          <div class="notice warn" style="margin-top:8px;">
+            <strong>MKV caution:</strong> embedded subs can be scattered across the file. Extraction may need large fetches (hundreds of MB) and take longer; very large files or slow clients might struggle.
           </div>
           <div class="mode-controls">
             <label for="extract-mode">Mode</label>

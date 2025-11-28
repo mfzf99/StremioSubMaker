@@ -6,7 +6,7 @@ const TranslationEngine = require('../services/translationEngine');
 const { createTranslationProvider } = require('../services/translationProviderFactory');
 const AniDBService = require('../services/anidb');
 const KitsuService = require('../services/kitsu');
-const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote } = require('../utils/subtitle');
+const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote, normalizeImdbId } = require('../utils/subtitle');
 const { getLanguageName, getDisplayName } = require('../utils/languages');
 const { deriveVideoHash, deriveLegacyVideoHash } = require('../utils/videoHash');
 const { LRUCache } = require('lru-cache');
@@ -21,6 +21,7 @@ const { generateCacheKeys } = require('../utils/cacheKeys');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const axios = require('axios');
 
 // Initialize storage adapter (will be set on first use)
 let storageAdapter = null;
@@ -59,6 +60,13 @@ const translationStatus = new LRUCache({
   max: 500,
   ttl: 10 * 60 * 1000, // 10 minutes
   updateAgeOnGet: false,
+});
+
+// TMDB → IMDB mapping cache to avoid repeated Cinemeta lookups
+const tmdbToImdbCache = new LRUCache({
+  max: 5000,
+  ttl: 24 * 60 * 60 * 1000, // 24 hours
+  updateAgeOnGet: true,
 });
 
 // Security: LRU cache for request deduplication for subtitle searches (max 200 entries)
@@ -130,6 +138,101 @@ function ensureInformationalSubtitleSize(srt, note = INFO_SUBTITLE_NOTE) {
   } catch (_) {
     return srt;
   }
+}
+
+// Resolve IMDB ID when only TMDB ID is available (Stremio can send tmdb:{id})
+async function resolveImdbIdFromTmdb(videoInfo, stremioType) {
+  if (!videoInfo || videoInfo.imdbId || !videoInfo.tmdbId) {
+    return videoInfo ? videoInfo.imdbId : null;
+  }
+
+  // Infer media type
+  const mediaType = (() => {
+    if (videoInfo.tmdbMediaType === 'movie' || videoInfo.tmdbMediaType === 'tv') {
+      return videoInfo.tmdbMediaType;
+    }
+    if (stremioType === 'series') return 'tv';
+    if (stremioType === 'movie') return 'movie';
+    if (videoInfo.type === 'episode' || videoInfo.type === 'anime-episode') return 'tv';
+    return 'movie';
+  })();
+
+  const cacheKey = `${videoInfo.tmdbId}:${mediaType}`;
+  if (tmdbToImdbCache.has(cacheKey)) {
+    const cached = tmdbToImdbCache.get(cacheKey);
+    if (cached) {
+      videoInfo.imdbId = cached;
+    }
+    return cached;
+  }
+
+  try {
+    log.debug(() => [`[Subtitles] Attempting TMDB → IMDB mapping`, { tmdbId: videoInfo.tmdbId, mediaType }]);
+
+    const stremioTypesToTry = (() => {
+      if (mediaType === 'movie') return ['movie'];
+      if (mediaType === 'tv') return ['series'];
+      return ['series', 'movie']; // fallback when unknown
+    })();
+
+    let mapped = null;
+    for (const stremioMetaType of stremioTypesToTry) {
+      const url = `https://v3-cinemeta.strem.io/meta/${stremioMetaType}/tmdb:${videoInfo.tmdbId}.json`;
+      try {
+        log.debug(() => [`[Subtitles] Cinemeta lookup for TMDB ${videoInfo.tmdbId} (${stremioMetaType})`, url]);
+        const response = await axios.get(url, { timeout: 8000 });
+        const imdbId = response?.data?.meta?.imdb_id || response?.data?.meta?.imdbId;
+        if (imdbId) {
+          mapped = normalizeImdbId(imdbId);
+          if (mapped) break;
+        }
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status && status !== 404) {
+          log.warn(() => [`[Subtitles] Cinemeta TMDB mapping error for ${videoInfo.tmdbId} (${stremioMetaType}):`, err.message]);
+        } else {
+          log.debug(() => [`[Subtitles] Cinemeta TMDB mapping miss for ${videoInfo.tmdbId} (${stremioMetaType})`]);
+        }
+      }
+    }
+
+    tmdbToImdbCache.set(cacheKey, mapped || null);
+
+    if (mapped) {
+      videoInfo.imdbId = mapped;
+      log.info(() => [`[Subtitles] Mapped TMDB ${mediaType} ${videoInfo.tmdbId} to IMDB ${mapped}`]);
+      return mapped;
+    }
+
+    log.warn(() => [`[Subtitles] Could not map TMDB ${mediaType} ${videoInfo.tmdbId} to IMDB`]);
+    return null;
+  } catch (error) {
+    tmdbToImdbCache.set(cacheKey, null);
+    log.error(() => [`[Subtitles] TMDB → IMDB mapping failed for ${videoInfo.tmdbId} (${mediaType}):`, error.message]);
+    return null;
+  }
+}
+
+// Ensure a usable IMDB ID exists on videoInfo (maps TMDB when needed)
+async function ensureImdbId(videoInfo, stremioType, logContext = 'Subtitles') {
+  if (!videoInfo) return null;
+
+  if (!videoInfo.imdbId && videoInfo.tmdbId) {
+    await resolveImdbIdFromTmdb(videoInfo, stremioType);
+  }
+
+  if (!videoInfo.imdbId) {
+    log.warn(() => [`[${logContext}] No IMDB ID available after parsing/mapping`, { tmdbId: videoInfo.tmdbId }]);
+    return null;
+  }
+
+  return videoInfo.imdbId;
+}
+
+function getVideoCacheIdComponent(videoInfo) {
+  if (videoInfo?.imdbId) return videoInfo.imdbId;
+  if (videoInfo?.tmdbId) return `tmdb:${videoInfo.tmdbId}`;
+  return 'unknown';
 }
 
 /**
@@ -1669,7 +1772,7 @@ function createSubtitleHandler(config) {
       }
 
       const { type, id, extra } = args;
-      const videoInfo = parseStremioId(id);
+      const videoInfo = parseStremioId(id, type);
 
       if (!videoInfo) {
         log.error(() => ['[Subtitles] Invalid video ID:', id]);
@@ -1712,6 +1815,8 @@ function createSubtitleHandler(config) {
           // Continue anyway - subtitle providers will skip search if no IMDB ID
         }
       }
+
+      await ensureImdbId(videoInfo, type, 'Subtitles');
 
       // Check if this is a session token error - if so, return error entry immediately
       if (config.__sessionTokenError === true) {
@@ -1771,10 +1876,11 @@ function createSubtitleHandler(config) {
         ? config.__configHash
         : 'default';
 
+      const cacheIdComponent = getVideoCacheIdComponent(videoInfo);
       // Create user-scoped deduplication key based on video info, languages, and config hash
       // This ensures different users (or same user with different configs) get separate cached results
       // Cache automatically purges when user changes config (different hash = different cache key)
-      const dedupKey = `subtitle-search:${videoInfo.imdbId}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${allLanguages.join(',')}:${userHash}`;
+      const dedupKey = `subtitle-search:${cacheIdComponent}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${allLanguages.join(',')}:${userHash}`;
 
       // Collect subtitles from all enabled providers with deduplication
       let openSubsAuthFailed = false; // track OpenSubtitles auth failures to append UX hint entries later
@@ -3223,6 +3329,8 @@ async function getAvailableSubtitlesForTranslation(videoId, config) {
       throw new Error('Invalid video ID');
     }
 
+    await ensureImdbId(videoInfo, null, 'Translation Selector');
+
     // Get ONLY source languages for translation selector
     // Users will configure one source language, and selector shows only those subtitles
     const sourceLanguages = config.sourceLanguages;
@@ -3240,7 +3348,8 @@ async function getAvailableSubtitlesForTranslation(videoId, config) {
     const userHash = (config && typeof config.__configHash === 'string' && config.__configHash.length > 0)
       ? config.__configHash
       : 'default';
-    const dedupKey = `translation-search:${videoInfo.imdbId}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${sourceLanguages.join(',')}:${userHash}`;
+    const cacheIdComponent = getVideoCacheIdComponent(videoInfo);
+    const dedupKey = `translation-search:${cacheIdComponent}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${sourceLanguages.join(',')}:${userHash}`;
 
     // Collect subtitles from all enabled providers with deduplication
     const subtitles = await deduplicateSearch(dedupKey, async () => {
