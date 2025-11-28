@@ -13,13 +13,12 @@ const { LRUCache } = require('lru-cache');
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const Joi = require('joi');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 
 const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, getLanguageSelectionLimits, getDefaultProviderParameters, mergeProviderParameters } = require('./src/utils/config');
 const { srtPairToWebVTT } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
-const { redactToken, sanitizeConfig } = require('./src/utils/security');
+const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getLanguageName } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
@@ -358,17 +357,6 @@ function enforceConfigPayloadSize(req, res, next) {
 function toBase64Url(input) {
     const base64 = Buffer.from(String(input), 'utf-8').toString('base64');
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-// Helper: Normalize base64/base64url strings (adds padding and converts URL-safe chars)
-function normalizeBase64Input(input) {
-    if (!input || typeof input !== 'string') return input;
-    let normalized = input.replace(/-/g, '+').replace(/_/g, '/');
-    const padding = normalized.length % 4;
-    if (padding) {
-        normalized += '='.repeat(4 - padding);
-    }
-    return normalized;
 }
 
 // Helper: force browsers/proxies to avoid caching sensitive responses

@@ -177,15 +177,13 @@ function validateEncryptedSessionPayload(sessionData) {
     return { valid: false, reason: 'missing_config' };
   }
 
-  if (config._encrypted !== true) {
-    return { valid: false, reason: 'unencrypted_config' };
-  }
-
+  const isEncrypted = config._encrypted === true;
   const hasFingerprint = typeof sessionData.fingerprint === 'string' && sessionData.fingerprint.length > 0;
   const hasIntegrity = typeof sessionData.integrity === 'string' && sessionData.integrity.length > 0;
 
   return {
-    valid: true,
+    valid: true, // Legacy/partially-upgraded payloads are allowed; callers can backfill.
+    unencryptedConfig: !isEncrypted,
     missingFingerprint: !hasFingerprint,
     missingIntegrity: !hasIntegrity
   };
@@ -617,19 +615,15 @@ class SessionManager extends EventEmitter {
         }
 
         const tokenValidation = ensureTokenMetadata(sessionData, token);
-        if (tokenValidation.status === 'missing_fingerprint') {
-            log.warn(() => `[SessionManager] Missing token fingerprint for ${redactToken(token)} - backfilling instead of deleting session`);
-            sessionData.tokenFingerprint = tokenValidation.expectedTokenFingerprint;
-            this.cache.set(token, sessionData);
-            this.dirty = true;
-
-            Promise.resolve().then(async () => {
-                const adapter = await getStorageAdapter();
-                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
-                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
-            }).catch(err => {
-                log.error(() => ['[SessionManager] Failed to persist token fingerprint backfill:', err?.message || String(err)]);
-            });
+        let needsPersist = false;
+        if (tokenValidation.status === 'missing_token') {
+            log.warn(() => `[SessionManager] Missing token metadata for ${redactToken(token)} - deleting session (cannot safely backfill)`);
+            this.deleteSession(token);
+            return null;
+        } else if (tokenValidation.status === 'missing_fingerprint') {
+            sessionData.tokenFingerprint = tokenValidation.expectedTokenFingerprint || computeTokenFingerprint(token);
+            needsPersist = true;
+            log.warn(() => `[SessionManager] Backfilled missing token fingerprint for ${redactToken(token)}`);
         } else if (tokenValidation.status !== 'ok') {
             log.warn(() => `[SessionManager] Token validation failed (${tokenValidation.status}) for ${redactToken(token)} - deleting session`);
             this.deleteSession(token);
@@ -652,11 +646,14 @@ class SessionManager extends EventEmitter {
             this.dirty = true;
         }
 
-        // Persist touch to refresh persistent TTL
+        // Persist touch to refresh persistent TTL and backfill metadata when needed
         Promise.resolve().then(async () => {
             const adapter = await getStorageAdapter();
             const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
             await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            if (needsPersist) {
+                log.debug(() => `[SessionManager] Persisted metadata backfill for ${redactToken(token)} on access`);
+            }
         }).catch(err => {
             log.error(() => ['[SessionManager] Failed to refresh session TTL on access:', err?.message || String(err)]);
         });
@@ -676,8 +673,9 @@ class SessionManager extends EventEmitter {
             decryptedConfig = result.config;
             metadata = result.metadata || {};
         } catch (err) {
-            log.warn(() => `[SessionManager] Failed to decrypt config for ${redactToken(token)} - deleting session`);
-            this.deleteSession(token);
+            log.warn(() => `[SessionManager] Failed to decrypt config for ${redactToken(token)} - keeping stored session for retry (${err?.message || err})`);
+            this.cache.delete(token);
+            this.decryptedCache.delete(token);
             return null;
         }
 
@@ -702,6 +700,29 @@ class SessionManager extends EventEmitter {
             log.warn(() => `[SessionManager] Fingerprint mismatch for ${redactToken(token)} - discarding contaminated session`);
             this.deleteSession(token);
             return null;
+        }
+        if (!sessionData.fingerprint) {
+            sessionData.fingerprint = fingerprint;
+            needsPersist = true;
+        }
+        if (!sessionData.integrity) {
+            sessionData.integrity = computeIntegrityHash(token, sessionData.fingerprint);
+            needsPersist = true;
+        }
+
+        // Upgrade legacy payloads that lack encryption marker by re-wrapping and encrypting
+        if (payloadValidation.unencryptedConfig) {
+            try {
+                const upgradedConfig = encryptUserConfig(embedSessionMetadata(decryptedConfig, token, sessionData.fingerprint));
+                sessionData.config = upgradedConfig;
+                needsPersist = true;
+                log.warn(() => `[SessionManager] Upgraded legacy unencrypted session payload for ${redactToken(token)}`);
+            } catch (upgradeErr) {
+                log.error(() => ['[SessionManager] Failed to upgrade legacy session payload:', upgradeErr?.message || String(upgradeErr)]);
+                this.cache.delete(token);
+                this.decryptedCache.delete(token);
+                return null;
+            }
         }
 
         // Defense-in-depth: ensure the stored integrity tag matches the token + fingerprint
@@ -930,15 +951,15 @@ class SessionManager extends EventEmitter {
             }
 
             const tokenValidation = ensureTokenMetadata(stored, token);
-            if (tokenValidation.status === 'missing_fingerprint') {
-                log.warn(() => `[SessionManager] loadSessionFromStorage: missing token fingerprint for ${redactToken(token)} - backfilling instead of deleting session`);
-                stored.tokenFingerprint = tokenValidation.expectedTokenFingerprint;
-                try {
-                    const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
-                    await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
-                } catch (persistErr) {
-                    log.error(() => ['[SessionManager] Failed to persist token fingerprint backfill during storage load:', persistErr?.message || String(persistErr)]);
-                }
+            let needsPersist = false;
+            if (tokenValidation.status === 'missing_token') {
+                log.warn(() => `[SessionManager] loadSessionFromStorage: missing token metadata for ${redactToken(token)} - deleting session (cannot safely backfill)`);
+                try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                return null;
+            } else if (tokenValidation.status === 'missing_fingerprint') {
+                stored.tokenFingerprint = tokenValidation.expectedTokenFingerprint || computeTokenFingerprint(token);
+                needsPersist = true;
+                log.warn(() => `[SessionManager] loadSessionFromStorage: missing token fingerprint for ${redactToken(token)} - backfilling`);
             } else if (tokenValidation.status !== 'ok') {
                 log.warn(() => `[SessionManager] loadSessionFromStorage: token validation failed (${tokenValidation.status}) for ${redactToken(token)} - deleting session`);
                 try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
@@ -952,16 +973,12 @@ class SessionManager extends EventEmitter {
                 return null;
             }
 
-            // Check if session has expired based on inactivity
+            // Refresh last accessed and cache it
             const now = Date.now();
             const inactivityAge = now - (stored.lastAccessedAt || stored.createdAt);
             if (Number.isFinite(this.maxAge) && inactivityAge > this.maxAge) {
-                log.warn(() => `[SessionManager] loadSessionFromStorage: session expired due to inactivity (${Math.round(inactivityAge / 1000 / 3600)} hours): ${token}`);
-                try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
-                return null;
+                log.warn(() => `[SessionManager] loadSessionFromStorage: session appears expired by ~${Math.round(inactivityAge / 1000 / 3600)} hours but preserving (possible clock skew): ${redactToken(token)}`);
             }
-
-            // Refresh last accessed and cache it
             stored.lastAccessedAt = now;
             this.cache.set(token, stored);
             this.decryptedCache.delete(token);
@@ -979,8 +996,7 @@ class SessionManager extends EventEmitter {
                 const { config: decryptedConfig, metadata } = stripSessionMetadata(decryptUserConfig(stored.config));
 
                 if (!decryptedConfig) {
-                    log.warn(() => `[SessionManager] loadSessionFromStorage: decrypted config was empty for token ${redactToken(token)} - deleting session`);
-                    try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                    log.warn(() => `[SessionManager] loadSessionFromStorage: decrypted config was empty for token ${redactToken(token)} - keeping session for retry`);
                     this.cache.delete(token);
                     this.decryptedCache.delete(token);
                     return null;
@@ -1022,29 +1038,42 @@ class SessionManager extends EventEmitter {
 
                 if (!stored.fingerprint) {
                     stored.fingerprint = fingerprint;
-                    this.cache.set(token, stored);
-                    try {
-                        const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
-                        await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
-                    } catch (persistErr) {
-                        log.error(() => ['[SessionManager] Failed to persist fingerprint during storage load:', persistErr?.message || String(persistErr)]);
-                    }
+                    needsPersist = true;
                 }
                 if (!stored.integrity) {
                     stored.integrity = computeIntegrityHash(token, stored.fingerprint);
+                    needsPersist = true;
+                }
+
+                // Upgrade legacy sessions that lacked encryption markers by re-encrypting with embedded metadata
+                if (payloadValidation.unencryptedConfig) {
+                    try {
+                        const upgradedConfig = encryptUserConfig(embedSessionMetadata(decryptedConfig, token, stored.fingerprint));
+                        stored.config = upgradedConfig;
+                        needsPersist = true;
+                        log.warn(() => `[SessionManager] loadSessionFromStorage: upgrading unencrypted session payload for ${redactToken(token)}`);
+                    } catch (upgradeErr) {
+                        log.error(() => ['[SessionManager] Failed to upgrade unencrypted session payload:', upgradeErr?.message || String(upgradeErr)]);
+                        this.cache.delete(token);
+                        this.decryptedCache.delete(token);
+                        return null;
+                    }
+                }
+
+                if (needsPersist) {
                     this.cache.set(token, stored);
                     try {
                         const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
                         await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
                     } catch (persistErr) {
-                        log.error(() => ['[SessionManager] Failed to persist integrity during storage load:', persistErr?.message || String(persistErr)]);
+                        log.error(() => ['[SessionManager] Failed to persist metadata upgrade during storage load:', persistErr?.message || String(persistErr)]);
                     }
                 }
+
                 this.decryptedCache.set(token, cloneConfig(decryptedConfig));
                 return cloneConfig(decryptedConfig);
             } catch (decryptErr) {
-                log.error(() => ['[SessionManager] loadSessionFromStorage: failed to decrypt config:', decryptErr?.message || String(decryptErr)]);
-                try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                log.error(() => ['[SessionManager] loadSessionFromStorage: failed to decrypt config, keeping session for retry:', decryptErr?.message || String(decryptErr)]);
                 this.cache.delete(token);
                 this.decryptedCache.delete(token);
                 return null;

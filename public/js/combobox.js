@@ -62,6 +62,8 @@
         panel.id = panelId;
         panel.setAttribute('role', 'listbox');
         panel.tabIndex = -1;
+        var panelPlaceholder = null;
+        var panelOriginalParent = null;
 
         select.classList.add('combo-hidden-select');
         select.setAttribute('aria-hidden', 'true');
@@ -175,6 +177,48 @@
             dispatchChange(select);
         }
 
+        function focusAndRevealOption(target) {
+            if (!target || typeof target.focus !== 'function') return;
+            target.focus({ preventScroll: true });
+            try {
+                target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            } catch (_) {
+                try {
+                    var optRect = target.getBoundingClientRect();
+                    var panelRect = panel.getBoundingClientRect();
+                    if (optRect.top < panelRect.top) {
+                        panel.scrollTop -= (panelRect.top - optRect.top);
+                    } else if (optRect.bottom > panelRect.bottom) {
+                        panel.scrollTop += (optRect.bottom - panelRect.bottom);
+                    }
+                } catch (e) {
+                    // ignore scroll failures
+                }
+            }
+        }
+
+        function movePanelToBody() {
+            if (panel.parentNode === document.body) return;
+            panelOriginalParent = panel.parentNode;
+            panelPlaceholder = document.createComment('combo-panel-placeholder');
+            panelOriginalParent.insertBefore(panelPlaceholder, panel);
+            document.body.appendChild(panel);
+            panel.classList.add('combo-portal');
+        }
+
+        function restorePanelToWrapper() {
+            if (panel.parentNode !== document.body) return;
+            panel.classList.remove('combo-portal');
+            if (panelPlaceholder && panelPlaceholder.parentNode) {
+                panelPlaceholder.parentNode.insertBefore(panel, panelPlaceholder);
+                panelPlaceholder.remove();
+            } else if (panelOriginalParent) {
+                panelOriginalParent.appendChild(panel);
+            }
+            panelPlaceholder = null;
+            panelOriginalParent = null;
+        }
+
         function focusOption(step) {
             var options = Array.prototype.slice.call(panel.querySelectorAll('.combo-option'));
             if (!options.length) return;
@@ -188,7 +232,7 @@
             }
             var target = options[targetIndex];
             if (target) {
-                target.focus({ preventScroll: true });
+                focusAndRevealOption(target);
             }
         }
 
@@ -232,7 +276,7 @@
                 match = findMatch(typeBuffer);
             }
             if (match) {
-                match.focus({ preventScroll: true });
+                focusAndRevealOption(match);
             }
         }
 
@@ -252,6 +296,7 @@
                 panel.style.width = '';
                 panel.style.visibility = '';
                 panel.style.position = '';
+                restorePanelToWrapper();
                 if (activeCombo === state) {
                     activeCombo = null;
                 }
@@ -261,6 +306,7 @@
                 closeActiveCombo(state);
                 activeCombo = state;
                 wrapper.classList.add('open');
+                movePanelToBody();
                 panel.style.display = 'block';
                 positionPanel();
                 bindFloatingListeners();
@@ -268,7 +314,9 @@
                 var selected = panel.querySelector('[aria-selected="true"]');
                 var first = panel.querySelector('.combo-option');
                 var target = selected || first || panel;
-                if (target && typeof target.focus === 'function') {
+                if (target && target !== panel) {
+                    focusAndRevealOption(target);
+                } else if (target && typeof target.focus === 'function') {
                     target.focus({ preventScroll: true });
                 }
             },

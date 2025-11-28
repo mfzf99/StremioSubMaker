@@ -840,6 +840,133 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             box-shadow: 0 8px 20px var(--glow);
         }
 
+        /* Reset confirmation modal (mirrors configure page UX) */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.88);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 11000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        [data-theme="dark"] .modal-overlay {
+            background: rgba(10, 14, 39, 0.8);
+        }
+
+        [data-theme="true-dark"] .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+        }
+
+        .modal {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.85) 100%),
+                var(--surface);
+            border-radius: 18px;
+            max-width: 640px;
+            width: 92%;
+            border: 1px solid var(--border);
+            box-shadow: 0 24px 72px var(--shadow), 0 0 0 1px rgba(8, 164, 213, 0.12);
+            overflow: hidden;
+            animation: slideInScale 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, rgba(8, 164, 213, 0.08) 0%, rgba(51, 185, 225, 0.08) 100%);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1.25rem;
+            right: 1.25rem;
+            width: 34px;
+            height: 34px;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+
+        .modal-close:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--danger);
+            color: var(--danger);
+            transform: rotate(90deg);
+        }
+
+        .modal-content {
+            padding: 1.5rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .modal-content p {
+            margin: 0.75rem 0;
+        }
+
+        .modal-content strong {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            background: var(--surface);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--danger);
+            border: 2px solid var(--danger);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.18);
+            box-shadow: 0 10px 28px rgba(239, 68, 68, 0.25);
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
         .help-button {
             position: fixed;
             bottom: 2rem;
@@ -1064,7 +1191,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             background: var(--surface-light);
             border: 2px solid var(--border);
             border-radius: 16px;
-            overflow: hidden;
+            overflow: visible;
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -2286,6 +2413,26 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         </div>
     </div>
 
+    <!-- Reset confirmation modal (reuse configure flow) -->
+    <div class="modal-overlay" id="resetConfirmModal" role="dialog" aria-modal="true" aria-labelledby="resetConfirmTitle">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="resetConfirmTitle">Reset File Translation</h2>
+                <div class="modal-close" id="closeResetConfirmBtn" role="button" aria-label="Close reset dialog">×</div>
+            </div>
+            <div class="modal-content">
+                <p><strong>This will reset everything for this tool:</strong></p>
+                <p>- Clear queued jobs, selections, and any downloaded results</p>
+                <p>- Remove saved preferences (themes, dismissed tips) for this page</p>
+                <p style="margin-top: 0.75rem;">You'll be reloaded on the same file translation page afterward.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelResetBtn">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmResetBtn">Reset Everything</button>
+            </div>
+        </div>
+    </div>
+
         <script src="/js/combobox.js"></script>
         <script>
         const clientConfig = ${JSON.stringify(clientConfig)};
@@ -2350,6 +2497,10 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         const queueList = document.getElementById('queueList');
         const queueSummary = document.getElementById('queueSummary');
         const resetPageBtn = document.getElementById('resetFilePageBtn');
+        const resetConfirmModal = document.getElementById('resetConfirmModal');
+        const confirmResetBtn = document.getElementById('confirmResetBtn');
+        const cancelResetBtn = document.getElementById('cancelResetBtn');
+        const closeResetConfirmBtn = document.getElementById('closeResetConfirmBtn');
 
         // Language lists
         const configuredLanguages = \`<option value="">Choose a language...</option>${languageOptions}\`;
@@ -2743,6 +2894,125 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             }
         }
 
+        function toggleBodyScrollLock(shouldLock) {
+            try {
+                const scrollbarWidth = Math.max(0, (window.innerWidth || 0) - (document.documentElement ? document.documentElement.clientWidth : 0));
+                document.body.classList.toggle('modal-open', !!shouldLock);
+                if (shouldLock && scrollbarWidth > 0) {
+                    if (document.body.dataset.prOriginal === undefined) {
+                        document.body.dataset.prOriginal = document.body.style.paddingRight || '';
+                    }
+                    document.body.style.paddingRight = scrollbarWidth + 'px';
+                } else if (!shouldLock) {
+                    if (document.body.dataset.prOriginal !== undefined) {
+                        document.body.style.paddingRight = document.body.dataset.prOriginal;
+                        delete document.body.dataset.prOriginal;
+                    } else {
+                        document.body.style.paddingRight = '';
+                    }
+                }
+            } catch (_) {}
+        }
+
+        function openResetConfirm() {
+            if (!resetConfirmModal) {
+                resetPageToDefaults();
+                return;
+            }
+            resetConfirmModal.classList.add('show');
+            resetConfirmModal.style.display = 'flex';
+            toggleBodyScrollLock(true);
+        }
+
+        function closeResetConfirm() {
+            if (!resetConfirmModal) return;
+            resetConfirmModal.classList.remove('show');
+            resetConfirmModal.style.display = 'none';
+            toggleBodyScrollLock(false);
+        }
+
+        async function performFullReset() {
+            let freshToken = null;
+            if (confirmResetBtn) {
+                confirmResetBtn.disabled = true;
+                confirmResetBtn.textContent = 'Resetting...';
+            }
+            try {
+                resetPageToDefaults();
+
+                try {
+                    const response = await fetch('/api/get-session/00000000000000000000000000000000?autoRegenerate=true');
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.regenerated && data.token) {
+                            freshToken = data.token;
+                        }
+                    }
+                } catch (_) {}
+
+                try {
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
+                    }
+                } catch (_) {}
+
+                try {
+                    if (window.caches && caches.keys) {
+                        const names = await caches.keys();
+                        await Promise.all(names.map(n => caches.delete(n).catch(() => {})));
+                    }
+                } catch (_) {}
+
+                try {
+                    if ('serviceWorker' in navigator) {
+                        const regs = await navigator.serviceWorker.getRegistrations();
+                        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+                    }
+                } catch (_) {}
+
+                try {
+                    if (window.indexedDB && indexedDB.databases) {
+                        const dbs = await indexedDB.databases();
+                        await Promise.all((dbs || []).map(db => {
+                            if (!db || !db.name) return Promise.resolve();
+                            return new Promise(res => {
+                                const req = indexedDB.deleteDatabase(db.name);
+                                req.onsuccess = req.onerror = req.onblocked = () => res();
+                            });
+                        }));
+                    }
+                } catch (_) {}
+
+                try { localStorage.clear(); } catch (_) {}
+                try { sessionStorage.clear(); } catch (_) {}
+
+                try {
+                    const parts = document.cookie.split(';');
+                    for (const part of parts) {
+                        const name = part.split('=')[0]?.trim();
+                        if (!name) continue;
+                        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+                    }
+                } catch (_) {}
+            } finally {
+                if (confirmResetBtn) {
+                    confirmResetBtn.disabled = false;
+                    confirmResetBtn.textContent = 'Reset Everything';
+                }
+                closeResetConfirm();
+
+                const params = new URLSearchParams();
+                const nextConfig = freshToken || PAGE.configStr || '';
+                if (nextConfig) params.set('config', nextConfig);
+                if (PAGE.videoId) params.set('videoId', PAGE.videoId);
+                if (PAGE.filename) params.set('filename', PAGE.filename);
+                params.set('reset', Date.now());
+
+                const nextUrl = '/file-upload' + (params.toString() ? '?' + params.toString() : '');
+                window.location.replace(nextUrl);
+            }
+        }
+
         function populateProviderSelect() {
             if (!providerSelect) return;
             const options = buildProviderOptions();
@@ -2789,7 +3059,19 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         });
 
         if (resetPageBtn) {
-            resetPageBtn.addEventListener('click', resetPageToDefaults);
+            resetPageBtn.addEventListener('click', openResetConfirm);
+        }
+
+        if (confirmResetBtn) {
+            confirmResetBtn.addEventListener('click', performFullReset);
+        }
+
+        if (cancelResetBtn) {
+            cancelResetBtn.addEventListener('click', closeResetConfirm);
+        }
+
+        if (closeResetConfirmBtn) {
+            closeResetConfirmBtn.addEventListener('click', closeResetConfirm);
         }
 
         // Translate another one button
@@ -2895,6 +3177,10 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         });
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && resetConfirmModal && resetConfirmModal.classList.contains('show')) {
+                closeResetConfirm();
+                return;
+            }
             if (e.key === 'Escape' && instructionsOverlay.classList.contains('show')) {
                 closeInstructionsModal();
             }
