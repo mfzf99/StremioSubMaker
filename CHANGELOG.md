@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## SubMaker v1.4.7
+## SubMaker v1.4.7-beta
+
+v1.4.6 hotfix.
 
 - Synced subtitle saves now reject missing/invalid session tokens with a 401 response, preventing cross-user pollution of the shared sync cache.
 - Service worker skips caching responses that advertise `Vary: *` or `no-store`, avoiding runtime cache failures and leaking user-specific assets.
