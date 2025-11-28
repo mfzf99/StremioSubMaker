@@ -56,7 +56,7 @@
         }
     }
 
-    var partialsReady = window.partialsReady || Promise.resolve();
+    var partialsReady = window.mainPartialReady || window.partialsReady || Promise.resolve();
     var partialsOrTimeout = Promise.race([
         partialsReady,
         new Promise(function(resolve) { setTimeout(resolve, PARTIALS_TIMEOUT_MS); })

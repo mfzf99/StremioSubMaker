@@ -785,15 +785,43 @@ Translate to {target_language}.`;
         } catch (_) {}
     }
 
-    function openModalById(id) {
+    function openModalById(id, opts) {
         const el = document.getElementById(id);
         if (!el) return false;
+        const peek = !!(opts && opts.peek);
+
+        el.classList.remove('peek');
+        el.style.inset = '';
+        el.style.width = '';
+        el.style.maxHeight = '';
+        el.style.alignItems = '';
+        el.style.justifyContent = '';
+        el.style.background = '';
+        el.style.bottom = '';
+        el.style.left = '';
+        el.style.right = '';
+        el.style.top = '';
+
+        if (peek) {
+            el.classList.add('peek');
+            el.style.inset = 'auto';
+            el.style.bottom = '1rem';
+            el.style.left = '1rem';
+            el.style.width = 'min(520px, 96vw)';
+            el.style.maxHeight = '72vh';
+            el.style.alignItems = 'flex-end';
+            el.style.justifyContent = 'flex-start';
+            el.style.background = 'transparent';
+            el.style.zIndex = '9000';
+        } else {
+            el.style.zIndex = '10000';
+        }
+
         // Force visible regardless of stylesheet order
         el.classList.add('show');
         el.style.display = 'flex';
-        el.style.zIndex = '10000';
-        // Lock body scroll for instructions/reset modals
-        if (id === 'instructionsModal' || id === 'resetConfirmModal') {
+        // Lock body scroll for full-screen instructions/reset modals
+        if (!peek && (id === 'instructionsModal' || id === 'resetConfirmModal')) {
             updateBodyScrollLock();
         }
         return true;
@@ -801,32 +829,27 @@ Translate to {target_language}.`;
     function showInstructionsModalIfNeeded() {
         try {
             const raw = localStorage.getItem('submaker_dont_show_instructions');
-            if (raw !== 'true') {
-                // Show then auto-minimize after ~3 seconds on first appearance
-                setTimeout(() => {
-                    if (openModalById('instructionsModal')) {
-                        // Set up interaction guards and schedule 2s auto-minimize
-                        setupInstructionsInteractionGuards();
-                        instructionsInteracted = false;
-                        if (instructionsAutoMinimizeTimer) clearTimeout(instructionsAutoMinimizeTimer);
-                        instructionsAutoMinimizeTimer = setTimeout(() => {
-                            if (!instructionsInteracted) minimizeInstructionsModal();
-                        }, 2000);
-                    }
-                }, 200);
+            if (raw === 'true') {
+                showInstructionsFab();
+                return;
             }
         } catch (_) {
-            setTimeout(() => {
-                if (openModalById('instructionsModal')) {
-                    setupInstructionsInteractionGuards();
-                    instructionsInteracted = false;
-                    if (instructionsAutoMinimizeTimer) clearTimeout(instructionsAutoMinimizeTimer);
-                    instructionsAutoMinimizeTimer = setTimeout(() => {
-                        if (!instructionsInteracted) minimizeInstructionsModal();
-                    }, 2000);
-                }
-            }, 200);
+            // Fall through to show a peek anyway
         }
+
+        const openPeek = () => {
+            if (openModalById('instructionsModal', { peek: true })) {
+                instructionsInteracted = false;
+                if (instructionsAutoMinimizeTimer) clearTimeout(instructionsAutoMinimizeTimer);
+                instructionsAutoMinimizeTimer = setTimeout(() => {
+                    minimizeInstructionsModal({ force: true });
+                }, 2600);
+            }
+        };
+
+        // Prefer to wait for main partial so the modal doesn't pop after footer-only render
+        const gate = (window.mainPartialReady || Promise.resolve());
+        gate.then(() => requestAnimationFrame(openPeek)).catch(openPeek);
     }
 
     window.closeInstructionsModal = function() {
@@ -838,7 +861,18 @@ Translate to {target_language}.`;
         const modal = document.getElementById('instructionsModal');
         if (modal) {
             modal.classList.remove('show');
+            modal.classList.remove('peek');
             modal.style.display = 'none';
+            modal.style.inset = '';
+            modal.style.width = '';
+            modal.style.maxHeight = '';
+            modal.style.alignItems = '';
+            modal.style.justifyContent = '';
+            modal.style.background = '';
+            modal.style.bottom = '';
+            modal.style.left = '';
+            modal.style.right = '';
+            modal.style.top = '';
         }
         // Update scroll lock after closing
         updateBodyScrollLock();
@@ -851,9 +885,35 @@ Translate to {target_language}.`;
     };
 
     // Animate modal to bottom-left and reveal mini FAB
-    function minimizeInstructionsModal() {
+    function minimizeInstructionsModal(opts) {
         const overlay = document.getElementById('instructionsModal');
         if (!overlay || !overlay.classList.contains('show')) return;
+        const isPeek = overlay.classList.contains('peek');
+        if (instructionsAutoMinimizeTimer) {
+            clearTimeout(instructionsAutoMinimizeTimer);
+            instructionsAutoMinimizeTimer = null;
+        }
+
+        // If we're in peek mode, just tuck it away without blocking anything
+        if (isPeek) {
+            overlay.classList.remove('show');
+            overlay.classList.remove('peek');
+            overlay.style.display = 'none';
+            overlay.style.inset = '';
+            overlay.style.width = '';
+            overlay.style.maxHeight = '';
+            overlay.style.alignItems = '';
+            overlay.style.justifyContent = '';
+            overlay.style.background = '';
+            overlay.style.bottom = '';
+            overlay.style.left = '';
+            overlay.style.right = '';
+            overlay.style.top = '';
+            requestAnimationFrame(() => {
+                showInstructionsFab();
+            });
+            return;
+        }
 
         // Apply fly-out animation; then hide overlay and show FAB
         overlay.classList.add('fly-out');
@@ -996,8 +1056,9 @@ Translate to {target_language}.`;
     document.addEventListener('click', function(e) {
         const target = e.target;
         const overlay = target && target.closest ? target.closest('.modal-overlay') : null;
+        const clickedInsideModal = target && target.closest ? target.closest('.modal') : null;
 
-        if (overlay) {
+        if (overlay && !clickedInsideModal) {
             if (overlay.id === 'instructionsModal') {
                 closeInstructionsModal();
                 return;
@@ -1028,6 +1089,10 @@ Translate to {target_language}.`;
         const fab = target && target.closest ? target.closest('#configHelp, #instructionsFab') : null;
         if (fab) {
             hideInstructionsFab();
+            if (instructionsAutoMinimizeTimer) {
+                clearTimeout(instructionsAutoMinimizeTimer);
+                instructionsAutoMinimizeTimer = null;
+            }
             openModalById('instructionsModal');
             return;
         }

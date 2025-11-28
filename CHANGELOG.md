@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## SubMaker v1.4.8-beta
 
+- Instructions modal now appears as a bottom-left peek after the main content loads, auto-tucks into the FAB after ~2.6s, and respects the "don't show again" preference while keeping body scroll unlocked.
+- Modal overlays no longer close when clicking inside the modal content, and reopening via the help FAB clears any pending auto-minimize timer.
+- Partials loader prioritizes the main partial before overlays/footers and exposes `mainPartialReady` for scripts that need core content ready (e.g., instructions peek gate); config loader now waits on that signal.
 - Combobox dropdown panels now portal to the document body so they no longer get clipped or stuck behind neighboring cards/sections.
 - File-upload translation options allow overflow again, so "Timestamps Strategy" and similar selects render fully instead of being truncated inside the accordion.
 - File-translation reset modal now just clears page selections/preferences and reloads the page—no cache wipes or token regeneration.

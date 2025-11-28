@@ -1499,6 +1499,27 @@
             display: flex;
         }
 
+        .modal-overlay.peek {
+            inset: auto;
+            bottom: 1rem;
+            left: 1rem;
+            right: auto;
+            top: auto;
+            width: min(520px, 96vw);
+            max-height: 72vh;
+            align-items: flex-end;
+            justify-content: flex-start;
+            background: none;
+            animation: none;
+        }
+
+        .modal-overlay.peek .modal {
+            width: 100%;
+            max-width: 100%;
+            box-shadow: 0 16px 44px var(--shadow);
+            animation: peekIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
         /* Fly-out animation for instructions modal */
         .modal-overlay.fly-out {
             animation: fadeOut 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -1544,6 +1565,10 @@
         @keyframes fadeOut {
             from { opacity: 1; }
             to { opacity: 0; }
+        }
+        @keyframes peekIn {
+            from { transform: translateY(8px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         @keyframes flyToCorner {
             0%   { transform: translate(0, 0) scale(1);    opacity: 1; }
