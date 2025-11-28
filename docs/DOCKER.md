@@ -71,7 +71,9 @@ REDIS_PORT=6379
 # To enable password authentication, also update the Redis command in docker-compose.yaml
 REDIS_PASSWORD=
 REDIS_DB=0
-REDIS_KEY_PREFIX=stremio
+# Keep the trailing colon and use the exact same value across all pods/instances
+# to share the same cache/session namespace.
+REDIS_KEY_PREFIX=stremio:
 
 # API Keys
 OPENSUBTITLES_API_KEY=your_opensubtitles_key

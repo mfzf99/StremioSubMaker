@@ -31,6 +31,55 @@ const CACHE_PREFIX = 'submaker';
 const getVersionedCacheName = (version) => `${CACHE_PREFIX}-static-v${version}`;
 const API_CACHE_NAME = `${CACHE_PREFIX}-api-v1`;
 
+// Detect whether an API request is sensitive (contains tokens/config/session identifiers)
+function isSensitiveApiRequest(urlLike) {
+    const url = urlLike instanceof URL ? urlLike : new URL(urlLike, self.location.origin);
+
+    return [
+        '/api/get-session',
+        '/api/update-session',
+        '/api/create-session'
+    ].some(path => url.pathname.startsWith(path)) ||
+        url.searchParams.has('config') ||
+        url.searchParams.has('token') ||
+        url.pathname.includes('session');
+}
+
+// Honor server cache directives (no-store/private) when deciding to cache
+function responseHasNoStore(response) {
+    const cacheControl = (response.headers.get('Cache-Control') || '').toLowerCase();
+    const pragma = (response.headers.get('Pragma') || '').toLowerCase();
+    const surrogate = (response.headers.get('Surrogate-Control') || '').toLowerCase();
+
+    return cacheControl.includes('no-store') ||
+        cacheControl.includes('no-cache') ||
+        cacheControl.includes('private') ||
+        pragma.includes('no-cache') ||
+        surrogate.includes('no-store');
+}
+
+// Purge any previously cached sensitive API entries so legacy data isn't retained
+async function purgeSensitiveApiCacheEntries() {
+    try {
+        const cache = await caches.open(API_CACHE_NAME);
+        const requests = await cache.keys();
+        await Promise.all(requests.map(async (req) => {
+            const url = new URL(req.url);
+
+            if (isSensitiveApiRequest(url)) {
+                await cache.delete(req);
+                return;
+            }
+
+            const cachedResp = await cache.match(req);
+            if (cachedResp && responseHasNoStore(cachedResp)) {
+                await cache.delete(req);
+            }
+        }));
+    } catch (error) {
+    }
+}
+
 // Assets to cache on install
 const ASSET_URLS = [
     '/',
@@ -69,30 +118,30 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
 
     event.waitUntil(
-        getAppVersion().then(currentVersion => {
+        (async () => {
+            const currentVersion = await getAppVersion();
             APP_VERSION = currentVersion;
             const currentCacheName = getVersionedCacheName(currentVersion);
 
             // Delete old version caches
-            return caches.keys().then(cacheNames => {
-
-                return Promise.all(
-                    cacheNames.map(cacheName => {
-                        // Keep current version cache and API cache
-                        if (cacheName === currentCacheName || cacheName === API_CACHE_NAME) {
-                            return Promise.resolve();
-                        }
-
-                        // Delete old version caches
-                        if (cacheName.startsWith(CACHE_PREFIX)) {
-                            return caches.delete(cacheName);
-                        }
-
+            const cacheNames = await caches.keys();
+            await Promise.all(
+                cacheNames.map(cacheName => {
+                    // Keep current version cache and API cache
+                    if (cacheName === currentCacheName || cacheName === API_CACHE_NAME) {
                         return Promise.resolve();
-                    })
-                );
-            });
-        })
+                    }
+
+                    // Delete old version caches
+                    if (cacheName.startsWith(CACHE_PREFIX)) {
+                        return caches.delete(cacheName);
+                    }
+
+                    return Promise.resolve();
+                })
+            );
+            await purgeSensitiveApiCacheEntries();
+        })()
     );
 
     // Claim clients immediately
@@ -132,22 +181,24 @@ self.addEventListener('fetch', (event) => {
  */
 async function handleApiRequest(request) {
     const isGetRequest = request.method === 'GET';
+    const url = new URL(request.url);
+    const isSensitiveRequest = isSensitiveApiRequest(url);
 
     try {
-        // Try to fetch from network
-        const response = await fetch(request);
+        // Always prefer fresh network data
+        const fetchOptions = isSensitiveRequest ? { cache: 'no-store' } : undefined;
+        const response = await fetch(request, fetchOptions);
 
-        // Cache successful API responses (except session-related)
-        // Cache API responses only for GET requests; Cache API does not support PUT/POST/DELETE.
-        if (response.ok && isGetRequest && !request.url.includes('session')) {
+        // Cache successful API responses (GET only) when they are safe to store
+        if (response.ok && isGetRequest && !isSensitiveRequest && !responseHasNoStore(response)) {
             const cache = await caches.open(API_CACHE_NAME);
             cache.put(request, response.clone());
         }
 
         return response;
     } catch (error) {
-        // Network failed, try cache
-        if (isGetRequest) {
+        // Network failed, try cache only when the request is safe to read from cache
+        if (isGetRequest && !isSensitiveRequest) {
             const cached = await caches.match(request);
             if (cached) {
                 return cached;

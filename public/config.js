@@ -368,6 +368,7 @@ Translate to {target_language}.`;
     const CACHE_KEY = 'submaker_config_cache';
     const CACHE_EXPIRY_KEY = 'submaker_config_cache_expiry';
     const CACHE_VERSION_KEY = 'submaker_config_cache_version';  // Tracks version when cache was saved
+    const CACHE_TOKEN_KEY = 'submaker_config_cache_token'; // Scopes cached config to the session token it was created for
     const TOKEN_KEY = 'submaker_session_token';
 
     // Visual state cache keys (these should be cleared on version changes)
@@ -419,6 +420,7 @@ Translate to {target_language}.`;
         const token = localStorage.getItem(TOKEN_KEY);
         if (token && !isValidConfigToken(token)) {
             localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(CACHE_TOKEN_KEY);
             return true;
         }
         return false;
@@ -486,14 +488,22 @@ Translate to {target_language}.`;
             configForm.setAttribute('novalidate', 'novalidate');
         }
 
-        // Priority: cached config > URL config > default config
-        // This ensures browser cache is respected unless explicitly shared via URL
-        // NOTE: loadConfigFromCache is now async due to version validation
-        const cachedConfig = await loadConfigFromCache();
         const params = new URLSearchParams(window.location.search);
         const rawConfigParam = params.get('config');
         const hasExplicitUrlConfig = params.has('config');
         const urlConfig = parseConfigFromUrl();
+
+        // Identify which session token should scope any cached config usage
+        const urlSessionToken = isValidSessionToken(rawConfigParam) ? rawConfigParam : null;
+        const storedToken = localStorage.getItem(TOKEN_KEY);
+        const persistentSessionToken = isValidSessionToken(storedToken) ? storedToken : null;
+        const intendedToken = urlSessionToken || persistentSessionToken || null;
+
+        // Priority: cached config (for this token) > URL config > default config
+        // This ensures browser cache is respected unless explicitly shared via URL while
+        // preventing cached configs from leaking across different session tokens.
+        // NOTE: loadConfigFromCache is now async due to version validation
+        const cachedConfig = await loadConfigFromCache(intendedToken);
         // Determine if this is the user's first config run
         isFirstRun = !cachedConfig && !hasExplicitUrlConfig;
 
@@ -3262,11 +3272,18 @@ Translate to {target_language}.`;
     /**
      * Save configuration to localStorage with version tracking
      */
-    function saveConfigToCache(config) {
+    function saveConfigToCache(config, tokenForCache) {
         try {
             // Save config and timestamp
             localStorage.setItem(CACHE_KEY, JSON.stringify(config));
             localStorage.setItem(CACHE_EXPIRY_KEY, Date.now().toString());
+
+            // Scope cache to the session token to prevent cross-user bleed when swapping configs
+            if (isValidSessionToken(tokenForCache)) {
+                localStorage.setItem(CACHE_TOKEN_KEY, tokenForCache);
+            } else {
+                localStorage.removeItem(CACHE_TOKEN_KEY);
+            }
 
             // Get and save current app version
             getCurrentAppVersion().then(version => {
@@ -3414,10 +3431,17 @@ Translate to {target_language}.`;
      * Load configuration from localStorage with version validation
      * @returns {Object|null} The cached configuration or null if not found/invalid/stale
      */
-    async function loadConfigFromCache() {
+    async function loadConfigFromCache(expectedToken) {
         try {
             const cachedConfig = localStorage.getItem(CACHE_KEY);
             if (!cachedConfig) {
+                return null;
+            }
+
+            // Ensure cached config belongs to the same session token we're trying to use
+            const cachedToken = localStorage.getItem(CACHE_TOKEN_KEY);
+            if ((cachedToken || expectedToken) && (!cachedToken || !expectedToken || cachedToken !== expectedToken)) {
+                clearConfigCache();
                 return null;
             }
 
@@ -3465,6 +3489,7 @@ Translate to {target_language}.`;
             localStorage.removeItem(CACHE_KEY);
             localStorage.removeItem(CACHE_EXPIRY_KEY);
             localStorage.removeItem(CACHE_VERSION_KEY);
+            localStorage.removeItem(CACHE_TOKEN_KEY);
         } catch (error) {
             // Failed to clear cache
         }
@@ -4116,7 +4141,7 @@ Translate to {target_language}.`;
         currentConfig = config;
 
         // Cache the configuration to localStorage
-        saveConfigToCache(config);
+        saveConfigToCache(config, configToken);
         updateToolboxLauncherVisibility(configToken);
 
         // Enable install and copy buttons

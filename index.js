@@ -285,7 +285,13 @@ function ensureConfigHash(config, fallbackSeed = '') {
     if (typeof config.__configHash === 'string' && config.__configHash.length > 0) {
         return config.__configHash;
     }
-    const hash = computeConfigHash(config || fallbackSeed || 'empty_config_00');
+    let hash = computeConfigHash(config || fallbackSeed || 'empty_config_00');
+
+    // If the payload normalized to an empty/invalid hash (e.g., corrupted session),
+    // re-hash with a token-specific seed so different users never collide.
+    if (hash === 'empty_config_00' && fallbackSeed) {
+        hash = computeConfigHash(`fallback:${fallbackSeed}`);
+    }
     config.__configHash = hash;
     return hash;
 }
@@ -416,6 +422,7 @@ const allowedOriginsNormalized = Array.from(new Set([
     ...allowedOrigins.map(normalizeOrigin),
     ...DEFAULT_STREMIO_WEB_ORIGINS.map(normalizeOrigin)
 ]));
+const STREMIO_ORIGIN_WILDCARD_SUFFIXES = ['.strem.io'];
 const STREMIO_ORIGIN_PREFIXES = ['stremio://', 'capacitor://', 'app://', 'file://'];
 const STREMIO_ORIGIN_EQUALS = ['capacitor://localhost', 'app://strem.io'];
 const DEFAULT_STREMIO_UA_HINTS = [
@@ -432,10 +439,29 @@ function isStremioUserAgent(userAgent) {
     const ua = userAgent.toLowerCase();
     return STREMIO_USER_AGENT_HINTS.some(hint => ua.includes(hint));
 }
+function extractHostnameFromOrigin(origin) {
+    if (!origin) return '';
+    const normalized = normalizeOrigin(origin);
+    try {
+        return (new URL(normalized).hostname || '').toLowerCase();
+    } catch (_) {
+        // Fallback parsing for origins without protocol or with non-standard schemes
+        const withoutScheme = normalized.replace(/^[a-z]+:\/\//i, '');
+        const hostPort = withoutScheme.split('/')[0] || '';
+        return hostPort.split(':')[0].toLowerCase();
+    }
+}
+function isStremioWildcardDomain(origin) {
+    const host = extractHostnameFromOrigin(origin);
+    if (!host) return false;
+    return STREMIO_ORIGIN_WILDCARD_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+}
 function isStremioOrigin(origin) {
     if (!origin) return false;
     const normalized = normalizeOrigin(origin);
     if (STREMIO_ORIGIN_EQUALS.includes(normalized)) return true;
+    // Accept any official Stremio-hosted subdomain (e.g., addon edge hosts)
+    if (isStremioWildcardDomain(origin)) return true;
     // Allow official Stremio web origins (desktop/mobile shells render web views from these hosts)
     if (DEFAULT_STREMIO_WEB_ORIGINS.some(o => normalized === normalizeOrigin(o) || normalized.startsWith(`${normalizeOrigin(o)}/`))) {
         return true;

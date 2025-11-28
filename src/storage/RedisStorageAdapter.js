@@ -159,6 +159,9 @@ class RedisStorageAdapter extends StorageAdapter {
         setTimeout(() => reject(new Error('Redis connection timeout')), 10000);
       });
 
+      // Self-heal legacy double-prefixed keys to prevent invisible sessions/configs
+      await this._migrateDoublePrefixedKeys();
+
       this.initialized = true;
       log.debug(() => 'Redis storage adapter initialized successfully');
     } catch (error) {
@@ -170,6 +173,79 @@ class RedisStorageAdapter extends StorageAdapter {
         log.error(() => 'Failed to initialize Redis storage adapter:', error.message);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Migrate legacy double-prefixed keys (e.g., stremio:stremio:session:token)
+   * to the corrected single-prefix format. This prevents invisible sessions
+   * that can cause user configs (languages, API keys) to appear to "randomly"
+   * change when Redis is used with a keyPrefix.
+   *
+   * Migration is capped to avoid long scans on large datasets.
+   * @private
+   */
+  async _migrateDoublePrefixedKeys() {
+    const prefix = this.options.keyPrefix || '';
+    // Only applicable when a non-empty prefix is set
+    if (!prefix) return;
+
+    const doublePrefix = `${prefix}${prefix}`;
+    const scanPattern = `${doublePrefix}*`;
+    let cursor = '0';
+    let migrated = 0;
+    const MIGRATION_LIMIT = 500; // safety cap
+
+    // Use a raw client without keyPrefix to avoid re-prefixing returned keys
+    const migrationClient = this.client.duplicate({ keyPrefix: '' });
+
+    try {
+      await migrationClient.connect();
+    } catch (err) {
+      log.error(() => ['[RedisStorage] Double-prefix migration skipped: could not open raw client:', err.message]);
+      return;
+    }
+
+    try {
+      do {
+        const [newCursor, keys] = await migrationClient.scan(cursor, 'MATCH', scanPattern, 'COUNT', 100);
+        cursor = newCursor;
+
+        for (const key of keys) {
+          if (migrated >= MIGRATION_LIMIT) {
+            cursor = '0'; // break outer loop
+            break;
+          }
+
+          // Only replace the leading double prefix to avoid mangling keys that include it elsewhere
+          const fixedKey = key.startsWith(doublePrefix)
+            ? `${prefix}${key.slice(doublePrefix.length)}`
+            : key;
+
+          if (fixedKey === key) continue; // Nothing to fix
+
+          try {
+            const exists = await migrationClient.exists(fixedKey);
+            if (exists) {
+              log.warn(() => `[RedisStorage] Skipping double-prefix migration for ${key} -> ${fixedKey}: target exists`);
+              continue;
+            }
+
+            await migrationClient.rename(key, fixedKey);
+            migrated++;
+          } catch (err) {
+            log.error(() => [`[RedisStorage] Failed to migrate key ${key} -> ${fixedKey}:`, err.message]);
+          }
+        }
+      } while (cursor !== '0');
+
+      if (migrated > 0) {
+        log.warn(() => `[RedisStorage] Migrated ${migrated} double-prefixed Redis key(s) to single-prefix format`);
+      }
+    } catch (err) {
+      log.error(() => ['[RedisStorage] Double-prefix migration failed:', err.message]);
+    } finally {
+      migrationClient.disconnect();
     }
   }
 

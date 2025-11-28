@@ -13,6 +13,18 @@ const { redactToken } = require('./security');
 // Cache decrypted configs briefly to avoid redundant decryption on rapid navigation
 const DECRYPTED_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// Lightweight integrity fingerprint stored alongside each session
+// Helps detect cross-session contamination when storage returns an unexpected payload
+function computeConfigFingerprint(config) {
+  try {
+    const serialized = JSON.stringify(config || {});
+    return crypto.createHash('sha256').update(serialized).digest('hex').slice(0, 16);
+  } catch (err) {
+    log.warn(() => ['[SessionManager] Failed to compute config fingerprint:', err?.message || String(err)]);
+    return 'fingerprint_error';
+  }
+}
+
 // Safe clone helper to prevent consumers from mutating cached objects
 function cloneConfig(config) {
   if (!config || typeof config !== 'object') {
@@ -30,6 +42,25 @@ function cloneConfig(config) {
   } catch (_) {
     return config;
   }
+}
+
+// Validate stored session metadata against the requested token to detect cross-user bleed
+// Returns an object describing whether metadata was backfilled or if a mismatch occurred
+function ensureTokenMetadata(sessionData, token) {
+  if (!sessionData) {
+    return { status: 'invalid' };
+  }
+
+  if (sessionData.token && sessionData.token !== token) {
+    return { status: 'mismatch', storedToken: sessionData.token };
+  }
+
+  if (!sessionData.token) {
+    sessionData.token = token;
+    return { status: 'backfilled' };
+  }
+
+  return { status: 'ok' };
 }
 
 // Storage adapter (lazy loaded)
@@ -362,10 +393,14 @@ class SessionManager extends EventEmitter {
         // Encrypt sensitive fields in config before storing
         const encryptedConfig = encryptUserConfig(config);
 
+        const fingerprint = computeConfigFingerprint(config);
+
         const sessionData = {
+            token,
             config: encryptedConfig,
             createdAt: Date.now(),
-            lastAccessedAt: Date.now()
+            lastAccessedAt: Date.now(),
+            fingerprint
         };
 
         this.cache.set(token, sessionData);
@@ -408,6 +443,24 @@ class SessionManager extends EventEmitter {
             return loadedConfig;
         }
 
+        const tokenValidation = ensureTokenMetadata(sessionData, token);
+        if (tokenValidation.status === 'mismatch') {
+            log.warn(() => `[SessionManager] Token mismatch detected for ${redactToken(token)} (stored token ${redactToken(tokenValidation.storedToken || '')}) - deleting session`);
+            this.deleteSession(token);
+            return null;
+        }
+        if (tokenValidation.status === 'backfilled') {
+            this.cache.set(token, sessionData);
+            this.dirty = true;
+            Promise.resolve().then(async () => {
+                const adapter = await getStorageAdapter();
+                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            }).catch(err => {
+                log.error(() => ['[SessionManager] Failed to persist token backfill on access:', err?.message || String(err)]);
+            });
+        }
+
         // Update last accessed time
         sessionData.lastAccessedAt = Date.now();
         this.cache.set(token, sessionData);
@@ -433,7 +486,42 @@ class SessionManager extends EventEmitter {
         }
 
         // Decrypt sensitive fields in config before returning
-        const decryptedConfig = decryptUserConfig(sessionData.config);
+        let decryptedConfig = null;
+        try {
+            decryptedConfig = decryptUserConfig(sessionData.config);
+        } catch (err) {
+            log.warn(() => `[SessionManager] Failed to decrypt config for ${redactToken(token)} - deleting session`);
+            this.deleteSession(token);
+            return null;
+        }
+
+        if (!decryptedConfig) {
+            log.warn(() => `[SessionManager] Decrypted config was empty for ${redactToken(token)} - deleting session`);
+            this.deleteSession(token);
+            return null;
+        }
+        const fingerprint = computeConfigFingerprint(decryptedConfig);
+        if (sessionData.fingerprint && fingerprint !== sessionData.fingerprint) {
+            log.warn(() => `[SessionManager] Fingerprint mismatch for ${redactToken(token)} - discarding contaminated session`);
+            this.deleteSession(token);
+            return null;
+        }
+
+        // Backfill missing fingerprint for legacy sessions
+        if (!sessionData.fingerprint) {
+            sessionData.fingerprint = fingerprint;
+            this.cache.set(token, sessionData);
+            this.dirty = true;
+
+            Promise.resolve().then(async () => {
+                const adapter = await getStorageAdapter();
+                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            }).catch(err => {
+                log.error(() => ['[SessionManager] Failed to persist fingerprint backfill:', err?.message || String(err)]);
+            });
+        }
+
         this.decryptedCache.set(token, cloneConfig(decryptedConfig));
 
         return cloneConfig(decryptedConfig);
@@ -471,12 +559,32 @@ class SessionManager extends EventEmitter {
             sessionData = this.cache.get(token);
         }
 
+        const tokenValidation = ensureTokenMetadata(sessionData, token);
+        if (tokenValidation.status === 'mismatch') {
+            log.warn(() => `[SessionManager] Token mismatch during update for ${redactToken(token)} (stored token ${redactToken(tokenValidation.storedToken || '')}) - deleting session`);
+            this.deleteSession(token);
+            return false;
+        }
+        if (tokenValidation.status === 'backfilled') {
+            this.cache.set(token, sessionData);
+            this.dirty = true;
+            Promise.resolve().then(async () => {
+                const adapter = await getStorageAdapter();
+                const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            }).catch(err => {
+                log.error(() => ['[SessionManager] Failed to persist token backfill on update:', err?.message || String(err)]);
+            });
+        }
+
         // Encrypt sensitive fields in config before storing
         const encryptedConfig = encryptUserConfig(config);
+        const fingerprint = computeConfigFingerprint(config);
 
         // Update config but keep creation time
         sessionData.config = encryptedConfig;
         sessionData.lastAccessedAt = Date.now();
+        sessionData.fingerprint = fingerprint;
 
         this.cache.set(token, sessionData);
         this.decryptedCache.set(token, cloneConfig(config));
@@ -586,6 +694,21 @@ class SessionManager extends EventEmitter {
                 return null;
             }
 
+            const tokenValidation = ensureTokenMetadata(stored, token);
+            if (tokenValidation.status === 'mismatch') {
+                log.warn(() => `[SessionManager] loadSessionFromStorage: token mismatch for ${redactToken(token)} (stored token ${redactToken(tokenValidation.storedToken || '')}) - deleting session`);
+                try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                return null;
+            }
+            if (tokenValidation.status === 'backfilled') {
+                try {
+                    const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                    await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+                } catch (persistErr) {
+                    log.error(() => ['[SessionManager] Failed to persist token backfill during storage load:', persistErr?.message || String(persistErr)]);
+                }
+            }
+
             // Check if session has expired based on inactivity
             const now = Date.now();
             const inactivityAge = now - (stored.lastAccessedAt || stored.createdAt);
@@ -611,13 +734,40 @@ class SessionManager extends EventEmitter {
             // Decrypt and return config
             try {
                 const decryptedConfig = decryptUserConfig(stored.config);
+                const fingerprint = computeConfigFingerprint(decryptedConfig);
+
+                if (stored.fingerprint && fingerprint !== stored.fingerprint) {
+                    log.warn(() => `[SessionManager] Fingerprint mismatch on storage load for ${redactToken(token)} - removing corrupted session`);
+                    try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                    this.cache.delete(token);
+                    this.decryptedCache.delete(token);
+                    return null;
+                }
+
+                if (!stored.fingerprint) {
+                    stored.fingerprint = fingerprint;
+                    this.cache.set(token, stored);
+                    try {
+                        const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                        await adapter.set(token, stored, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+                    } catch (persistErr) {
+                        log.error(() => ['[SessionManager] Failed to persist fingerprint during storage load:', persistErr?.message || String(persistErr)]);
+                    }
+                }
                 if (!decryptedConfig) {
-                    log.warn(() => `[SessionManager] loadSessionFromStorage: decryption returned null/falsy config for token: ${token}`);
+                    log.warn(() => `[SessionManager] loadSessionFromStorage: decrypted config was empty for token ${redactToken(token)} - deleting session`);
+                    try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                    this.cache.delete(token);
+                    this.decryptedCache.delete(token);
+                    return null;
                 }
                 this.decryptedCache.set(token, cloneConfig(decryptedConfig));
                 return cloneConfig(decryptedConfig);
             } catch (decryptErr) {
                 log.error(() => ['[SessionManager] loadSessionFromStorage: failed to decrypt config:', decryptErr?.message || String(decryptErr)]);
+                try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                this.cache.delete(token);
+                this.decryptedCache.delete(token);
                 return null;
             }
         } catch (err) {
@@ -712,6 +862,13 @@ class SessionManager extends EventEmitter {
                 const sessionData = await adapter.get(token, StorageAdapter.CACHE_TYPES.SESSION);
                 if (!sessionData) continue;
 
+                const tokenValidation = ensureTokenMetadata(sessionData, token);
+                if (tokenValidation.status === 'mismatch') {
+                    log.warn(() => `[SessionManager] loadFromDisk: token mismatch for ${redactToken(token)} (stored token ${redactToken(tokenValidation.storedToken || '')}) - deleting session`);
+                    try { await adapter.delete(token, StorageAdapter.CACHE_TYPES.SESSION); } catch (_) {}
+                    continue;
+                }
+
                 const inactivityAge = now - (sessionData.lastAccessedAt || sessionData.createdAt);
                 if (Number.isFinite(this.maxAge) && inactivityAge > this.maxAge) {
                     expiredCount++;
@@ -735,6 +892,14 @@ class SessionManager extends EventEmitter {
                 }
 
                 this.cache.set(token, sessionData);
+                if (tokenValidation.status === 'backfilled') {
+                    try {
+                        const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
+                        await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+                    } catch (persistErr) {
+                        log.error(() => ['[SessionManager] Failed to persist token backfill during preload:', persistErr?.message || String(persistErr)]);
+                    }
+                }
                 loadedCount++;
             }
 
