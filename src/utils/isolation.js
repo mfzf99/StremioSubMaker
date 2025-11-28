@@ -75,10 +75,26 @@ function getIsolationKey() {
     log.warn(() => ['[Isolation] Unable to hash encryption key file for isolation:', err.message]);
   }
 
+  // Ensure Redis key prefix stays stable across restarts even when the
+  // encryption key file does not exist yet on first boot. Generating or
+  // loading the encryption key now gives us a consistent hash for the
+  // default prefix instead of falling back to a random instance id on
+  // the first run and then switching to an encryption-key-derived prefix
+  // after restart (which makes previously stored sessions invisible).
+  try {
+    const { getEncryptionKey } = require('./encryption');
+    const key = getEncryptionKey();
+    const hashed = hashValue(key?.toString('hex'));
+    if (hashed) {
+      return `enc_${hashed.slice(0, 8)}`;
+    }
+  } catch (err) {
+    log.warn(() => ['[Isolation] Unable to derive isolation key from encryption key:', err.message]);
+  }
+
   return loadOrCreateInstanceId();
 }
 
 module.exports = {
   getIsolationKey,
 };
-

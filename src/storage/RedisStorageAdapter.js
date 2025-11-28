@@ -18,13 +18,22 @@ class RedisStorageAdapter extends StorageAdapter {
   constructor(options = {}) {
     super();
 
-    const { canonicalPrefix, variants } = this._normalizeKeyPrefix(options.keyPrefix);
+    const {
+      canonicalPrefix,
+      variants,
+      usedFallbackPrefix
+    } = this._normalizeKeyPrefix(options.keyPrefix);
 
     // Prefix/key migration can unintentionally merge data between tenants when
     // a shared Redis instance is used (e.g., managed hosting). Keep it opt-in
     // to avoid cross-user config leakage while still allowing operators to
     // enable it explicitly for controlled single-tenant migrations.
-    this.prefixMigrationEnabled = process.env.REDIS_PREFIX_MIGRATION === 'true';
+    // Enable prefix self-healing by default when we're using the built-in
+    // fallback prefix (no explicit REDIS_KEY_PREFIX provided). This allows us
+    // to pull sessions/configs that were written with the previous
+    // isolation-derived default before this fallback was introduced.
+    const migrationEnv = process.env.REDIS_PREFIX_MIGRATION;
+    this.prefixMigrationEnabled = migrationEnv === 'true' || (migrationEnv !== 'false' && usedFallbackPrefix);
 
     // Check if Redis Sentinel is enabled (disabled by default)
     const sentinelEnabled = process.env.REDIS_SENTINEL_ENABLED === 'true' || options.sentinelEnabled === true;
@@ -88,16 +97,18 @@ class RedisStorageAdapter extends StorageAdapter {
    * @private
    */
   _normalizeKeyPrefix(configuredPrefix) {
-    // Default to an instance-scoped prefix to prevent cross-tenant leakage when
-    // multiple deployments share the same Redis database and forget to set
-    // REDIS_KEY_PREFIX. This ties the namespace to a deterministic isolation
-    // key so restarts keep access to existing sessions while avoiding collisions
-    // with other deployments.
     const isolationSegment = getIsolationKey();
-    const defaultPrefix = `stremio:${isolationSegment}:`;
+    const isolationPrefix = `stremio:${isolationSegment}:`;
 
-    const base = configuredPrefix ?? process.env.REDIS_KEY_PREFIX ?? defaultPrefix;
+    // Use the explicit prefix when provided. Otherwise, fall back to the
+    // legacy stable prefix so restarts continue to see previously stored
+    // sessions/configs even when the instance ID changes. Include the
+    // isolation-derived prefix as a variant so operators can migrate data
+    // written before this change.
+    const explicitPrefix = configuredPrefix ?? process.env.REDIS_KEY_PREFIX;
+    const base = explicitPrefix || 'stremio:';
     const canonicalPrefix = !base || base.endsWith(':') ? base : `${base}:`;
+    const usedFallbackPrefix = !explicitPrefix;
 
     const variants = new Set();
     const addVariants = (prefix) => {
@@ -116,6 +127,13 @@ class RedisStorageAdapter extends StorageAdapter {
     // shared prefix can still read/cleanup previously stored data.
     addVariants('stremio:');
 
+    // When using the fallback prefix, also include the isolation-derived prefix
+    // so migrations can pull keys written before we reverted to the stable
+    // default.
+    if (usedFallbackPrefix) {
+      addVariants(isolationPrefix);
+    }
+
     if (process.env.REDIS_KEY_PREFIX_VARIANTS) {
       process.env.REDIS_KEY_PREFIX_VARIANTS
         .split(',')
@@ -129,7 +147,8 @@ class RedisStorageAdapter extends StorageAdapter {
 
     return {
       canonicalPrefix,
-      variants: Array.from(variants)
+      variants: Array.from(variants),
+      usedFallbackPrefix
     };
   }
 
