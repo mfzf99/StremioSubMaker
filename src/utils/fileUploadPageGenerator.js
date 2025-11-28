@@ -2932,7 +2932,6 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         }
 
         async function performFullReset() {
-            let freshToken = null;
             if (confirmResetBtn) {
                 confirmResetBtn.disabled = true;
                 confirmResetBtn.textContent = 'Resetting...';
@@ -2940,60 +2939,9 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             try {
                 resetPageToDefaults();
 
-                try {
-                    const response = await fetch('/api/get-session/00000000000000000000000000000000?autoRegenerate=true');
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data && data.regenerated && data.token) {
-                            freshToken = data.token;
-                        }
-                    }
-                } catch (_) {}
-
-                try {
-                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
-                    }
-                } catch (_) {}
-
-                try {
-                    if (window.caches && caches.keys) {
-                        const names = await caches.keys();
-                        await Promise.all(names.map(n => caches.delete(n).catch(() => {})));
-                    }
-                } catch (_) {}
-
-                try {
-                    if ('serviceWorker' in navigator) {
-                        const regs = await navigator.serviceWorker.getRegistrations();
-                        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
-                    }
-                } catch (_) {}
-
-                try {
-                    if (window.indexedDB && indexedDB.databases) {
-                        const dbs = await indexedDB.databases();
-                        await Promise.all((dbs || []).map(db => {
-                            if (!db || !db.name) return Promise.resolve();
-                            return new Promise(res => {
-                                const req = indexedDB.deleteDatabase(db.name);
-                                req.onsuccess = req.onerror = req.onblocked = () => res();
-                            });
-                        }));
-                    }
-                } catch (_) {}
-
-                try { localStorage.clear(); } catch (_) {}
-                try { sessionStorage.clear(); } catch (_) {}
-
-                try {
-                    const parts = document.cookie.split(';');
-                    for (const part of parts) {
-                        const name = part.split('=')[0]?.trim();
-                        if (!name) continue;
-                        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-                    }
-                } catch (_) {}
+                // Clear page-level preferences (theme, dismissed tips) only
+                try { localStorage.removeItem('theme'); } catch (_) {}
+                try { localStorage.removeItem(INSTRUCTIONS_KEY); } catch (_) {}
             } finally {
                 if (confirmResetBtn) {
                     confirmResetBtn.disabled = false;
@@ -3002,7 +2950,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 closeResetConfirm();
 
                 const params = new URLSearchParams();
-                const nextConfig = freshToken || PAGE.configStr || '';
+                const nextConfig = PAGE.configStr || '';
                 if (nextConfig) params.set('config', nextConfig);
                 if (PAGE.videoId) params.set('videoId', PAGE.videoId);
                 if (PAGE.filename) params.set('filename', PAGE.filename);

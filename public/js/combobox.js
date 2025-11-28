@@ -183,17 +183,20 @@
             try {
                 target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             } catch (_) {
-                try {
-                    var optRect = target.getBoundingClientRect();
-                    var panelRect = panel.getBoundingClientRect();
-                    if (optRect.top < panelRect.top) {
-                        panel.scrollTop -= (panelRect.top - optRect.top);
-                    } else if (optRect.bottom > panelRect.bottom) {
-                        panel.scrollTop += (optRect.bottom - panelRect.bottom);
-                    }
-                } catch (e) {
-                    // ignore scroll failures
+                // ignore scrollIntoView failures
+            }
+            try {
+                var optionTop = target.offsetTop;
+                var optionBottom = optionTop + target.offsetHeight;
+                var viewTop = panel.scrollTop;
+                var viewBottom = viewTop + panel.clientHeight;
+                if (optionTop < viewTop) {
+                    panel.scrollTop = optionTop;
+                } else if (optionBottom > viewBottom) {
+                    panel.scrollTop = optionBottom - panel.clientHeight;
                 }
+            } catch (e) {
+                // ignore scroll failures
             }
         }
 

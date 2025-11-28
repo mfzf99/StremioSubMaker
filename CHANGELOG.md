@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## SubMaker v1.4.8 (unreleased)
+## SubMaker v1.4.8-beta
 
 - Combobox dropdown panels now portal to the document body so they no longer get clipped or stuck behind neighboring cards/sections.
 - File-upload translation options allow overflow again, so "Timestamps Strategy" and similar selects render fully instead of being truncated inside the accordion.
-- File translation reset now asks for confirmation and fully clears caches/storage before reloading with a fresh session token.
+- File-translation reset modal now just clears page selections/preferences and reloads the page—no cache wipes or token regeneration.
 - Session manager now backfills missing token metadata, upgrades legacy unencrypted payloads in place, and keeps sessions for retry on decrypt errors instead of deleting them.
 
 ## SubMaker v1.4.7-beta
