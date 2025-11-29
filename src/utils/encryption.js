@@ -104,7 +104,11 @@ function getEncryptionKey() {
     log.error(() => ['[Encryption] Failed to save encryption key to file:', error.message]);
     log.error(() => ['[Encryption] Key file path:', ENCRYPTION_KEY_FILE]);
     log.error(() => ['[Encryption] Directory exists:', fs.existsSync(path.dirname(ENCRYPTION_KEY_FILE))]);
-    log.warn(() => '[Encryption] Using in-memory key only (will be lost on restart!)');
+    // Running with an in-memory key makes all encrypted data unrecoverable after
+    // a restart. Fail fast so operators fix the persistence/permissions issue
+    // instead of silently generating a new key on every boot and "losing" all
+    // stored sessions/configs.
+    throw new Error(`Failed to persist encryption key to ${ENCRYPTION_KEY_FILE}; aborting to avoid key loss`);
   }
 
   return encryptionKey;

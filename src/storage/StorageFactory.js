@@ -74,24 +74,29 @@ class StorageFactory {
       log.debug(() => `[StorageFactory] Storage adapter initialized successfully (type: ${storageType})`);
       return adapter;
     } catch (error) {
-      // If Redis fails, fall back to filesystem
+      // In Redis mode, do not silently fall back to the filesystem. Doing so stores
+      // sessions on the ephemeral container filesystem, which are lost on the next
+      // restart and surface as "session token not found" errors even though the
+      // user previously saved their config. Crash early so operators fix Redis or
+      // the connection details instead of losing sessions.
       if (storageType === 'redis') {
-        log.warn(() => 'Redis storage initialization failed, falling back to filesystem storage...');
-        adapter = new FilesystemStorageAdapter();
-        try {
-          await adapter.initialize();
-          StorageFactory.instance = adapter;
-          StorageFactory._scheduleCleanup(adapter);
-          log.debug(() => '[StorageFactory] Fallback to filesystem storage successful');
-          return adapter;
-        } catch (fallbackError) {
-          log.error(() => ['[StorageFactory] Filesystem fallback also failed:', fallbackError.message]);
-          throw fallbackError;
-        }
+        log.error(() => ['[StorageFactory] Redis storage initialization failed:', error.message]);
+        throw error;
       }
 
-      log.error(() => ['[StorageFactory] Failed to initialize storage adapter:', error.message]);
-      throw error;
+      // For non-Redis deployments, keep the existing filesystem fallback behaviour
+      log.warn(() => 'Redis storage initialization failed, falling back to filesystem storage...');
+      adapter = new FilesystemStorageAdapter();
+      try {
+        await adapter.initialize();
+        StorageFactory.instance = adapter;
+        StorageFactory._scheduleCleanup(adapter);
+        log.debug(() => '[StorageFactory] Fallback to filesystem storage successful');
+        return adapter;
+      } catch (fallbackError) {
+        log.error(() => ['[StorageFactory] Filesystem fallback also failed:', fallbackError.message]);
+        throw fallbackError;
+      }
     }
   }
 
