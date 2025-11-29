@@ -1920,9 +1920,17 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             document.getElementById(textId).textContent = text;
         }
 
+        const dedupeState = { lastText: null, lastTs: 0 };
         function logSync(message, level = 'info') {
             const panel = document.getElementById('syncLog');
             if (!panel) return;
+            const now = Date.now();
+            // Suppress immediate duplicates to avoid triplicate spam from repeated events.
+            if (dedupeState.lastText === message && (now - dedupeState.lastTs) < 800) {
+                return;
+            }
+            dedupeState.lastText = message;
+            dedupeState.lastTs = now;
             const entry = document.createElement('div');
             entry.className = 'log-entry ' + level;
             const time = document.createElement('span');
@@ -2215,13 +2223,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     break;
                 }
                 case 'SUBMAKER_SYNC_PROGRESS': {
-                    if (!msg.messageId || !STATE?.activeMessageId || msg.messageId === STATE.activeMessageId) {
-                        if (typeof msg.status === 'string' && msg.status.trim()) {
-                            logSync(msg.status, 'info');
-                        } else if (typeof msg.progress === 'number') {
-                            logSync('Progress: ' + Math.round(msg.progress) + '%', 'info');
-                        }
-                    }
+                    // Progress for the active job is handled by the request-specific listener to avoid duplicates.
+                    if (!msg.messageId || !STATE?.activeMessageId || msg.messageId !== STATE.activeMessageId) break;
                     break;
                 }
                 default:
