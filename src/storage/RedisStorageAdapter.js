@@ -21,7 +21,8 @@ class RedisStorageAdapter extends StorageAdapter {
     const {
       canonicalPrefix,
       variants,
-      usedFallbackPrefix
+      usedFallbackPrefix,
+      isolationPrefix
     } = this._normalizeKeyPrefix(options.keyPrefix);
 
     // Prefix/key migration can unintentionally merge data between tenants when
@@ -33,7 +34,8 @@ class RedisStorageAdapter extends StorageAdapter {
     // to pull sessions/configs that were written with the previous
     // isolation-derived default before this fallback was introduced.
     const migrationEnv = process.env.REDIS_PREFIX_MIGRATION;
-    this.prefixMigrationEnabled = migrationEnv === 'true' || (migrationEnv !== 'false' && usedFallbackPrefix);
+    this.prefixMigrationEnabled = migrationEnv === 'true'
+      || (migrationEnv !== 'false' && (usedFallbackPrefix || Boolean(isolationPrefix)));
 
     // Check if Redis Sentinel is enabled (disabled by default)
     const sentinelEnabled = process.env.REDIS_SENTINEL_ENABLED === 'true' || options.sentinelEnabled === true;
@@ -127,12 +129,10 @@ class RedisStorageAdapter extends StorageAdapter {
     // shared prefix can still read/cleanup previously stored data.
     addVariants('stremio:');
 
-    // When using the fallback prefix, also include the isolation-derived prefix
-    // so migrations can pull keys written before we reverted to the stable
-    // default.
-    if (usedFallbackPrefix) {
-      addVariants(isolationPrefix);
-    }
+    // Include the isolation-derived prefix variant so migrations can recover
+    // keys written with the older isolation-based default even when an
+    // explicit REDIS_KEY_PREFIX is configured now.
+    addVariants(isolationPrefix);
 
     if (process.env.REDIS_KEY_PREFIX_VARIANTS) {
       process.env.REDIS_KEY_PREFIX_VARIANTS
@@ -148,7 +148,8 @@ class RedisStorageAdapter extends StorageAdapter {
     return {
       canonicalPrefix,
       variants: Array.from(variants),
-      usedFallbackPrefix
+      usedFallbackPrefix,
+      isolationPrefix
     };
   }
 
