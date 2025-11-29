@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## SubMaker v1.4.10
 
+- Embedded subtitles page gets a floating "Stream subtitles" quick menu that fetches current source/target/cached/xSync entries for the active stream and opens them in one click.
 - Service worker now serves from a dedicated `/sw.js` route with `no-store` and `Service-Worker-Allowed: /`, and registration uses `updateViaCache: 'none'` so updates bypass HTTP caches and pick up cache-busting logic immediately.
 - Public HTML assets are forced to `no-store`/`private` in the static middleware to prevent cached, user-specific pages from leaking across sessions or proxies.
 - Addon auto-subtitles, configure, and sync routes now rely on the shared `setNoStore` helper instead of hand-written headers, keeping those token-bearing endpoints consistently non-cacheable.

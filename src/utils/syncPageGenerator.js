@@ -1360,6 +1360,30 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             font-weight: 500;
         }
 
+        .log-panel {
+            margin-top: 0.75rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            max-height: 260px;
+            overflow-y: auto;
+            font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 0.9rem;
+            line-height: 1.35;
+            color: var(--text);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+        .log-panel .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(0,0,0,0.07);
+        }
+        .log-panel .log-entry:last-child { border-bottom: none; }
+        .log-entry .log-time { color: var(--muted); font-weight: 600; margin-right: 6px; }
+        .log-entry.info { color: var(--text); }
+        .log-entry.warn { color: #d99000; }
+        .log-entry.error { color: #d7263d; }
+
         .status-message {
             padding: 1.25rem;
             border-radius: 12px;
@@ -1746,6 +1770,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         </div>
                         <div class="progress-text" id="syncProgressText">Syncing subtitles...</div>
                     </div>
+                    <div class="log-panel" id="syncLog" aria-live="polite"></div>
                     <div class="status-message" id="syncStatus"></div>
                 </div>
             </div>
@@ -1893,6 +1918,24 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         function updateProgress(fillId, textId, percent, text) {
             document.getElementById(fillId).style.width = percent + '%';
             document.getElementById(textId).textContent = text;
+        }
+
+        function logSync(message, level = 'info') {
+            const panel = document.getElementById('syncLog');
+            if (!panel) return;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + level;
+            const time = document.createElement('span');
+            time.className = 'log-time';
+            time.textContent = '[' + new Date().toLocaleTimeString() + ']';
+            const text = document.createElement('span');
+            text.textContent = ' ' + message;
+            entry.appendChild(time);
+            entry.appendChild(text);
+            panel.insertBefore(entry, panel.firstChild);
+            while (panel.childElementCount > 400) {
+                panel.removeChild(panel.lastChild);
+            }
         }
 
         function isHttpUrl(url) {
@@ -2134,38 +2177,59 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         // Set up message listener FIRST, before sending PING
         window.addEventListener('message', (event) => {
             const msg = event.data || {};
-            if (!msg || msg.type !== 'SUBMAKER_PONG') return;
-            if (msg.source && msg.source !== 'extension') return;
+            if (!msg || (msg.source && msg.source !== 'extension')) return;
 
-            console.log('[Sync Page] Extension detected! Version:', msg.version);
-            extensionInstalled = true;
-            const version = msg.version || '1.0.0';
-            updateExtensionStatus(true, \`Ready (v\${version})\`);
-            if (pingTimer) clearInterval(pingTimer);
+            switch (msg.type) {
+                case 'SUBMAKER_PONG': {
+                    console.log('[Sync Page] Extension detected! Version:', msg.version);
+                    extensionInstalled = true;
+                    const version = msg.version || '1.0.0';
+                    updateExtensionStatus(true, `Ready (v${version})`);
+                    logSync('Extension detected (v' + version + ')', 'info');
+                    if (pingTimer) clearInterval(pingTimer);
 
-            // Enable all automatic sync options
-            const quickOption = document.querySelector('#syncMethod option[value="quick"]');
-            const fastOption = document.querySelector('#syncMethod option[value="fast"]');
-            const completeOption = document.querySelector('#syncMethod option[value="complete"]');
+                    const quickOption = document.querySelector('#syncMethod option[value="quick"]');
+                    const fastOption = document.querySelector('#syncMethod option[value="fast"]');
+                    const completeOption = document.querySelector('#syncMethod option[value="complete"]');
 
-            if (quickOption) quickOption.disabled = false;
-            if (fastOption) fastOption.disabled = false;
-            if (completeOption) completeOption.disabled = false;
+                    if (quickOption) quickOption.disabled = false;
+                    if (fastOption) fastOption.disabled = false;
+                    if (completeOption) completeOption.disabled = false;
 
-            console.log('[Sync Page] Enabled sync options:', {
-                quick: !quickOption?.disabled,
-                fast: !fastOption?.disabled,
-                complete: !completeOption?.disabled
-            });
+                    console.log('[Sync Page] Enabled sync options:', {
+                        quick: !quickOption?.disabled,
+                        fast: !fastOption?.disabled,
+                        complete: !completeOption?.disabled
+                    });
+                    logSync('Sync options unlocked (quick/fast/complete)', 'info');
 
-            // Select Smart Sync (fast) by default
-            document.getElementById('syncMethod').value = 'fast';
-
-            // Trigger change event to show appropriate controls
-            document.getElementById('syncMethod').dispatchEvent(new Event('change'));
+                    document.getElementById('syncMethod').value = 'fast';
+                    document.getElementById('syncMethod').dispatchEvent(new Event('change'));
+                    break;
+                }
+                case 'SUBMAKER_DEBUG_LOG': {
+                    if (msg.messageId && STATE?.activeMessageId && msg.messageId !== STATE.activeMessageId) {
+                        break;
+                    }
+                    logSync(msg.text || 'Log event', msg.level || 'info');
+                    break;
+                }
+                case 'SUBMAKER_SYNC_PROGRESS': {
+                    if (!msg.messageId || !STATE?.activeMessageId || msg.messageId === STATE.activeMessageId) {
+                        if (typeof msg.status === 'string' && msg.status.trim()) {
+                            logSync(msg.status, 'info');
+                        } else if (typeof msg.progress === 'number') {
+                            logSync('Progress: ' + Math.round(msg.progress) + '%', 'info');
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
         });
 
-        // Check for extension on page load (start early like working pages)
+// Check for extension on page load (start early like working pages)
         setTimeout(pingExtension, 150);
         // Retry every 10 seconds if extension not detected
         setInterval(() => {
@@ -2178,6 +2242,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             return new Promise((resolve, reject) => {
                 const messageId = 'sync_' + Date.now();
                 let timeoutId;
+                STATE.activeMessageId = messageId;
 
                 // Listen for response
                 const responseHandler = (event) => {
@@ -2186,6 +2251,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         window.removeEventListener('message', responseHandler);
                         window.removeEventListener('message', progressHandler);
                         clearTimeout(timeoutId);
+                        STATE.activeMessageId = null;
                         resolve(event.data);
                     }
                 };
@@ -2197,6 +2263,9 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     if (event.data.type === 'SUBMAKER_SYNC_PROGRESS' &&
                         event.data.messageId === messageId) {
                         updateProgress('syncProgressFill', 'syncProgressText', event.data.progress, event.data.status);
+                        if (event.data.status) {
+                            logSync(event.data.status, 'info');
+                        }
                     }
                 };
 
@@ -2219,6 +2288,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 timeoutId = setTimeout(() => {
                     window.removeEventListener('message', responseHandler);
                     window.removeEventListener('message', progressHandler);
+                    STATE.activeMessageId = null;
                     reject(new Error('Extension sync timeout'));
                 }, 900000);
             });

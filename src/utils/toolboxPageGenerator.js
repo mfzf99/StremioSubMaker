@@ -1774,6 +1774,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       background: linear-gradient(135deg, rgba(8, 164, 213, 0.08), rgba(51, 185, 225, 0.06));
       border-bottom: 1px solid var(--border);
     }
+    .subtitle-menu-titles { display: flex; flex-direction: column; gap: 2px; }
     .subtitle-menu-eyebrow {
       margin: 0;
       font-size: 11px;
@@ -1783,7 +1784,24 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       font-weight: 700;
     }
     .subtitle-menu-header strong { display: block; font-size: 16px; color: var(--text-primary); }
+    .subtitle-menu-substatus { margin: 0; font-size: 12px; color: var(--muted); font-weight: 700; }
     .subtitle-menu-actions { display: flex; align-items: center; gap: 6px; }
+    .subtitle-menu-auto {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-light);
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .subtitle-menu-auto:hover { border-color: var(--primary); color: var(--text-primary); }
+    .subtitle-menu-auto input { accent-color: var(--primary); cursor: pointer; }
     .subtitle-menu-icon-btn {
       width: 32px;
       height: 32px;
@@ -1855,6 +1873,46 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       background: var(--surface);
     }
     .subtitle-menu-status.error { color: var(--danger); }
+    .subtitle-lang-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface-light);
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .subtitle-lang-card.open { border-color: var(--primary); box-shadow: 0 10px 24px var(--shadow-color); }
+    .subtitle-lang-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .subtitle-lang-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+    .subtitle-lang-label { font-weight: 800; color: var(--text-primary); }
+    .subtitle-lang-pill { font-size: 12px; color: var(--muted); font-weight: 700; }
+    .subtitle-lang-count {
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-weight: 800;
+    }
+    .subtitle-lang-chevron { color: var(--muted); transition: transform 0.2s ease; }
+    .subtitle-lang-card.open .subtitle-lang-chevron { transform: rotate(90deg); }
+    .subtitle-lang-menu {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 12px 12px;
+    }
+    .subtitle-lang-card.open .subtitle-lang-menu { display: flex; }
+    .subtitle-lang-menu .subtitle-menu-item { margin-top: 4px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .modal-overlay {
       position: fixed;
@@ -2500,11 +2558,16 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   </button>
   <div class="subtitle-menu-panel" id="subtitleMenu" aria-live="polite">
     <div class="subtitle-menu-header">
-      <div>
+      <div class="subtitle-menu-titles">
         <p class="subtitle-menu-eyebrow">Stream subtitles</p>
         <strong>Sources & Targets</strong>
+        <p class="subtitle-menu-substatus" id="subtitleMenuSubstatus">Auto-refresh off</p>
       </div>
       <div class="subtitle-menu-actions">
+        <label class="subtitle-menu-auto" for="subtitleMenuAuto">
+          <input type="checkbox" id="subtitleMenuAuto">
+          <span>Auto</span>
+        </label>
         <button type="button" class="subtitle-menu-icon-btn" id="subtitleMenuRefresh" title="Refresh subtitle list">&#8635;</button>
         <button type="button" class="subtitle-menu-icon-btn" id="subtitleMenuClose" title="Close subtitle list">&times;</button>
       </div>
@@ -2762,7 +2825,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       activeTranslations: 0,
       queue: [],
       step2Enabled: false,
-      lastProgressStatus: null  // Track last logged progress message to prevent spam
+      lastProgressStatus: null,  // Track last logged progress message to prevent spam
+      extractMessageId: null
     };
     const translatedHistory = new Set();
     const instructionsEls = {
@@ -2774,6 +2838,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     };
     const INSTRUCTIONS_KEY = 'submaker_embedded_instructions_visited';
     const EXTRACT_MODE_KEY = 'submaker_embedded_extract_mode';
+    const SUBTITLE_MENU_AUTO_KEY = 'submaker_subtitle_menu_auto';
     const subtitleMenuEls = {
       toggle: document.getElementById('subtitleMenuToggle'),
       panel: document.getElementById('subtitleMenu'),
@@ -2782,14 +2847,28 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       sourceList: document.getElementById('subtitleMenuSource'),
       targetList: document.getElementById('subtitleMenuTarget'),
       refresh: document.getElementById('subtitleMenuRefresh'),
-      close: document.getElementById('subtitleMenuClose')
+      close: document.getElementById('subtitleMenuClose'),
+      substatus: document.getElementById('subtitleMenuSubstatus'),
+      auto: document.getElementById('subtitleMenuAuto')
     };
     const subtitleMenuState = {
       open: false,
       loading: false,
       items: [],
-      lastFetched: null
+      lastFetched: null,
+      autoRefresh: false,
+      autoTimer: null
     };
+
+    function requestExtensionReset(reason) {
+      try {
+        window.postMessage({
+          type: 'SUBMAKER_EMBEDDED_RESET',
+          source: 'webpage',
+          reason: reason || ''
+        }, '*');
+      } catch (_) {}
+    }
 
     function setInstructionLock(active) {
       document.body.classList.toggle('modal-open', !!active);
@@ -2885,9 +2964,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
     }
 
+    function shouldDisplaySubtitle(item) {
+      if (!item) return false;
+      if (item.type === 'action' || item.type === 'learn') return false;
+      const label = (item.label || '').toString().toLowerCase();
+      if (label.includes('sub toolbox')) return false;
+      return true;
+    }
+
     function normalizeSubtitleEntry(entry) {
-      const label = (entry?.lang || '').toString().trim() || 'Untitled';
-      const lower = label.toLowerCase();
+      const languageLabel = (entry?.language || entry?.lang || entry?.langName || '').toString().trim() || 'Unknown language';
+      const displayLabel = (entry?.title || entry?.name || entry?.label || languageLabel || '').toString().trim() || languageLabel || 'Untitled';
+      const lower = displayLabel.toLowerCase();
       const type = lower.startsWith('make ') ? 'target'
         : lower.startsWith('learn ') ? 'learn'
         : lower.startsWith('xembed') ? 'cached'
@@ -2896,62 +2984,171 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         : 'source';
       const group = (type === 'target' || type === 'cached' || type === 'learn') ? 'target' : 'source';
       return {
-        id: entry?.id || label,
-        label,
+        id: entry?.id || displayLabel,
+        label: displayLabel,
+        languageLabel,
+        languageKey: languageLabel.toLowerCase() || displayLabel.toLowerCase(),
         url: entry?.url || '#',
         type,
         group
       };
     }
 
+    function groupSubtitlesByLanguage(items) {
+      const buckets = { source: new Map(), target: new Map() };
+      items.forEach(item => {
+        const bucket = item.group === 'target' ? 'target' : 'source';
+        const map = buckets[bucket];
+        const key = item.languageKey || item.languageLabel?.toLowerCase() || item.label.toLowerCase();
+        const label = item.languageLabel || item.label;
+        if (!map.has(key)) map.set(key, { key, label, items: [] });
+        map.get(key).items.push(item);
+      });
+      return buckets;
+    }
+
+    function buildSubtitleMenuItem(item) {
+      const row = document.createElement('div');
+      row.className = 'subtitle-menu-item';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const labelEl = document.createElement('div');
+      labelEl.className = 'label';
+      labelEl.textContent = item.label;
+      const chipData = subtitleChipForType(item.type);
+      const chip = document.createElement('span');
+      chip.className = 'subtitle-menu-chip ' + chipData.cls;
+      chip.textContent = chipData.label;
+      meta.appendChild(labelEl);
+      meta.appendChild(chip);
+
+      const link = document.createElement('a');
+      link.className = 'subtitle-menu-link';
+      link.href = item.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Download';
+
+      row.appendChild(meta);
+      row.appendChild(link);
+      return row;
+    }
+
+    function buildLanguageCard(langEntry, openByDefault, container) {
+      const card = document.createElement('div');
+      card.className = 'subtitle-lang-card' + (openByDefault ? ' open' : '');
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'subtitle-lang-header';
+
+      const meta = document.createElement('div');
+      meta.className = 'subtitle-lang-meta';
+      const title = document.createElement('div');
+      title.className = 'subtitle-lang-label';
+      title.textContent = langEntry.label;
+      const pill = document.createElement('div');
+      pill.className = 'subtitle-lang-pill';
+      const counts = langEntry.items.reduce((acc, itm) => {
+        acc[itm.type] = (acc[itm.type] || 0) + 1;
+        return acc;
+      }, {});
+      const summaryParts = [];
+      if (counts.cached) summaryParts.push(counts.cached + ' xEmbed');
+      if (counts.synced) summaryParts.push(counts.synced + ' xSync');
+      if (counts.target) summaryParts.push(counts.target + ' target');
+      if (counts.source) summaryParts.push(counts.source + ' source');
+      pill.textContent = summaryParts.join(' • ') || 'Subtitles';
+      meta.appendChild(title);
+      meta.appendChild(pill);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.alignItems = 'center';
+      right.style.gap = '8px';
+      const count = document.createElement('span');
+      count.className = 'subtitle-lang-count';
+      count.textContent = langEntry.items.length + ' option' + (langEntry.items.length === 1 ? '' : 's');
+      const chevron = document.createElement('span');
+      chevron.className = 'subtitle-lang-chevron';
+      chevron.textContent = '›';
+      right.appendChild(count);
+      right.appendChild(chevron);
+
+      header.appendChild(meta);
+      header.appendChild(right);
+
+      const menu = document.createElement('div');
+      menu.className = 'subtitle-lang-menu';
+      const sortedItems = [...langEntry.items].sort((a, b) => a.label.localeCompare(b.label));
+      sortedItems.forEach(item => menu.appendChild(buildSubtitleMenuItem(item)));
+
+      const toggle = () => {
+        const next = !card.classList.contains('open');
+        if (next && container) {
+          const openSiblings = container.querySelectorAll('.subtitle-lang-card.open');
+          openSiblings.forEach(el => { if (el !== card) el.classList.remove('open'); });
+        }
+        card.classList.toggle('open', next);
+      };
+      header.addEventListener('click', toggle);
+
+      card.appendChild(header);
+      card.appendChild(menu);
+      return card;
+    }
+
     function renderSubtitleMenu(items) {
       if (!subtitleMenuEls.sourceList || !subtitleMenuEls.targetList) return;
-      const source = [];
-      const target = [];
-      items.forEach(item => {
-        if (item.group === 'target') target.push(item);
-        else source.push(item);
-      });
+      const filtered = (items || []).filter(shouldDisplaySubtitle);
+      const grouped = groupSubtitlesByLanguage(filtered);
 
-      const renderList = (container, list) => {
+      const renderList = (container, map) => {
         container.innerHTML = '';
-        if (!list.length) return;
-        list.forEach(item => {
-          const row = document.createElement('div');
-          row.className = 'subtitle-menu-item';
-
-          const meta = document.createElement('div');
-          meta.className = 'meta';
-          const labelEl = document.createElement('div');
-          labelEl.className = 'label';
-          labelEl.textContent = item.label;
-          const chipData = subtitleChipForType(item.type);
-          const chip = document.createElement('span');
-          chip.className = 'subtitle-menu-chip ' + chipData.cls;
-          chip.textContent = chipData.label;
-          meta.appendChild(labelEl);
-          meta.appendChild(chip);
-
-          const link = document.createElement('a');
-          link.className = 'subtitle-menu-link';
-          link.href = item.url;
-          link.target = '_blank';
-          link.rel = 'noopener';
-          link.textContent = 'Open';
-
-          row.appendChild(meta);
-          row.appendChild(link);
-          container.appendChild(row);
-        });
+        const languages = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+        languages.forEach((lang, idx) => container.appendChild(buildLanguageCard(lang, idx === 0, container)));
       };
 
-      renderList(subtitleMenuEls.sourceList, source);
-      renderList(subtitleMenuEls.targetList, target);
+      renderList(subtitleMenuEls.sourceList, grouped.source);
+      renderList(subtitleMenuEls.targetList, grouped.target);
 
       if (subtitleMenuEls.body) {
-        const hasAny = source.length || target.length;
+        const hasAny = filtered.length > 0;
         subtitleMenuEls.body.style.display = hasAny ? 'flex' : 'none';
       }
+    }
+
+    function updateSubtitleMenuMeta() {
+      if (!subtitleMenuEls.substatus) return;
+      if (subtitleMenuState.lastFetched) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - subtitleMenuState.lastFetched) / 1000));
+        const recency = elapsed < 5 ? 'just now' : (elapsed + 's ago');
+        subtitleMenuEls.substatus.textContent = 'Updated ' + recency + (subtitleMenuState.autoRefresh ? ' · Auto-refresh on' : '');
+      } else {
+        subtitleMenuEls.substatus.textContent = subtitleMenuState.autoRefresh ? 'Auto-refresh on' : 'Auto-refresh off';
+      }
+    }
+
+    function stopSubtitleAutoRefresh() {
+      if (subtitleMenuState.autoTimer) {
+        clearInterval(subtitleMenuState.autoTimer);
+        subtitleMenuState.autoTimer = null;
+      }
+    }
+
+    function setSubtitleAutoRefresh(enabled) {
+      subtitleMenuState.autoRefresh = !!enabled;
+      if (subtitleMenuEls.auto) {
+        subtitleMenuEls.auto.checked = subtitleMenuState.autoRefresh;
+        subtitleMenuEls.auto.setAttribute('aria-pressed', subtitleMenuState.autoRefresh ? 'true' : 'false');
+      }
+      stopSubtitleAutoRefresh();
+      if (subtitleMenuState.autoRefresh) {
+        subtitleMenuState.autoTimer = setInterval(() => fetchSubtitleMenuData(true), 12000);
+        fetchSubtitleMenuData(true);
+      }
+      try { localStorage.setItem(SUBTITLE_MENU_AUTO_KEY, subtitleMenuState.autoRefresh ? '1' : '0'); } catch (_) {}
+      updateSubtitleMenuMeta();
     }
 
     async function fetchSubtitleMenuData(silent = false) {
@@ -2967,10 +3164,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         if (!resp.ok) throw new Error('Request failed (' + resp.status + ')');
         const data = await resp.json();
         const normalized = Array.isArray(data?.subtitles) ? data.subtitles.map(normalizeSubtitleEntry) : [];
+        const visibleCount = normalized.filter(shouldDisplaySubtitle).length;
         subtitleMenuState.items = normalized;
         subtitleMenuState.lastFetched = Date.now();
-        if (normalized.length) {
-          setSubtitleMenuStatus('Loaded ' + normalized.length + ' subtitle entries.');
+        if (visibleCount) {
+          setSubtitleMenuStatus('Loaded ' + visibleCount + ' subtitle entr' + (visibleCount === 1 ? 'y' : 'ies') + '.');
         } else {
           setSubtitleMenuStatus('No subtitles available for this stream yet.');
         }
@@ -2982,6 +3180,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       } finally {
         subtitleMenuState.loading = false;
         subtitleMenuEls.toggle?.classList.remove('is-loading');
+        updateSubtitleMenuMeta();
       }
     }
 
@@ -3006,12 +3205,29 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (subtitleMenuEls.refresh) {
         subtitleMenuEls.refresh.addEventListener('click', () => fetchSubtitleMenuData(false));
       }
+      if (subtitleMenuEls.auto) {
+        subtitleMenuEls.auto.addEventListener('change', (ev) => setSubtitleAutoRefresh(ev.target.checked));
+      }
       setSubtitleMenuStatus('Loading subtitles...', 'muted');
-      setTimeout(() => fetchSubtitleMenuData(true), 650);
+      const savedAuto = (() => {
+        try { return localStorage.getItem(SUBTITLE_MENU_AUTO_KEY) === '1'; } catch (_) { return false; }
+      })();
+      if (subtitleMenuEls.auto) {
+        setSubtitleAutoRefresh(savedAuto);
+      } else {
+        updateSubtitleMenuMeta();
+      }
+      if (!subtitleMenuState.autoRefresh) {
+        setTimeout(() => fetchSubtitleMenuData(true), 650);
+      }
+      window.addEventListener('beforeunload', stopSubtitleAutoRefresh);
     }
 
     initInstructions();
     initSubtitleMenu();
+    window.addEventListener('beforeunload', () => {
+      requestExtensionReset('page-unload');
+    });
 
     initStreamRefreshButton({
       buttonId: 'quickNavRefresh',
@@ -3066,6 +3282,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extract: els.extractBtn?.textContent || 'Extract Subtitles',
       translate: els.translateBtn?.textContent || 'Translate Subtitles'
     };
+
+    if (els.extractLog) els.extractLog.innerHTML = '';
+    if (els.translateLog) els.translateLog.innerHTML = '';
 
     state.extractMode = loadExtractMode();
     if (els.modeSelect) {
@@ -3718,6 +3937,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     window.addEventListener('message', (event) => {
       const msg = event.data || {};
       if (msg.source !== 'extension') return;
+      const isExtractEvent = msg.type === 'SUBMAKER_EXTRACT_PROGRESS' || msg.type === 'SUBMAKER_EXTRACT_RESPONSE';
+      if (isExtractEvent) {
+        if (!state.extractMessageId) return;
+        if (msg.messageId !== state.extractMessageId) return;
+      }
       if (msg.type === 'SUBMAKER_PONG') {
         pingRetries = 0; // Reset retry counter
         updateExtensionStatus(true, 'Ready (v' + (msg.version || '-') + ')');
@@ -3732,6 +3956,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         setExtractionInFlight(false);
         setTranslationInFlight(false);
         state.lastProgressStatus = null; // Reset for next extraction
+        state.extractMessageId = null;
         if (msg.success && Array.isArray(msg.tracks)) {
           state.targets = {};
           state.queue = [];
@@ -3762,6 +3987,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           logExtract('Extraction failed: ' + (msg.error || 'unknown error'));
           setStep2Enabled(false);
         }
+        requestExtensionReset('extract-finished');
       }
     });
 
@@ -3804,7 +4030,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const messageId = 'extract_' + Date.now();
       setStep2Enabled(false);
       setExtractionInFlight(true);
+      state.extractMessageId = messageId;
       state.lastProgressStatus = null; // Reset progress tracking for new extraction
+      if (els.extractLog) els.extractLog.innerHTML = '';
       window.postMessage({
         type: 'SUBMAKER_EXTRACT_REQUEST',
         source: 'webpage',
