@@ -759,7 +759,13 @@ class RedisStorageAdapter extends StorageAdapter {
     try {
       // Use SCAN for better performance with large datasets
       const keys = [];
-      const scanPattern = `${this.options.keyPrefix}${cacheType}:${pattern}`;
+
+      // ioredis automatically applies keyPrefix to commands when configured.
+      // Using an already-prefixed pattern here would double-prefix and return
+      // zero results after a restart (making persisted sessions look "missing"
+      // when preloading). Scan using the raw cacheType pattern and strip any
+      // prefix from returned keys for safety.
+      const scanPattern = `${cacheType}:${pattern}`;
       let cursor = '0';
 
       do {
@@ -767,11 +773,18 @@ class RedisStorageAdapter extends StorageAdapter {
         cursor = result[0];
         const foundKeys = result[1];
 
-        // Strip prefix and cache type from keys
-        const prefix = `${this.options.keyPrefix}${cacheType}:`;
+        // Strip prefix and cache type from keys. Replies may include the
+        // configured keyPrefix (when SCAN is issued on a client without
+        // automatic prefixing), or they may already be de-prefixed by ioredis
+        // when keyPrefix is enabled. Handle both cases to avoid dropping keys.
+        const configuredPrefix = this.options.keyPrefix || '';
+        const prefix = `${configuredPrefix}${cacheType}:`;
         for (const key of foundKeys) {
           if (key.endsWith(':meta')) continue; // Skip metadata keys
-          keys.push(key.substring(prefix.length));
+          const withoutPrefix = key.startsWith(prefix)
+            ? key.substring(prefix.length)
+            : key.replace(new RegExp(`^${cacheType}:`), '');
+          keys.push(withoutPrefix);
         }
       } while (cursor !== '0');
 

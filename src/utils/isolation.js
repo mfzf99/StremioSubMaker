@@ -26,6 +26,14 @@ function sanitizeSegment(value) {
 
 function loadOrCreateInstanceId() {
   try {
+    const instanceDir = path.dirname(INSTANCE_FILE);
+    try {
+      fs.mkdirSync(instanceDir, { recursive: true });
+    } catch (err) {
+      // Best effort – if this fails we'll log below and fall back to a transient id
+      log.warn(() => ['[Isolation] Failed to ensure instance id directory exists:', err.message]);
+    }
+
     if (fs.existsSync(INSTANCE_FILE)) {
       const raw = fs.readFileSync(INSTANCE_FILE, 'utf8').trim();
       if (raw) {

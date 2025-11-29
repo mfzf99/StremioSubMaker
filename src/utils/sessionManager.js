@@ -582,7 +582,14 @@ class SessionManager extends EventEmitter {
             const adapter = await getStorageAdapter();
             // Set sliding persistence TTL equal to maxAge
             const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
-            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            const persisted = await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+
+            if (!persisted) {
+                // Avoid returning a token that only lives in memory (would vanish on restart)
+                this.cache.delete(token);
+                this.decryptedCache.delete(token);
+                throw new Error('Failed to persist new session to storage');
+            }
         } catch (err) {
             log.error(() => ['[SessionManager] Failed to persist new session:', err?.message || String(err)]);
             // Surface the failure so callers can decide whether to retry or abort
@@ -847,16 +854,19 @@ class SessionManager extends EventEmitter {
         this.decryptedCache.set(token, cloneConfig(config));
         this.dirty = true;
 
-        // Persist immediately (per-token)
-        Promise.resolve().then(async () => {
+        try {
             const adapter = await getStorageAdapter();
             const ttlSeconds = Number.isFinite(this.maxAge) ? Math.floor(this.maxAge / 1000) : null;
-            await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            const persisted = await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+            if (!persisted) {
+                throw new Error('Failed to persist updated session to storage');
+            }
             // Notify other instances to invalidate their cache
             await this._publishInvalidation(token, 'update');
-        }).catch(err => {
+        } catch (err) {
             log.error(() => ['[SessionManager] Failed to persist updated session:', err?.message || String(err)]);
-        });
+            return false;
+        }
 
         this.emit('sessionUpdated', { token, source: 'local' });
         log.debug(() => `[SessionManager] Session updated: ${redactToken(token)}`);
