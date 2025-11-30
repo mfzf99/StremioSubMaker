@@ -6,6 +6,8 @@ services:
     # Or build locally
     build: .
     container_name: submaker
+    # Give container 30 seconds to gracefully shutdown and save sessions
+    stop_grace_period: 30s
     ports:
       - "${PORT:-7001}:7001"
     # Load ALL environment variables from .env file
@@ -53,7 +55,7 @@ services:
     command: >
       redis-server
       --maxmemory 4gb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
       --save 900 1
       --save 300 10
       --save 60 10000
