@@ -45,6 +45,8 @@
       left: 24px;
       width: 56px;
       height: 56px;
+      padding: 0;
+      gap: 0;
       display: grid;
       place-items: center;
       border-radius: 50%;
@@ -167,6 +169,8 @@
     .subtitle-menu-icon-btn {
       width: 36px;
       height: 36px;
+      padding: 0;
+      gap: 0;
       display: grid;
       place-items: center;
       border-radius: 10px;
@@ -177,6 +181,7 @@
       transition: all 0.2s ease;
       font-size: 18px;
       line-height: 1;
+      box-shadow: none;
     }
 
     .subtitle-menu-icon-btn:hover {
@@ -211,6 +216,11 @@
       flex-direction: column;
       gap: 12px;
     }
+
+    /* Keep categories in a predictable order */
+    .subtitle-menu-group-source { order: 1; }
+    .subtitle-menu-group-target { order: 2; }
+    .subtitle-menu-group-translation { order: 3; }
 
     .subtitle-menu-group-title {
       font-size: 12px;
@@ -562,21 +572,21 @@
         </div>
       </div>
       <div class="subtitle-menu-body" id="subtitleMenuBody">
-        <div class="subtitle-menu-group">
+        <div class="subtitle-menu-group subtitle-menu-group-source">
           <div class="subtitle-menu-group-title">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             Source languages
           </div>
           <div class="subtitle-menu-list" id="subtitleMenuSource"></div>
         </div>
-        <div class="subtitle-menu-group">
+        <div class="subtitle-menu-group subtitle-menu-group-target">
           <div class="subtitle-menu-group-title">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
             Target & cached
           </div>
           <div class="subtitle-menu-list" id="subtitleMenuTarget"></div>
         </div>
-        <div class="subtitle-menu-group">
+        <div class="subtitle-menu-group subtitle-menu-group-translation">
           <div class="subtitle-menu-group-title">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"></path><path d="M4 14h6"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>
             Translation
@@ -796,6 +806,7 @@
       if (!item || !item.id) return null;
       if (!translationActions.has(item.id)) {
         translationActions.set(item.id, {
+          id: item.id,
           status: 'idle',
           timer: null,
           pollAttempts: 0,
@@ -807,6 +818,7 @@
         });
       }
       const action = translationActions.get(item.id);
+      action.id = item.id || action.id || '';
       action.langKey = deriveLangKeyForItem(item) || action.langKey || '';
       action.label = item?.languageLabel || item?.label || action.label || '';
       action.url = item?.url || action.url || '';
@@ -841,11 +853,9 @@
       }
     }
 
-    function markTranslationLanguageReady(langKey, info = {}) {
-      const normalized = normalizeTargetLangCode(langKey || '');
-      if (!normalized) return;
+    function markTranslationActions(predicate, info = {}) {
       translationActions.forEach(action => {
-        if (normalizeTargetLangCode(action.langKey) !== normalized) return;
+        if (typeof predicate === 'function' && !predicate(action)) return;
         stopTranslationPoll(action);
         action.status = 'ready';
         action.downloadUrl = info.downloadUrl || action.downloadUrl || action.url;
@@ -853,6 +863,22 @@
         action.filename = info.filename || action.filename || '';
         applyTranslationActionState(action);
       });
+    }
+
+    function markTranslationActionReady(actionId, info = {}) {
+      if (!actionId) return;
+      markTranslationActions(action => action.id === actionId, info);
+    }
+
+    function markTranslationLanguageReady(langKey, info = {}, options = {}) {
+      const normalized = normalizeTargetLangCode(langKey || '');
+      if (!normalized) return;
+      const targetActionId = options.actionId || null;
+      markTranslationActions(action => {
+        const matchesLang = normalizeTargetLangCode(action.langKey) === normalized;
+        const matchesId = !targetActionId || action.id === targetActionId;
+        return matchesLang && matchesId;
+      }, info);
     }
 
     function syncTranslationActionsFromInventory(items) {
@@ -1304,7 +1330,7 @@
         action.filename = parseDownloadFilename(resp, action.langKey);
         action.pollAttempts = 0;
         applyTranslationActionState(action);
-        markTranslationLanguageReady(action.langKey, {
+        markTranslationActionReady(action.id, {
           downloadUrl: action.downloadUrl || action.url,
           cachedContent: text,
           filename: action.filename
@@ -1469,6 +1495,10 @@
       prefetch: () => loadSubtitleInventory({ force: false }).catch(() => { }),
       toggle: (open) => toggleSubtitleMenu(elements, open),
       updateStream: (payload) => handleStreamUpdate(payload, elements),
+      notify: (message, variant = 'muted', options = {}) => {
+        const opts = Object.assign({ persist: true }, options || {});
+        setSubtitleMenuStatus(elements, message, variant, opts);
+      },
       getTargets: () => config.targetOptions.slice(),
       destroy: () => {
         setSubtitleMenuStatus(elements, '');

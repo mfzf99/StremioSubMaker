@@ -1949,6 +1949,14 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             subtitleMenuInstance.prefetch();
         }
 
+        function forwardMenuNotification(info) {
+            if (!subtitleMenuInstance || typeof subtitleMenuInstance.notify !== 'function') return false;
+            const message = (info && info.message) ? info.message : 'New stream detected';
+            const title = (info && info.title) ? info.title + ': ' : '';
+            subtitleMenuInstance.notify(title + message, 'muted', { persist: true });
+            return true;
+        }
+
         initStreamRefreshButton({
             buttonId: 'quickNavRefresh',
             configStr: CONFIG.configStr,
@@ -1970,7 +1978,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     '&videoId=' + encodeURIComponent(payload.videoId || '') +
                     '&filename=' + encodeURIComponent(payload.filename || '');
             },
-            onEpisode: handleStreamUpdate
+            onEpisode: handleStreamUpdate,
+            notify: forwardMenuNotification
         });
 
         // Helper functions

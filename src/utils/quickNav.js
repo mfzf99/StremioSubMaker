@@ -387,6 +387,7 @@ function quickNavScript() {
       };
       const configStr = opts.configStr;
       const buildUrl = typeof opts.buildUrl === 'function' ? opts.buildUrl : null;
+      const notify = typeof opts.notify === 'function' ? opts.notify : null;
 
       let latest = null;
       let es = null;
@@ -486,9 +487,20 @@ function quickNavScript() {
       }
 
       function showToast(payload) {
-        if (titleEl) titleEl.textContent = opts.labels?.title || 'New stream detected';
+        const description = describe(payload);
+        const titleText = opts.labels?.title || 'New stream detected';
+        if (notify) {
+          const handled = notify({
+            title: titleText,
+            message: description,
+            payload,
+            updateUrl: buildUrl ? buildUrl(payload) : null
+          });
+          if (handled === true) return;
+        }
+        if (titleEl) titleEl.textContent = titleText;
         if (metaEl) {
-          metaEl.textContent = describe(payload);
+          metaEl.textContent = description;
           enhanceMeta(payload);
         }
         toast.classList.add('show');

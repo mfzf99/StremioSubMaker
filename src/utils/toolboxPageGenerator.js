@@ -2854,6 +2854,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 
     initInstructions();
     subtitleMenuInstance = initSubtitleMenuBridge();
+    function forwardMenuNotification(info) {
+      if (!subtitleMenuInstance || typeof subtitleMenuInstance.notify !== 'function') return false;
+      const message = (info && info.message) ? info.message : 'New stream detected';
+      const title = (info && info.title) ? info.title + ': ' : '';
+      subtitleMenuInstance.notify(title + message, 'muted', { persist: true });
+      return true;
+    }
     window.addEventListener('beforeunload', () => {
       requestExtensionReset('page-unload');
     });
@@ -3765,7 +3772,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           '&videoId=' + encodeURIComponent(payload.videoId || '') +
           '&filename=' + encodeURIComponent(payload.filename || '');
       },
-      onEpisode: handleStreamUpdateFromNotification
+      onEpisode: handleStreamUpdateFromNotification,
+      notify: forwardMenuNotification
     });
   </script>
 </body>
@@ -4525,6 +4533,13 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
     if (subtitleMenuInstance && typeof subtitleMenuInstance.prefetch === 'function') {
       subtitleMenuInstance.prefetch();
     }
+    function forwardMenuNotification(info) {
+      if (!subtitleMenuInstance || typeof subtitleMenuInstance.notify !== 'function') return false;
+      const message = (info && info.message) ? info.message : 'New stream detected';
+      const title = (info && info.title) ? info.title + ': ' : '';
+      subtitleMenuInstance.notify(title + message, 'muted', { persist: true });
+      return true;
+    }
     initStreamRefreshButton({
       buttonId: 'quickNavRefresh',
       configStr: PAGE.configStr,
@@ -4697,7 +4712,8 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
           '&videoId=' + encodeURIComponent(payload.videoId || '') +
           '&filename=' + encodeURIComponent(payload.filename || '');
       },
-      onEpisode: handleStreamUpdate
+      onEpisode: handleStreamUpdate,
+      notify: forwardMenuNotification
     });
   })();
   </script>
