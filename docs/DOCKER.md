@@ -46,6 +46,7 @@ services:
       - REDIS_DB=0
       - REDIS_KEY_PREFIX=stremio
       - ENCRYPTION_KEY_FILE=/app/keys/.encryption-key
+      - REDIS_PASSWORD_FILE=/app/keys/.redis-password
     depends_on:
       redis:
         condition: service_healthy
@@ -185,6 +186,7 @@ docker run -d \
   -e REDIS_PASSWORD= \
   -e REDIS_DB=0 \
   -e REDIS_KEY_PREFIX=stremio \
+  -e REDIS_PASSWORD_FILE=/app/keys/.redis-password \
   -e ENCRYPTION_KEY_FILE=/app/keys/.encryption-key \
   -v $(pwd)/keys:/app/keys \
   xtremexq/submaker:latest
@@ -194,6 +196,7 @@ docker run -d \
 - `OPENSUBTITLES_API_KEY` is required.
 - `STORAGE_TYPE` defaults to `redis`; set to `filesystem` for single-node/local installs.
 - Encryption key: if `ENCRYPTION_KEY` is unset, the app writes a key to `/app/keys/.encryption-key`; keep that path persistent (named volume or bind mount).
+- Redis password: set `REDIS_PASSWORD_FILE` (for example `/app/keys/.redis-password`) to auto-generate and persist a strong Redis password. If `REDIS_PASSWORD` is set, that value is used instead and written to the password file. Ensure Redis is configured to read the same file; the provided `docker-compose.yaml` handles this via the shared `keys` volume.
 - Ports: container listens on `7001` by default; override with `PORT` env and matching host mapping.
 
 ## Troubleshooting

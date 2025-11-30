@@ -2,6 +2,7 @@ const log = require('../utils/logger');
 const StorageAdapter = require('./StorageAdapter');
 const FilesystemStorageAdapter = require('./FilesystemStorageAdapter');
 const RedisStorageAdapter = require('./RedisStorageAdapter');
+const { getRedisPassword } = require('../utils/redisHelper');
 
 /**
  * Storage Factory
@@ -55,7 +56,7 @@ class StorageFactory {
       adapter = new RedisStorageAdapter({
         host: process.env.REDIS_HOST,
         port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : undefined,
-        password: process.env.REDIS_PASSWORD,
+        password: getRedisPassword() || undefined,
         db: process.env.REDIS_DB ? parseInt(process.env.REDIS_DB, 10) : undefined,
         keyPrefix: process.env.REDIS_KEY_PREFIX
       });

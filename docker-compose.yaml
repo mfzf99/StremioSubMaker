@@ -29,6 +29,8 @@ services:
 
       # Encryption key file path (persisted in volume)
       - ENCRYPTION_KEY_FILE=/app/keys/.encryption-key
+      # Redis password auto-generated and persisted alongside encryption key
+      - REDIS_PASSWORD_FILE=/app/keys/.redis-password
 
     depends_on:
       redis:
@@ -53,6 +55,19 @@ services:
     # - Add this line after redis-server: --requirepass ${REDIS_PASSWORD}
     # - Update healthcheck to: ["CMD", "redis-cli", "--raw", "incr", "ping"]
     command: >
+      sh -c '
+      mkdir -p /app/keys;
+      if [ -n "$REDIS_PASSWORD" ]; then
+        echo "$REDIS_PASSWORD" > /app/keys/.redis-password;
+        chmod 600 /app/keys/.redis-password;
+      else
+        if [ ! -f /app/keys/.redis-password ]; then
+          echo "Generating new Redis password...";
+          tr -dc A-Za-z0-9 < /dev/urandom | head -c 32 > /app/keys/.redis-password;
+          chmod 600 /app/keys/.redis-password;
+        fi;
+      fi;
+      export REDIS_PASSWORD=$(cat /app/keys/.redis-password);
       redis-server
       --maxmemory 4gb
       --maxmemory-policy noeviction
@@ -64,19 +79,21 @@ services:
       --no-appendfsync-on-rewrite no
       --timeout 300
       --tcp-keepalive 60
-      --requirepass ${REDIS_PASSWORD}
+      --requirepass "$REDIS_PASSWORD"
       --rename-command FLUSHDB ""
       --rename-command FLUSHALL ""
       --rename-command CONFIG ""
       --rename-command SAVE ""
+      '
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
+      - encryption-key:/app/keys
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli -a \"$(cat /app/keys/.redis-password)\" ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5

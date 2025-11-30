@@ -4,6 +4,7 @@ const { StorageUnavailableError } = require('./errors');
 const Redis = require('ioredis');
 const crypto = require('crypto');
 const { getIsolationKey } = require('../utils/isolation');
+const { getRedisPassword } = require('../utils/redisHelper');
 
 /**
  * Redis Storage Adapter
@@ -51,9 +52,9 @@ class RedisStorageAdapter extends StorageAdapter {
       // Redis Sentinel configuration for HA deployments
       const sentinels = process.env.REDIS_SENTINELS
         ? process.env.REDIS_SENTINELS.split(',').map(s => {
-            const [host, port] = s.trim().split(':');
-            return { host, port: parseInt(port) || 26379 };
-          })
+          const [host, port] = s.trim().split(':');
+          return { host, port: parseInt(port) || 26379 };
+        })
         : options.sentinels || [{ host: 'localhost', port: 26379 }];
 
       const sentinelName = process.env.REDIS_SENTINEL_NAME || options.sentinelName || 'mymaster';
@@ -61,7 +62,7 @@ class RedisStorageAdapter extends StorageAdapter {
       this.options = {
         sentinels,
         name: sentinelName,
-        password: restOptions.password || process.env.REDIS_PASSWORD || undefined,
+        password: restOptions.password || getRedisPassword() || undefined,
         db: restOptions.db || process.env.REDIS_DB || 0,
         keyPrefix: canonicalPrefix,
         maxRetriesPerRequest: 3,
@@ -81,7 +82,7 @@ class RedisStorageAdapter extends StorageAdapter {
       this.options = {
         host: restOptions.host || process.env.REDIS_HOST || 'localhost',
         port: restOptions.port || process.env.REDIS_PORT || 6379,
-        password: restOptions.password || process.env.REDIS_PASSWORD || undefined,
+        password: restOptions.password || getRedisPassword() || undefined,
         db: restOptions.db || process.env.REDIS_DB || 0,
         keyPrefix: canonicalPrefix,
         maxRetriesPerRequest: 3,

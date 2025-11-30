@@ -1,5 +1,6 @@
 const log = require('./logger');
 const { getEncryptionKey } = require('./encryption');
+const { getRedisPassword } = require('./redisHelper');
 const Redis = require('ioredis');
 
 /**
@@ -44,7 +45,7 @@ class StartupValidator {
       const redisOptions = {
         host: process.env.REDIS_HOST || 'localhost',
         port: process.env.REDIS_PORT || 6379,
-        password: process.env.REDIS_PASSWORD || undefined,
+        password: getRedisPassword() || undefined,
         db: process.env.REDIS_DB ? parseInt(process.env.REDIS_DB, 10) : 0,
         // Use a raw client (no keyPrefix) for validation so SCAN/EXISTS operate on exact keys
         keyPrefix: '',
