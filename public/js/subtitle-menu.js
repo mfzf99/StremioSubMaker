@@ -1682,7 +1682,22 @@
     }
 
     injectStyles();
-    const elements = createMarkup(config.labels, config);
+    // Guard against unexpected ReferenceErrors during markup creation (e.g., partial loads)
+    let elements;
+    try {
+      elements = createMarkup(config.labels, config);
+    } catch (err) {
+      console.warn('Subtitle menu markup creation failed', err, { options });
+      return {
+        prefetch: () => {},
+        refresh: () => {},
+        toggle: () => {},
+        updateStream: () => {},
+        notify: () => {},
+        getTargets: () => config.targetOptions.slice(),
+        destroy: () => {}
+      };
+    }
 
     if (elements.toggle) {
       elements.toggle.addEventListener('click', () => toggleSubtitleMenu(elements));
