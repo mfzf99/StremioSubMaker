@@ -21,6 +21,7 @@ data/
 .agent/
 
 # Extensions
+
 SubMaker xSync/
 nSync/
 

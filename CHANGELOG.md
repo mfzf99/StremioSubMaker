@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.11
+
+**New Features:**
+- **Floating subtitle menu:** Added a Stream Subtitles widget to sync and file-upload pages with grouped source/translation/target lists, quick refresh/prefetch, and live stream updates from QuickNav.
+- **Inline translation controls:** Translation entries now ship with Translate/Download buttons that poll background translations, cache finished files, and surface ready-to-download targets without page reloads.
+
+**Security & Infrastructure:**
+
+- **Service Worker Cache:** API cache bumped to `v2` with stricter `Vary: *` checks and guarded cache writes to avoid storing non-cacheable responses.
+- **Origin allowlist:** Expanded trusted Stremio origins to include `*.stremio.one` and `*.stremio.com` alongside existing `*.strem.io`, covering new official hosts while keeping addon API lockdown intact.
+
+**Bug Fixes:**
+
+- **Template safety:** Escaped backticks and fixed template literals in QuickNav/toolbox scripts to prevent malformed inline scripts.
+- **Resilient language maps:** Subtitle menu now guards language-map bootstrapping and drops stale backups so missing/invalid maps can’t crash subtitle rendering.
+
+**Improvements:**
+
+- **Subtitle intelligence:** Language lookup now normalizes ISO1/ISO2 codes and common aliases (e.g., LATAM Spanish, Brazilian Portuguese), improving grouping/labels across providers and cached translations.
+- **Stream context:** QuickNav toasts clean filenames, add episode tags, and fetch Cinemeta titles; owner leases fail over faster and duplicate SSE connections are avoided.
+- **Subtitle menu polish:** Status overlay now anchors to the footer with glassmorphism, the footer shows version/filename plus subtitle and language counts, and translation-ready targets stay visible while status messages display.
+
 ## SubMaker v1.4.10
 
 **New Features:**

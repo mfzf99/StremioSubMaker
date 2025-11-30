@@ -526,11 +526,15 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 const DEFAULT_STREMIO_WEB_ORIGINS = [
     // Official Stremio web app origins
     'https://app.strem.io',
+    'https://app.stremio.one',
     'https://strem.io',
+    'https://stremio.one',
     'https://www.strem.io',
+    'https://www.stremio.one',
     'https://staging.strem.io',
     // Alternative official domain (used by web app)
     'https://web.stremio.com',
+    'https://web.stremio.one',
     'https://www.stremio.com',
     'https://stremio.com',
     'https://app.stremio.com'
@@ -539,7 +543,7 @@ const allowedOriginsNormalized = Array.from(new Set([
     ...allowedOrigins.map(normalizeOrigin),
     ...DEFAULT_STREMIO_WEB_ORIGINS.map(normalizeOrigin)
 ]));
-const STREMIO_ORIGIN_WILDCARD_SUFFIXES = ['.strem.io'];
+const STREMIO_ORIGIN_WILDCARD_SUFFIXES = ['.strem.io', '.stremio.one', '.stremio.com'];
 const STREMIO_ORIGIN_PREFIXES = ['stremio://', 'capacitor://', 'app://', 'file://'];
 const STREMIO_ORIGIN_EQUALS = ['capacitor://localhost', 'app://strem.io'];
 const DEFAULT_STREMIO_UA_HINTS = [
