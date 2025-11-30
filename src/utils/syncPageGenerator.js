@@ -1761,21 +1761,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         </select>
                     </div>
 
-                    <div class="checkbox-group" style="margin-top: 0.5rem;" id="advancedToggleRow">
-                        <input type="checkbox" id="showAdvancedSettings">
-                        <label for="showAdvancedSettings" style="display:flex;flex-direction:column;">
-                            <span style="font-weight:700;">Advanced settings</span>
-                            <span class="label-description">Tweak window timing for any auto mode.</span>
-                        </label>
-                    </div>
-                    <div id="advancedSettings" class="advanced-settings" style="display:none;gap:0.75rem;">
-                        <div class="form-group">
-                            <label for="windowTimeOverride">Window time override (seconds):</label>
-                            <input type="number" id="windowTimeOverride" min="20" max="7200" step="10" placeholder="Leave blank to use the preset default">
-                            <p style="font-size: 0.85rem; color: #9CA3AF; margin-top: 0.35rem;">Applied to any auto mode. We'll clamp if it's longer than the video or unrealistically short.</p>
-                        </div>
-                    </div>
-
                     <!-- Manual Sync Controls -->
                     <div id="manualSyncControls">
                         <div class="form-group">
@@ -2307,20 +2292,13 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         const MIN_WINDOW_SECONDS = 20;
         const MAX_WINDOW_SECONDS = 7200;
 
-        function normalizeWindowOverrideSeconds(value) {
-            const num = parseInt(value, 10);
-            if (!Number.isFinite(num) || num <= 0) return null;
-            return Math.min(Math.max(num, MIN_WINDOW_SECONDS), MAX_WINDOW_SECONDS);
-        }
-
-        function buildSyncPlan(mode, overrideSeconds = null, estimatedDurationMs = null) {
+        function buildSyncPlan(mode, estimatedDurationMs = null) {
             const preset = SYNC_PRESETS[mode] || SYNC_PRESETS.smart;
             const durationSeconds = estimatedDurationMs ? Math.max(0, estimatedDurationMs / 1000) : null;
 
-            const requestedOverride = normalizeWindowOverrideSeconds(overrideSeconds);
             const minWindow = durationSeconds ? Math.min(MIN_WINDOW_SECONDS, Math.max(durationSeconds, 1)) : MIN_WINDOW_SECONDS;
 
-            let windowSeconds = requestedOverride != null ? requestedOverride : preset.windowSeconds;
+            let windowSeconds = preset.windowSeconds;
             if (windowSeconds != null) {
                 windowSeconds = Math.min(Math.max(windowSeconds, minWindow), MAX_WINDOW_SECONDS);
             } else if (durationSeconds && preset.coveragePct && (preset.minWindows || preset.maxWindows)) {
@@ -2353,10 +2331,9 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 legacyMode: preset.legacyMode || mode,
                 windowCount: preset.strategy === 'full' ? null : windowCount,
                 windowSeconds: preset.strategy === 'full'
-                    ? (durationSeconds || requestedOverride || preset.windowSeconds || null)
+                    ? (durationSeconds || preset.windowSeconds || null)
                     : windowSeconds,
                 requestedWindowSeconds,
-                overrideApplied: requestedOverride != null,
                 coverageSeconds: preset.strategy === 'full' ? (durationSeconds || null) : coverageSeconds,
                 coverageTargetPct: targetCoveragePct,
                 durationSeconds,
@@ -2392,7 +2369,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             } else if (plan.coverageTargetPct) {
                 parts.push(\`~\${Math.round(plan.coverageTargetPct * 100)}% target coverage\`);
             }
-            if (plan.overrideApplied) parts.push('override');
             return parts.join(' • ');
         }
 
@@ -2529,7 +2505,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     minWindows: plan.minWindows,
                     maxWindows: plan.maxWindows,
                     fullScan: plan.fullScan,
-                    overrideApplied: plan.overrideApplied,
                     durationAdjusted: plan.durationAdjusted
                 } : null;
                 let timeoutId;
@@ -2589,7 +2564,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             });
         }
 
-        // Sync method change handler + advanced settings
+        // Sync method change handler
         function refreshSyncPlanPreview() {
             const method = document.getElementById('syncMethod').value;
             const manualControls = document.getElementById('manualSyncControls');
@@ -2607,9 +2582,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             manualControls.style.display = 'none';
             autoSyncInfo.style.display = 'block';
 
-            const overrideInput = document.getElementById('windowTimeOverride');
-            const overrideSeconds = overrideInput ? overrideInput.value : null;
-            const plan = buildSyncPlan(method, overrideSeconds, STATE.estimatedDurationMs);
+            const plan = buildSyncPlan(method, STATE.estimatedDurationMs);
             STATE.activeSyncPlan = plan;
 
             const summary = describeSyncPlan(plan);
@@ -2619,17 +2592,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         document.getElementById('syncMethod').addEventListener('change', refreshSyncPlanPreview);
 
-        const advancedToggle = document.getElementById('showAdvancedSettings');
-        const advancedSettings = document.getElementById('advancedSettings');
-        if (advancedToggle && advancedSettings) {
-            advancedToggle.addEventListener('change', () => {
-                advancedSettings.style.display = advancedToggle.checked ? 'block' : 'none';
-            });
-        }
-        const windowOverrideInput = document.getElementById('windowTimeOverride');
-        if (windowOverrideInput) {
-            windowOverrideInput.addEventListener('input', refreshSyncPlanPreview);
-        }
         refreshSyncPlanPreview();
 
         // Step 1: Continue button
@@ -2783,8 +2745,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     };
                     const modeName = modeNames[syncMethod] || syncMethod;
                     const preferAlass = document.getElementById('preferAlass')?.checked === true;
-                    const overrideSeconds = document.getElementById('windowTimeOverride')?.value;
-                    const syncPlan = buildSyncPlan(syncMethod, overrideSeconds, STATE.estimatedDurationMs);
+                    const syncPlan = buildSyncPlan(syncMethod, STATE.estimatedDurationMs);
                     STATE.activeSyncPlan = syncPlan;
                     const planSummary = describeSyncPlan(syncPlan);
 
