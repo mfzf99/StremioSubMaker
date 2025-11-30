@@ -221,6 +221,7 @@
     .subtitle-menu-group-source { order: 1; }
     .subtitle-menu-group-target { order: 2; }
     .subtitle-menu-group-translation { order: 3; }
+    .subtitle-menu-group-other { order: 4; }
 
     .subtitle-menu-group-title {
       font-size: 12px;
@@ -593,6 +594,13 @@
           </div>
           <div class="subtitle-menu-list" id="subtitleMenuTranslation"></div>
         </div>
+        <div class="subtitle-menu-group subtitle-menu-group-other">
+          <div class="subtitle-menu-group-title">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            Other entries
+          </div>
+          <div class="subtitle-menu-list" id="subtitleMenuOther"></div>
+        </div>
       </div>
       <div class="subtitle-menu-status" id="subtitleMenuStatus" role="status" aria-live="polite"></div>
       <div class="subtitle-menu-footer" id="subtitleMenuFooter">
@@ -615,6 +623,11 @@
       sourceList: panel.querySelector('#subtitleMenuSource'),
       translationList: panel.querySelector('#subtitleMenuTranslation'),
       targetList: panel.querySelector('#subtitleMenuTarget'),
+      otherList: panel.querySelector('#subtitleMenuOther'),
+      sourceGroup: panel.querySelector('.subtitle-menu-group-source'),
+      targetGroup: panel.querySelector('.subtitle-menu-group-target'),
+      translationGroup: panel.querySelector('.subtitle-menu-group-translation'),
+      otherGroup: panel.querySelector('.subtitle-menu-group-other'),
       refresh: panel.querySelector('#subtitleMenuRefresh'),
       close: panel.querySelector('#subtitleMenuClose'),
       substatus: panel.querySelector('#subtitleMenuSubstatus'),
@@ -771,7 +784,9 @@
             : lower.startsWith('xsync') ? 'synced'
               : lower.includes('toolbox') ? 'action'
                 : 'source';
-      const group = isTranslation ? 'translation' : ((type === 'cached' || type === 'learn') ? 'target' : 'source');
+      const group = isTranslation ? 'translation'
+        : ((type === 'cached' || type === 'learn' || type === 'synced' || type === 'action') ? 'other'
+          : (type === 'target' ? 'target' : 'source'));
       return {
         id: entry?.id || displayLabel,
         label: displayLabel,
@@ -785,12 +800,26 @@
     }
 
     function groupSubtitlesByLanguage(items) {
-      const buckets = { source: new Map(), target: new Map(), translation: new Map() };
+      const buckets = { source: new Map(), target: new Map(), translation: new Map(), other: new Map() };
       items.forEach(item => {
-        const bucket = item.group === 'translation' ? 'translation' : (item.group === 'target' ? 'target' : 'source');
+        const bucket = item.group === 'translation' ? 'translation'
+          : (item.group === 'target' ? 'target'
+            : (item.group === 'other' ? 'other' : 'source'));
+
         const map = buckets[bucket];
-        const key = item.languageKey || item.languageLabel?.toLowerCase() || item.label.toLowerCase();
-        const label = item.languageLabel || item.label;
+
+        // For Source and Target, group by language key (e.g. "portuguese")
+        // For Translation and Other, group by label (e.g. "Make Portuguese", "Learn Spanish")
+        let key, label;
+
+        if (bucket === 'translation' || bucket === 'other') {
+          key = item.label; // Group by the full label
+          label = item.label;
+        } else {
+          key = item.languageKey || item.languageLabel?.toLowerCase() || item.label.toLowerCase();
+          label = item.languageLabel || item.label;
+        }
+
         if (!map.has(key)) map.set(key, { key, label, items: [] });
         map.get(key).items.push(item);
       });
@@ -1102,15 +1131,22 @@
       const filtered = (items || []).filter(shouldDisplaySubtitle);
       const grouped = groupSubtitlesByLanguage(filtered);
 
-      const renderList = (container, map) => {
+      const renderList = (container, groupEl, map) => {
         container.innerHTML = '';
         const languages = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-        languages.forEach(lang => container.appendChild(buildLanguageCard(lang, false, container)));
+
+        if (languages.length === 0) {
+          if (groupEl) groupEl.style.display = 'none';
+        } else {
+          if (groupEl) groupEl.style.display = 'flex';
+          languages.forEach(lang => container.appendChild(buildLanguageCard(lang, false, container)));
+        }
       };
 
-      renderList(els.sourceList, grouped.source);
-      renderList(els.targetList, grouped.target);
-      renderList(els.translationList, grouped.translation);
+      renderList(els.sourceList, els.sourceGroup, grouped.source);
+      renderList(els.targetList, els.targetGroup, grouped.target);
+      renderList(els.translationList, els.translationGroup, grouped.translation);
+      renderList(els.otherList, els.otherGroup, grouped.other);
 
       if (els.body) {
         const hasAny = filtered.length > 0;
