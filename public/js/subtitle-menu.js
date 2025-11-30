@@ -603,7 +603,7 @@
         <div class="subtitle-menu-group subtitle-menu-group-other">
           <div class="subtitle-menu-group-title">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            Other entries
+            Other Entries
           </div>
           <div class="subtitle-menu-list" id="subtitleMenuOther"></div>
         </div>
@@ -793,16 +793,37 @@
     function normalizeSubtitleEntry(entry) {
       const languageInfo = resolveLanguageInfo(entry, config.languageMaps);
       const languageLabel = languageInfo.name || languageInfo.rawLabel || 'Unknown language';
-      const displayLabel = (entry?.title || entry?.name || entry?.label || languageInfo.rawLabel || '').toString().trim()
-        || languageLabel
-        || 'Untitled';
-      const lower = displayLabel.toLowerCase();
-      const isTranslation = lower.startsWith('make ');
-      const isLearn = lower.startsWith('learn ');
-      const isEmbed = lower.startsWith('xembed');
-      const isSync = lower.startsWith('xsync');
-      const isAction = lower.includes('toolbox');
-      const langKey = normalizeLangKey(languageInfo.code || parseTargetLangFromSubtitle(entry) || '');
+      const baseLabel = (entry?.title || entry?.name || entry?.label || languageInfo.rawLabel || '').toString().trim();
+      const fallbackLabel = baseLabel || languageLabel || 'Untitled';
+      const preferredLabel = baseLabel || languageLabel || fallbackLabel;
+      const idLower = (entry?.id || '').toString().toLowerCase();
+      const lower = fallbackLabel.toLowerCase();
+      const isTranslation = lower.startsWith('make ') || idLower.startsWith('translate_') || idLower.includes('_to_');
+      const isLearn = lower.startsWith('learn ') || idLower.startsWith('learn_');
+      const isEmbed = lower.startsWith('xembed') || idLower.startsWith('xembed_');
+      const isSync = lower.startsWith('xsync') || idLower.startsWith('xsync_');
+      const isAction = lower.includes('toolbox') || idLower.includes('toolbox');
+      const ensurePrefix = (labelValue, prefix, options = {}) => {
+        const raw = (labelValue || '').toString();
+        const stripped = raw.replace(new RegExp('^' + prefix + '\\s*', 'i'), '').trim().replace(/^\((.*)\)$/, '$1').trim();
+        if (!stripped) return prefix;
+        if (options.wrapInParens) return `${prefix} (${stripped})`;
+        return `${prefix} ${stripped}`;
+      };
+
+      let displayLabel = fallbackLabel;
+      if (isTranslation && !lower.startsWith('make ')) {
+        displayLabel = ensurePrefix(preferredLabel, 'Make');
+      } else if (isLearn && !lower.startsWith('learn ')) {
+        displayLabel = ensurePrefix(preferredLabel, 'Learn');
+      } else if (isEmbed && !lower.startsWith('xembed')) {
+        displayLabel = ensurePrefix(preferredLabel, 'xEmbed', { wrapInParens: true });
+      } else if (isSync && !lower.startsWith('xsync')) {
+        displayLabel = ensurePrefix(preferredLabel, 'xSync');
+      }
+
+      const normalizedEntry = Object.assign({}, entry, { label: displayLabel, languageLabel });
+      const langKey = normalizeLangKey(languageInfo.code || parseTargetLangFromSubtitle(normalizedEntry) || '');
       const inTarget = langKey && languageSets.target.has(langKey);
       const inSource = langKey && languageSets.source.has(langKey);
       const type = isTranslation ? 'target'
@@ -1164,9 +1185,15 @@
         const languages = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
 
         if (languages.length === 0) {
-          if (groupEl) groupEl.style.display = 'none';
+          if (groupEl) {
+            groupEl.style.display = 'none';
+            groupEl.setAttribute('aria-hidden', 'true');
+          }
         } else {
-          if (groupEl) groupEl.style.display = 'flex';
+          if (groupEl) {
+            groupEl.style.display = 'flex';
+            groupEl.removeAttribute('aria-hidden');
+          }
           languages.forEach(lang => container.appendChild(buildLanguageCard(lang, false, container)));
         }
       };
