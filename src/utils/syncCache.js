@@ -9,6 +9,12 @@ const crypto = require('crypto');
 const { StorageFactory, StorageAdapter } = require('../storage');
 const log = require('./logger');
 
+// Index metadata is stored alongside sync cache entries so we can avoid
+// per-request SCANs. Index keys are namespaced and sanitized to avoid
+// cross-user bleed (storage adapters already isolate via prefix/baseDir).
+const INDEX_VERSION = 1;
+const MAX_INDEX_ENTRIES = 200; // hard cap per video/lang to avoid unbounded growth
+
 // Cache directory for synced subtitles (legacy filesystem fallback)
 const SYNC_CACHE_DIR = path.join(process.cwd(), '.cache', 'sync_cache');
 const MAX_CACHE_SIZE_GB = 50; // 50GB max for sync cache
@@ -47,6 +53,66 @@ function generateSyncCacheKey(videoHash, languageCode, sourceSubId) {
   // Format: videoHash_lang_sourceSubId
   // Example: abc123def456_eng_subdl_12345
   return `${videoHash}_${languageCode}_${sourceSubId}`;
+}
+
+function normalizeIndexSegment(value, fallback = 'unknown') {
+  const str = String(value || fallback);
+  let normalized = str.replace(/[\s\*\?\[\]\\]/g, '_');
+  if (normalized.length > 64) {
+    const hash = crypto.createHash('md5').update(str).digest('hex').slice(0, 8);
+    normalized = normalized.slice(0, 40) + '_' + hash;
+  }
+  return normalized || fallback;
+}
+
+function getIndexKey(videoHash, languageCode) {
+  const safeVideo = normalizeIndexSegment(videoHash);
+  const safeLang = normalizeIndexSegment(languageCode);
+  return `__index_sync__${safeVideo}__${safeLang}`;
+}
+
+async function loadIndex(adapter, videoHash, languageCode) {
+  const indexKey = getIndexKey(videoHash, languageCode);
+  const index = await adapter.get(indexKey, StorageAdapter.CACHE_TYPES.SYNC);
+  if (!index || index.version !== INDEX_VERSION || !Array.isArray(index.keys)) {
+    return { indexKey, keys: [] };
+  }
+  return { indexKey, keys: index.keys };
+}
+
+async function persistIndex(adapter, indexKey, keys) {
+  const unique = Array.from(new Set(keys)).slice(-MAX_INDEX_ENTRIES);
+  await adapter.set(indexKey, { version: INDEX_VERSION, keys: unique }, StorageAdapter.CACHE_TYPES.SYNC);
+  return unique;
+}
+
+async function addToIndex(adapter, videoHash, languageCode, cacheKey) {
+  const { indexKey, keys } = await loadIndex(adapter, videoHash, languageCode);
+  if (keys.includes(cacheKey)) {
+    return keys;
+  }
+  keys.push(cacheKey);
+  return persistIndex(adapter, indexKey, keys);
+}
+
+async function removeFromIndex(adapter, videoHash, languageCode, cacheKey) {
+  const { indexKey, keys } = await loadIndex(adapter, videoHash, languageCode);
+  if (!keys.length) {
+    return;
+  }
+  const filtered = keys.filter(k => k !== cacheKey);
+  if (filtered.length === keys.length) {
+    return;
+  }
+  await persistIndex(adapter, indexKey, filtered);
+}
+
+async function rebuildIndexFromStorage(adapter, videoHash, languageCode) {
+  const pattern = `${videoHash}_${languageCode}_*`;
+  const keys = await adapter.list(StorageAdapter.CACHE_TYPES.SYNC, pattern);
+  const { indexKey } = await loadIndex(adapter, videoHash, languageCode);
+  const saved = await persistIndex(adapter, indexKey, keys || []);
+  return saved;
 }
 
 /**
@@ -91,6 +157,13 @@ async function saveSyncedSubtitle(videoHash, languageCode, sourceSubId, syncData
     // Save to storage
     await adapter.set(cacheKey, cacheEntry, StorageAdapter.CACHE_TYPES.SYNC);
 
+    // Maintain per-video/lang index to avoid SCAN on reads
+    try {
+      await addToIndex(adapter, videoHash, languageCode, cacheKey);
+    } catch (error) {
+      log.warn(() => [`[Sync Cache] Failed to update index for ${cacheKey}:`, error.message]);
+    }
+
     log.debug(() => `[Sync Cache] Saved: ${cacheKey}`);
 
   } catch (error) {
@@ -109,16 +182,22 @@ async function saveSyncedSubtitle(videoHash, languageCode, sourceSubId, syncData
 async function getSyncedSubtitles(videoHash, languageCode) {
   try {
     const adapter = await getStorageAdapter();
-    const pattern = `${videoHash}_${languageCode}_*`;
+    let { keys } = await loadIndex(adapter, videoHash, languageCode);
 
-    // List matching keys via the adapter
-    const keys = await adapter.list(StorageAdapter.CACHE_TYPES.SYNC, pattern);
+    // If the index is empty, rebuild once from storage as a fallback
+    if (!keys.length) {
+      keys = await rebuildIndexFromStorage(adapter, videoHash, languageCode);
+    }
+
     const results = [];
 
     for (const cacheKey of keys) {
       try {
         const entry = await adapter.get(cacheKey, StorageAdapter.CACHE_TYPES.SYNC);
-        if (!entry) continue;
+        if (!entry) {
+          try { await removeFromIndex(adapter, videoHash, languageCode, cacheKey); } catch (_) {}
+          continue;
+        }
 
         results.push({
           cacheKey,
@@ -130,6 +209,8 @@ async function getSyncedSubtitles(videoHash, languageCode) {
         });
       } catch (error) {
         log.warn(() => [`[Sync Cache] Failed to fetch entry for ${cacheKey}:`, error.message]);
+        // On failure, drop the key from index to avoid repeat hits
+        try { await removeFromIndex(adapter, videoHash, languageCode, cacheKey); } catch (_) {}
       }
     }
 
@@ -193,6 +274,11 @@ async function deleteSyncedSubtitle(videoHash, languageCode, sourceSubId) {
 
     const deleted = await adapter.delete(cacheKey, StorageAdapter.CACHE_TYPES.SYNC);
     if (deleted) {
+      try {
+        await removeFromIndex(adapter, videoHash, languageCode, cacheKey);
+      } catch (error) {
+        log.warn(() => [`[Sync Cache] Failed to update index on delete for ${cacheKey}:`, error.message]);
+      }
       log.debug(() => `[Sync Cache] Deleted: ${cacheKey}`);
     }
     return deleted;

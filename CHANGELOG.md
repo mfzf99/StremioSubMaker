@@ -23,6 +23,8 @@ All notable changes to this project will be documented in this file.
 - **Subtitle intelligence:** Language lookup now normalizes ISO1/ISO2 codes and common aliases (e.g., LATAM Spanish, Brazilian Portuguese), improving grouping/labels across providers and cached translations.
 - **Stream context:** QuickNav toasts clean filenames, add episode tags, and fetch Cinemeta titles; owner leases fail over faster and duplicate SSE connections are avoided.
 - **Subtitle menu polish:** Status overlay now anchors to the footer with glassmorphism, the footer shows version/filename plus subtitle and language counts, and translation-ready targets stay visible while status messages display.
+- **Cache indexing:** Embedded and sync caches now keep per-video indexes to avoid storage scans, cap index size, and drop stale keys when reads fail.
+- **Subtitle labels:** Subtitle menu normalizes generated labels (Make/Learn/xEmbed/xSync) and hides empty groups from screen readers for clearer navigation.
 
 ## SubMaker v1.4.10
 
