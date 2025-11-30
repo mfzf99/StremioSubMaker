@@ -1228,6 +1228,7 @@
     function buildLanguageCard(langEntry, openByDefault, container, groupType) {
       const card = document.createElement('div');
       card.className = 'subtitle-lang-card' + (openByDefault ? ' open' : '');
+      card.setAttribute('data-lang-key', langEntry.key || langEntry.label || '');
       const header = document.createElement('button');
       header.type = 'button';
       header.className = 'subtitle-lang-header';
@@ -1298,12 +1299,23 @@
       return card;
     }
 
+    function getOpenCardKeys(container) {
+      const keys = new Set();
+      if (!container) return keys;
+      container.querySelectorAll('.subtitle-lang-card.open').forEach(el => {
+        const key = el.getAttribute('data-lang-key');
+        if (key) keys.add(key);
+      });
+      return keys;
+    }
+
     function renderSubtitleMenu(items, els) {
       if (!els.sourceList || !els.targetList || !els.translationList) return;
       const filtered = (items || []).filter(shouldDisplaySubtitle);
       const grouped = groupSubtitlesByLanguage(filtered);
 
       const renderList = (container, groupEl, map, groupType) => {
+        const openKeys = getOpenCardKeys(container);
         container.innerHTML = '';
         const languages = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
 
@@ -1317,7 +1329,7 @@
             groupEl.style.display = 'flex';
             groupEl.removeAttribute('aria-hidden');
           }
-          languages.forEach(lang => container.appendChild(buildLanguageCard(lang, false, container, groupType)));
+          languages.forEach(lang => container.appendChild(buildLanguageCard(lang, openKeys.has(lang.key), container, groupType)));
         }
       };
 
