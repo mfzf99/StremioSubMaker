@@ -129,6 +129,7 @@
       gap: 16px;
       border-bottom: 1px solid var(--sm-border);
       background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent);
+      box-shadow: inset 0 -1px rgba(255, 255, 255, 0.08);
     }
 
     .subtitle-menu-titles {
@@ -193,6 +194,7 @@
 
     .subtitle-menu-body {
       padding: 16px;
+      position: relative;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -201,6 +203,7 @@
       min-height: 0;
       scrollbar-width: thin;
       scrollbar-color: var(--sm-text-muted) transparent;
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
     }
 
     .subtitle-menu-body::-webkit-scrollbar {
@@ -404,19 +407,23 @@
 
     .subtitle-menu-status {
       position: relative;
-      padding: 12px 16px;
+      padding: 10px 14px;
       background: var(--sm-surface);
       border-top: 1px solid var(--sm-border);
       font-size: 13px;
+      line-height: 1.2;
       font-weight: 600;
       color: var(--sm-text);
       display: flex;
       align-items: center;
-      gap: 10px;
-      min-height: 48px;
+      gap: 8px;
+      min-height: 42px;
       z-index: 20;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
+      box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.08),
+        inset 0 -1px rgba(15, 23, 42, 0.06);
     }
 
     .subtitle-menu-status.show {
@@ -450,6 +457,9 @@
       backdrop-filter: blur(8px);
       z-index: 10;
       min-height: 54px;
+      box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.08),
+        0 -1px 0 rgba(15, 23, 42, 0.06);
     }
 
     [data-theme="dark"] .subtitle-menu-footer,
