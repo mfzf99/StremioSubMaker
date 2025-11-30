@@ -1618,14 +1618,12 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             <div class="modal-content">
                 <h3>Sync Methods</h3>
                 <ol>
-                    <li><strong>Quick Sync:</strong> 3 anchors (start/mid/end) at 180s each for a rapid drift check.</li>
-                    <li><strong>Smart Sync:</strong> 5 windows (start + 3 spread + end) at 180s each to catch bitrate shifts/ads.</li>
-                    <li><strong>Long Sync:</strong> 7 windows (start + 5 spread + end) at 240s each for deeper coverage.</li>
-                    <li><strong>Thorough Sync:</strong> 12 windows (start + 10 spread + end) at 240s each for dense alignment.</li>
-                    <li><strong>Complete Sync:</strong> Scans the full runtime for maximum accuracy.</li>
                     <li><strong>Manual Offset:</strong> Adjust subtitle timing manually with positive/negative milliseconds when you don't want to run autosync.</li>
+                    <li><strong>ALASS (audio ➜ subtitle):</strong> Fast wasm anchors against the audio; pick Rapid/Balanced/Deep/Complete profiles for coverage.</li>
+                    <li><strong>FFSubSync (audio ➜ subtitle):</strong> Drift-aware audio alignment via ffsubsync-wasm; choose a light, balanced, deep, or complete scan.</li>
+                    <li><strong>Whisper + ALASS (subtitle ➜ subtitle):</strong> Whisper transcript alignment with an ALASS refinement pass; use light/balanced/deep/complete profiles to control scan size.</li>
                 </ol>
-                <p>Smart Sync auto-selects when the extension is detected; switch modes if ads or heavy drifts need a different scan.</p>
+                <p>Select a primary engine first, then pick its scan profile. Coverage adapts to the detected runtime so heavy cases can get deeper scans.</p>
             </div>
             <div class="modal-footer">
                 <label class="modal-checkbox">
@@ -1750,15 +1748,18 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     </div>
 
                     <div class="form-group">
-                        <label for="syncMethod">Sync Method:</label>
-                        <select id="syncMethod">
+                        <label for="primarySyncMode">Primary Mode:</label>
+                        <select id="primarySyncMode">
                             <option value="manual">📝 Manual Offset Adjustment</option>
-                            <option value="quick" disabled>⚡ Quick Sync - light ~5% coverage</option>
-                            <option value="smart" disabled>🚀 Smart Sync - ~10–15% spread coverage</option>
-                            <option value="long" disabled>⏳ Long Sync - ~25–30% deep coverage</option>
-                            <option value="thorough" disabled>🧭 Thorough Sync - ~45% dense coverage</option>
-                            <option value="complete" disabled>🎯 Complete Sync - Full runtime scan</option>
+                            <option value="alass" disabled>🎯 ALASS (audio ➜ subtitle)</option>
+                            <option value="ffsubsync" disabled>🎛️ FFSubSync (audio ➜ subtitle)</option>
+                            <option value="whisper-alass" disabled>🗣️ Whisper + ALASS (subtitle ➜ subtitle)</option>
                         </select>
+                    </div>
+
+                    <div class="form-group" id="secondaryModeGroup" style="display: none;">
+                        <label for="secondarySyncMode">Scan Profile:</label>
+                        <select id="secondarySyncMode"></select>
                     </div>
 
                     <!-- Manual Sync Controls -->
@@ -1785,14 +1786,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         <div class="info-box auto-sync-box">
                             <p id="syncMethodDescription" class="sync-method-description"></p>
                         </div>
-                    </div>
-
-                    <div class="checkbox-group" style="margin-top: 0.75rem;">
-                        <input type="checkbox" id="preferAlass">
-                        <label for="preferAlass" style="display:flex;flex-direction:column;">
-                            <span style="font-weight:700;">Use alass alignment first</span>
-                            <span class="label-description">Skip straight to alass-wasm (faster if Whisper struggles); falls back automatically on failure.</span>
-                        </label>
                     </div>
 
                     <button id="startSyncBtn" class="btn btn-primary">
@@ -2274,74 +2267,121 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             return \`\${seconds}s\`;
         }
 
-        const SYNC_PRESETS = {
-            quick:   { coveragePct: 0.05, minWindows: 3, maxWindows: 5, windowSeconds: 45, strategy: 'spread', legacyMode: 'quick' },
-            smart:   { coveragePct: 0.1,  minWindows: 4, maxWindows: 7, windowSeconds: 60, strategy: 'spread', legacyMode: 'fast' },
-            long:    { coveragePct: 0.28, minWindows: 6, maxWindows: 11, windowSeconds: 75, strategy: 'spread', legacyMode: 'complete' },
-            thorough:{ coveragePct: 0.45, minWindows: 10, maxWindows: 16, windowSeconds: 90, strategy: 'dense-spread', legacyMode: 'complete' },
-            complete:{ coveragePct: 1,    minWindows: null, maxWindows: null, windowSeconds: null, strategy: 'full', legacyMode: 'complete' }
+        const AUTO_PRIMARY_MODES = ['alass', 'ffsubsync', 'whisper-alass'];
+        const SYNC_MODE_LIBRARY = {
+            alass: {
+                description: 'Audio ➜ subtitle anchors via alass-wasm.',
+                options: [
+                    { value: 'alass-rapid', label: 'Rapid anchors (~8–10%)', description: '4–6 short anchor windows for quick drift locking.', plan: { coverageTargetPct: 0.1, minWindows: 4, maxWindows: 6, windowSeconds: 45, strategy: 'spread', legacyMode: 'fast' }, preferAlass: true },
+                    { value: 'alass-balanced', label: 'Balanced anchors (~14–18%)', description: '6–9 windows at ~60s for tougher bitrate shifts.', plan: { coverageTargetPct: 0.16, minWindows: 6, maxWindows: 9, windowSeconds: 60, strategy: 'spread', legacyMode: 'fast' }, preferAlass: true },
+                    { value: 'alass-deep', label: 'Deep anchors (~26–32%)', description: '9–14 windows at ~75s for heavy drift/ads.', plan: { coverageTargetPct: 0.28, minWindows: 9, maxWindows: 14, windowSeconds: 75, strategy: 'dense-spread', legacyMode: 'complete' }, preferAlass: true },
+                    { value: 'alass-complete', label: 'Complete (full runtime)', description: 'Scan the full runtime with alass anchors.', plan: { coverageTargetPct: 1, strategy: 'full', fullScan: true, legacyMode: 'complete' }, preferAlass: true }
+                ]
+            },
+            ffsubsync: {
+                description: 'Audio ➜ subtitle alignment via ffsubsync-wasm.',
+                options: [
+                    { value: 'ffss-light', label: 'Light scan (~6–8%)', description: '4–6 windows (~60s) to catch obvious drifts quickly.', plan: { coverageTargetPct: 0.08, minWindows: 4, maxWindows: 6, windowSeconds: 60, strategy: 'spread', legacyMode: 'fast' }, preferFfsubsync: true },
+                    { value: 'ffss-balanced', label: 'Balanced scan (~12–16%)', description: '6–10 windows (~80s) for mixed drift patterns.', plan: { coverageTargetPct: 0.14, minWindows: 6, maxWindows: 10, windowSeconds: 80, strategy: 'spread', legacyMode: 'fast' }, preferFfsubsync: true },
+                    { value: 'ffss-deep', label: 'Deep scan (~22–28%)', description: '9–14 windows (~100s) for aggressive correction.', plan: { coverageTargetPct: 0.24, minWindows: 9, maxWindows: 14, windowSeconds: 100, strategy: 'dense-spread', legacyMode: 'complete' }, preferFfsubsync: true },
+                    { value: 'ffss-complete', label: 'Complete (full runtime)', description: 'Full-runtime ffsubsync scan for maximum accuracy.', plan: { coverageTargetPct: 1, strategy: 'full', fullScan: true, legacyMode: 'complete' }, preferFfsubsync: true }
+                ]
+            },
+            'whisper-alass': {
+                description: 'Subtitle ➜ subtitle (Whisper transcript + ALASS refine).',
+                options: [
+                    { value: 'whisper-light', label: 'Light scan (~5–7%)', description: '3–5 Whisper windows (~70s) to sanity-check drift.', plan: { coverageTargetPct: 0.06, minWindows: 3, maxWindows: 5, windowSeconds: 70, strategy: 'spread', legacyMode: 'fast' } },
+                    { value: 'whisper-balanced', label: 'Balanced scan (~12–16%)', description: '5–8 windows (~85s) for typical shows with ads.', plan: { coverageTargetPct: 0.14, minWindows: 5, maxWindows: 8, windowSeconds: 85, strategy: 'spread', legacyMode: 'fast' } },
+                    { value: 'whisper-deep', label: 'Deep scan (~22–28%)', description: '8–12 windows (~100s) for stubborn drifts.', plan: { coverageTargetPct: 0.26, minWindows: 8, maxWindows: 12, windowSeconds: 100, strategy: 'dense-spread', legacyMode: 'complete' } },
+                    { value: 'whisper-complete', label: 'Complete (full runtime)', description: 'Full-runtime transcript + align when you need everything.', plan: { coverageTargetPct: 1, strategy: 'full', fullScan: true, legacyMode: 'complete' } }
+                ]
+            }
         };
-        const AUTO_SYNC_MODES = Object.keys(SYNC_PRESETS);
-        const SYNC_DESCRIPTIONS = {
-            quick: '⚡ <strong>Quick Sync:</strong> Light 5–8% runtime coverage to spot obvious drift.',
-            smart: '🚀 <strong>Smart Sync:</strong> Balanced 10–15% coverage spread across the runtime.',
-            long: '⏳ <strong>Long Sync:</strong> Deep 25–30% coverage for tougher bitrate shifts/ads.',
-            thorough: '🧭 <strong>Thorough Sync:</strong> Dense ~45% coverage for hard cases and long runtimes.',
-            complete: '🎯 <strong>Complete Sync:</strong> Full-runtime scan (splits into chunks when needed).'
+        const PRIMARY_DESCRIPTIONS = {
+            manual: '📝 Manual offset: type the millisecond shift you need.',
+            alass: '🎯 ALASS anchors the subtitle to audio for fast, offline alignment.',
+            ffsubsync: '🎛️ FFSubSync detects drifts/ads directly from the audio waveform.',
+            'whisper-alass': '🗣️ Whisper transcript alignment with an ALASS refinement pass.'
         };
+        const PRESET_DESCRIPTIONS = (() => {
+            const map = {};
+            Object.values(SYNC_MODE_LIBRARY).forEach(group => {
+                (group.options || []).forEach(opt => {
+                    map[opt.value] = opt.description || '';
+                });
+            });
+            return map;
+        })();
         const MIN_WINDOW_SECONDS = 20;
         const MAX_WINDOW_SECONDS = 7200;
 
-        function buildSyncPlan(mode, estimatedDurationMs = null) {
-            const preset = SYNC_PRESETS[mode] || SYNC_PRESETS.smart;
+        function resolveSecondaryPreset(primaryMode, secondaryPresetValue) {
+            const options = (SYNC_MODE_LIBRARY[primaryMode] || {}).options || [];
+            if (!options.length) return null;
+            return options.find(opt => opt.value === secondaryPresetValue) || options[0];
+        }
+
+        function buildSyncPlan(primaryMode, secondaryPresetValue, estimatedDurationMs = null) {
+            const preset = resolveSecondaryPreset(primaryMode, secondaryPresetValue);
+            if (!preset) return null;
             const durationSeconds = estimatedDurationMs ? Math.max(0, estimatedDurationMs / 1000) : null;
+            const targetCoverage = Number.isFinite(preset.plan?.coverageTargetPct)
+                ? Math.max(0.01, Math.min(1, preset.plan.coverageTargetPct))
+                : Number.isFinite(preset.plan?.coveragePct)
+                    ? Math.max(0.01, Math.min(1, preset.plan.coveragePct))
+                    : 0.1;
+
+            const minWindows = Number.isFinite(preset.plan?.minWindows) ? preset.plan.minWindows : null;
+            const maxWindows = Number.isFinite(preset.plan?.maxWindows) ? preset.plan.maxWindows : null;
+            const fullScan = preset.plan?.fullScan === true || preset.plan?.strategy === 'full';
 
             const minWindow = durationSeconds ? Math.min(MIN_WINDOW_SECONDS, Math.max(durationSeconds, 1)) : MIN_WINDOW_SECONDS;
 
-            let windowSeconds = preset.windowSeconds;
+            let windowSeconds = Number.isFinite(preset.plan?.windowSeconds) ? preset.plan.windowSeconds : null;
             if (windowSeconds != null) {
                 windowSeconds = Math.min(Math.max(windowSeconds, minWindow), MAX_WINDOW_SECONDS);
-            } else if (durationSeconds && preset.coveragePct && (preset.minWindows || preset.maxWindows)) {
-                const targetCoverageSec = durationSeconds * preset.coveragePct;
-                const divisor = Math.max(1, preset.minWindows || 3);
+            } else if (durationSeconds && targetCoverage && (minWindows || maxWindows) && !fullScan) {
+                const targetCoverageSec = durationSeconds * targetCoverage;
+                const divisor = Math.max(1, minWindows || 3);
                 windowSeconds = Math.min(Math.max(targetCoverageSec / divisor, minWindow), Math.max(180, minWindow));
             }
             const requestedWindowSeconds = windowSeconds;
 
-            const targetCoveragePct = preset.coveragePct || 0.1;
-            let windowCount = preset.strategy === 'full' ? null : (preset.minWindows || preset.windows || 3);
+            const targetCoveragePct = targetCoverage || 0.1;
+            let windowCount = fullScan ? null : (Number.isFinite(preset.plan?.windowCount) ? preset.plan.windowCount : (minWindows || 3));
             let durationAdjusted = false;
 
-            if (durationSeconds && preset.strategy !== 'full') {
+            if (durationSeconds && !fullScan) {
                 const targetCoverageSeconds = durationSeconds * targetCoveragePct;
                 const desiredCount = windowSeconds
                     ? Math.ceil(targetCoverageSeconds / windowSeconds)
-                    : (preset.minWindows || 3);
-                const bounded = preset.maxWindows ? Math.min(preset.maxWindows, desiredCount) : desiredCount;
-                const minBound = preset.minWindows || 1;
+                    : (minWindows || 3);
+                const bounded = maxWindows ? Math.min(maxWindows, desiredCount) : desiredCount;
+                const minBound = minWindows || 1;
                 const adjustedCount = Math.max(minBound, bounded);
                 if (windowCount !== adjustedCount) durationAdjusted = true;
                 windowCount = adjustedCount;
             }
 
-            let coverageSeconds = (windowCount && windowSeconds) ? windowCount * windowSeconds : null;
+            let coverageSeconds = fullScan ? (durationSeconds || null) : ((windowCount && windowSeconds) ? windowCount * windowSeconds : null);
 
             const plan = {
-                preset: mode,
-                legacyMode: preset.legacyMode || mode,
-                windowCount: preset.strategy === 'full' ? null : windowCount,
-                windowSeconds: preset.strategy === 'full'
-                    ? (durationSeconds || preset.windowSeconds || null)
+                preset: preset.value,
+                legacyMode: preset.plan?.legacyMode || preset.value,
+                windowCount: fullScan ? null : windowCount,
+                windowSeconds: fullScan
+                    ? (durationSeconds || preset.plan?.windowSeconds || null)
                     : windowSeconds,
                 requestedWindowSeconds,
-                coverageSeconds: preset.strategy === 'full' ? (durationSeconds || null) : coverageSeconds,
+                coverageSeconds,
                 coverageTargetPct: targetCoveragePct,
                 durationSeconds,
-                minWindows: preset.minWindows || null,
-                maxWindows: preset.maxWindows || null,
-                strategy: preset.strategy,
-                fullScan: preset.strategy === 'full',
-                durationAdjusted
+                minWindows: minWindows || null,
+                maxWindows: maxWindows || null,
+                strategy: preset.plan?.strategy || (fullScan ? 'full' : 'spread'),
+                fullScan,
+                durationAdjusted,
+                modeGroup: primaryMode
             };
 
             if (durationSeconds && plan.windowSeconds && plan.windowSeconds > durationSeconds) {
@@ -2398,6 +2438,54 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         const extLabel = document.getElementById('ext-label');
         const extStatus = document.getElementById('ext-status');
         const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn?authuser=0&hl=en';
+        const primaryModeSelect = document.getElementById('primarySyncMode');
+        const secondaryModeSelect = document.getElementById('secondarySyncMode');
+        const secondaryModeGroup = document.getElementById('secondaryModeGroup');
+
+        function setAutoSyncAvailability(enabled) {
+            const primaryOptions = ['alass', 'ffsubsync', 'whisper-alass'];
+            primaryOptions.forEach((mode) => {
+                const opt = primaryModeSelect?.querySelector('option[value="' + mode + '"]');
+                if (opt) opt.disabled = !enabled;
+            });
+            if (secondaryModeSelect) {
+                secondaryModeSelect.disabled = !enabled;
+            }
+        }
+
+        function populateSecondaryOptions(primaryMode) {
+            if (!secondaryModeSelect || !secondaryModeGroup) return;
+            const opts = (SYNC_MODE_LIBRARY[primaryMode] || {}).options || [];
+            if (!opts.length || primaryMode === 'manual') {
+                secondaryModeGroup.style.display = 'none';
+                secondaryModeSelect.innerHTML = '';
+                return;
+            }
+
+            const previous = secondaryModeSelect.value;
+            secondaryModeSelect.innerHTML = '';
+            opts.forEach((opt) => {
+                const optionEl = document.createElement('option');
+                optionEl.value = opt.value;
+                optionEl.textContent = opt.label;
+                secondaryModeSelect.appendChild(optionEl);
+            });
+            const restored = previous && opts.some(o => o.value === previous);
+            if (restored) {
+                secondaryModeSelect.value = previous;
+            } else if (secondaryModeSelect.options.length) {
+                secondaryModeSelect.value = secondaryModeSelect.options[0].value;
+            }
+            secondaryModeGroup.style.display = 'block';
+        }
+
+        function resolveEnginePrefs(primaryMode, secondaryPresetValue) {
+            const preset = resolveSecondaryPreset(primaryMode, secondaryPresetValue);
+            return {
+                preferAlass: !!(preset?.preferAlass || primaryMode === 'alass'),
+                preferFfsubsync: !!(preset?.preferFfsubsync || primaryMode === 'ffsubsync')
+            };
+        }
 
         function updateExtensionStatus(ready, text, tone) {
             extensionInstalled = ready;
@@ -2422,6 +2510,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         function pingExtension() {
             updateExtensionStatus(false, 'Pinging extension...', 'warn');
+            setAutoSyncAvailability(false);
             if (pingTimer) clearInterval(pingTimer);
             pingAttempts = 0;
             const sendPing = () => {
@@ -2450,22 +2539,15 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     logSync('Extension detected (v' + version + ')', 'info');
                     if (pingTimer) clearInterval(pingTimer);
 
-                    const quickOption = document.querySelector('#syncMethod option[value="quick"]');
-                    const smartOption = document.querySelector('#syncMethod option[value="smart"]');
-                    const longOption = document.querySelector('#syncMethod option[value="long"]');
-                    const thoroughOption = document.querySelector('#syncMethod option[value="thorough"]');
-                    const completeOption = document.querySelector('#syncMethod option[value="complete"]');
+                    setAutoSyncAvailability(true);
 
-                    if (quickOption) quickOption.disabled = false;
-                    if (smartOption) smartOption.disabled = false;
-                    if (longOption) longOption.disabled = false;
-                    if (thoroughOption) thoroughOption.disabled = false;
-                    if (completeOption) completeOption.disabled = false;
+                    logSync('Sync engines unlocked (ALASS / FFSubSync / Whisper + ALASS)', 'info');
 
-                    logSync('Sync options unlocked (quick/smart/long/thorough/complete)', 'info');
-
-                    document.getElementById('syncMethod').value = 'smart';
-                    document.getElementById('syncMethod').dispatchEvent(new Event('change'));
+                    if (primaryModeSelect && primaryModeSelect.value === 'manual') {
+                        primaryModeSelect.value = 'whisper-alass';
+                    }
+                    populateSecondaryOptions(primaryModeSelect?.value || 'whisper-alass');
+                    refreshSyncPlanPreview();
                     break;
                 }
                 case 'SUBMAKER_DEBUG_LOG': {
@@ -2489,7 +2571,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         setTimeout(pingExtension, 150);
 
         // Request sync from Chrome extension
-        function requestExtensionSync(streamUrl, subtitleContent, plan = null, preferAlass = false) {
+        function requestExtensionSync(streamUrl, subtitleContent, plan = null, preferAlass = false, preferFfsubsync = false) {
             return new Promise((resolve, reject) => {
                 const messageId = 'sync_' + Date.now();
                 const modeToSend = (plan && plan.legacyMode) ? plan.legacyMode : (plan && plan.preset) ? plan.preset : 'smart';
@@ -2548,7 +2630,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         mode: modeToSend,  // Pass mode to extension
                         preset: plan?.preset || modeToSend,
                         plan: planPayload,
-                        preferAlass: !!preferAlass
+                        preferAlass: !!preferAlass,
+                        preferFfsubsync: !!preferFfsubsync
                     }
                 }, '*');
                 const summary = describeSyncPlan(plan);
@@ -2566,12 +2649,12 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         // Sync method change handler
         function refreshSyncPlanPreview() {
-            const method = document.getElementById('syncMethod').value;
+            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'manual';
             const manualControls = document.getElementById('manualSyncControls');
             const autoSyncInfo = document.getElementById('autoSyncInfo');
             const syncMethodDesc = document.getElementById('syncMethodDescription');
 
-            if (method === 'manual') {
+            if (primaryMode === 'manual') {
                 manualControls.style.display = 'block';
                 autoSyncInfo.style.display = 'none';
                 syncMethodDesc.innerHTML = '';
@@ -2582,16 +2665,24 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             manualControls.style.display = 'none';
             autoSyncInfo.style.display = 'block';
 
-            const plan = buildSyncPlan(method, STATE.estimatedDurationMs);
-            STATE.activeSyncPlan = plan;
+            const preset = resolveSecondaryPreset(primaryMode, secondaryModeSelect?.value);
+            const plan = buildSyncPlan(primaryMode, preset ? preset.value : null, STATE.estimatedDurationMs);
+            STATE.activeSyncPlan = plan || null;
 
             const summary = describeSyncPlan(plan);
-            const baseDesc = SYNC_DESCRIPTIONS[method] || '';
-            syncMethodDesc.innerHTML = baseDesc + (summary ? '<div class="plan-summary">Plan: ' + summary + '</div>' : '');
+            const primaryDesc = PRIMARY_DESCRIPTIONS[primaryMode] || '';
+            const presetDesc = (preset && PRESET_DESCRIPTIONS[preset.value]) || (preset ? preset.description : '');
+            const combinedDesc = [primaryDesc, presetDesc].filter(Boolean).join(' ');
+            syncMethodDesc.innerHTML = combinedDesc + (summary ? '<div class="plan-summary">Plan: ' + summary + '</div>' : '');
         }
 
-        document.getElementById('syncMethod').addEventListener('change', refreshSyncPlanPreview);
+        primaryModeSelect?.addEventListener('change', (e) => {
+            populateSecondaryOptions(e.target.value);
+            refreshSyncPlanPreview();
+        });
+        secondaryModeSelect?.addEventListener('change', refreshSyncPlanPreview);
 
+        populateSecondaryOptions(primaryModeSelect?.value || 'manual');
         refreshSyncPlanPreview();
 
         // Step 1: Continue button
@@ -2708,14 +2799,15 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 return;
             }
 
-            const syncMethod = document.getElementById('syncMethod').value;
+            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'manual';
+            const secondaryMode = secondaryModeSelect ? secondaryModeSelect.value : null;
 
             try {
                 setSyncInFlight(true);
                 document.getElementById('syncProgress').style.display = 'block';
                 hideStatus('syncStatus');
 
-                if (syncMethod !== 'manual') {
+                if (primaryMode !== 'manual') {
                     if (!extensionInstalled) {
                         throw new Error('Autosync requires the SubMaker Chrome Extension. Please install/enable it.');
                     }
@@ -2724,7 +2816,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     }
                 }
 
-                if (syncMethod === 'manual') {
+                if (primaryMode === 'manual') {
                     // Manual offset adjustment
                     const offsetMs = parseInt(document.getElementById('offsetMs').value) || 0;
 
@@ -2734,18 +2826,16 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     STATE.syncedSubtitle = offsetSubtitles(STATE.subtitleContent, offsetMs);
 
                     updateProgress('syncProgressFill', 'syncProgressText', 100, 'Sync complete!');
-                } else if (AUTO_SYNC_MODES.includes(syncMethod)) {
-                    // Automatic sync using Chrome extension with selected mode
-                    const modeNames = {
-                        'quick': 'Quick',
-                        'smart': 'Smart',
-                        'long': 'Long',
-                        'thorough': 'Thorough',
-                        'complete': 'Complete'
-                    };
-                    const modeName = modeNames[syncMethod] || syncMethod;
-                    const preferAlass = document.getElementById('preferAlass')?.checked === true;
-                    const syncPlan = buildSyncPlan(syncMethod, STATE.estimatedDurationMs);
+                } else if (AUTO_PRIMARY_MODES.includes(primaryMode)) {
+                    const preset = resolveSecondaryPreset(primaryMode, secondaryMode);
+                    if (!preset) {
+                        throw new Error('Select a scan profile before starting autosync.');
+                    }
+
+                    const modeName = preset.label || (secondaryMode || 'Autosync');
+                    const primaryLabel = primaryModeSelect?.selectedOptions?.[0]?.textContent || primaryMode;
+                    const prefs = resolveEnginePrefs(primaryMode, preset.value);
+                    const syncPlan = buildSyncPlan(primaryMode, preset.value, STATE.estimatedDurationMs);
                     STATE.activeSyncPlan = syncPlan;
                     const planSummary = describeSyncPlan(syncPlan);
 
@@ -2753,18 +2843,24 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         logSync('Plan: ' + planSummary, 'info');
                     }
 
-                    const intro = \`Starting \${modeName} Sync\${planSummary ? ' (' + planSummary + ')' : ''}...\`;
+                    const intro = \`Starting \${modeName} (\${primaryLabel})\${planSummary ? ' [' + planSummary + ']' : ''}...\`;
                     updateProgress('syncProgressFill', 'syncProgressText', 10, intro);
 
                     // Request audio extraction and sync from extension
-                    const syncResult = await requestExtensionSync(STATE.streamUrl, STATE.subtitleContent, syncPlan, preferAlass);
+                    const syncResult = await requestExtensionSync(
+                        STATE.streamUrl,
+                        STATE.subtitleContent,
+                        syncPlan,
+                        prefs.preferAlass,
+                        prefs.preferFfsubsync
+                    );
 
                     if (!syncResult.success) {
                         throw new Error(syncResult.error || 'Extension sync failed');
                     }
 
                     STATE.syncedSubtitle = syncResult.syncedSubtitle;
-                    updateProgress('syncProgressFill', 'syncProgressText', 100, \`\${modeName} Sync complete!\`);
+                    updateProgress('syncProgressFill', 'syncProgressText', 100, \`\${modeName} complete!\`);
                 }
 
                 // Save to cache
