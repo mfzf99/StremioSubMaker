@@ -4,10 +4,9 @@
     if (!('serviceWorker' in navigator)) return;
 
     window.addEventListener('load', function() {
-        // Aggressive cache-buster ensures clients always fetch the latest SW immediately
-        // This prevents stale SWs (with Vary:* cache.put) from lingering
-        const cacheBust = Date.now();
-        navigator.serviceWorker.register('/sw.js?v=' + cacheBust, { scope: '/', updateViaCache: 'none' })
+        // Version-based cache-buster: keeps first load light while updating on new releases
+        var versionTag = (window.__APP_VERSION__ || 'dev').toString();
+        navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(versionTag), { scope: '/', updateViaCache: 'none' })
             .then(function(reg) {
                 setInterval(function() {
                     reg.update().catch(function(){});
