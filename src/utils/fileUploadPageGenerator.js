@@ -2691,8 +2691,8 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         // Language lists
         const targetPlaceholderOption = '<option value="">' + localeStrings.targetPlaceholder + '</option>';
         const sourceAutoOption = '<option value="">' + localeStrings.sourceAuto + '</option>';
-        const configuredLanguages = `${targetPlaceholderOption}${languageOptions}`;
-        const allLanguagesList = `${targetPlaceholderOption}${allLanguageOptions}`;
+        const configuredLanguages = targetPlaceholderOption + languageOptions;
+        const allLanguagesList = targetPlaceholderOption + allLanguageOptions;
         const hasConfiguredLanguages = Array.isArray(clientConfig.targetLanguages) && clientConfig.targetLanguages.length > 0;
         const defaultSourceLanguage = Array.isArray(clientConfig.sourceLanguages) && clientConfig.sourceLanguages.length
             ? clientConfig.sourceLanguages[0]
