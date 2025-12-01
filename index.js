@@ -19,7 +19,7 @@ const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, getLangua
 const { srtPairToWebVTT } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
 const { redactToken } = require('./src/utils/security');
-const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName } = require('./src/utils/languages');
+const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
 const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation } = require('./src/handlers/subtitles');
@@ -3580,25 +3580,9 @@ function normalizeSyncLanguageCode(raw) {
     const val = (raw || '').toString().trim().toLowerCase();
     if (!val) return '';
 
-    // Direct ISO-639-2 match
-    if (getLanguageName(val)) return val;
-
-    // Try ISO-639-1 -> ISO-639-2 mapping
-    const iso2FromIso1 = Array.isArray(toISO6392(val)) ? toISO6392(val) : [];
-    if (iso2FromIso1.length) {
-        const code = iso2FromIso1[0];
-        if (typeof code === 'string') return code;
-        if (code && typeof code.code2 === 'string') return code.code2;
-    }
-
-    // Try resolving by language name
-    const iso1FromName = findISO6391ByName(val);
-    const iso2FromName = iso1FromName ? toISO6392(iso1FromName) : [];
-    if (iso2FromName && iso2FromName.length) {
-        const code = iso2FromName[0];
-        if (typeof code === 'string') return code;
-        if (code && typeof code.code2 === 'string') return code.code2;
-    }
+    // Prefer canonical ISO-639-2/custom code to keep sync keys consistent (e.g., en -> eng, pt-br -> pob)
+    const canonical = canonicalSyncLanguageCode(val);
+    if (canonical) return canonical;
 
     // Fallback: return normalized value (avoid empty writes)
     return val;

@@ -402,6 +402,40 @@ function buildLanguageLookupMaps() {
   return { byCode, byNameKey };
 }
 
+/**
+ * Canonicalize a language code for synced subtitle storage/lookups.
+ * Always returns the preferred ISO-639-2/custom code for the given input.
+ * Examples:
+ *  - 'en' or 'eng' -> 'eng'
+ *  - 'pt-br', 'pob', 'ptbr' -> 'pob'
+ */
+function canonicalSyncLanguageCode(raw) {
+  const val = (raw || '').toString().trim().toLowerCase();
+  if (!val) return '';
+
+  // Prefer ISO-639-1 base when available, then pick the first ISO-639-2/custom entry
+  let iso1 = toISO6391(val);
+  if (!iso1 && /^[a-z]{2}(-[a-z]{2})?$/.test(val)) {
+    iso1 = val;
+  }
+
+  if (iso1) {
+    const variants = toISO6392(iso1) || [];
+    if (variants.length) {
+      const first = variants[0];
+      const code2 = typeof first === 'string' ? first : first?.code2;
+      if (code2) return code2.toLowerCase();
+    }
+  }
+
+  // If input is already a known ISO-639-2/custom code, keep it as-is
+  if (getLanguageName(val)) {
+    return val;
+  }
+
+  return val;
+}
+
 module.exports = {
   languageMap,
   reverseLanguageMap,
@@ -412,5 +446,6 @@ module.exports = {
   getDisplayName,
   getAllLanguages,
   getAllLanguagesISO1,
-  buildLanguageLookupMaps
+  buildLanguageLookupMaps,
+  canonicalSyncLanguageCode
 };

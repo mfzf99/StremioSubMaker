@@ -7,7 +7,7 @@ const { createTranslationProvider } = require('../services/translationProviderFa
 const AniDBService = require('../services/anidb');
 const KitsuService = require('../services/kitsu');
 const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote, normalizeImdbId } = require('../utils/subtitle');
-const { getLanguageName, getDisplayName, toISO6391, toISO6392 } = require('../utils/languages');
+const { getLanguageName, getDisplayName, toISO6391, toISO6392, canonicalSyncLanguageCode } = require('../utils/languages');
 const { getTranslator } = require('../utils/i18n');
 const { deriveVideoHash, deriveLegacyVideoHash } = require('../utils/videoHash');
 const { LRUCache } = require('lru-cache');
@@ -2331,22 +2331,8 @@ function createSubtitleHandler(config) {
       if (toolboxEnabled && videoHashes.length) {
         const seenSync = new Set();
         const buildLangCandidates = (lang) => {
-          const set = new Set();
-          const normalized = (lang || '').toString().trim().toLowerCase();
-          if (normalized) set.add(normalized);
-          const iso1 = normalized ? toISO6391(normalized) : null;
-          if (iso1) set.add(iso1);
-          const iso2FromIso1 = iso1 ? toISO6392(iso1) : [];
-          (iso2FromIso1 || []).forEach(entry => {
-            const code = typeof entry === 'string' ? entry : entry?.code2;
-            if (code) set.add(code.toLowerCase());
-          });
-          const iso2FromOriginal = toISO6392(normalized);
-          (iso2FromOriginal || []).forEach(entry => {
-            const code = typeof entry === 'string' ? entry : entry?.code2;
-            if (code) set.add(code.toLowerCase());
-          });
-          return Array.from(set).filter(Boolean);
+          const canonical = canonicalSyncLanguageCode(lang);
+          return canonical ? [canonical] : [];
         };
         for (const hash of videoHashes) {
           // Merge configured languages with any languages we previously synced for this hash
