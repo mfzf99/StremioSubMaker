@@ -443,7 +443,6 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
   const t = getTranslator(config?.uiLanguage || 'en');
   const languageSummary = getLanguageSummary(config || {}, t);
   const providerSummary = getProviderSummary(config || {}, t);
-  const t = getTranslator(config?.uiLanguage || 'en');
   const streamHint = filename ? escapeHtml(filename) : t('toolbox.streamUnknown', {}, 'Stream filename not detected (still works)');
   const videoHash = deriveVideoHash(filename, videoId);
   const devMode = (config || {}).devMode === true;
@@ -3268,8 +3267,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         const queued = Math.max(0, Array.isArray(state.queue) ? state.queue.length : 0);
         if (state.translationInFlight && (running || queued)) {
           const parts = [];
-          const runningLabel = window.t ? window.t('toolbox.logs.running', { count: running }, `${running} running`) : (running + ' running');
-          const queuedLabel = window.t ? window.t('toolbox.logs.queued', { count: queued }, `${queued} queued`) : (queued + ' queued');
+          const runningLabel = window.t ? window.t('toolbox.logs.running', { count: running }, running + ' running') : (running + ' running');
+          const queuedLabel = window.t ? window.t('toolbox.logs.queued', { count: queued }, queued + ' queued') : (queued + ' queued');
           if (running) parts.push(runningLabel);
           if (queued) parts.push(queuedLabel);
           const baseLabel = window.t ? window.t('toolbox.logs.queueTranslation', {}, 'Queue translation') : 'Queue translation';
@@ -3287,7 +3286,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extractWatchdogTimer = null;
       if (!state.extractionInFlight) return;
       const timeoutMinutes = Math.round(EXTRACT_WATCHDOG_MS / 60000);
-      const label = window.t ? window.t('toolbox.logs.noProgress', { minutes: timeoutMinutes }, `No extraction progress for ${timeoutMinutes} minute(s). Resetting extraction; please retry.`) : ('No extraction progress for ' + timeoutMinutes + ' minute(s). Resetting extraction; please retry.');
+      const timeoutText = 'No extraction progress for ' + timeoutMinutes + ' minute(s). Resetting extraction; please retry.';
+      const label = window.t ? window.t('toolbox.logs.noProgress', { minutes: timeoutMinutes }, timeoutText) : timeoutText;
       logExtract(label);
       state.extractMessageId = null;
       state.lastProgressStatus = null;
@@ -3720,7 +3720,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             })
           });
         } catch (e) {
-          const label = window.t ? window.t('toolbox.logs.cacheSaveFailed', { id: track.id, reason: e.message }, `Failed to save track ${track.id} to cache: ${e.message}`) : ('Failed to save track ' + track.id + ' to cache: ' + e.message);
+          const label = window.t ? window.t('toolbox.logs.cacheSaveFailed', { id: track.id, reason: e.message }, 'Failed to save track ' + track.id + ' to cache: ' + e.message) : ('Failed to save track ' + track.id + ' to cache: ' + e.message);
           logExtract(label);
         }
       }
@@ -3735,7 +3735,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
       const status = state.targets[targetLang]?.status;
       if (status === 'running' || status === 'queued') {
-        const label = window.t ? window.t('toolbox.logs.translationQueued', { lang: targetLang }, `Translation already queued for ${targetLang}.`) : ('Translation already queued for ' + targetLang + '.');
+        const label = window.t ? window.t('toolbox.logs.translationQueued', { lang: targetLang }, 'Translation already queued for ' + targetLang + '.') : ('Translation already queued for ' + targetLang + '.');
         logTranslate(label);
         return;
       }
@@ -3756,7 +3756,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       state.targets[targetLang] = { status: 'running', trackId: track.id, retranslate: isRetranslate };
       renderTargets();
       const baseKey = isRetranslate ? 'toolbox.logs.retranslating' : 'toolbox.logs.translating';
-      const translateLabel = window.t ? window.t(baseKey, { label: track.label, target: targetLang }, `${isRetranslate ? 'Retranslating' : 'Translating'} ${track.label} -> ${targetLang}...`) : ((isRetranslate ? 'Retranslating ' : 'Translating ') + track.label + ' -> ' + targetLang + '...');
+      const translateFallback = (isRetranslate ? 'Retranslating ' : 'Translating ') + track.label + ' -> ' + targetLang + '...';
+      const translateLabel = window.t ? window.t(baseKey, { label: track.label, target: targetLang }, translateFallback) : translateFallback;
       logTranslate(translateLabel);
       if (track.binary || track.codec === 'copy') {
         state.targets[targetLang] = { status: 'failed', error: 'Binary subtitle cannot be translated' };
@@ -3801,13 +3802,15 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         translatedHistory.add(historyKey);
         state.targets[targetLang] = { status: 'done', cacheKey: data.cacheKey, trackId: track.id, retranslate: isRetranslate };
         const doneKey = data.cached ? 'toolbox.logs.finishedCached' : 'toolbox.logs.finished';
-        const finishMsg = window.t ? window.t(doneKey, { lang: targetLang }, data.cached ? `Finished ${targetLang} (cached)` : `Finished ${targetLang}`) : ('Finished ' + targetLang + (data.cached ? ' (cached)' : ''));
+        const finishFallback = data.cached ? ('Finished ' + targetLang + ' (cached)') : ('Finished ' + targetLang);
+        const finishMsg = window.t ? window.t(doneKey, { lang: targetLang }, finishFallback) : finishFallback;
         logTranslate(finishMsg);
         els.reloadHint.style.display = 'block';
         renderTargets();
       } catch (e) {
         state.targets[targetLang] = { status: 'failed', error: e.message };
-        const failMsg = window.t ? window.t('toolbox.logs.translationError', { lang: targetLang, reason: e.message }, `Failed ${targetLang}: ${e.message}`) : ('Failed ' + targetLang + ': ' + e.message);
+        const failFallback = 'Failed ' + targetLang + ': ' + e.message;
+        const failMsg = window.t ? window.t('toolbox.logs.translationError', { lang: targetLang, reason: e.message }, failFallback) : failFallback;
         logTranslate(failMsg);
         renderTargets();
       } finally {
@@ -3879,11 +3882,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           renderDownloads();
           const batchId = Date.now();
           persistOriginals(batchId);
-          const label = window.t ? window.t('toolbox.logs.extracted', { count: state.tracks.length }, `Extracted ${state.tracks.length} track(s).`) : ('Extracted ' + state.tracks.length + ' track(s).');
+          const label = window.t ? window.t('toolbox.logs.extracted', { count: state.tracks.length }, 'Extracted ' + state.tracks.length + ' track(s).') : ('Extracted ' + state.tracks.length + ' track(s).');
           logExtract(label);
         } else {
           resetExtractionState(true);
-          const label = window.t ? window.t('toolbox.logs.failed', { error: msg.error || 'unknown error' }, `Extraction failed: ${msg.error || 'unknown error'}`) : ('Extraction failed: ' + (msg.error || 'unknown error'));
+          const label = window.t ? window.t('toolbox.logs.failed', { error: msg.error || 'unknown error' }, 'Extraction failed: ' + (msg.error || 'unknown error')) : ('Extraction failed: ' + (msg.error || 'unknown error'));
           logExtract(label);
           setStep2Enabled(false);
         }
@@ -3954,7 +3957,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           videoHash: getVideoHash()
         }
       }, '*');
-      const label = window.t ? window.t('toolbox.logs.sentRequest', { mode }, `Sent extract request (${mode}) to extension.`) : ('Sent extract request (' + mode + ') to extension.');
+      const label = window.t ? window.t('toolbox.logs.sentRequest', { mode }, 'Sent extract request (' + mode + ') to extension.') : ('Sent extract request (' + mode + ') to extension.');
       logExtract(label);
     }
 

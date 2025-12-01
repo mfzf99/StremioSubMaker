@@ -3,7 +3,7 @@
         <div class="ui-language-glow"></div>
         <div class="ui-language-flag" id="uiLanguageFlag" aria-hidden="true">🇬🇧</div>
         <div class="ui-language-copy">
-            <span class="ui-language-pill" id="uiLanguageLabel">Interface</span>
+            <span class="ui-language-pill" id="uiLanguageLabel" data-i18n="config.uiLanguageLabel">Interface</span>
             <span class="ui-language-value" id="uiLanguageValue">English</span>
         </div>
         <div class="ui-language-chevron" aria-hidden="true">
@@ -19,9 +19,9 @@
         <div class="logo">
             <img src="logo.png" alt="SubMaker Logo" style="width: 80px; height: 80px; border-radius: 20px;">
         </div>
-        <h1 id="heroTitle">SubMaker</h1>
+        <h1 id="heroTitle" data-i18n="config.heroTitle">SubMaker</h1>
         <div class="version-badge-wrapper">
-            <p class="subtitle" id="heroSubtitle">AI-Powered Subtitle Translation</p>
+            <p class="subtitle" id="heroSubtitle" data-i18n="config.heroSubtitle">AI-Powered Subtitle Translation</p>
             <span id="version-badge" class="version-badge" style="display:none;"></span>
         </div>
     </div>
@@ -68,9 +68,10 @@
             style="margin: 2rem 0; padding: 1.5rem; background: var(--surface-light); border: 2px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 1rem;">
             <span style="font-size: 1.75rem;">⏸️</span>
             <div style="flex: 1;">
-                <span style="display: block; font-weight: 600; color: var(--text-primary);">Just Fetch Subtitles (No
+                <span id="noTranslationTitle" style="display: block; font-weight: 600; color: var(--text-primary);">Just Fetch Subtitles (No
                     Translation)</span>
                 <span
+                    id="noTranslationDescription"
                     style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Skip
                     AI translation and just fetch subtitles in your chosen languages</span>
             </div>
@@ -95,7 +96,7 @@
                             </g>
                         </svg>
                     </div>
-                    <h2 class="card-title">Subtitles API Keys</h2>
+                    <h2 class="card-title" id="subtitleApiTitle">Subtitles API Keys</h2>
                 </div>
                 <button type="button" class="collapse-btn collapsed" data-collapse="subtitle-api"></button>
             </div>
@@ -108,7 +109,7 @@
                             <span style="font-size: 1.5rem;">📄</span>
                             <div>
                                 <strong style="display: block;">OpenSubtitles</strong>
-                                <span class="label-description" style="margin: 0;">Choose your preferred OpenSubtitles
+                                <span id="opensubsImplDescription" class="label-description" style="margin: 0;">Choose your preferred OpenSubtitles
                                     implementation below.</span>
                             </div>
                         </label>
@@ -121,7 +122,7 @@
                         <!-- Implementation Type Selection -->
                         <div
                             style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-light); border-radius: 8px;">
-                            <label style="display: block; margin-bottom: 0.75rem; font-weight: 600;">Implementation
+                            <label id="opensubsImplTypeLabel" style="display: block; margin-bottom: 0.75rem; font-weight: 600;">Implementation
                                 Type</label>
                             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                                 <label
@@ -130,17 +131,17 @@
                                         value="v3" checked style="margin-top: 0.25rem;">
                                     <div style="flex: 1;">
                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <strong style="margin-bottom: 0.25rem;">V3 (Default)</strong>
+                                            <strong id="opensubsV3Title" style="margin-bottom: 0.25rem;">V3 (Default)</strong>
                                             <div class="v3-warning-tooltip">
                                                 <span class="warning-icon" tabindex="0"
                                                     aria-label="OpenSubtitles V3 limitations">&#9888;&#65039;</span>
-                                                <div class="tooltip-bubble" role="tooltip" aria-hidden="true">
+                                                <div class="tooltip-bubble" role="tooltip" aria-hidden="true" id="opensubsV3Tooltip">
                                                     V3 doesn't show all OpenSubtitles results and rate-limiting may
                                                     apply.
                                                 </div>
                                             </div>
                                         </div>
-                                        <span class="label-description" style="margin: 0; font-size: 0.875rem;">Uses the
+                                        <span id="opensubsV3Description" class="label-description" style="margin: 0; font-size: 0.875rem;">Uses the
                                             official Stremio OpenSubtitles V3 addon. No authentication required, simple
                                             setup.</span>
                                     </div>
@@ -150,9 +151,9 @@
                                     <input type="radio" name="opensubtitlesImplementation" id="opensubtitlesImplAuth"
                                         value="auth" style="margin-top: 0.25rem;">
                                     <div>
-                                        <strong style="display: block; margin-bottom: 0.25rem;">Auth
+                                        <strong id="opensubsAuthTitle" style="display: block; margin-bottom: 0.25rem;">Auth
                                             (Recommended)</strong>
-                                        <span class="label-description" style="margin: 0; font-size: 0.875rem;">Uses
+                                        <span id="opensubsAuthDescription" class="label-description" style="margin: 0; font-size: 0.875rem;">Uses
                                             your OpenSubtitles account with API key authentication. Requires
                                             username/password.</span>
                                     </div>
@@ -164,12 +165,12 @@
                         <div id="opensubtitlesAuthConfig" style="display: none;">
                             <div class="opensubs-auth-layout">
                                 <div class="opensubs-auth-fields">
-                                    <label style="display: block;">Username</label>
+                                    <label id="opensubsUsernameLabel" style="display: block;">Username</label>
                                     <input type="text" id="opensubtitlesUsername" name="opensubtitlesUsername"
                                         placeholder="Enter OpenSubtitles Username" autocomplete="username"
                                         autocapitalize="none" autocorrect="off" spellcheck="false">
 
-                                    <label style="display: block;">Password</label>
+                                    <label id="opensubsPasswordLabel" style="display: block;">Password</label>
                                     <div class="password-field-wrapper">
                                         <input type="text" class="sensitive-input masked" id="opensubtitlesPassword"
                                             name="opensubtitlesPassword" placeholder="Enter OpenSubtitles Password"
@@ -179,7 +180,7 @@
                                             title="Show/hide password">&#128274;&#128065;</span>
                                     </div>
 
-                                    <span class="label-description">20 subtitles a day. <a
+                                    <span id="opensubsRateNote" class="label-description">20 subtitles a day. <a
                                             href="https://www.opensubtitles.com/en/newuser" target="_blank"
                                             style="color: var(--primary-light);">Create a free account</a> if you don't
                                         have one.</span>

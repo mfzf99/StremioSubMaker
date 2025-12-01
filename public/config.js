@@ -51,10 +51,12 @@
             const data = await resp.json();
             bootstrapTranslator(data || DEFAULT_LOCALE);
             applyUiLanguageCopy();
+            applyStaticCopy();
         } catch (err) {
             console.warn('[i18n] Failed to load locale, falling back to English', err);
             bootstrapTranslator(DEFAULT_LOCALE);
             applyUiLanguageCopy();
+            applyStaticCopy();
         }
     }
     initLocale();
@@ -64,6 +66,63 @@
             if (typeof window.t === 'function') return window.t(key, vars, fallback || key);
         } catch (_) {}
         return fallback || key;
+    }
+
+    function setText(id, key, fallback) {
+        const el = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!el) return;
+        el.textContent = tConfig(key, {}, fallback || el.textContent || '');
+    }
+
+    function setAttr(id, attr, key, fallback) {
+        const el = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!el) return;
+        const current = el.getAttribute(attr) || '';
+        el.setAttribute(attr, tConfig(key, {}, fallback || current || ''));
+    }
+
+    function applyStaticCopy() {
+        setText('uiLanguageLabel', 'config.uiLanguageLabel', 'Interface');
+        setAttr('uiLanguageSelect', 'aria-label', 'config.uiLanguageAria', 'UI language');
+        setAttr('uiLanguageSelect', 'title', 'config.uiLanguageAria', 'UI language');
+        setText('heroTitle', 'config.heroTitle', 'SubMaker');
+        setText('heroSubtitle', 'config.heroSubtitle', 'AI-Powered Subtitle Translation');
+        setAttr('subToolboxLauncher', 'title', 'config.actions.openToolbox', 'Open Sub Toolbox');
+        setAttr('subToolboxLauncher', 'aria-label', 'config.actions.openToolbox', 'Open Sub Toolbox');
+        setAttr('configHelp', 'title', 'config.quickActionHelp', 'Help');
+        setText('noTranslationTitle', 'config.noTranslation.title', 'Just Fetch Subtitles (No Translation)');
+        setText('noTranslationDescription', 'config.noTranslation.description', 'Skip AI translation and just fetch subtitles in your chosen languages');
+        setText('subtitleApiTitle', 'config.sections.subtitleApiTitle', 'Subtitles API Keys');
+        setText('opensubsImplDescription', 'config.opensubs.implDescription', 'Choose your preferred OpenSubtitles implementation below.');
+        setText('opensubsImplTypeLabel', 'config.opensubs.implementationType', 'Implementation Type');
+        setText('opensubsV3Title', 'config.opensubs.v3Title', 'V3 (Default)');
+        setText('opensubsV3Tooltip', 'config.opensubs.v3Tooltip', "V3 doesn't show all OpenSubtitles results and rate-limiting may apply.");
+        setText('opensubsV3Description', 'config.opensubs.v3Description', 'Uses the official Stremio OpenSubtitles V3 addon. No authentication required, simple setup.');
+        setText('opensubsAuthTitle', 'config.opensubs.authTitle', 'Auth (Recommended)');
+        setText('opensubsAuthDescription', 'config.opensubs.authDescription', 'Uses your OpenSubtitles account with API key authentication. Requires username/password.');
+        setText('opensubsUsernameLabel', 'config.opensubs.usernameLabel', 'Username');
+        setText('opensubsPasswordLabel', 'config.opensubs.passwordLabel', 'Password');
+        const rateNote = document.getElementById('opensubsRateNote');
+        if (rateNote) {
+            const existingLink = rateNote.querySelector('a');
+            const linkHref = existingLink ? existingLink.getAttribute('href') : 'https://www.opensubtitles.com/en/newuser';
+            const linkText = existingLink ? existingLink.textContent : 'Create a free account';
+            const linkColor = existingLink ? existingLink.style.color : 'var(--primary-light)';
+            rateNote.textContent = tConfig('config.opensubs.rateNote', {}, '20 subtitles a day. Create a free account if you do not have one.') + ' ';
+            const link = document.createElement('a');
+            link.href = linkHref;
+            link.target = '_blank';
+            link.style.color = linkColor;
+            link.textContent = linkText;
+            rateNote.appendChild(link);
+        }
+        setAttr('toggleOpenSubsPassword', 'title', 'config.opensubs.showHidePassword', 'Show/hide password');
+        setAttr('validateOpenSubtitles', 'title', 'config.opensubs.validateTitle', 'Validate OpenSubtitles credentials');
+        const validateBtn = document.getElementById('validateOpenSubtitles');
+        if (validateBtn) {
+            const textEl = validateBtn.querySelector('.validate-text');
+            if (textEl) setText(textEl, 'config.opensubs.validateCta', 'Run Test');
+        }
     }
 
     /**
@@ -860,22 +919,22 @@ Translate to {target_language}.`;
     function updateLanguageLimitCopy() {
         const sourceDesc = document.getElementById('sourceLanguagesDescription');
         if (sourceDesc) {
-            sourceDesc.innerHTML = `You can select up to ${MAX_SOURCE_LANGUAGES} source language${MAX_SOURCE_LANGUAGES === 1 ? '' : 's'}, but only 1 is recommended (so you have the same list order when translating). All subtitles from this language will be available for translation in the translation selector AND will be fetched (original subtitles will show up).`;
+            sourceDesc.innerHTML = tConfig('config.limits.sourceDescription', { max: MAX_SOURCE_LANGUAGES }, `You can select up to ${MAX_SOURCE_LANGUAGES} source language${MAX_SOURCE_LANGUAGES === 1 ? '' : 's'}, but only 1 is recommended (so you have the same list order when translating). All subtitles from this language will be available for translation in the translation selector AND will be fetched (original subtitles will show up).`);
         }
 
         const targetDesc = document.getElementById('targetLanguagesDescription');
         if (targetDesc) {
-            targetDesc.innerHTML = `Subtitles in target languages will be fetched AND translation buttons will appear for translating FROM the source language TO these languages. You can select up to ${MAX_TARGET_LANGUAGES} total target languages (including Learn Mode).`;
+            targetDesc.innerHTML = tConfig('config.limits.targetDescription', { max: MAX_TARGET_LANGUAGES }, `Subtitles in target languages will be fetched AND translation buttons will appear for translating FROM the source language TO these languages. You can select up to ${MAX_TARGET_LANGUAGES} total target languages (including Learn Mode).`);
         }
 
         const sourceError = document.getElementById('sourceLanguagesError');
         if (sourceError) {
-            sourceError.textContent = 'Please select at least one source language';
+            sourceError.textContent = tConfig('config.validation.sourceRequired', {}, 'Please select at least one source language');
         }
 
         const noTranslationDesc = document.getElementById('noTranslationLanguagesDescription');
         if (noTranslationDesc) {
-            noTranslationDesc.textContent = `Select which languages you want to fetch subtitles in (up to ${MAX_NO_TRANSLATION_LANGUAGES}).`;
+            noTranslationDesc.textContent = tConfig('config.limits.noTranslationDescription', { max: MAX_NO_TRANSLATION_LANGUAGES }, `Select which languages you want to fetch subtitles in (up to ${MAX_NO_TRANSLATION_LANGUAGES}).`);
         }
     }
 
@@ -2136,7 +2195,7 @@ Translate to {target_language}.`;
             // Source languages must have 1..MAX_SOURCE_LANGUAGES selections
             if (currentConfig[configKey].length < 1 || currentConfig[configKey].length > MAX_SOURCE_LANGUAGES) {
                 if (errorDiv) {
-                    errorDiv.textContent = `Please select 1-${MAX_SOURCE_LANGUAGES} source languages`;
+                    errorDiv.textContent = tConfig('config.validation.sourceRange', { min: 1, max: MAX_SOURCE_LANGUAGES }, `Please select 1-${MAX_SOURCE_LANGUAGES} source languages`);
                     errorDiv.classList.add('show');
                 }
                 return false;
@@ -2162,7 +2221,7 @@ Translate to {target_language}.`;
             }
             if (combinedCount > MAX_TARGET_LANGUAGES) {
                 if (errorDiv) {
-                    errorDiv.textContent = `Please select up to ${MAX_TARGET_LANGUAGES} target languages (including Learn Mode)`;
+                    errorDiv.textContent = tConfig('config.validation.targetLimitShort', { limit: MAX_TARGET_LANGUAGES }, `Please select up to ${MAX_TARGET_LANGUAGES} target languages (including Learn Mode)`);
                     errorDiv.classList.add('show');
                 }
                 return false;
@@ -2187,7 +2246,7 @@ Translate to {target_language}.`;
 
         if (count === 0) {
             if (errorDiv) {
-                errorDiv.textContent = 'Please select at least one language for Just Fetch mode';
+                errorDiv.textContent = tConfig('config.validation.noTranslationRequired', {}, 'Please select at least one language for Just Fetch mode');
                 errorDiv.classList.add('show');
             }
             return false;
@@ -2195,7 +2254,7 @@ Translate to {target_language}.`;
 
         if (count > MAX_NO_TRANSLATION_LANGUAGES) {
             if (errorDiv) {
-                errorDiv.textContent = `Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages for Just Fetch mode`;
+                errorDiv.textContent = tConfig('config.validation.noTranslationLimitShort', { limit: MAX_NO_TRANSLATION_LANGUAGES }, `Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages for Just Fetch mode`);
                 errorDiv.classList.add('show');
             }
             return false;
@@ -2741,11 +2800,11 @@ Translate to {target_language}.`;
 
             // Surface a user-facing message if Auth mode isn't active
             if (!opensubsEnabled) {
-                showValidationFeedback(feedback, 'error', 'Enable OpenSubtitles before testing credentials.');
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.opensubsEnable', {}, 'Enable OpenSubtitles before testing credentials.'));
                 return;
             }
             if (impl !== 'auth') {
-                showValidationFeedback(feedback, 'error', 'Switch to Auth mode to test your credentials.');
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.opensubsAuthMode', {}, 'Switch to Auth mode to test your credentials.'));
                 return;
             }
         } else if (provider === 'gemini') {
@@ -2758,12 +2817,12 @@ Translate to {target_language}.`;
         // Validate input
         if (provider === 'opensubtitles') {
             if (!username || !password) {
-                showValidationFeedback(feedback, 'error', 'Please enter both username and password');
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.credentialsRequired', {}, 'Please enter both username and password'));
                 return;
             }
         } else {
             if (!apiKey) {
-                showValidationFeedback(feedback, 'error', 'Please enter an API key');
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.apiKeyRequired', {}, 'Please enter an API key'));
                 return;
             }
         }
@@ -2776,7 +2835,7 @@ Translate to {target_language}.`;
         const textEl = btn.querySelector('.validate-text');
         const originalIcon = iconEl.textContent;
         iconEl.textContent = '⟳';
-        textEl.textContent = 'Testing...';
+        textEl.textContent = tConfig('config.validation.testing', {}, 'Testing...');
 
         // Clear previous feedback
         feedback.classList.remove('show', 'success', 'error');
@@ -2811,11 +2870,11 @@ Translate to {target_language}.`;
                 // Success
                 btn.classList.add('success');
                 iconEl.textContent = '✓';
-                textEl.textContent = 'Valid';
+                textEl.textContent = tConfig('config.validation.valid', {}, 'Valid');
 
-                let message = result.message || 'API key is valid';
+                let message = result.message || tConfig('config.validation.apiKeyValid', {}, 'API key is valid');
                 if (result.resultsCount !== undefined) {
-                    message += ` (${result.resultsCount} test results)`;
+                    message += ' ' + tConfig('config.validation.testResults', { count: result.resultsCount }, `(${result.resultsCount} test results)`);
                 }
 
                 showValidationFeedback(feedback, 'success', message);
@@ -2833,14 +2892,16 @@ Translate to {target_language}.`;
                 setTimeout(() => {
                     btn.classList.remove('success');
                     iconEl.textContent = originalIcon;
-                    textEl.textContent = provider === 'opensubtitles' ? 'Test Credentials' : 'Test';
+                    textEl.textContent = provider === 'opensubtitles'
+                        ? tConfig('config.validation.testCredentials', {}, 'Test Credentials')
+                        : tConfig('config.validation.test', {}, 'Test');
                 }, 3000);
             } else {
                 // Error
                 btn.classList.add('error');
                 iconEl.textContent = '✗';
-                textEl.textContent = 'Invalid';
-                showValidationFeedback(feedback, 'error', result.error || 'Validation failed');
+                textEl.textContent = tConfig('config.validation.invalid', {}, 'Invalid');
+                showValidationFeedback(feedback, 'error', result.error || tConfig('config.validation.validationFailed', {}, 'Validation failed'));
 
                 // For Gemini: Mark input as invalid (red border)
                 if (provider === 'gemini') {
@@ -2855,7 +2916,9 @@ Translate to {target_language}.`;
                 setTimeout(() => {
                     btn.classList.remove('error');
                     iconEl.textContent = originalIcon;
-                    textEl.textContent = provider === 'opensubtitles' ? 'Test Credentials' : 'Test';
+                    textEl.textContent = provider === 'opensubtitles'
+                        ? tConfig('config.validation.testCredentials', {}, 'Test Credentials')
+                        : tConfig('config.validation.test', {}, 'Test');
                 }, 4000);
             }
 
@@ -2864,8 +2927,8 @@ Translate to {target_language}.`;
             btn.classList.add('error');
             btn.disabled = false;
             iconEl.textContent = '✗';
-            textEl.textContent = 'Error';
-            showValidationFeedback(feedback, 'error', 'Connection error. Please try again.');
+            textEl.textContent = tConfig('config.validation.error', {}, 'Error');
+            showValidationFeedback(feedback, 'error', tConfig('config.validation.connectionError', {}, 'Connection error. Please try again.'));
 
             // For Gemini: Mark input as invalid on connection error
             if (provider === 'gemini') {
@@ -4263,30 +4326,30 @@ Translate to {target_language}.`;
             }
 
             if (!validateLanguageSelection('source')) {
-                errors.push(`⚠️ Please select 1-${MAX_SOURCE_LANGUAGES} source languages`);
+                errors.push(`⚠️ ${tConfig('config.validation.sourceRange', { min: 1, max: MAX_SOURCE_LANGUAGES }, `Please select 1-${MAX_SOURCE_LANGUAGES} source languages`)}`);
             }
 
             if (!validateLanguageSelection('target')) {
-                errors.push(`⚠️ Please select between 1 and ${MAX_TARGET_LANGUAGES} target languages (including Learn Mode)`);
+                errors.push(`⚠️ ${tConfig('config.validation.targetLimitShort', { limit: MAX_TARGET_LANGUAGES }, `Please select between 1 and ${MAX_TARGET_LANGUAGES} target languages (including Learn Mode)`)}`);
             }
 
             if (config.learnMode && !validateLanguageSelection('learn')) {
-                errors.push('⚠️ Please select at least one learn target language (or disable Learn Mode)');
+                errors.push(`⚠️ ${tConfig('config.validation.noTranslationRequired', {}, 'Please select at least one language for Just Fetch mode')}`);
             }
         } else {
             // In no-translation mode, validate language count bounds
             const noTranslationError = document.getElementById('noTranslationLanguagesError');
 
             if (!config.noTranslationLanguages || config.noTranslationLanguages.length === 0) {
-                errors.push('⚠️ Please select at least one language in no-translation mode');
+                errors.push(`⚠️ ${tConfig('config.validation.noTranslationRequired', {}, 'Please select at least one language for Just Fetch mode')}`);
                 if (noTranslationError) {
-                    noTranslationError.textContent = 'Please select at least one language for Just Fetch mode';
+                    noTranslationError.textContent = tConfig('config.validation.noTranslationRequired', {}, 'Please select at least one language for Just Fetch mode');
                     noTranslationError.classList.add('show');
                 }
             } else if (config.noTranslationLanguages.length > MAX_NO_TRANSLATION_LANGUAGES) {
-                errors.push(`⚠️ Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages in no-translation mode`);
+                errors.push(`⚠️ ${tConfig('config.validation.noTranslationLimitShort', { limit: MAX_NO_TRANSLATION_LANGUAGES }, `Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages in no-translation mode`)}`);
                 if (noTranslationError) {
-                    noTranslationError.textContent = `Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages for Just Fetch mode`;
+                    noTranslationError.textContent = tConfig('config.validation.noTranslationLimitShort', { limit: MAX_NO_TRANSLATION_LANGUAGES }, `Please select up to ${MAX_NO_TRANSLATION_LANGUAGES} languages for Just Fetch mode`);
                     noTranslationError.classList.add('show');
                 }
             } else if (noTranslationError) {

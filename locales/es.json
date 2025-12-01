@@ -267,6 +267,7 @@
     },
     "config": {
       "uiLanguageLabel": "Interfaz",
+      "uiLanguageAria": "Idioma de la interfaz",
       "heroTitle": "SubMaker",
       "heroSubtitle": "Traducción de subtítulos con IA",
       "quickStatsStatus": "Estado",
@@ -274,6 +275,57 @@
       "quickStatsToolbox": "Toolbox",
       "quickStatsLastSave": "Último guardado",
       "quickActionHelp": "Ayuda",
+      "actions": {
+        "openToolbox": "Abrir Sub Toolbox"
+      },
+      "noTranslation": {
+        "title": "Solo obtener subtítulos (sin traducción)",
+        "description": "Omite la traducción con IA y solo obtén subtítulos en tus idiomas elegidos"
+      },
+      "sections": {
+        "subtitleApiTitle": "Claves de la API de subtítulos"
+      },
+      "opensubs": {
+        "implDescription": "Elige tu implementación preferida de OpenSubtitles abajo.",
+        "implementationType": "Tipo de implementación",
+        "v3Title": "V3 (Predeterminado)",
+        "v3Tooltip": "V3 no muestra todos los resultados y puede aplicar límites de uso.",
+        "v3Description": "Usa el addon oficial de OpenSubtitles V3 de Stremio. No requiere autenticación, configuración sencilla.",
+        "authTitle": "Auth (Recomendado)",
+        "authDescription": "Usa tu cuenta de OpenSubtitles con autenticación por clave API. Requiere usuario/contraseña.",
+        "usernameLabel": "Usuario",
+        "passwordLabel": "Contraseña",
+        "rateNote": "20 subtítulos al día. Crea una cuenta gratuita si no tienes una.",
+        "validateCta": "Ejecutar prueba",
+        "validateTitle": "Validar credenciales de OpenSubtitles",
+        "showHidePassword": "Mostrar/ocultar contraseña"
+      },
+      "limits": {
+        "sourceDescription": "Puedes seleccionar hasta {max} idioma(s) de origen, pero solo 1 es recomendable (para mantener el mismo orden al traducir). Todos los subtítulos de este idioma estarán disponibles para traducción y se obtendrán (aparecerán los originales).",
+        "targetDescription": "Los subtítulos en idiomas destino se obtendrán y aparecerán botones de traducción DESDE el idioma origen HACIA estos idiomas. Puedes elegir hasta {max} idiomas destino (incluye Learn Mode).",
+        "noTranslationDescription": "Elige en qué idiomas quieres obtener subtítulos (hasta {max})."
+      },
+      "validation": {
+        "sourceRequired": "Selecciona al menos un idioma de origen",
+        "sourceRange": "Selecciona entre {min} y {max} idiomas de origen",
+        "targetLimitShort": "Selecciona hasta {limit} idiomas destino (incluye Learn Mode)",
+        "noTranslationRequired": "Selecciona al menos un idioma en modo Solo obtener",
+        "noTranslationLimitShort": "Selecciona hasta {limit} idiomas en modo Solo obtener",
+        "opensubsEnable": "Activa OpenSubtitles antes de probar las credenciales.",
+        "opensubsAuthMode": "Cambia a modo Auth para probar tus credenciales.",
+        "credentialsRequired": "Ingresa usuario y contraseña",
+        "apiKeyRequired": "Ingresa una clave de API",
+        "apiKeyValid": "La clave de API es válida",
+        "testResults": "({count} resultados de prueba)",
+        "connectionError": "Error de conexión. Vuelve a intentar.",
+        "validationFailed": "Validación fallida",
+        "testing": "Probando...",
+        "valid": "Válida",
+        "invalid": "Inválida",
+        "error": "Error",
+        "testCredentials": "Probar credenciales",
+        "test": "Probar"
+      },
       "alerts": {
         "sessionLost": "Se perdió la sesión de configuración. Vuelve a configurar y guarda para crear una nueva sesión.",
         "loadLanguagesFailed": "No se pudieron cargar los idiomas: {reason}",

@@ -243,6 +243,7 @@
     },
     "config": {
       "uiLanguageLabel": "Interface",
+      "uiLanguageAria": "UI language",
       "heroTitle": "SubMaker",
       "heroSubtitle": "AI-Powered Subtitle Translation",
       "quickStatsStatus": "Status",
@@ -250,33 +251,6 @@
       "quickStatsToolbox": "Toolbox",
       "quickStatsLastSave": "Last Save",
       "quickActionHelp": "Help",
-      "alerts": {
-        "sessionLost": "Config session was lost. Please reconfigure and save to create a new session.",
-        "loadLanguagesFailed": "Failed to load languages: {reason}",
-        "loadLanguagesExhausted": "Failed to load languages after {retries} attempts: {reason}. Please refresh the page.",
-        "sourceLimit": "You can only select up to {limit} source languages",
-        "targetLimit": "You can only select up to {limit} total target languages (including Learn Mode)",
-        "noTranslationLimit": "You can only select up to {limit} languages in Just Fetch mode",
-        "saveConfigFirst": "Save your config first to open Sub Toolbox.",
-        "betaOn": "Experimental Mode ON",
-        "betaOff": "Experimental Mode OFF",
-        "missingCfWorkers": "Cloudflare Workers AI key must be in ACCOUNT_ID|TOKEN format",
-        "missingProviderKey": "Add an API key for {provider} to load models"
-      }
-    },
-    "nav": {
-      "refresh": "Refresh stream",
-      "refreshTitle": "Jump to your latest stream",
-      "subToolbox": "Sub Toolbox",
-      "translateFiles": "Translate files",
-      "embeddedSubs": "Extract Subs",
-      "syncSubtitles": "Sync subtitles",
-      "automaticSubs": "Auto subs",
-      "configure": "Configure",
-      "youAreHere": "You are here"
-    },
-    "config": {
-      "uiLanguageAria": "UI language",
       "actions": {
         "openToolbox": "Open Sub Toolbox"
       },
@@ -327,7 +301,31 @@
         "error": "Error",
         "testCredentials": "Test Credentials",
         "test": "Test"
+      },
+      "alerts": {
+        "sessionLost": "Config session was lost. Please reconfigure and save to create a new session.",
+        "loadLanguagesFailed": "Failed to load languages: {reason}",
+        "loadLanguagesExhausted": "Failed to load languages after {retries} attempts: {reason}. Please refresh the page.",
+        "sourceLimit": "You can only select up to {limit} source languages",
+        "targetLimit": "You can only select up to {limit} total target languages (including Learn Mode)",
+        "noTranslationLimit": "You can only select up to {limit} languages in Just Fetch mode",
+        "saveConfigFirst": "Save your config first to open Sub Toolbox.",
+        "betaOn": "Experimental Mode ON",
+        "betaOff": "Experimental Mode OFF",
+        "missingCfWorkers": "Cloudflare Workers AI key must be in ACCOUNT_ID|TOKEN format",
+        "missingProviderKey": "Add an API key for {provider} to load models"
       }
+    },
+    "nav": {
+      "refresh": "Refresh stream",
+      "refreshTitle": "Jump to your latest stream",
+      "subToolbox": "Sub Toolbox",
+      "translateFiles": "Translate files",
+      "embeddedSubs": "Extract Subs",
+      "syncSubtitles": "Sync subtitles",
+      "automaticSubs": "Auto subs",
+      "configure": "Configure",
+      "youAreHere": "You are here"
     },
     "fileUpload": {
       "title": "File Translation",
