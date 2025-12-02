@@ -1382,6 +1382,22 @@ Translate to {target_language}.`;
         return `/sub-toolbox?config=${encodeURIComponent(cfg)}&videoId=${encodeURIComponent(fallbackVideoId)}&filename=${encodeURIComponent(fallbackFilename)}`;
     }
 
+    function isToolboxEnabledForConfig(tokenToCheck) {
+        if (!tokenToCheck) return false;
+        try {
+            const cachedToken = localStorage.getItem(CACHE_TOKEN_KEY);
+            if (cachedToken && cachedToken !== tokenToCheck) return false;
+            const raw = localStorage.getItem(CACHE_KEY);
+            const cached = raw ? JSON.parse(raw) : null;
+            if (!cached) return false;
+            return cached.subToolboxEnabled === true
+                || cached.fileTranslationEnabled === true
+                || cached.syncSubtitlesEnabled === true;
+        } catch (_) {
+            return false;
+        }
+    }
+
     function updateToolboxLauncherVisibility(configOverride) {
         const btn = document.getElementById('subToolboxLauncher');
         if (!btn) return;
@@ -1391,9 +1407,8 @@ Translate to {target_language}.`;
             btn.classList.remove('show');
             return;
         }
-        // Show whenever we have a token for this origin; avoid hiding due to init timing
         const cfgRef = configOverride || getActiveConfigRef();
-        const shouldShow = !!cfgRef;
+        const shouldShow = !!cfgRef && isToolboxEnabledForConfig(cfgRef);
         if (shouldShow) {
             btn.style.display = 'flex';
             btn.dataset.configRef = cfgRef;
