@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 **Bug Fixes:**
 - **Subtitle menu UX:** Stream subtitle menu now surfaces source and target tracks together under "Source & Target," with categories collapsed by default (per-locale labels updated), pill counts, and refreshed chrome for quicker scanning.
+- **Extract Subs rollout:** Embedded subtitles extractor is now always enabled in Sub Toolbox and QuickNav, no Dev Mode gate.
 - **Locale placeholders:** Config page now re-applies limit copy with `data-i18n-vars` so `{max}` placeholders resolve correctly after locale reloads (target/source/no-translation language caps no longer show raw template tokens).
 - **BCP-47 locale support:** Locale loader now accepts alphanumeric tags with dashes/underscores (e.g., `es-419`, `pt_BR`) instead of silently falling back to English.
 - **Safe alerts:** Config alerts no longer render via `innerHTML`, preventing HTML injection from bubbled error strings while keeping icons/spacing intact.

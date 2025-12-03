@@ -449,6 +449,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
   const videoHash = deriveVideoHash(filename, videoId);
   const devMode = (config || {}).devMode === true;
   const devDisabledClass = devMode ? '' : ' dev-disabled';
+  const devOnlyLink = (href) => devMode ? href : '#';
   const languageMaps = buildLanguageLookupMaps();
   const localeBootstrap = buildClientBootstrap(loadLocale(config?.uiLanguage || 'en'));
   const subtitleMenuTargets = (config?.targetLanguages || []).map(code => ({
@@ -1195,7 +1196,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
               <span class="tool-link">${t('toolbox.tools.translate.cta', {}, 'Translate a file')}</span>
             </div>
           </a>
-          <a class="tool-tile${devDisabledClass}" href="${devMode ? links.embeddedSubs : '#'}">
+          <a class="tool-tile" href="${links.embeddedSubs}">
             <div class="tool-icon">🧲</div>
             <div>
               <div class="tool-title">${t('toolbox.tools.embedded.title', {}, 'Extract + Translate')}</div>
@@ -1203,7 +1204,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
               <span class="tool-link">${t('toolbox.tools.embedded.cta', {}, 'Open extractor')}</span>
             </div>
           </a>
-          <a class="tool-tile${devDisabledClass}" href="${devMode ? links.syncSubtitles : '#'}">
+          <a class="tool-tile${devDisabledClass}" href="${devOnlyLink(links.syncSubtitles)}">
             <div class="tool-icon">⏱️</div>
             <div>
               <div class="tool-title">${t('toolbox.tools.sync.title', {}, 'Sync subtitles')}</div>
@@ -1211,7 +1212,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
               <span class="tool-link">${t('toolbox.tools.sync.cta', {}, 'Open sync studio')}</span>
             </div>
           </a>
-          <a class="tool-tile${devDisabledClass}" href="${devMode ? links.automaticSubs : '#'}">
+          <a class="tool-tile${devDisabledClass}" href="${devOnlyLink(links.automaticSubs)}">
             <div class="tool-icon">🤖</div>
             <div>
               <div class="tool-title">${t('toolbox.tools.auto.title', {}, 'Automatic subtitles')}</div>

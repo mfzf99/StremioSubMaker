@@ -295,6 +295,7 @@ function quickNavStyles() {
 
 function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = true, t = (k, vars, fallback) => fallback || k) {
   const devDisabled = devMode !== true ? ' dev-disabled' : '';
+  const devOnlyHref = (href) => devMode ? href : '#';
   const label = (key, fallback, vars) => t(`nav.${key}`, vars || {}, fallback);
   const mobileMenuLabel = label('mobileMenu', 'Open menu');
   return `
@@ -319,17 +320,17 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
         <span>${label('translateFiles', 'Translate files')}</span>
         ${activeKey === 'translateFiles' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
-      <a class="quick-nav-link${activeKey === 'embeddedSubs' ? ' active' : ''}${devDisabled}" href="${devMode ? links.embeddedSubs : '#'}">
+      <a class="quick-nav-link${activeKey === 'embeddedSubs' ? ' active' : ''}" href="${links.embeddedSubs}">
         <span>🧲</span>
         <span>${label('embeddedSubs', 'Extract Subs')}</span>
         ${activeKey === 'embeddedSubs' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
-      <a class="quick-nav-link${activeKey === 'syncSubtitles' ? ' active' : ''}${devDisabled}" href="${devMode ? links.syncSubtitles : '#'}">
+      <a class="quick-nav-link${activeKey === 'syncSubtitles' ? ' active' : ''}${devDisabled}" href="${devOnlyHref(links.syncSubtitles)}">
         <span>⏱️</span>
         <span>${label('syncSubtitles', 'Sync subtitles')}</span>
         ${activeKey === 'syncSubtitles' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
-      <a class="quick-nav-link${activeKey === 'automaticSubs' ? ' active' : ''}${devDisabled}" href="${devMode ? links.automaticSubs : '#'}">
+      <a class="quick-nav-link${activeKey === 'automaticSubs' ? ' active' : ''}${devDisabled}" href="${devOnlyHref(links.automaticSubs)}">
         <span>🤖</span>
         <span>${label('automaticSubs', 'Auto subs')}</span>
         ${activeKey === 'automaticSubs' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
