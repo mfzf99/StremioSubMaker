@@ -4313,12 +4313,24 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             const lower = String(label).toLowerCase();
             return /^extracted_sub/.test(lower) || /^track\\s+\\d+$/i.test(lower);
           };
+          const isGeneratedLangHint = (value) => {
+            if (!value) return false;
+            const lower = String(value).toLowerCase();
+            // ignore common auto-generated placeholders/filenames
+            if (/^extracted_sub/.test(lower)) return true;
+            if (/^track\\s+\\d+$/i.test(lower)) return true;
+            if (/^remux_sub/.test(lower)) return true;
+            if (/^extracted_sub_fix/.test(lower)) return true;
+            if (/(\\.srt|\\.vtt|\\.ass|\\.ssa|\\.sup)(\\b|$)/i.test(lower)) return true;
+            return false;
+          };
           state.tracks = filteredTracks.map((t, idx) => {
             const contentBytes = t.contentBytes || null;
             const contentBase64 = t.contentBase64 || '';
             const contentValue = (typeof t.content === 'string' || t.content instanceof Uint8Array || t.content instanceof ArrayBuffer) ? t.content : '';
             const byteLength = t.byteLength || (contentBytes ? contentBytes.length : (typeof contentValue === 'string' ? contentValue.length : 0));
-            const primaryLang = (t.language || t.lang || t.languageRaw || '').toString().trim();
+            const primaryLangRaw = (t.language || t.lang || t.languageRaw || '').toString().trim();
+            const primaryLang = isGeneratedLangHint(primaryLangRaw) ? '' : primaryLangRaw;
             let rawLang = canonicalTrackLanguageCode(primaryLang);
             if (rawLang === 'und') {
               const labelLang = !isGeneratedLabel(t.label) ? canonicalTrackLanguageCode(t.label || '') : 'und';
