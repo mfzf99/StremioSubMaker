@@ -3074,15 +3074,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     }
 
     function applyPendingStreamUpdateIfSafe(opts = {}) {
-      if (!pendingStreamUpdate) return false;
-      if (hasActiveStreamWork()) return false;
-      if (!opts.force) {
-        if (state.extractMessageId) return false;
-        if (hasStreamOutputs()) return false;
-      }
-      const label = opts.logLabel ||
-        (window.t ? window.t('toolbox.logs.linkedChanged', {}, 'Linked stream changed. Outputs cleared; run extraction again for the new stream.') : 'Linked stream changed. Outputs cleared; run extraction again for the new stream.');
-      return applyStreamUpdate(pendingStreamUpdate.payload, { signature: pendingStreamUpdate.signature, logLabel: label });
+      // Manual apply only (via toast Update/navigation); no auto-apply
+      return false;
     }
 
     function handleStreamUpdateFromNotification(payload) {
@@ -3090,19 +3083,14 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const currentSig = getStreamSignature();
       if (!nextSig || nextSig === currentSig) return;
 
-      if (hasActiveStreamWork() || hasStreamOutputs()) {
-        const isNew = !pendingStreamUpdate || pendingStreamUpdate.signature !== nextSig;
-        pendingStreamUpdate = { payload, signature: nextSig };
-        if (isNew && els.extractLog) {
-          const pendingLabel = window.t
-            ? window.t('toolbox.logs.linkedPending', {}, 'New stream detected. It will switch after the current extraction/translation finishes.')
-            : 'New stream detected. It will switch after the current extraction/translation finishes.';
-          logExtract(pendingLabel);
-        }
-        return;
+      const isNew = !pendingStreamUpdate || pendingStreamUpdate.signature !== nextSig;
+      pendingStreamUpdate = { payload, signature: nextSig };
+      if (isNew && els.extractLog) {
+        const pendingLabel = window.t
+          ? window.t('toolbox.logs.linkedPending', {}, 'New stream detected. It will switch after the current extraction/translation finishes.')
+          : 'New stream detected. It will switch after the current extraction/translation finishes.';
+        logExtract(pendingLabel);
       }
-
-      applyStreamUpdate(payload, { signature: nextSig });
     }
 
     initInstructions();
@@ -3372,7 +3360,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
       updateExtensionStatus(state.extensionReady, lastExtensionLabel || (state.extensionReady ? 'Ready' : ''), state.extensionReady ? 'ok' : 'warn');
       if (!state.extractionInFlight) {
-        applyPendingStreamUpdateIfSafe();
+        // No auto-apply of pending stream; user must click Update
       }
     }
 
@@ -3403,7 +3391,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
       applyTranslateDisabled();
       if (!state.translationInFlight) {
-        applyPendingStreamUpdateIfSafe();
+        // No auto-apply of pending stream; user must click Update
       }
     }
 
@@ -4026,7 +4014,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           setStep2Enabled(false);
         }
         requestExtensionReset('extract-finished');
-        applyPendingStreamUpdateIfSafe();
       }
     });
 
@@ -4063,9 +4050,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         return;
       }
       if (state.extractionInFlight) return;
-      if (pendingStreamUpdate) {
-        applyPendingStreamUpdateIfSafe({ force: true });
-      }
       const streamUrl = (els.streamUrl.value || '').trim();
       if (!streamUrl) {
         const label = window.t ? window.t('toolbox.logs.pasteUrl', {}, 'Paste a stream URL first.') : 'Paste a stream URL first.';
