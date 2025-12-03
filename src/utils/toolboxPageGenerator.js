@@ -2662,6 +2662,12 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       line-height: 1.45;
       color: var(--text);
     }
+    .mkv-text + .mkv-text { margin-top: 6px; color: var(--muted); }
+    .aio-warning {
+      margin-top: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
     select.compact-select { width: min(240px, 100%); }
     select.target-select { width: min(420px, 100%); }
     .selected-track-box {
@@ -2805,11 +2811,12 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   ${renderQuickNav(links, 'embeddedSubs', false, devMode, t)}
   <div class="page">
     <header class="masthead">
-      <div class="page-hero">
-        <div class="page-icon">🧲</div>
-        <h1 class="page-heading">Embedded Subtitle Studio</h1>
-        <p class="page-subtitle">Extract embedded tracks from your current stream and translate them instantly.</p>
-      </div>
+        <div class="page-hero">
+          <div class="page-icon">🧲</div>
+          <h1 class="page-heading">Embedded Subtitle Studio</h1>
+          <p class="page-subtitle">Extract embedded tracks from your current stream and translate them instantly.</p>
+          <p class="notice warn aio-warning">Do not use this tool at the same time you watch through a AIOStreams <strong>PROXY</strong> for Real-Debrid.</p>
+        </div>
       <div class="badge-row">
         ${renderRefreshBadge(t)}
         <div class="status-badge">
@@ -2860,6 +2867,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             <div>
               <div class="mkv-title">MKV tip</div>
               <p class="mkv-text">Use Complete Mode when extracting MKV streams for the best results. Non-MKV links automatically switch to Smart.</p>
+              <p class="mkv-text">In Complete mode, the whole file will be fetched for extraction.</p>
             </div>
           </div>
           <div class="mode-controls">
