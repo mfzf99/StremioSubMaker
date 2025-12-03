@@ -445,9 +445,11 @@ function quickNavScript() {
       let currentSig = '';
       let lastSig = '';
       let hasBaseline = false;
-      let lastSeenTs = 0;
+      let lastSeenTs = Date.now();
+      let staleCheckTimer = null;
       const MAX_SSE_RETRIES = 5;
-      const POLL_INTERVAL_MS = Math.max(300000, Number(opts.pollIntervalMs) || 300000); // 5 minutes
+      const POLL_INTERVAL_MS = Math.max(15000, Number(opts.pollIntervalMs) || 15000); // Faster fallback when SSE is blocked
+      const STALE_BACKSTOP_MS = Math.max(20000, Number(opts.staleBackstopMs) || 30000); // Force a poll if nothing arrives for ~30s
       const OWNER_TTL_MS = 45000; // quicker failover if the owning tab closes
       const OWNER_REFRESH_MS = 20000;
       const configSig = (() => {
@@ -681,8 +683,9 @@ function quickNavScript() {
         });
       }
 
-      async function pollOnce() {
-        if (!isOwner && channel) return;
+      async function pollOnce(force = false) {
+        const isStale = (Date.now() - lastSeenTs) > STALE_BACKSTOP_MS;
+        if (!force && !isStale && !isOwner && channel) return;
         try {
           const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(configStr), { cache: 'no-store' });
           if (!resp.ok || resp.status === 204) return;
@@ -692,7 +695,8 @@ function quickNavScript() {
         } catch (_) {
           // ignore
         } finally {
-          pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS);
+          const delay = (force || isStale) ? Math.min(POLL_INTERVAL_MS, STALE_BACKSTOP_MS) : POLL_INTERVAL_MS;
+          pollTimer = setTimeout(() => pollOnce(false), delay);
         }
       }
 
@@ -747,6 +751,7 @@ function quickNavScript() {
         if (pollTimer) clearTimeout(pollTimer);
         if (sseRetryTimer) clearTimeout(sseRetryTimer);
         if (ownerLeaseTimer) clearInterval(ownerLeaseTimer);
+        if (staleCheckTimer) clearInterval(staleCheckTimer);
         releaseOwner();
       });
       window.addEventListener('pagehide', releaseOwner);
@@ -755,6 +760,14 @@ function quickNavScript() {
         // No broadcast channel support: every tab owns its own connection
         startSse();
       }
+
+      // Backstop: if SSE/broadcast is blocked, force a quick poll so we still surface updates
+      staleCheckTimer = setInterval(() => {
+        const isStale = (Date.now() - lastSeenTs) > STALE_BACKSTOP_MS;
+        if (isStale) {
+          pollOnce(true);
+        }
+      }, Math.min(STALE_BACKSTOP_MS, POLL_INTERVAL_MS));
     };
 
     (function() {

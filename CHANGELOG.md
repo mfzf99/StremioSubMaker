@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - **Subtitle sync load:** Subtitle Sync page initializes translation/copy helpers before usage to avoid ReferenceErrors that previously broke `/subtitle-sync` loads.
 - **Tool pages extension detection:** Fixed inline script escapes and translation helper init on sync/embedded tool pages so scripts parse correctly and the xSync extension status can be detected (no more stuck "Waiting for extension..." badges when the extension is present).
 - **Inline script stability:** Escaped line breaks in the subtitle sync SRT helpers and initialized the embedded-subtitles `tt` helper to prevent inline script parse errors that blocked extension detection.
+- **Stream toasts everywhere:** Quick-nav stream watcher now forces a fast polling fallback when SSE is blocked, so file-upload/sync/embedded/auto-sub pages surface the same "new stream detected" toast as Sub Toolbox even with aggressive content blockers.
 
 ## SubMaker v1.4.11
 
