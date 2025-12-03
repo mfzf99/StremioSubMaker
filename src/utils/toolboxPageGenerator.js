@@ -4040,6 +4040,97 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       return URL.createObjectURL(blob);
     }
 
+    // Lightweight language normalizer for client-side canonicalization before save
+    const TRACK_LANG_NORMALIZE_MAP = {
+      spa: 'es', esl: 'es', esp: 'es', sp: 'es', spn: 'es',
+      eng: 'en', enu: 'en',
+      por: 'pt', pt: 'pt',
+      pob: 'pob', pb: 'pob', ptb: 'pob', ptbr: 'pob', 'pt-br': 'pob', porbr: 'pob', brazpor: 'pob', brazilian: 'pob',
+      fre: 'fr', fra: 'fr',
+      ger: 'de', deu: 'de',
+      ita: 'it',
+      rus: 'ru',
+      pol: 'pl',
+      dut: 'nl', nld: 'nl',
+      ara: 'ar',
+      heb: 'he',
+      tur: 'tr',
+      rum: 'ro', ron: 'ro',
+      alb: 'sq', sqi: 'sq',
+      chi: 'zh', zho: 'zh', zhs: 'zh-cn', zht: 'zh-tw',
+      jpn: 'ja',
+      kor: 'ko',
+      ces: 'cs', cze: 'cs',
+      dan: 'da',
+      fin: 'fi',
+      swe: 'sv',
+      hun: 'hu',
+      ukr: 'uk',
+      srp: 'sr',
+      ron: 'ro',
+      fas: 'fa', per: 'fa',
+      vie: 'vi',
+      ell: 'el', gre: 'el',
+      bel: 'be',
+      bul: 'bg',
+      tam: 'ta',
+      hin: 'hi',
+      tha: 'th'
+    };
+    const LANGUAGE_NAME_ALIASES = {
+      english: 'en', spanish: 'es', espanol: 'es', espanha: 'es', castellano: 'es',
+      portuguese: 'pt', portugese: 'pt', portugues: 'pt', portugal: 'pt', brazillian: 'pob', brazilian: 'pob',
+      french: 'fr', francais: 'fr', francese: 'fr',
+      german: 'de', deutsch: 'de',
+      italian: 'it', italiano: 'it', italia: 'it',
+      russian: 'ru', russkiy: 'ru',
+      polish: 'pl', polski: 'pl',
+      dutch: 'nl', nederlands: 'nl',
+      arabic: 'ar', hebrew: 'he', turkish: 'tr', romanian: 'ro', greek: 'el',
+      chinese: 'zh', mandarin: 'zh', cantonese: 'zh',
+      japanese: 'ja', korean: 'ko', vietnamese: 'vi', persian: 'fa',
+      thai: 'th', hindi: 'hi', tamil: 'ta', bulgarian: 'bg', ukrainian: 'uk',
+      serbian: 'sr', hungarian: 'hu', swedish: 'sv', finnish: 'fi', danish: 'da'
+    };
+    function normalizeTrackLanguageCode(raw) {
+      if (!raw) return null;
+      const cleaned = String(raw).trim().toLowerCase().replace(/[^a-z-]/g, '');
+      if (!cleaned) return null;
+      const base = cleaned.split('-')[0];
+      if (!base) return null;
+      if (TRACK_LANG_NORMALIZE_MAP[base]) return TRACK_LANG_NORMALIZE_MAP[base];
+      if (LANGUAGE_NAME_ALIASES[base]) return LANGUAGE_NAME_ALIASES[base];
+      if (base.length === 2) return base;
+      if (base.length === 3 && TRACK_LANG_NORMALIZE_MAP[base]) return TRACK_LANG_NORMALIZE_MAP[base];
+      if (base.length === 3) return base;
+      return base.slice(0, 8);
+    }
+    function detectLanguageFromLabel(label) {
+      if (!label) return null;
+      const lowered = String(label).toLowerCase();
+      if (lowered.includes('brazil')) return 'pob';
+      if (lowered.includes('portuguese (br')) return 'pob';
+      const codeMatch = lowered.match(/(?:^|\\[|\\(|\\s)([a-z]{2,3})(?:\\s|$|\\]|\\))/);
+      if (codeMatch) {
+        const byCode = normalizeTrackLanguageCode(codeMatch[1]);
+        if (byCode) return byCode;
+      }
+      const cleaned = lowered.replace(/[^a-z\\s]/g, ' ').replace(/\\s+/g, ' ').trim();
+      if (!cleaned) return null;
+      if (LANGUAGE_NAME_ALIASES[cleaned]) return LANGUAGE_NAME_ALIASES[cleaned];
+      const parts = cleaned.split(' ');
+      for (const part of parts) {
+        const byName = LANGUAGE_NAME_ALIASES[part];
+        if (byName) return byName;
+        const byCode = normalizeTrackLanguageCode(part);
+        if (byCode) return byCode;
+      }
+      return null;
+    }
+    function canonicalTrackLanguageCode(raw) {
+      return normalizeTrackLanguageCode(raw) || detectLanguageFromLabel(raw) || 'und';
+    }
+
     async function persistOriginals(batchId) {
       for (const track of state.tracks) {
         try {
@@ -4054,6 +4145,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             contentPayload = btoa(str);
             encoding = 'base64';
           }
+          const langCode = canonicalTrackLanguageCode(track.language || track.label || track.name || 'und');
           await fetch('/api/save-embedded-subtitle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4061,7 +4153,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
               configStr: BOOTSTRAP.configStr,
               videoHash: getVideoHash(),
               trackId: track.id,
-              languageCode: track.language || 'und',
+              languageCode: langCode,
               content: contentPayload,
               metadata: {
                 label: track.label,

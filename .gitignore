@@ -11,6 +11,7 @@ keys/
 
 # Dependencies
 node_modules/
+SubMaker xSync
 
 # Data and cache
 data/

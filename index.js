@@ -3745,11 +3745,12 @@ app.post('/api/save-embedded-subtitle', userDataWriteLimiter, async (req, res) =
         const normalizedVideoHash = typeof videoHash === 'string' ? videoHash.trim() : '';
         const normalizedTrackId = (typeof trackId === 'string' || typeof trackId === 'number') ? String(trackId).trim() : '';
         const normalizedLang = typeof languageCode === 'string' ? languageCode.trim().toLowerCase() : '';
+        const canonicalLang = canonicalSyncLanguageCode(normalizedLang);
         const subtitleContent = typeof content === 'string' ? content : '';
 
         const hashIsSafe = normalizedVideoHash && normalizedVideoHash.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(normalizedVideoHash);
         const trackIsSafe = normalizedTrackId && normalizedTrackId.length <= 120 && /^[a-zA-Z0-9._-]+$/.test(normalizedTrackId);
-        const langIsSafe = normalizedLang && normalizedLang.length <= 24;
+        const langIsSafe = canonicalLang && canonicalLang.length <= 24;
 
         if (!configStr || !hashIsSafe || !trackIsSafe || !langIsSafe || !subtitleContent) {
             return res.status(400).json({ error: t('server.errors.missingOrInvalidFields', {}, 'Missing or invalid required fields') });
@@ -3774,7 +3775,7 @@ app.post('/api/save-embedded-subtitle', userDataWriteLimiter, async (req, res) =
             const saveResult = await embeddedCache.saveOriginalEmbedded(
                 normalizedVideoHash,
                 normalizedTrackId,
-                normalizedLang,
+                canonicalLang,
                 subtitleContent,
                 normalizedMetadata
             );
