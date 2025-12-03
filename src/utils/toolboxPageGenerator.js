@@ -4237,7 +4237,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           const filteredTracks = rawTracks.filter((t) => !(t && (t.binary || t.codec === 'copy' || (t.mime && String(t.mime).toLowerCase().includes('matroska')) || t.source === 'copy')));
           const dropped = rawTracks.length - filteredTracks.length;
           if (dropped > 0) {
-            const dropMsg = window.t ? window.t('toolbox.logs.filteredBinaryTracks', { count: dropped }, `Omitted ${dropped} binary track(s); showing text subtitles only.`) : (`Omitted ${dropped} binary track(s); showing text subtitles only.`);
+            const dropFallback = 'Omitted ' + dropped + ' binary track(s); showing text subtitles only.';
+            const dropMsg = window.t
+              ? window.t('toolbox.logs.filteredBinaryTracks', { count: dropped }, dropFallback)
+              : dropFallback;
             logExtract(dropMsg);
           }
           const batchId = Date.now();
