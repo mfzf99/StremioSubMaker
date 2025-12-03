@@ -3818,6 +3818,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         const normalizedSourceLang = typeof sourceLanguageCode === 'string' ? sourceLanguageCode.trim().toLowerCase() : 'und';
         const subtitleContent = typeof content === 'string' ? content : '';
         let mergedMetadata = (metadata && typeof metadata === 'object') ? { ...metadata } : {};
+        const incomingBatchId = Number(mergedMetadata.batchId);
 
         const hashIsSafe = normalizedVideoHash && normalizedVideoHash.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(normalizedVideoHash);
         const trackIsSafe = normalizedTrackId && normalizedTrackId.length <= 120 && /^[a-zA-Z0-9._-]+$/.test(normalizedTrackId);
@@ -4051,6 +4052,14 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
         if (originalEntry && originalEntry.metadata) {
             mergedMetadata = { ...(originalEntry.metadata || {}), ...mergedMetadata };
+        }
+
+        if (Number.isFinite(Number(originalEntry?.metadata?.batchId))) {
+            mergedMetadata.batchId = Number(originalEntry.metadata.batchId);
+        } else if (Number.isFinite(incomingBatchId)) {
+            mergedMetadata.batchId = incomingBatchId;
+        } else if (!mergedMetadata.batchId) {
+            mergedMetadata.batchId = Date.now();
         }
 
         // Convert VTT to SRT if needed

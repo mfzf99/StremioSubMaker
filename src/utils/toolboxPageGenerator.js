@@ -3061,6 +3061,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extractionInFlight: false,
       translationInFlight: false,
       tracks: [],
+      currentBatchId: null,
       selectedTrackId: null,
       selectedTargetLang: baseTargetOptions[0]?.code || null,
       extractMode: 'complete',
@@ -3542,6 +3543,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           return { data: base64ToUint8(track.contentBase64), mime: track.mime || 'application/octet-stream' };
         }
       }
+      if (track.contentBase64) {
+        return { data: base64ToUint8(track.contentBase64), mime: track.mime || 'text/plain' };
+      }
       if (track.content instanceof Uint8Array || track.content instanceof ArrayBuffer) {
         return { data: track.content, mime: track.mime || 'text/plain' };
       }
@@ -3563,6 +3567,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 
     function resetExtractionState(clearLogs = false) {
       state.tracks = [];
+      state.currentBatchId = null;
       state.targets = {};
       state.queue = [];
       state.activeTranslations = 0;
@@ -4145,7 +4150,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             metadata: {
               label: track.label,
               codec: track.codec,
-              extractedAt: track.extractedAt || Date.now()
+              extractedAt: track.extractedAt || Date.now(),
+              batchId: track.batchId || state.currentBatchId || null
             },
             forceRetranslate: isRetranslate
           })
@@ -4217,23 +4223,39 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         if (msg.success && Array.isArray(msg.tracks)) {
           resetExtractionState(true);
           state.selectedTargetLang = getTargetOptions()[0]?.code || null;
-          state.tracks = msg.tracks.map((t, idx) => ({
-            id: t.id || idx,
-            label: t.label || ('Track ' + (idx + 1)),
-            language: t.language || 'und',
-            codec: t.codec || t.format || 'subtitle',
-            binary: !!(t.binary || t.codec === 'copy' || t.encoding === 'base64'),
-            content: t.content || '',
-            contentBase64: t.contentBase64 || '',
-            contentBytes: t.contentBytes || null,
-            byteLength: t.byteLength || (t.contentBytes ? t.contentBytes.length : (typeof t.content === 'string' ? t.content.length : 0)),
-            mime: t.mime || (t.binary ? 'application/octet-stream' : 'text/plain'),
-            extractedAt: Date.now()
-          }));
+          const rawTracks = msg.tracks || [];
+          const filteredTracks = rawTracks.filter((t) => !(t && (t.binary || t.codec === 'copy' || (t.mime && String(t.mime).toLowerCase().includes('matroska')) || t.source === 'copy')));
+          const dropped = rawTracks.length - filteredTracks.length;
+          if (dropped > 0) {
+            const dropMsg = window.t ? window.t('toolbox.logs.filteredBinaryTracks', { count: dropped }, `Omitted ${dropped} binary track(s); showing text subtitles only.`) : (`Omitted ${dropped} binary track(s); showing text subtitles only.`);
+            logExtract(dropMsg);
+          }
+          const batchId = Date.now();
+          state.currentBatchId = batchId;
+          state.tracks = filteredTracks.map((t, idx) => {
+            const contentBytes = t.contentBytes || null;
+            const contentBase64 = t.contentBase64 || '';
+            const contentValue = (typeof t.content === 'string' || t.content instanceof Uint8Array || t.content instanceof ArrayBuffer) ? t.content : '';
+            const byteLength = t.byteLength || (contentBytes ? contentBytes.length : (typeof contentValue === 'string' ? contentValue.length : 0));
+            const rawLang = (t.language || '').toString().trim();
+            return {
+              id: t.id || idx,
+              label: t.label || ('Track ' + (idx + 1)),
+              language: rawLang ? rawLang.toLowerCase() : 'und',
+              codec: t.codec || t.format || 'subtitle',
+              binary: false,
+              content: contentValue,
+              contentBase64,
+              contentBytes,
+              byteLength,
+              mime: t.mime || 'text/plain',
+              extractedAt: Date.now(),
+              batchId
+            };
+          });
           renderTargets();
           autoSelectDefaultTrack();
           renderDownloads();
-          const batchId = Date.now();
           persistOriginals(batchId);
           const label = window.t ? window.t('toolbox.logs.extracted', { count: state.tracks.length }, 'Extracted ' + state.tracks.length + ' track(s).') : ('Extracted ' + state.tracks.length + ' track(s).');
           logExtract(label);

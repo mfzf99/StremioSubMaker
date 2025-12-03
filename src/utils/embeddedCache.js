@@ -172,6 +172,7 @@ async function saveOriginalEmbedded(videoHash, trackId, languageCode, content, m
   try {
     await addToIndex(adapter, videoHash, 'original', cacheKey);
     await pruneOriginalsForVideo(videoHash, metadata.batchId);
+    await pruneTranslationsForVideo(videoHash, metadata.batchId);
   } catch (error) {
     log.warn(() => [`[Embedded Cache] Failed to update original index for ${cacheKey}:`, error.message]);
   }
@@ -196,6 +197,7 @@ async function saveTranslatedEmbedded(videoHash, trackId, sourceLanguageCode, ta
   await adapter.set(cacheKey, { content: entry }, StorageAdapter.CACHE_TYPES.EMBEDDED);
   try {
     await addToIndex(adapter, videoHash, 'translation', cacheKey);
+    await pruneTranslationsForVideo(videoHash, metadata.batchId);
   } catch (error) {
     log.warn(() => [`[Embedded Cache] Failed to update translation index for ${cacheKey}:`, error.message]);
   }
@@ -327,6 +329,69 @@ async function pruneOriginalsForVideo(videoHash, preferredBatchId = null) {
   }
 }
 
+async function pruneTranslationsForVideo(videoHash, preferredBatchId = null) {
+  const adapter = await getStorageAdapter();
+  const translations = await listEmbeddedTranslations(videoHash);
+  if (!translations.length) return;
+
+  let targetBatchId = preferredBatchId !== undefined && preferredBatchId !== null
+    ? Number(preferredBatchId)
+    : null;
+
+  if (Number.isNaN(targetBatchId)) {
+    targetBatchId = null;
+  }
+
+  if (targetBatchId === null) {
+    const withBatch = translations
+      .map(t => Number(t?.metadata?.batchId))
+      .filter(v => Number.isFinite(v));
+    if (withBatch.length) {
+      targetBatchId = Math.max(...withBatch);
+    }
+  }
+
+  let newestTimestamp = null;
+  if (targetBatchId === null) {
+    const timestamps = translations
+      .map(t => Number(t?.timestamp))
+      .filter(v => Number.isFinite(v));
+    if (timestamps.length) {
+      newestTimestamp = Math.max(...timestamps);
+    }
+  }
+
+  const toDelete = [];
+  for (const entry of translations) {
+    const batchId = Number(entry?.metadata?.batchId);
+    if (targetBatchId !== null) {
+      if (!Number.isNaN(batchId) && batchId === targetBatchId) continue;
+      toDelete.push(entry.cacheKey);
+      continue;
+    }
+    if (newestTimestamp !== null) {
+      const ts = Number(entry.timestamp);
+      if (Number.isFinite(ts) && ts >= newestTimestamp) continue;
+      toDelete.push(entry.cacheKey);
+    }
+  }
+
+  if (!toDelete.length) return;
+
+  const { indexKey, keys: previousKeys } = await loadIndex(adapter, videoHash, 'translation');
+  const remaining = previousKeys.filter(k => !toDelete.includes(k));
+  await persistIndex(adapter, indexKey, remaining, previousKeys);
+
+  for (const key of toDelete) {
+    try {
+      await adapter.delete(key, StorageAdapter.CACHE_TYPES.EMBEDDED);
+      log.debug(() => `[Embedded Cache] Pruned translation ${key}`);
+    } catch (error) {
+      log.warn(() => [`[Embedded Cache] Failed to prune translation ${key}:`, error.message]);
+    }
+  }
+}
+
 module.exports = {
   generateEmbeddedCacheKey,
   saveOriginalEmbedded,
@@ -335,5 +400,6 @@ module.exports = {
   getTranslatedEmbedded,
   listEmbeddedOriginals,
   listEmbeddedTranslations,
-  pruneOriginalsForVideo
+  pruneOriginalsForVideo,
+  pruneTranslationsForVideo
 };
