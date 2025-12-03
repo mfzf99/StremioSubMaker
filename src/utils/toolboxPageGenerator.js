@@ -4354,10 +4354,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             const contentBase64 = t.contentBase64 || '';
             const contentValue = (typeof t.content === 'string' || t.content instanceof Uint8Array || t.content instanceof ArrayBuffer) ? t.content : '';
             const byteLength = t.byteLength || (contentBytes ? contentBytes.length : (typeof contentValue === 'string' ? contentValue.length : 0));
-            const primaryLangRaw = (t.language || t.lang || t.languageRaw || '').toString().trim();
+            const primaryLangRaw = (t.language || t.lang || t.languageRaw || t.languageCode || t.languageIetf || '').toString().trim();
             const primaryLang = isGeneratedLangHint(primaryLangRaw) ? '' : primaryLangRaw;
             const fallbackLangs = [
               t.originalLanguage,
+              t.languageCode,
+              t.languageIetf,
+              t.langCode,
               (!isGeneratedLabel(t.originalLabel) && t.originalLabel) || null,
               (!isGeneratedLabel(t.label) && t.label) || null,
               (!isGeneratedLabel(t.name) && t.name) || null,
