@@ -4,17 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## SubMaker v1.4.12
 
-**Bug Fixes:**
+- **Extract Subs rollout:** Embedded subtitles extractor is now always enabled in Sub Toolbox and QuickNav.
 - **Subtitle menu UX:** Stream subtitle menu now surfaces source and target tracks together under "Source & Target," with categories collapsed by default (per-locale labels updated), pill counts, and refreshed chrome for quicker scanning.
-- **Extract Subs rollout:** Embedded subtitles extractor is now always enabled in Sub Toolbox and QuickNav, no Dev Mode gate.
-- **Locale placeholders:** Config page now re-applies limit copy with `data-i18n-vars` so `{max}` placeholders resolve correctly after locale reloads (target/source/no-translation language caps no longer show raw template tokens).
 - **BCP-47 locale support:** Locale loader now accepts alphanumeric tags with dashes/underscores (e.g., `es-419`, `pt_BR`) instead of silently falling back to English.
 - **Safe alerts:** Config alerts no longer render via `innerHTML`, preventing HTML injection from bubbled error strings while keeping icons/spacing intact.
 - **data-i18n vars respected:** `data-i18n-vars` is parsed and applied for any element using `data-i18n`, so dynamic placeholders stay translated when copy is re-applied.
 - **Subtitle sync load:** Subtitle Sync page initializes translation/copy helpers before usage to avoid ReferenceErrors that previously broke `/subtitle-sync` loads.
 - **Tool pages extension detection:** Fixed inline script escapes and translation helper init on sync/embedded tool pages so scripts parse correctly and the xSync extension status can be detected (no more stuck "Waiting for extension..." badges when the extension is present).
 - **Inline script stability:** Escaped line breaks in the subtitle sync SRT helpers and initialized the embedded-subtitles `tt` helper to prevent inline script parse errors that blocked extension detection.
-- **Stream toasts everywhere:** Quick-nav stream watcher now forces a fast polling fallback when SSE is blocked, so file-upload/sync/embedded/auto-sub pages surface the same "new stream detected" toast as Sub Toolbox even with aggressive content blockers.
 
 ## SubMaker v1.4.11
 

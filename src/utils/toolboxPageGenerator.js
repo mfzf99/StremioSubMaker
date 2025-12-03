@@ -2658,6 +2658,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       display: flex;
       justify-content: center;
       margin: 10px auto 0;
+      flex-basis: 100%;
+      width: 100%;
     }
     #linked-stream-card {
       width: min(780px, 100%);
