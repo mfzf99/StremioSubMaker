@@ -1834,6 +1834,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   if (episodeTag) metaDetails.push(`Episode: ${episodeTag}`);
   if (filename) metaDetails.push(`File: ${cleanDisplayName(filename)}`);
   const initialVideoSubtitle = escapeHtml(metaDetails.join(' - ') || 'Video ID unavailable');
+  const initialTranslationContext = (() => {
+    const labelParts = [
+      (linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || 'your linked stream').trim(),
+      episodeTag
+    ].filter(Boolean);
+    return escapeHtml(`You're translating subtitles for ${labelParts.join(' ').trim()}`);
+  })();
   const config = arguments[3] || {};
   const targetLanguages = (Array.isArray(config.targetLanguages) ? config.targetLanguages : [])
     .map(code => ({ code, name: getLanguageName(code) || code }));
@@ -1848,28 +1855,49 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     const options = [];
     const providers = config.providers || {};
     const seen = new Set();
-    const add = (key, label, model) => {
-      const norm = String(key || '').toLowerCase();
-      if (!norm || seen.has(norm)) return;
-      seen.add(norm);
-      options.push({ key: norm, label, model: model || '' });
+    const resolveProviderEntry = (key) => {
+      const normalized = String(key || '').trim().toLowerCase();
+      const matchKey = Object.keys(providers || {}).find(k => String(k).toLowerCase() === normalized);
+      return matchKey ? { key: matchKey, config: providers[matchKey] || {} } : null;
     };
-    add('gemini', `Gemini${config.geminiModel ? ` (${config.geminiModel})` : ''}`, config.geminiModel);
+    const formatLabel = (name, model) => {
+      const base = formatProviderName(name);
+      const modelLabel = model ? ` (${model})` : '';
+      return `${base}${modelLabel}`;
+    };
+    const geminiConfigured = Boolean(config.geminiModel || config.geminiKey || config.geminiApiKey || providers.gemini);
+    const geminiEnabled = providers.gemini ? providers.gemini.enabled !== false : geminiConfigured;
+    const addIfEnabled = (key, label, model) => {
+      const norm = String(key || '').trim().toLowerCase();
+      if (!norm || seen.has(norm)) return;
+      let enabled = false;
+      if (norm === 'gemini') {
+        enabled = geminiEnabled;
+      } else {
+        const entry = resolveProviderEntry(norm);
+        enabled = entry?.config?.enabled === true;
+      }
+      if (!enabled) return;
+      seen.add(norm);
+      options.push({ key: norm, label: label || formatLabel(key, model) });
+    };
+    if (geminiEnabled) {
+      const geminiLabel = formatLabel('Gemini', config.geminiModel || providers.gemini?.model || '');
+      addIfEnabled('gemini', geminiLabel, config.geminiModel || providers.gemini?.model || '');
+    }
     if (config.multiProviderEnabled && config.mainProvider) {
-      const main = String(config.mainProvider);
-      const norm = main.toLowerCase();
-      const model = providers[norm]?.model || '';
-      add(norm, `Main: ${main}${model ? ` (${model})` : ''}`, model);
+      const entry = resolveProviderEntry(config.mainProvider);
+      const model = entry?.config?.model || (config.mainProvider.toLowerCase() === 'gemini' ? config.geminiModel : '');
+      addIfEnabled(config.mainProvider, `Main: ${formatLabel(config.mainProvider, model)}`, model);
     }
     if (config.secondaryProviderEnabled && config.secondaryProvider) {
-      const secondary = String(config.secondaryProvider);
-      const norm = secondary.toLowerCase();
-      const model = providers[norm]?.model || '';
-      add(norm, `Secondary: ${secondary}${model ? ` (${model})` : ''}`, model);
+      const entry = resolveProviderEntry(config.secondaryProvider);
+      const model = entry?.config?.model || (config.secondaryProvider.toLowerCase() === 'gemini' ? config.geminiModel : '');
+      addIfEnabled(config.secondaryProvider, `Secondary: ${formatLabel(config.secondaryProvider, model)}`, model);
     }
     Object.keys(providers || {}).forEach(key => {
       const model = providers[key]?.model || '';
-      add(key, `Provider: ${key}${model ? ` (${model})` : ''}`, model);
+      addIfEnabled(key, `Provider: ${formatLabel(key, model)}`, model);
     });
     return options;
   })();
@@ -1887,8 +1915,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     defaults: {
       singleBatchMode: config.singleBatchMode === true,
       sendTimestampsToAI: config.advancedSettings?.sendTimestampsToAI === true,
-      translationPrompt: config.translationPrompt || '',
-      providerModel: config.geminiModel || ''
+      translationPrompt: config.translationPrompt || ''
     },
     links,
     linkedTitle
@@ -2487,7 +2514,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     #step1Card .step-stack .field-block { width: min(720px, 100%); display: flex; flex-direction: column; gap: 6px; }
     #step1Card .step-stack .log,
     #step1Card .step-stack .result-box,
-    #step1Card .video-meta,
     #step1Card .mode-controls { width: min(720px, 100%); }
     #step1Card .mode-controls { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
     #extract-btn { margin-bottom: 6px; }
@@ -2572,36 +2598,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       box-shadow: 0 14px 34px rgba(8,164,213,0.18);
     }
     .pill-small { padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; background: var(--surface); }
-    .model-status {
-      margin-top: 4px;
-      font-size: 13px;
-      padding: 8px;
-      border-radius: 10px;
-      min-height: 20px;
-    }
-    .model-status.fetching {
-      color: var(--primary);
-      background: rgba(8, 164, 213, 0.08);
-    }
-    .model-status.success {
-      color: #10b981;
-      background: rgba(16, 185, 129, 0.12);
-    }
-    .model-status.error {
-      color: var(--danger);
-      background: rgba(239, 68, 68, 0.12);
-    }
-    .spinner-small {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border: 2px solid rgba(8, 164, 213, 0.2);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      vertical-align: middle;
-      margin-right: 6px;
-    }
     .log {
       position: relative;
       background: var(--surface-2);
@@ -2656,6 +2652,15 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       border-radius: 12px;
       border: 1px dashed var(--border);
       background: var(--surface-2);
+    }
+    .linked-stream-wrapper {
+      display: flex;
+      justify-content: center;
+      margin: 10px auto 0;
+    }
+    #linked-stream-card {
+      width: min(780px, 100%);
+      text-align: center;
     }
     .video-meta-label {
       font-size: 11px;
@@ -2897,7 +2902,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           <div class="page-icon">🧲</div>
           <h1 class="page-heading">Embedded Subtitle Studio</h1>
           <p class="page-subtitle">Extract embedded tracks from your current stream and translate them instantly.</p>
-          <p class="notice warn aio-warning">Do not use this tool at the same time you stream through an AIOStreams <strong>PROXY</strong> for Real-Debrid.</p>
+          <p class="notice warn aio-warning">If you use AIOStreams <strong>PROXY</strong> for Real-Debrid, completely exit all streams before running this tool.</p>
         </div>
       <div class="badge-row">
         ${renderRefreshBadge(t)}
@@ -2923,6 +2928,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           </div>
         </div>
       </div>
+      <div class="linked-stream-wrapper">
+        <div class="video-meta" id="linked-stream-card">
+          <p class="video-meta-label">Linked stream</p>
+          <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
+          <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
+        </div>
+      </div>
     </header>
 
     <section class="section-grid">
@@ -2931,15 +2943,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           <div class="step-header">
             <span class="step-chip">Step 1</span>
             <h3>Extension & Extraction</h3>
-            <p class="muted" style="margin:4px 0 0;">Ensure xSync is detected, paste a stream URL, and pull embedded subtitle tracks.</p>
+            <p class="muted" style="margin:4px 0 0;">Right-click stremio's stream and select "Copy Stream URL". <strong>Ensure the linked stream is the right one.</strong> Paste the stream's URL on the field below and extract its subtitles.</p>
           </div>
         </div>
         <div class="step-stack">
-          <div class="video-meta">
-            <p class="video-meta-label">Linked stream</p>
-            <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
-            <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
-          </div>
           <div class="field-block form-group">
             <label for="stream-url">Stream URL</label>
             <input type="text" id="stream-url" placeholder="Paste the video/stream URL from Stremio or your browser">
@@ -2960,6 +2967,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             </select>
             <p class="mode-helper">Smart performs one best-effort fast pass and fails if incomplete. Complete always downloads the entire stream and runs one FFmpeg demux with no retries.</p>
             <button id="extract-btn" type="button" class="secondary">Extract Subtitles</button>
+            <p id="extract-blocked-msg" style="margin:6px 0 0; color:#d14343; font-weight:600; display:none;">Refresh the stream link in Stremio, then try again.</p>
           </div>
           <div class="log-header" aria-hidden="true">
             <span class="pulse"></span>
@@ -3004,7 +3012,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           <summary>
             <div>
               <span>Translation Settings</span>
-              <span class="summary-meta">Provider, model, batching, timestamps</span>
+              <span class="summary-meta">Provider, batching, timestamps</span>
             </div>
             <span class="chevron" aria-hidden="true"></span>
           </summary>
@@ -3012,16 +3020,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             <div class="provider-model-row">
               <div class="select-stack">
                 <label for="provider-select">Provider</label>
-                <select id="provider-select" style="max-width:240px;"></select>
-              </div>
-              <div class="select-stack model-stack">
-                <label for="model-select">Model</label>
-                <select id="model-select" style="max-width:260px;">
-                  <option value="">Use Configured Model</option>
-                </select>
+                <select id="provider-select" style="width:auto; min-width:200px; max-width:360px;"></select>
               </div>
             </div>
-            <div id="model-status" class="model-status" role="status" aria-live="polite"></div>
+            <p class="muted" style="margin:0; text-align:center;">Uses your configured model for the selected provider.</p>
 
             <div class="flex" style="flex-direction:column; gap:12px; align-items:center; width:100%;">
               <div style="display:flex; flex-direction:column; gap:6px; align-items:center; width:100%; max-width:300px;">
@@ -3042,7 +3044,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           </div>
         </details>
 
-        <div class="flex" style="margin-top:10px;">
+        <div class="flex" style="margin-top:10px; flex-direction:column; align-items:flex-start; gap:6px;">
+          <p class="muted" id="translation-context" style="margin:0;">${initialTranslationContext}</p>
           <button id="translate-btn" type="button">Translate Subtitles</button>
         </div>
 
@@ -3116,7 +3119,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       step2Enabled: false,
       lastProgressStatus: null,  // Track last logged progress message to prevent spam
       extractMessageId: null,
-      targetOptions: baseTargetOptions
+      targetOptions: baseTargetOptions,
+      placeholderBlocked: isPlaceholderStreamValue(PAGE.videoId) || isPlaceholderStreamValue(PAGE.filename)
     };
     const translatedHistory = new Set();
     const instructionsEls = {
@@ -3437,9 +3441,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extractBtn: document.getElementById('extract-btn'),
       targetSelect: document.getElementById('target-select'),
       translateBtn: document.getElementById('translate-btn'),
+      translationContext: document.getElementById('translation-context'),
       providerSelect: document.getElementById('provider-select'),
-      modelSelect: document.getElementById('model-select'),
-      modelStatus: document.getElementById('model-status'),
       singleBatch: document.getElementById('single-batch-select'),
       timestamps: document.getElementById('timestamps-select'),
       extractedDownloads: document.getElementById('extracted-downloads'),
@@ -3451,7 +3454,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       videoMetaSubtitle: document.getElementById('video-meta-subtitle'),
       step2Card: document.getElementById('step2Card'),
       selectedTrackSummary: document.getElementById('selected-track-summary'),
-      modeSelect: document.getElementById('extract-mode')
+      modeSelect: document.getElementById('extract-mode'),
+      extractError: document.getElementById('extract-blocked-msg')
     };
     const tr = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
     const buttonLabels = {
@@ -3545,9 +3549,45 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       return '';
     }
 
+    function buildTranslationContextLabel(source = {}) {
+      const baseTitle = source.title || cleanVideoName(source.filename) || cleanVideoName(source.videoId) || '';
+      const episodeTag = formatEpisodeTag(source.videoId);
+      const parts = [baseTitle || '', episodeTag || ''].filter(Boolean);
+      return parts.join(' ').trim();
+    }
+
+    function updateTranslationContext(source = {}) {
+      if (!els.translationContext) return;
+      const label = buildTranslationContextLabel(source);
+      if (label) {
+        els.translationContext.textContent = "You're translating subtitles for " + label;
+      } else {
+        els.translationContext.textContent = "You're translating subtitles for your linked stream";
+      }
+    }
+
+    function applyExtractDisabled() {
+      if (!els.extractBtn) return;
+      const blocked = !!state.placeholderBlocked;
+      const disabled = !!state.extractionInFlight || blocked;
+      els.extractBtn.disabled = disabled;
+      els.extractBtn.textContent = state.extractionInFlight ? 'Extracting...' : buttonLabels.extract;
+      if (els.extractError) {
+        els.extractError.style.display = blocked ? 'block' : 'none';
+      }
+    }
+
+    function updatePlaceholderBlock(source = {}) {
+      const videoId = normalizeStreamValue(source.videoId !== undefined ? source.videoId : PAGE.videoId);
+      const filename = normalizeStreamValue(source.filename !== undefined ? source.filename : PAGE.filename);
+      state.placeholderBlocked = isPlaceholderStreamValue(videoId) || isPlaceholderStreamValue(filename);
+      applyExtractDisabled();
+    }
+
     async function updateVideoMeta(payload) {
       if (!els.videoMetaTitle || !els.videoMetaSubtitle) return;
       const source = payload || BOOTSTRAP;
+      updatePlaceholderBlock(source);
       const title = source.title || cleanVideoName(source.filename) || cleanVideoName(source.videoId) || 'No stream linked';
       const episodeTag = formatEpisodeTag(source.videoId);
       const fallbackDetails = [];
@@ -3560,6 +3600,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (source.filename) fallbackDetails.push('File: ' + source.filename);
       els.videoMetaTitle.textContent = title;
       els.videoMetaSubtitle.textContent = fallbackDetails.join(' - ') || 'Waiting for a linked stream...';
+      updateTranslationContext({ ...source, title, videoId: source.videoId, filename: source.filename });
 
       const requestId = ++linkedTitleRequestId;
       const fetchedTitle = source.title || await fetchLinkedTitle(source.videoId);
@@ -3574,8 +3615,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (episodeTag) details.push('Episode: ' + episodeTag);
       if (source.filename) details.push('File: ' + source.filename);
 
-      els.videoMetaTitle.textContent = fetchedTitle || title;
+      const resolvedTitle = fetchedTitle || title;
+      els.videoMetaTitle.textContent = resolvedTitle;
       els.videoMetaSubtitle.textContent = details.join(' - ') || 'Waiting for a linked stream...';
+      updateTranslationContext({ ...source, title: resolvedTitle, videoId: source.videoId, filename: source.filename });
     }
 
     function base64ToUint8(base64) {
@@ -3644,10 +3687,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     function setExtractionInFlight(active) {
       state.extractionInFlight = !!active;
       refreshExtractionWatchdog();
-      if (els.extractBtn) {
-        els.extractBtn.disabled = !!active;
-        els.extractBtn.textContent = active ? 'Extracting...' : buttonLabels.extract;
-      }
+      applyExtractDisabled();
       if (els.modeSelect) {
         els.modeSelect.disabled = !!active;
       }
@@ -3748,112 +3788,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
     }
 
-    const modelCache = new Map();
-    const fetchedModels = new Set();
-    const providerModelSelection = new Map();
-
     const normalizeProviderKey = (key) => String(key || '').trim().toLowerCase();
-
-    function getConfiguredModel(providerKey) {
-      const normalized = normalizeProviderKey(providerKey);
-      const match = (BOOTSTRAP.providerOptions || []).find(opt => normalizeProviderKey(opt.key) === normalized);
-      if (match && match.model) return match.model;
-      if (normalized === 'gemini') return BOOTSTRAP.defaults.providerModel || '';
-      return '';
-    }
-
-    function setModelStatus(message, statusClass = '', useHtml = false) {
-      if (!els.modelStatus) return;
-      els.modelStatus.className = 'model-status' + (statusClass ? ' ' + statusClass : '');
-      if (useHtml) els.modelStatus.innerHTML = message || '';
-      else els.modelStatus.textContent = message || '';
-    }
-
-    function populateModelDropdown(providerKey, models = []) {
-      if (!els.modelSelect) return;
-      const normalized = normalizeProviderKey(providerKey || els.providerSelect?.value);
-      const configuredModel = getConfiguredModel(normalized);
-      const placeholder = configuredModel
-        ? 'Use Configured Model (' + configuredModel + ')'
-        : 'Use Configured Model (from your config)';
-
-      const desiredOptions = [
-        { value: '', text: placeholder },
-        ...models.map(model => ({
-          value: model.name || model.id,
-          text: model.displayName || model.name || model.id
-        }))
-      ];
-
-      const current = Array.from(els.modelSelect.options).map(o => ({
-        value: o.value,
-        text: o.textContent
-      }));
-      const needsRebuild = desiredOptions.length !== current.length ||
-        desiredOptions.some((opt, idx) => {
-          const existing = current[idx];
-          return !existing || existing.value !== opt.value || existing.text !== opt.text;
-        });
-
-      if (needsRebuild) {
-        els.modelSelect.innerHTML = '';
-        desiredOptions.forEach(({ value, text }) => {
-          const opt = document.createElement('option');
-          opt.value = value;
-          opt.textContent = text;
-          els.modelSelect.appendChild(opt);
-        });
-      }
-
-      const savedValue = providerModelSelection.get(normalized) || '';
-      if (savedValue) {
-        const exists = Array.from(els.modelSelect.options).some(o => o.value === savedValue);
-        if (exists) els.modelSelect.value = savedValue;
-      } else {
-        els.modelSelect.value = '';
-      }
-    }
-
-    async function fetchModels(providerKey) {
-      const normalized = normalizeProviderKey(providerKey || els.providerSelect?.value);
-      if (!els.modelSelect) return;
-      if (!BOOTSTRAP.configStr) {
-        populateModelDropdown(normalized, []);
-        setModelStatus('Model list requires a saved config', 'error');
-        return;
-      }
-
-      if (normalized === 'googletranslate') {
-        populateModelDropdown(normalized, []);
-        setModelStatus('Model selection not available for Google Translate');
-        fetchedModels.add(normalized);
-        return;
-      }
-
-      setModelStatus('<div class="spinner-small"></div> Fetching models...', 'fetching', true);
-      const endpoint = normalized === 'gemini' ? '/api/gemini-models' : '/api/models/' + normalized;
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ configStr: BOOTSTRAP.configStr })
-        });
-        if (!response.ok) {
-          throw new Error((await response.text()) || 'Failed to fetch models');
-        }
-        const models = await response.json();
-        modelCache.set(normalized, models);
-        fetchedModels.add(normalized);
-        populateModelDropdown(normalized, models);
-        setModelStatus('Models loaded!', 'success');
-        setTimeout(() => setModelStatus(''), 2500);
-      } catch (err) {
-        console.error('Failed to fetch models', err);
-        populateModelDropdown(normalized, modelCache.get(normalized) || []);
-        setModelStatus('Failed to fetch models', 'error');
-      }
-    }
-
     function syncSelectOptions(selectEl, desiredOptions) {
       if (!selectEl) return;
       for (let i = 0; i < desiredOptions.length; i++) {
@@ -3875,23 +3810,24 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     }
 
     function renderProviders() {
-      if (els.providerSelect) {
-        const providerOpts = BOOTSTRAP.providerOptions || [{ key: 'gemini', label: 'Gemini', model: BOOTSTRAP.defaults.providerModel }];
-        const desired = providerOpts.map(opt => {
-          const key = normalizeProviderKey(opt.key || opt.value || opt);
-          return { value: key, text: opt.label + (opt.model ? ' - ' + opt.model : '') };
-        });
-        const prevValue = els.providerSelect.value;
-        syncSelectOptions(els.providerSelect, desired);
+      if (!els.providerSelect) return;
+      const providerOpts = BOOTSTRAP.providerOptions || [];
+      const desired = providerOpts.map(opt => {
+        const key = normalizeProviderKey(opt.key || opt.value || opt);
+        const label = opt.label || formatProviderName(opt.key || opt.value || opt);
+        return { value: key, text: label };
+      });
+      const prevValue = els.providerSelect.value;
+      syncSelectOptions(els.providerSelect, desired);
 
-        const preferred = desired[0]?.value || 'gemini';
-        const nextValue = (prevValue && desired.some(d => d.value === prevValue)) ? prevValue : preferred;
-        els.providerSelect.value = nextValue;
-        populateModelDropdown(nextValue, modelCache.get(nextValue) || []);
-        if (!fetchedModels.has(nextValue)) {
-          fetchModels(nextValue);
-        }
-      }
+      const preferred = desired[0]?.value || '';
+      const nextValue = (prevValue && desired.some(d => d.value === prevValue)) ? prevValue : preferred;
+      els.providerSelect.value = nextValue;
+      els.providerSelect.disabled = desired.length === 0;
+      // Expand width to fit longest label while clamping to a comfortable max
+      const longest = desired.reduce((len, opt) => Math.max(len, opt.text.length), 0);
+      const computed = Math.min(Math.max(200, longest * 9 + 36), 360); // px
+      els.providerSelect.style.width = computed + 'px';
     }
 
     function getTargetOptions() {
@@ -4202,8 +4138,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
               sendTimestampsToAI: (els.timestamps?.value || 'original') === 'send'
             },
             overrides: {
-              providerName: els.providerSelect?.value || '',
-              providerModel: els.modelSelect?.value || ''
+              providerName: els.providerSelect?.value || ''
             },
             metadata: {
               label: track.label,
@@ -4363,6 +4298,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         return;
       }
       if (state.extractionInFlight) return;
+      if (state.placeholderBlocked) {
+        const label = 'Refresh the stream link in Stremio, then try again.';
+        logExtract(label);
+        return;
+      }
       const streamUrl = (els.streamUrl.value || '').trim();
       if (!streamUrl) {
         const label = window.t ? window.t('toolbox.logs.pasteUrl', {}, 'Paste a stream URL first.') : 'Paste a stream URL first.';
@@ -4421,24 +4361,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         els.streamUrl.addEventListener(evt, updateModeFromStreamField);
       });
       updateModeFromStreamField();
-    }
-    if (els.providerSelect) {
-      els.providerSelect.addEventListener('change', () => {
-        const key = normalizeProviderKey(els.providerSelect.value);
-        populateModelDropdown(key, modelCache.get(key) || []);
-        providerModelSelection.set(key, providerModelSelection.get(key) || '');
-        if (!fetchedModels.has(key)) {
-          fetchModels(key);
-        } else {
-          setModelStatus('');
-        }
-      });
-    }
-    if (els.modelSelect) {
-      els.modelSelect.addEventListener('change', () => {
-        const key = normalizeProviderKey(els.providerSelect?.value);
-        providerModelSelection.set(key, els.modelSelect.value || '');
-      });
     }
     if (els.modeSelect) {
       els.modeSelect.addEventListener('change', () => {
@@ -4754,11 +4676,25 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
       -webkit-background-clip: border-box;
       background-clip: border-box;
     }
-  .page-subtitle {
-    margin: 0;
-    color: var(--muted);
-    font-weight: 600;
-  }
+    .page-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .notice {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(8,164,213,0.12);
+      border: 1px solid rgba(8,164,213,0.25);
+      color: var(--text);
+      font-weight: 700;
+    }
+    .aio-warning {
+      margin-top: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
     .badge-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
     .status-badge {
       display: inline-flex;
@@ -5155,6 +5091,7 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
         <div class="page-icon">🤖</div>
         <h1 class="page-heading">${escapeHtml(copy.hero.title)}</h1>
         <p class="page-subtitle">${escapeHtml(copy.hero.subtitle)}</p>
+        <p class="notice warn aio-warning">If you use AIOStreams <strong>PROXY</strong> for Real-Debrid, completely exit all streams before running this tool.</p>
       </div>
       <div class="badge-row">
         ${renderRefreshBadge(t)}
