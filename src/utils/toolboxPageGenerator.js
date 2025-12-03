@@ -3047,8 +3047,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           </div>
         </details>
 
-        <div class="flex" style="margin-top:10px; flex-direction:column; align-items:flex-start; gap:6px;">
-          <p class="muted" id="translation-context" style="margin:0;">${initialTranslationContext}</p>
+        <div class="flex" style="margin-top:10px; flex-direction:column; align-items:center; gap:6px;">
+          <p class="muted" id="translation-context" style="margin:0; text-align:center; width:100%;">${initialTranslationContext}</p>
           <button id="translate-btn" type="button">Translate Subtitles</button>
         </div>
 
