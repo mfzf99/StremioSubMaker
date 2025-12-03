@@ -440,6 +440,7 @@ function quickNavScript() {
       let latest = null;
       let es = null;
       let pollTimer = null;
+      let pollErrorStreak = 0;
       let sseRetryTimer = null;
       let sseRetryCount = 0;
       let currentSig = '';
@@ -449,6 +450,8 @@ function quickNavScript() {
       let staleCheckTimer = null;
       const MAX_SSE_RETRIES = 5;
       const POLL_INTERVAL_MS = Math.max(15000, Number(opts.pollIntervalMs) || 15000); // Faster fallback when SSE is blocked
+      const POLL_BACKOFF_MAX_MS = 60000;
+      const POLL_ERROR_STREAK_CAP = 6;
       const STALE_BACKSTOP_MS = Math.max(20000, Number(opts.staleBackstopMs) || 30000); // Force a poll if nothing arrives for ~30s
       const OWNER_TTL_MS = 45000; // quicker failover if the owning tab closes
       const OWNER_REFRESH_MS = 20000;
@@ -688,14 +691,22 @@ function quickNavScript() {
         if (!force && !isStale && !isOwner && channel) return;
         try {
           const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(configStr), { cache: 'no-store' });
-          if (!resp.ok || resp.status === 204) return;
+          if (!resp.ok || resp.status === 204) {
+            pollErrorStreak = Math.min(pollErrorStreak + 1, POLL_ERROR_STREAK_CAP);
+            return;
+          }
           const data = await resp.json();
+          pollErrorStreak = 0;
           handleEpisode(data);
           broadcastEpisode(data);
         } catch (_) {
-          // ignore
+          pollErrorStreak = Math.min(pollErrorStreak + 1, POLL_ERROR_STREAK_CAP);
         } finally {
-          const delay = (force || isStale) ? Math.min(POLL_INTERVAL_MS, STALE_BACKSTOP_MS) : POLL_INTERVAL_MS;
+          const baseDelay = (force || isStale) ? Math.min(POLL_INTERVAL_MS, STALE_BACKSTOP_MS) : POLL_INTERVAL_MS;
+          const delay = Math.min(
+            POLL_BACKOFF_MAX_MS,
+            baseDelay * Math.max(1, Math.pow(2, pollErrorStreak))
+          );
           pollTimer = setTimeout(() => pollOnce(false), delay);
         }
       }
@@ -718,6 +729,7 @@ function quickNavScript() {
 
           es.addEventListener('open', () => {
             sseRetryCount = 0;
+            pollErrorStreak = 0;
             if (pollTimer) {
               clearTimeout(pollTimer);
               pollTimer = null;

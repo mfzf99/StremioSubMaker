@@ -1394,6 +1394,10 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       let latest = null;
       let es = null;
       let pollTimer = null;
+      let pollErrorStreak = 0;
+      const POLL_INTERVAL_MS = 5000;
+      const POLL_BACKOFF_MAX_MS = 60000;
+      const POLL_ERROR_STREAK_CAP = 6;
       let sseRetryTimer = null;
       let sseRetryCount = 0;
       let currentSig = '';
@@ -1524,13 +1528,22 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
           const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(TOOLBOX.configStr), {
             cache: 'no-store'
           });
-          if (!resp.ok || resp.status === 204) return;
+          if (!resp.ok || resp.status === 204) {
+            pollErrorStreak = Math.min(pollErrorStreak + 1, POLL_ERROR_STREAK_CAP);
+            return;
+          }
           const data = await resp.json();
+          pollErrorStreak = 0;
           handleEpisode(data);
         } catch (_) {
+          pollErrorStreak = Math.min(pollErrorStreak + 1, POLL_ERROR_STREAK_CAP);
           // ignore
         } finally {
-          pollTimer = setTimeout(pollOnce, 5000);
+          const delay = Math.min(
+            POLL_BACKOFF_MAX_MS,
+            POLL_INTERVAL_MS * Math.max(1, Math.pow(2, pollErrorStreak))
+          );
+          pollTimer = setTimeout(pollOnce, delay);
         }
       }
 
