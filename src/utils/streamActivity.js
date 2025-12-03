@@ -13,7 +13,8 @@ const latestByConfig = new LRUCache({
 const HEARTBEAT_MS = parseInt(process.env.STREAM_ACTIVITY_HEARTBEAT_MS || `${40 * 1000}`, 10);
 // Allow long-lived connections to avoid churn/reconnect storms
 const MAX_CONNECTION_AGE_MS = parseInt(process.env.STREAM_ACTIVITY_MAX_CONN_AGE_MS || `${60 * 60 * 1000}`, 10);
-const MAX_LISTENERS_PER_CONFIG = parseInt(process.env.STREAM_ACTIVITY_MAX_LISTENERS_PER_CONFIG || '100', 10);
+// Hard cap to a single live SSE listener per config (additional attempts will be rejected)
+const MAX_LISTENERS_PER_CONFIG = parseInt(process.env.STREAM_ACTIVITY_MAX_LISTENERS_PER_CONFIG || '1', 10);
 // Log a single heartbeat summary every 5 minutes regardless of cadence
 const HEARTBEAT_LOG_INTERVAL_MS = parseInt(process.env.STREAM_ACTIVITY_HEARTBEAT_LOG_INTERVAL_MS || `${5 * 60 * 1000}`, 10);
 
@@ -113,6 +114,20 @@ function getLatestStreamActivity(configHash) {
 function subscribe(configHash, res) {
   if (!configHash || !res) return () => {};
 
+  const existing = listeners.get(configHash);
+  if (existing && existing.size >= MAX_LISTENERS_PER_CONFIG) {
+    // Reject additional listeners; clients should fall back to polling/backoff
+    try {
+      res.setHeader('Retry-After', '5');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } catch (_) { /* ignore */ }
+    res.statusCode = 204;
+    res.end();
+    const shortHash = (configHash || '').slice(0, 8);
+    log.debug(() => `[StreamActivity] SSE rejected (too many listeners) for ${shortHash}`);
+    return () => {};
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Content-Encoding', 'identity'); // Explicitly disable compression for SSE
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -135,14 +150,6 @@ function subscribe(configHash, res) {
   if (!set) {
     set = new Set();
     listeners.set(configHash, set);
-  }
-
-  // Enforce per-config listener cap to prevent runaway reconnect loops
-  if (set.size >= MAX_LISTENERS_PER_CONFIG) {
-    const oldest = set.values().next().value;
-    if (oldest) {
-      cleanupListener(configHash, oldest, 'max_listeners_evicted');
-    }
   }
 
   set.add(listener);
