@@ -3811,7 +3811,8 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             metadata,
             options,
             overrides,
-            forceRetranslate
+            forceRetranslate,
+            skipCache
         } = req.body || {};
 
         const normalizedVideoHash = typeof videoHash === 'string' ? videoHash.trim() : '';
@@ -3821,6 +3822,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         const subtitleContent = typeof content === 'string' ? content : '';
         let mergedMetadata = (metadata && typeof metadata === 'object') ? { ...metadata } : {};
         const incomingBatchId = Number(mergedMetadata.batchId);
+        const skipCacheWrites = skipCache === true;
 
         const hashIsSafe = normalizedVideoHash && normalizedVideoHash.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(normalizedVideoHash);
         const trackIsSafe = normalizedTrackId && normalizedTrackId.length <= 120 && /^[a-zA-Z0-9._-]+$/.test(normalizedTrackId);
@@ -3989,7 +3991,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         };
 
         // Return cached translation when available unless force requested
-        if (!forceRetranslate) {
+        if (!forceRetranslate && !skipCacheWrites) {
             try {
                 let cachedTranslation = await embeddedCache.getTranslatedEmbedded(
                     safeVideoHash,
@@ -4023,7 +4025,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         let sourceContent = subtitleContent;
         let originalEntry = null;
         if (!sourceContent) {
-            if (!KEEP_EMBEDDED_ORIGINALS) {
+            if (!KEEP_EMBEDDED_ORIGINALS || skipCacheWrites) {
                 return res.status(400).json({ error: t('server.errors.originalEmbeddedRequired', {}, 'Original embedded subtitle required: send content or enable KEEP_EMBEDDED_ORIGINALS=true') });
             }
             originalEntry = await embeddedCache.getOriginalEmbedded(safeVideoHash, safeTrackId, safeSourceLanguage);
@@ -4031,7 +4033,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                 return res.status(404).json({ error: t('server.errors.originalEmbeddedMissing', {}, 'Original embedded subtitle not found') });
             }
             sourceContent = originalEntry.content;
-        } else if (KEEP_EMBEDDED_ORIGINALS) {
+        } else if (KEEP_EMBEDDED_ORIGINALS && !skipCacheWrites) {
             try {
                 const existingOriginal = await embeddedCache.getOriginalEmbedded(safeVideoHash, safeTrackId, safeSourceLanguage);
                 if (!existingOriginal || !existingOriginal.content) {
@@ -4102,21 +4104,26 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             sendTimestampsToAI,
             promptSignature
         };
-        const saveResult = await embeddedCache.saveTranslatedEmbedded(
-            safeVideoHash,
-            safeTrackId,
-            safeSourceLanguage,
-            safeTargetLanguage,
-            translatedContent,
-            saveMeta
-        );
+        let saveResult = { cacheKey: null, entry: null };
+        if (!skipCacheWrites) {
+            saveResult = await embeddedCache.saveTranslatedEmbedded(
+                safeVideoHash,
+                safeTrackId,
+                safeSourceLanguage,
+                safeTargetLanguage,
+                translatedContent,
+                saveMeta
+            );
+        } else {
+            log.debug(() => `[Embedded Translate] Skipped cache write for ${safeVideoHash}_${safeTargetLanguage}_${safeTrackId} (skipCache=true)`);
+        }
 
         res.json({
             success: true,
             cached: false,
-            cacheKey: saveResult.cacheKey,
+            cacheKey: skipCacheWrites ? null : saveResult.cacheKey,
             translatedContent,
-            metadata: saveMeta
+            metadata: { ...saveMeta, skipCache: skipCacheWrites || undefined }
         });
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);

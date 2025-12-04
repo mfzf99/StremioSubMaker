@@ -244,7 +244,8 @@
         "finished": "Finished {lang}",
         "finishedCached": "Finished {lang} (cached)",
         "translationError": "Failed {lang}: {reason}",
-        "selectTarget": "Select a target language."
+        "selectTarget": "Select a target language.",
+        "filteredBinaryTracks": "Omitted {count} binary track(s); showing text subtitles only."
       },
       "downloads": {
         "selectPrompt": "Select a subtitle in Step 1 outputs to unlock this step.",
@@ -263,6 +264,111 @@
         "selected": "Selected",
         "useForStep2": "Use for Step 2",
         "translatedLabel": "Translated {lang} (track {track})"
+      },
+      "embedded": {
+        "meta": {
+          "documentTitle": "Translate Embedded Subtitles - SubMaker",
+          "pageHeading": "Embedded Subtitles Studio",
+          "pageSubtitle": "Extract embedded tracks from your current stream and translate them instantly.",
+          "title": "Title: {title}",
+          "videoId": "Video ID: {id}",
+          "episode": "Episode: {episode}",
+          "file": "File: {file}"
+        },
+        "instructions": {
+          "title": "Embedded Subtitles Instructions",
+          "help": "Show instructions",
+          "close": "Close instructions",
+          "extractionTitle": "Subtitles Extraction:",
+          "extractionSteps": {
+            "1": "Make sure the xSync extension is installed and detected.",
+            "2": "Make sure the linked stream is the movie/episode you want to extract/translate.",
+            "3": "Right-click Stremio's stream and click \"Copy stream link\".",
+            "4": "Paste the stream URL in the corresponding box.",
+            "5": "Use \"Complete\" for MKV streams (non-MKV links auto-switch to Smart).",
+            "6": "Click \"Extract Subtitles\""
+          },
+          "translationTitle": "Translating Extracted Subtitles:",
+          "translationSteps": {
+            "1": "Verify and select the desired subtitles.",
+            "2": "Select target language.",
+            "3": "Select translation settings and translation provider.",
+            "4": "Click \"Translate Subtitles\"."
+          },
+          "download": "You can download both extracted or translated subtitles as SRT.",
+          "upload": "Translated subtitles are automatically uploaded to the database, matching the video hash, under the \"xEmbed (Language)\" entry (reload the stream on Stremio to see it).",
+          "retry": "If translation/sync problems happen, simply retranslate the subtitle to overwrite the xEmbed database cache.",
+          "originals": "Extracted subtitles are saved to xEmbed as originals and show up under their source language (no separate label).",
+          "ocrNote": "Currently doesn't work with image-based subtitles - OCR may be implemented.",
+          "dontShow": "Don't show this again",
+          "gotIt": "Got it"
+        },
+        "hero": {
+          "notice": "If you use AIOStreams PROXY for Real-Debrid, completely exit all streams before running this tool."
+        },
+        "videoMeta": {
+          "label": "Linked stream",
+          "none": "No stream linked",
+          "unavailable": "Video ID unavailable",
+          "waiting": "Waiting for a linked stream..."
+        },
+        "step1": {
+          "chip": "Step 1",
+          "title": "Extension & Extraction",
+          "helper": "Right-click Stremio's stream and select \"Copy Stream URL\". Ensure the linked stream is the right one. Paste the stream URL below and extract its subtitles.",
+          "streamLabel": "Stream URL",
+          "streamPlaceholder": "Paste the video/stream URL from Stremio or your browser",
+          "mkvTitle": "MKV tip",
+          "mkvLine1": "Use Complete Mode when extracting MKV streams for the best results.",
+          "mkvLine2": "In Complete mode, the whole file will be fetched for extraction.",
+          "modeLabel": "Mode",
+          "modeSmart": "Smart (fast)",
+          "modeComplete": "Complete (full file)",
+          "modeHelper": "Smart performs one best-effort fast pass and fails if incomplete. Complete always downloads the entire stream and runs one FFmpeg demux with no retries.",
+          "extractButton": "Extract Subtitles",
+          "extractBlocked": "Refresh the stream link in Stremio, then try again.",
+          "logHeader": "Live log",
+          "logSub": "Auto-filled while extraction runs.",
+          "outputsEyebrow": "Outputs",
+          "outputsTitle": "Extracted files",
+          "outputsEmpty": "No tracks extracted yet. Run extraction above to see them here."
+        },
+        "step2": {
+          "chip": "Step 2",
+          "title": "Tracks & Translation",
+          "helper": "Select a track in Step 1 outputs, then choose a target language and translate.",
+          "selectedLabel": "Selected subtitle",
+          "selectedPlaceholder": "Select a subtitle in Step 1 outputs to unlock this step.",
+          "targetLabel": "Target language",
+          "settingsTitle": "Translation Settings",
+          "settingsMeta": "Provider, batching, timestamps",
+          "providerLabel": "Provider",
+          "providerHelper": "Uses your configured model for the selected provider.",
+          "batchingLabel": "Batching",
+          "batchingMultiple": "Multiple batches (recommended)",
+          "batchingSingle": "Single batch (all at once)",
+          "timestampsLabel": "Timestamps",
+          "timestampsOriginal": "Original Timestamps",
+          "timestampsSend": "Send Timestamps to AI",
+          "translationContext": "You're translating subtitles for {label}",
+          "translationContextFallback": "your linked stream",
+          "translateButton": "Translate Subtitles",
+          "logHeader": "Live log",
+          "logSub": "Auto-filled while translations run.",
+          "outputsEyebrow": "Outputs",
+          "outputsTitle": "Translated subtitles",
+          "outputsEmpty": "No translations yet. Pick a track and translate to see them here.",
+          "reloadHint": "Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries."
+        },
+        "status": {
+          "queued": "queued",
+          "running": "running",
+          "done": "done",
+          "failed": "failed"
+        },
+        "buttons": {
+          "extracting": "Extracting..."
+        }
       },
       "autoSubs": {
         "documentTitle": "Automatic Subtitles - SubMaker",

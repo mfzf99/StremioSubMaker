@@ -13,8 +13,8 @@ const latestByConfig = new LRUCache({
 const HEARTBEAT_MS = parseInt(process.env.STREAM_ACTIVITY_HEARTBEAT_MS || `${40 * 1000}`, 10);
 // Allow long-lived connections to avoid churn/reconnect storms
 const MAX_CONNECTION_AGE_MS = parseInt(process.env.STREAM_ACTIVITY_MAX_CONN_AGE_MS || `${60 * 60 * 1000}`, 10);
-// Hard cap to a single live SSE listener per config (additional attempts will be rejected)
-const MAX_LISTENERS_PER_CONFIG = parseInt(process.env.STREAM_ACTIVITY_MAX_LISTENERS_PER_CONFIG || '1', 10);
+// Allow a few concurrent listeners per config so multiple tool tabs don't thrash retries
+const MAX_LISTENERS_PER_CONFIG = parseInt(process.env.STREAM_ACTIVITY_MAX_LISTENERS_PER_CONFIG || '4', 10);
 // Log a single heartbeat summary every 5 minutes regardless of cadence
 const HEARTBEAT_LOG_INTERVAL_MS = parseInt(process.env.STREAM_ACTIVITY_HEARTBEAT_LOG_INTERVAL_MS || `${5 * 60 * 1000}`, 10);
 

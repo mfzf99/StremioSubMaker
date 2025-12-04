@@ -244,7 +244,8 @@
         "finished": "Finalizado {lang}",
         "finishedCached": "Finalizado {lang} (cache)",
         "translationError": "Falhou {lang}: {reason}",
-        "selectTarget": "Selecione um idioma de destino."
+        "selectTarget": "Selecione um idioma de destino.",
+        "filteredBinaryTracks": "Foram omitidas {count} faixa(s) binárias; apenas legendas de texto serão exibidas."
       },
       "downloads": {
         "selectPrompt": "Selecione uma legenda nas saídas do Passo 1 para desbloquear este passo.",
@@ -263,6 +264,111 @@
         "selected": "Selecionado",
         "useForStep2": "Usar para o Passo 2",
         "translatedLabel": "Traduzida {lang} (faixa {track})"
+      },
+      "embedded": {
+        "meta": {
+          "documentTitle": "Traduzir legendas embutidas - SubMaker",
+          "pageHeading": "Estúdio de legendas embutidas",
+          "pageSubtitle": "Extraia faixas embutidas do seu stream atual e traduza na hora.",
+          "title": "Título: {title}",
+          "videoId": "ID do vídeo: {id}",
+          "episode": "Episódio: {episode}",
+          "file": "Arquivo: {file}"
+        },
+        "instructions": {
+          "title": "Instruções de legendas embutidas",
+          "help": "Mostrar instruções",
+          "close": "Fechar instruções",
+          "extractionTitle": "Extração de legendas:",
+          "extractionSteps": {
+            "1": "Certifique-se de que a extensão xSync está instalada e detectada.",
+            "2": "Certifique-se de que o stream vinculado é o filme/episódio que você quer extrair/traduzir.",
+            "3": "Clique com o botão direito no stream do Stremio e escolha \"Copiar link do stream\".",
+            "4": "Cole a URL do stream na caixa correspondente.",
+            "5": "Use \"Completo\" para streams MKV (links que não são MKV mudam automaticamente para Inteligente).",
+            "6": "Clique em \"Extrair legendas\""
+          },
+          "translationTitle": "Tradução das legendas extraídas:",
+          "translationSteps": {
+            "1": "Verifique e selecione as legendas desejadas.",
+            "2": "Selecione o idioma de destino.",
+            "3": "Selecione as configurações de tradução e o provedor.",
+            "4": "Clique em \"Traduzir legendas\"."
+          },
+          "download": "Você pode baixar as legendas extraídas ou traduzidas em SRT.",
+          "upload": "As legendas traduzidas são enviadas automaticamente para o banco de dados, combinando com o hash do vídeo, na entrada \"xEmbed (Idioma)\" (recarregue o stream no Stremio para vê-la).",
+          "retry": "Se houver problemas de tradução/sincronização, basta retraduzir a legenda para sobrescrever o cache do xEmbed.",
+          "originals": "As legendas extraídas são salvas no xEmbed como originais e aparecem no idioma de origem (sem etiqueta separada).",
+          "ocrNote": "Atualmente não funciona com legendas baseadas em imagem; OCR pode ser implementado.",
+          "dontShow": "Não mostrar novamente",
+          "gotIt": "Entendi"
+        },
+        "hero": {
+          "notice": "Se você usa AIOStreams PROXY para Real-Debrid, feche completamente todos os streams antes de executar esta ferramenta."
+        },
+        "videoMeta": {
+          "label": "Stream vinculado",
+          "none": "Nenhum stream vinculado",
+          "unavailable": "ID do vídeo indisponível",
+          "waiting": "Aguardando um stream vinculado..."
+        },
+        "step1": {
+          "chip": "Passo 1",
+          "title": "Extensão e extração",
+          "helper": "Clique com o botão direito no stream do Stremio e selecione \"Copiar URL do stream\". Garanta que o stream vinculado é o correto. Cole a URL abaixo e extraia as legendas.",
+          "streamLabel": "URL do stream",
+          "streamPlaceholder": "Cole a URL do vídeo/stream do Stremio ou do navegador",
+          "mkvTitle": "Dica MKV",
+          "mkvLine1": "Use o modo Completo ao extrair streams MKV para melhores resultados.",
+          "mkvLine2": "No modo Completo, o arquivo inteiro será baixado para extração.",
+          "modeLabel": "Modo",
+          "modeSmart": "Inteligente (rápido)",
+          "modeComplete": "Completo (arquivo inteiro)",
+          "modeHelper": "Inteligente faz uma tentativa rápida e falha se ficar incompleto. Completo sempre baixa todo o stream e executa um demux do FFmpeg sem novas tentativas.",
+          "extractButton": "Extrair legendas",
+          "extractBlocked": "Atualize o link do stream no Stremio e tente novamente.",
+          "logHeader": "Registro em tempo real",
+          "logSub": "Preenchido automaticamente enquanto a extração roda.",
+          "outputsEyebrow": "Resultados",
+          "outputsTitle": "Arquivos extraídos",
+          "outputsEmpty": "Nenhuma faixa extraída ainda. Rode a extração acima para vê-las aqui."
+        },
+        "step2": {
+          "chip": "Passo 2",
+          "title": "Faixas e tradução",
+          "helper": "Selecione uma faixa nos resultados do Passo 1, depois escolha um idioma de destino e traduza.",
+          "selectedLabel": "Legenda selecionada",
+          "selectedPlaceholder": "Selecione uma legenda nos resultados do Passo 1 para liberar este passo.",
+          "targetLabel": "Idioma de destino",
+          "settingsTitle": "Configurações de tradução",
+          "settingsMeta": "Provedor, lote, timestamps",
+          "providerLabel": "Provedor",
+          "providerHelper": "Usa seu modelo configurado para o provedor selecionado.",
+          "batchingLabel": "Lote",
+          "batchingMultiple": "Vários lotes (recomendado)",
+          "batchingSingle": "Lote único (tudo de uma vez)",
+          "timestampsLabel": "Timestamps",
+          "timestampsOriginal": "Timestamps originais",
+          "timestampsSend": "Enviar timestamps para a IA",
+          "translationContext": "Você está traduzindo legendas para {label}",
+          "translationContextFallback": "seu stream vinculado",
+          "translateButton": "Traduzir legendas",
+          "logHeader": "Registro em tempo real",
+          "logSub": "Preenchido automaticamente enquanto as traduções rodam.",
+          "outputsEyebrow": "Resultados",
+          "outputsTitle": "Legendas traduzidas",
+          "outputsEmpty": "Ainda não há traduções. Escolha uma faixa e traduza para vê-las aqui.",
+          "reloadHint": "Pronto! Recarregue a lista de legendas no Stremio para ver as entradas xEmbed (Idioma)."
+        },
+        "status": {
+          "queued": "na fila",
+          "running": "em andamento",
+          "done": "concluída",
+          "failed": "falhou"
+        },
+        "buttons": {
+          "extracting": "Extraindo..."
+        }
       },
       "autoSubs": {
         "documentTitle": "Legendas Automáticas - SubMaker",

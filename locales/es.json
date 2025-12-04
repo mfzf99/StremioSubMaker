@@ -244,7 +244,8 @@
         "finished": "Terminado {lang}",
         "finishedCached": "Terminado {lang} (en caché)",
         "translationError": "Falló {lang}: {reason}",
-        "selectTarget": "Selecciona un idioma de destino."
+        "selectTarget": "Selecciona un idioma de destino.",
+        "filteredBinaryTracks": "Se omitieron {count} pista(s) binarias; se mostrarán solo los subtítulos de texto."
       },
       "downloads": {
         "selectPrompt": "Selecciona un subtítulo en las salidas del Paso 1 para habilitar este paso.",
@@ -263,6 +264,111 @@
         "selected": "Seleccionado",
         "useForStep2": "Usar para el Paso 2",
         "translatedLabel": "Traducido {lang} (pista {track})"
+      },
+      "embedded": {
+        "meta": {
+          "documentTitle": "Traducir subtítulos incrustados - SubMaker",
+          "pageHeading": "Estudio de subtítulos incrustados",
+          "pageSubtitle": "Extrae pistas incrustadas de tu emisión actual y tradúcelas al instante.",
+          "title": "Título: {title}",
+          "videoId": "ID de video: {id}",
+          "episode": "Episodio: {episode}",
+          "file": "Archivo: {file}"
+        },
+        "instructions": {
+          "title": "Instrucciones de subtítulos incrustados",
+          "help": "Mostrar instrucciones",
+          "close": "Cerrar instrucciones",
+          "extractionTitle": "Extracción de subtítulos:",
+          "extractionSteps": {
+            "1": "Asegúrate de que la extensión xSync esté instalada y detectada.",
+            "2": "Asegúrate de que el stream vinculado sea la película/episodio que quieres extraer/traducir.",
+            "3": "Haz clic derecho en el stream de Stremio y elige \"Copiar enlace del stream\".",
+            "4": "Pega la URL del stream en el cuadro correspondiente.",
+            "5": "Usa \"Completo\" para streams MKV (los enlaces que no sean MKV cambian automáticamente a Inteligente).",
+            "6": "Haz clic en \"Extraer subtítulos\""
+          },
+          "translationTitle": "Traducción de subtítulos extraídos:",
+          "translationSteps": {
+            "1": "Verifica y selecciona los subtítulos deseados.",
+            "2": "Selecciona el idioma de destino.",
+            "3": "Selecciona la configuración de traducción y el proveedor.",
+            "4": "Haz clic en \"Traducir subtítulos\"."
+          },
+          "download": "Puedes descargar los subtítulos extraídos o traducidos como SRT.",
+          "upload": "Los subtítulos traducidos se suben automáticamente a la base de datos, coincidiendo con el hash del video, bajo la entrada \"xEmbed (Idioma)\" (recarga el stream en Stremio para verla).",
+          "retry": "Si ocurren problemas de traducción/sincronización, simplemente vuelve a traducir el subtítulo para sobrescribir la caché xEmbed.",
+          "originals": "Los subtítulos extraídos se guardan en xEmbed como originales y aparecen bajo su idioma de origen (sin etiqueta separada).",
+          "ocrNote": "Actualmente no funciona con subtítulos basados en imágenes; quizá se implemente OCR.",
+          "dontShow": "No mostrar esto de nuevo",
+          "gotIt": "Entendido"
+        },
+        "hero": {
+          "notice": "Si usas AIOStreams PROXY para Real-Debrid, cierra completamente todos los streams antes de ejecutar esta herramienta."
+        },
+        "videoMeta": {
+          "label": "Stream vinculado",
+          "none": "Sin stream vinculado",
+          "unavailable": "ID de video no disponible",
+          "waiting": "Esperando un stream vinculado..."
+        },
+        "step1": {
+          "chip": "Paso 1",
+          "title": "Extensión y extracción",
+          "helper": "Haz clic derecho en el stream de Stremio y selecciona \"Copiar URL del stream\". Asegúrate de que el stream vinculado sea el correcto. Pega la URL del stream abajo y extrae sus subtítulos.",
+          "streamLabel": "URL del stream",
+          "streamPlaceholder": "Pega la URL del video/stream desde Stremio o tu navegador",
+          "mkvTitle": "Consejo MKV",
+          "mkvLine1": "Usa el modo Completo al extraer streams MKV para obtener mejores resultados.",
+          "mkvLine2": "En el modo Completo se descargará todo el archivo para extraerlo.",
+          "modeLabel": "Modo",
+          "modeSmart": "Inteligente (rápido)",
+          "modeComplete": "Completo (archivo entero)",
+          "modeHelper": "Inteligente hace un intento rápido y falla si queda incompleto. Completo siempre descarga todo el stream y ejecuta un demux de FFmpeg sin reintentos.",
+          "extractButton": "Extraer subtítulos",
+          "extractBlocked": "Actualiza el enlace del stream en Stremio y vuelve a intentarlo.",
+          "logHeader": "Registro en vivo",
+          "logSub": "Se llena automáticamente mientras se ejecuta la extracción.",
+          "outputsEyebrow": "Resultados",
+          "outputsTitle": "Archivos extraídos",
+          "outputsEmpty": "Aún no se extrajo ninguna pista. Ejecuta la extracción arriba para verlas aquí."
+        },
+        "step2": {
+          "chip": "Paso 2",
+          "title": "Pistas y traducción",
+          "helper": "Selecciona una pista en los resultados del Paso 1, luego elige un idioma de destino y traduce.",
+          "selectedLabel": "Subtítulo seleccionado",
+          "selectedPlaceholder": "Selecciona un subtítulo en los resultados del Paso 1 para desbloquear este paso.",
+          "targetLabel": "Idioma de destino",
+          "settingsTitle": "Configuración de traducción",
+          "settingsMeta": "Proveedor, loteo, marcas de tiempo",
+          "providerLabel": "Proveedor",
+          "providerHelper": "Usa tu modelo configurado para el proveedor seleccionado.",
+          "batchingLabel": "Loteo",
+          "batchingMultiple": "Varios lotes (recomendado)",
+          "batchingSingle": "Un solo lote (todo de una vez)",
+          "timestampsLabel": "Marcas de tiempo",
+          "timestampsOriginal": "Marcas de tiempo originales",
+          "timestampsSend": "Enviar marcas de tiempo a la IA",
+          "translationContext": "Estás traduciendo subtítulos para {label}",
+          "translationContextFallback": "tu stream vinculado",
+          "translateButton": "Traducir subtítulos",
+          "logHeader": "Registro en vivo",
+          "logSub": "Se llena automáticamente mientras se ejecutan las traducciones.",
+          "outputsEyebrow": "Resultados",
+          "outputsTitle": "Subtítulos traducidos",
+          "outputsEmpty": "Aún no hay traducciones. Elige una pista y tradúcela para verlas aquí.",
+          "reloadHint": "¡Listo! Recarga la lista de subtítulos en Stremio para ver las entradas xEmbed (Idioma)."
+        },
+        "status": {
+          "queued": "en cola",
+          "running": "en curso",
+          "done": "completado",
+          "failed": "falló"
+        },
+        "buttons": {
+          "extracting": "Extrayendo..."
+        }
       },
       "autoSubs": {
         "documentTitle": "Subtítulos automáticos - SubMaker",

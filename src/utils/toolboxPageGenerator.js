@@ -1389,20 +1389,6 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   const parsedVideo = parseStremioId(videoId);
   const episodeTag = formatEpisodeTag(parsedVideo);
   const linkedTitle = await fetchLinkedTitleServer(videoId);
-  const initialVideoTitle = escapeHtml(linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || 'No stream linked');
-  const metaDetails = [];
-  if (linkedTitle) metaDetails.push(`Title: ${linkedTitle}`);
-  else if (videoId) metaDetails.push(`Video ID: ${videoId}`);
-  if (episodeTag) metaDetails.push(`Episode: ${episodeTag}`);
-  if (filename) metaDetails.push(`File: ${cleanDisplayName(filename)}`);
-  const initialVideoSubtitle = escapeHtml(metaDetails.join(' - ') || 'Video ID unavailable');
-  const initialTranslationContext = (() => {
-    const labelParts = [
-      (linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || 'your linked stream').trim(),
-      episodeTag
-    ].filter(Boolean);
-    return escapeHtml(`You're translating subtitles for ${labelParts.join(' ').trim()}`);
-  })();
   const config = arguments[3] || {};
   const targetLanguages = (Array.isArray(config.targetLanguages) ? config.targetLanguages : [])
     .map(code => ({ code, name: getLanguageName(code) || code }));
@@ -1413,6 +1399,125 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   const localeBootstrap = buildClientBootstrap(loadLocale(config?.uiLanguage || 'en'));
   const t = getTranslator(config?.uiLanguage || 'en');
   const themeToggleLabel = t('fileUpload.themeToggle', {}, 'Toggle theme');
+  const copy = {
+    meta: {
+      documentTitle: t('toolbox.embedded.meta.documentTitle', {}, 'Translate Embedded Subtitles - SubMaker'),
+      pageHeading: t('toolbox.embedded.meta.pageHeading', {}, 'Embedded Subtitles Studio'),
+      pageSubtitle: t('toolbox.embedded.meta.pageSubtitle', {}, 'Extract embedded tracks from your current stream and translate them instantly.')
+    },
+    instructions: {
+      title: t('toolbox.embedded.instructions.title', {}, 'Embedded Subtitles Instructions'),
+      help: t('toolbox.embedded.instructions.help', {}, 'Show instructions'),
+      close: t('toolbox.embedded.instructions.close', {}, 'Close instructions'),
+      extractionTitle: t('toolbox.embedded.instructions.extractionTitle', {}, 'Subtitles Extraction:'),
+      extractionSteps: [
+        t('toolbox.embedded.instructions.extractionSteps.1', {}, 'Make sure the xSync extension is installed and detected.'),
+        t('toolbox.embedded.instructions.extractionSteps.2', {}, 'Make sure the linked stream is the movie/episode you want to extract/translate.'),
+        t('toolbox.embedded.instructions.extractionSteps.3', {}, 'Right-click Stremio\'s stream and click "Copy stream link".'),
+        t('toolbox.embedded.instructions.extractionSteps.4', {}, 'Paste the stream URL in the corresponding box.'),
+        t('toolbox.embedded.instructions.extractionSteps.5', {}, 'Use "Complete" for MKV streams (non-MKV links auto-switch to Smart).'),
+        t('toolbox.embedded.instructions.extractionSteps.6', {}, 'Click "Extract Subtitles"')
+      ],
+      translationTitle: t('toolbox.embedded.instructions.translationTitle', {}, 'Translating Extracted Subtitles:'),
+      translationSteps: [
+        t('toolbox.embedded.instructions.translationSteps.1', {}, 'Verify and select the desired subtitles.'),
+        t('toolbox.embedded.instructions.translationSteps.2', {}, 'Select target language.'),
+        t('toolbox.embedded.instructions.translationSteps.3', {}, 'Select translation settings and translation provider.'),
+        t('toolbox.embedded.instructions.translationSteps.4', {}, 'Click "Translate Subtitles".')
+      ],
+      download: t('toolbox.embedded.instructions.download', {}, 'You can download both extracted or translated subtitles as SRT.'),
+      upload: t('toolbox.embedded.instructions.upload', {}, 'Translated subtitles are automatically uploaded to the database, matching the video hash, under the "xEmbed (Language)" entry (reload the stream on Stremio to see it).'),
+      retry: t('toolbox.embedded.instructions.retry', {}, 'If translation/sync problems happen, simply retranslate the subtitle to overwrite the xEmbed database cache.'),
+      originals: t('toolbox.embedded.instructions.originals', {}, 'Extracted subtitles are saved to xEmbed as originals and show up under their source language (no separate label).'),
+      ocrNote: t('toolbox.embedded.instructions.ocrNote', {}, "Currently doesn't work with image-based subtitles - OCR may be implemented."),
+      dontShow: t('toolbox.embedded.instructions.dontShow', {}, "Don't show this again"),
+      gotIt: t('toolbox.embedded.instructions.gotIt', {}, 'Got it')
+    },
+    hero: {
+      notice: t('toolbox.embedded.hero.notice', {}, 'If you use AIOStreams PROXY for Real-Debrid, completely exit all streams before running this tool.')
+    },
+    videoMeta: {
+      label: t('toolbox.embedded.videoMeta.label', {}, 'Linked stream'),
+      none: t('toolbox.embedded.videoMeta.none', {}, 'No stream linked'),
+      unavailable: t('toolbox.embedded.videoMeta.unavailable', {}, 'Video ID unavailable'),
+      waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...')
+    },
+    step1: {
+      chip: t('toolbox.embedded.step1.chip', {}, 'Step 1'),
+      title: t('toolbox.embedded.step1.title', {}, 'Extension & Extraction'),
+      helper: t('toolbox.embedded.step1.helper', {}, 'Right-click Stremio\'s stream and select "Copy Stream URL". Ensure the linked stream is the right one. Paste the stream URL below and extract its subtitles.'),
+      streamLabel: t('toolbox.embedded.step1.streamLabel', {}, 'Stream URL'),
+      streamPlaceholder: t('toolbox.embedded.step1.streamPlaceholder', {}, 'Paste the video/stream URL from Stremio or your browser'),
+      mkvTitle: t('toolbox.embedded.step1.mkvTitle', {}, 'MKV tip'),
+      mkvLine1: t('toolbox.embedded.step1.mkvLine1', {}, 'Use Complete Mode when extracting MKV streams for the best results.'),
+      mkvLine2: t('toolbox.embedded.step1.mkvLine2', {}, 'In Complete mode, the whole file will be fetched for extraction.'),
+      modeLabel: t('toolbox.embedded.step1.modeLabel', {}, 'Mode'),
+      modeSmart: t('toolbox.embedded.step1.modeSmart', {}, 'Smart (fast)'),
+      modeComplete: t('toolbox.embedded.step1.modeComplete', {}, 'Complete (full file)'),
+      modeHelper: t('toolbox.embedded.step1.modeHelper', {}, 'Smart performs one best-effort fast pass and fails if incomplete. Complete always downloads the entire stream and runs one FFmpeg demux with no retries.'),
+      extractButton: t('toolbox.embedded.step1.extractButton', {}, 'Extract Subtitles'),
+      extractBlocked: t('toolbox.embedded.step1.extractBlocked', {}, 'Refresh the stream link in Stremio, then try again.'),
+      logHeader: t('toolbox.embedded.step1.logHeader', {}, 'Live log'),
+      logSub: t('toolbox.embedded.step1.logSub', {}, 'Auto-filled while extraction runs.'),
+      outputsEyebrow: t('toolbox.embedded.step1.outputsEyebrow', {}, 'Outputs'),
+      outputsTitle: t('toolbox.embedded.step1.outputsTitle', {}, 'Extracted files'),
+      outputsEmpty: t('toolbox.embedded.step1.outputsEmpty', {}, 'No tracks extracted yet. Run extraction above to see them here.')
+    },
+    step2: {
+      chip: t('toolbox.embedded.step2.chip', {}, 'Step 2'),
+      title: t('toolbox.embedded.step2.title', {}, 'Tracks & Translation'),
+      helper: t('toolbox.embedded.step2.helper', {}, 'Select a track in Step 1 outputs, then choose a target language and translate.'),
+      selectedLabel: t('toolbox.embedded.step2.selectedLabel', {}, 'Selected subtitle'),
+      selectedPlaceholder: t('toolbox.embedded.step2.selectedPlaceholder', {}, 'Select a subtitle in Step 1 outputs to unlock this step.'),
+      targetLabel: t('toolbox.embedded.step2.targetLabel', {}, 'Target language'),
+      settingsTitle: t('toolbox.embedded.step2.settingsTitle', {}, 'Translation Settings'),
+      settingsMeta: t('toolbox.embedded.step2.settingsMeta', {}, 'Provider, batching, timestamps'),
+      providerLabel: t('toolbox.embedded.step2.providerLabel', {}, 'Provider'),
+      providerHelper: t('toolbox.embedded.step2.providerHelper', {}, 'Uses your configured model for the selected provider.'),
+      batchingLabel: t('toolbox.embedded.step2.batchingLabel', {}, 'Batching'),
+      batchingMultiple: t('toolbox.embedded.step2.batchingMultiple', {}, 'Multiple batches (recommended)'),
+      batchingSingle: t('toolbox.embedded.step2.batchingSingle', {}, 'Single batch (all at once)'),
+      timestampsLabel: t('toolbox.embedded.step2.timestampsLabel', {}, 'Timestamps'),
+      timestampsOriginal: t('toolbox.embedded.step2.timestampsOriginal', {}, 'Original Timestamps'),
+      timestampsSend: t('toolbox.embedded.step2.timestampsSend', {}, 'Send Timestamps to AI'),
+      translationContext: t('toolbox.embedded.step2.translationContext', { label: '{label}' }, "You're translating subtitles for {label}"),
+      translationContextFallback: t('toolbox.embedded.step2.translationContextFallback', {}, 'your linked stream'),
+      translateButton: t('toolbox.embedded.step2.translateButton', {}, 'Translate Subtitles'),
+      logHeader: t('toolbox.embedded.step2.logHeader', {}, 'Live log'),
+      logSub: t('toolbox.embedded.step2.logSub', {}, 'Auto-filled while translations run.'),
+      outputsEyebrow: t('toolbox.embedded.step2.outputsEyebrow', {}, 'Outputs'),
+      outputsTitle: t('toolbox.embedded.step2.outputsTitle', {}, 'Translated subtitles'),
+      outputsEmpty: t('toolbox.embedded.step2.outputsEmpty', {}, 'No translations yet. Pick a track and translate to see them here.'),
+      reloadHint: t('toolbox.embedded.step2.reloadHint', {}, 'Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries.')
+    },
+    status: {
+      queued: t('toolbox.embedded.status.queued', {}, 'queued'),
+      running: t('toolbox.embedded.status.running', {}, 'running'),
+      done: t('toolbox.embedded.status.done', {}, 'done'),
+      failed: t('toolbox.embedded.status.failed', {}, 'failed')
+    },
+    buttons: {
+      extracting: t('toolbox.embedded.buttons.extracting', {}, 'Extracting...')
+    }
+  };
+  const translationContextLabel = [
+    (linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || copy.step2.translationContextFallback).trim(),
+    episodeTag
+  ].filter(Boolean).join(' ').trim() || copy.step2.translationContextFallback;
+  const metaDetails = [];
+  if (linkedTitle) metaDetails.push(t('toolbox.embedded.meta.title', { title: linkedTitle }, `Title: ${linkedTitle}`));
+  else if (videoId) metaDetails.push(t('toolbox.embedded.meta.videoId', { id: videoId }, `Video ID: ${videoId}`));
+  if (episodeTag) metaDetails.push(t('toolbox.embedded.meta.episode', { episode: episodeTag }, `Episode: ${episodeTag}`));
+  if (filename) metaDetails.push(t('toolbox.embedded.meta.file', { file: cleanDisplayName(filename) }, `File: ${cleanDisplayName(filename)}`));
+  const initialVideoTitle = escapeHtml(linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || copy.videoMeta.none);
+  const initialVideoSubtitle = escapeHtml(metaDetails.join(' - ') || copy.videoMeta.unavailable);
+  const initialTranslationContext = escapeHtml(
+    t(
+      'toolbox.embedded.step2.translationContext',
+      { label: translationContextLabel },
+      (copy.step2.translationContext || "You're translating subtitles for {label}").replace('{label}', translationContextLabel)
+    )
+  );
   const providerOptions = (() => {
     const options = [];
     const providers = config.providers || {};
@@ -1480,7 +1585,27 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       translationPrompt: config.translationPrompt || ''
     },
     links,
-    linkedTitle
+    linkedTitle,
+    strings: {
+      translationContextTemplate: copy.step2.translationContext,
+      translationContextFallback: copy.step2.translationContextFallback,
+      videoMeta: {
+        waiting: copy.videoMeta.waiting,
+        none: copy.videoMeta.none,
+        unavailable: copy.videoMeta.unavailable,
+        title: t('toolbox.embedded.meta.title', { title: '{title}' }, 'Title: {title}'),
+        videoId: t('toolbox.embedded.meta.videoId', { id: '{id}' }, 'Video ID: {id}'),
+        episode: t('toolbox.embedded.meta.episode', { episode: '{episode}' }, 'Episode: {episode}'),
+        file: t('toolbox.embedded.meta.file', { file: '{file}' }, 'File: {file}')
+      },
+      statusLabels: copy.status,
+      buttons: {
+        extract: copy.step1.extractButton,
+        translate: copy.step2.translateButton,
+        extracting: copy.buttons.extracting
+      },
+      extractBlocked: copy.step1.extractBlocked
+    }
   };
 
   return `
@@ -1489,7 +1614,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Translate Embedded Subtitles - SubMaker</title>
+  <title>${escapeHtml(copy.meta.documentTitle)}</title>
   ${localeBootstrap}
   <link rel="icon" type="image/svg+xml" href="/favicon-toolbox.svg">
   <link rel="shortcut icon" href="/favicon-toolbox.svg">
@@ -2087,6 +2212,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     .select-stack.model-stack select { width: min(260px, 100%); }
     .target-select-stack { width: min(420px, 100%); margin: 12px auto 0; align-items: center; }
     .target-select-stack label { margin: 0; }
+    select.target-select { width: min(420px, 100%); text-align: center; text-align-last: center; }
+    select.target-select option { text-align: center; }
     details.translation-settings {
       width: min(720px, 100%);
       margin: 14px auto 0;
@@ -2409,44 +2536,36 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 </head>
 <body>
   ${themeToggleMarkup(themeToggleLabel)}
-  <button class="help-button mario" id="embeddedHelp" title="Show instructions">?</button>
+  <button class="help-button mario" id="embeddedHelp" title="${escapeHtml(copy.instructions.help)}">?</button>
   <div class="modal-overlay" id="embeddedInstructionsModal" role="dialog" aria-modal="true" aria-labelledby="embeddedInstructionsTitle">
     <div class="modal">
       <div class="modal-header">
-        <h2 id="embeddedInstructionsTitle">Embedded Subtitles Instructions</h2>
-        <div class="modal-close" id="closeEmbeddedInstructions" role="button" aria-label="Close instructions">&times;</div>
+        <h2 id="embeddedInstructionsTitle">${escapeHtml(copy.instructions.title)}</h2>
+        <div class="modal-close" id="closeEmbeddedInstructions" role="button" aria-label="${escapeHtml(copy.instructions.close)}">&times;</div>
       </div>
       <div class="modal-content">
-        <h3>Subtitles Extraction:</h3>
+        <h3>${escapeHtml(copy.instructions.extractionTitle)}</h3>
         <ol>
-          <li>Make sure the xSync extension is installed and detected.</li>
-          <li>Make sure the <strong>linked stream</strong> is the movie/episode you want to extract/translate.</li>
-          <li>Right-click Stremio's stream and click "Copy stream link".</li>
-          <li>Paste the stream URL in the corresponding box.</li>
-          <li>Use "Complete" for MKV streams (non-MKV links auto-switch to Smart).</li>
-          <li>Click "Extract Subtitles"</li>
+          ${copy.instructions.extractionSteps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
         </ol>
 
-        <h3>Translating Extracted Subtitles:</h3>
+        <h3>${escapeHtml(copy.instructions.translationTitle)}</h3>
         <ol>
-          <li>Verify and select the desired subtitles.</li>
-          <li>Select target language.</li>
-          <li>Select translation settings and translation provider.</li>
-          <li>Click "Translate Subtitles".</li>
+          ${copy.instructions.translationSteps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
         </ol>
 
-        <p>You can download both extracted or translated subtitles as SRT.</p>
-        <p>Translated subtitles are automatically uploaded to the database, matching the video hash, under the "xEmbed (Language)" entry (reload the stream on Stremio to see it).</p>
-        <p>If translation/sync problems happen, simply retranslate the subtitle to overwrite the xEmbed database cache.</p>
-        <p>Extracted subtitles are saved to xEmbed as originals and show up under their source language (no separate label).</p>
-        <p class="muted">Currently doesn't work with image-based subtitles - OCR may be implemented.</p>
+        <p>${escapeHtml(copy.instructions.download)}</p>
+        <p>${escapeHtml(copy.instructions.upload)}</p>
+        <p>${escapeHtml(copy.instructions.retry)}</p>
+        <p>${escapeHtml(copy.instructions.originals)}</p>
+        <p class="muted">${escapeHtml(copy.instructions.ocrNote)}</p>
       </div>
       <div class="modal-footer">
         <label class="modal-checkbox">
           <input type="checkbox" id="dontShowEmbeddedInstructions">
-          Don't show this again
+          ${escapeHtml(copy.instructions.dontShow)}
         </label>
-        <button type="button" class="btn" id="gotItEmbeddedInstructions">Got it</button>
+        <button type="button" class="btn" id="gotItEmbeddedInstructions">${escapeHtml(copy.instructions.gotIt)}</button>
       </div>
     </div>
   </div>
@@ -2464,9 +2583,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     <header class="masthead">
         <div class="page-hero">
           <div class="page-icon">🧲</div>
-          <h1 class="page-heading">Embedded Subtitles Studio</h1>
-          <p class="page-subtitle">Extract embedded tracks from your current stream and translate them instantly.</p>
-          <p class="notice warn aio-warning">If you use AIOStreams <strong>PROXY</strong> for Real-Debrid, completely exit all streams before running this tool.</p>
+          <h1 class="page-heading">${escapeHtml(copy.meta.pageHeading)}</h1>
+          <p class="page-subtitle">${escapeHtml(copy.meta.pageSubtitle)}</p>
+          <p class="notice warn aio-warning">${escapeHtml(copy.hero.notice)}</p>
         </div>
       <div class="badge-row">
         ${renderRefreshBadge(t)}
@@ -2492,63 +2611,63 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           </div>
         </div>
       </div>
-      <div class="linked-stream-wrapper">
-        <div class="video-meta" id="linked-stream-card">
-          <p class="video-meta-label">Linked stream</p>
-          <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
-          <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
-        </div>
-      </div>
     </header>
 
     <section class="section-grid">
       <div class="card section centered-section" id="step1Card">
         <div class="section-head">
           <div class="step-header">
-            <span class="step-chip">Step 1</span>
-            <h3>Extension & Extraction</h3>
-            <p class="muted" style="margin:4px 0 0;">Right-click stremio's stream and select "Copy Stream URL". <strong>Ensure the linked stream is the right one.</strong> Paste the stream's URL on the field below and extract its subtitles.</p>
+            <span class="step-chip">${escapeHtml(copy.step1.chip)}</span>
+            <h3>${escapeHtml(copy.step1.title)}</h3>
+            <p class="muted" style="margin:4px 0 0;">${escapeHtml(copy.step1.helper)}</p>
           </div>
         </div>
         <div class="step-stack">
+          <div class="linked-stream-wrapper">
+            <div class="video-meta" id="linked-stream-card">
+              <p class="video-meta-label">${escapeHtml(copy.videoMeta.label)}</p>
+              <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
+              <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
+            </div>
+          </div>
           <div class="field-block form-group">
-            <label for="stream-url">Stream URL</label>
-            <input type="text" id="stream-url" placeholder="Paste the video/stream URL from Stremio or your browser">
+            <label for="stream-url">${escapeHtml(copy.step1.streamLabel)}</label>
+            <input type="text" id="stream-url" placeholder="${escapeHtml(copy.step1.streamPlaceholder)}">
           </div>
           <div class="mkv-callout" aria-live="polite">
             <div class="mkv-header">
               <div class="mkv-icon">🎬</div>
-              <div class="mkv-title">MKV tip</div>
+              <div class="mkv-title">${escapeHtml(copy.step1.mkvTitle)}</div>
             </div>
-            <p class="mkv-text">Use Complete Mode when extracting MKV streams for the best results.</p>
-            <p class="mkv-text">In Complete mode, the whole file will be fetched for extraction.</p>
+            <p class="mkv-text">${escapeHtml(copy.step1.mkvLine1)}</p>
+            <p class="mkv-text">${escapeHtml(copy.step1.mkvLine2)}</p>
           </div>
           <div class="mode-controls">
-            <label for="extract-mode">Mode</label>
+            <label for="extract-mode">${escapeHtml(copy.step1.modeLabel)}</label>
             <select id="extract-mode" class="compact-select">
-              <option value="smart">Smart (fast)</option>
-              <option value="complete">Complete (full file)</option>
+              <option value="smart">${escapeHtml(copy.step1.modeSmart)}</option>
+              <option value="complete">${escapeHtml(copy.step1.modeComplete)}</option>
             </select>
-            <p class="mode-helper">Smart performs one best-effort fast pass and fails if incomplete. Complete always downloads the entire stream and runs one FFmpeg demux with no retries.</p>
-            <button id="extract-btn" type="button" class="secondary">Extract Subtitles</button>
-            <p id="extract-blocked-msg" style="margin:6px 0 0; color:#d14343; font-weight:600; display:none;">Refresh the stream link in Stremio, then try again.</p>
+            <p class="mode-helper">${escapeHtml(copy.step1.modeHelper)}</p>
+            <button id="extract-btn" type="button" class="secondary">${escapeHtml(copy.step1.extractButton)}</button>
+            <p id="extract-blocked-msg" style="margin:6px 0 0; color:#d14343; font-weight:600; display:none;">${escapeHtml(copy.step1.extractBlocked)}</p>
           </div>
           <div class="log-header" aria-hidden="true">
             <span class="pulse"></span>
-            <span class="label">Live log</span>
-            <span>Auto-filled while extraction runs.</span>
+            <span class="label">${escapeHtml(copy.step1.logHeader)}</span>
+            <span>${escapeHtml(copy.step1.logSub)}</span>
           </div>
           <div class="log" id="extract-log" aria-live="polite"></div>
 
           <div class="result-box">
             <div class="result-head">
               <div>
-                <div class="eyebrow">Outputs</div>
-                <h4>Extracted files</h4>
+                <div class="eyebrow">${escapeHtml(copy.step1.outputsEyebrow)}</div>
+                <h4>${escapeHtml(copy.step1.outputsTitle)}</h4>
               </div>
             </div>
             <div id="extracted-downloads" class="downloads"></div>
-            <div class="result-empty" id="extracted-empty">No tracks extracted yet. Run extraction above to see them here.</div>
+            <div class="result-empty" id="extracted-empty">${escapeHtml(copy.step1.outputsEmpty)}</div>
           </div>
         </div>
       </div>
@@ -2556,52 +2675,52 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       <div class="card section centered-section is-disabled" id="step2Card">
         <div class="section-head">
           <div class="step-header">
-            <span class="step-chip">Step 2</span>
-            <h3>Tracks & Translation</h3>
-            <p class="muted" style="margin:4px 0 0;">Select a track in Step 1 outputs, then choose a target language and translate.</p>
+            <span class="step-chip">${escapeHtml(copy.step2.chip)}</span>
+            <h3>${escapeHtml(copy.step2.title)}</h3>
+            <p class="muted" style="margin:4px 0 0;">${escapeHtml(copy.step2.helper)}</p>
           </div>
         </div>
 
         <div class="selected-track-box">
-          <p class="selected-track-label">Selected subtitle</p>
-          <p id="selected-track-summary" class="selected-track-placeholder">Select a subtitle in Step 1 outputs to unlock this step.</p>
+          <p class="selected-track-label">${escapeHtml(copy.step2.selectedLabel)}</p>
+          <p id="selected-track-summary" class="selected-track-placeholder">${escapeHtml(copy.step2.selectedPlaceholder)}</p>
         </div>
 
         <div class="select-stack target-select-stack">
-          <label for="target-select">Target language</label>
+          <label for="target-select">${escapeHtml(copy.step2.targetLabel)}</label>
           <select id="target-select" class="target-select"></select>
         </div>
 
         <details class="translation-settings">
           <summary>
             <div>
-              <span>Translation Settings</span>
-              <span class="summary-meta">Provider, batching, timestamps</span>
+              <span>${escapeHtml(copy.step2.settingsTitle)}</span>
+              <span class="summary-meta">${escapeHtml(copy.step2.settingsMeta)}</span>
             </div>
             <span class="chevron" aria-hidden="true"></span>
           </summary>
           <div class="translation-settings-body">
             <div class="provider-model-row">
               <div class="select-stack">
-                <label for="provider-select">Provider</label>
+                <label for="provider-select">${escapeHtml(copy.step2.providerLabel)}</label>
                 <select id="provider-select" style="width:auto; min-width:200px; max-width:360px;"></select>
               </div>
             </div>
-            <p class="muted" style="margin:0; text-align:center;">Uses your configured model for the selected provider.</p>
+            <p class="muted" style="margin:0; text-align:center;">${escapeHtml(copy.step2.providerHelper)}</p>
 
             <div class="flex" style="flex-direction:column; gap:12px; align-items:center; width:100%;">
               <div style="display:flex; flex-direction:column; gap:6px; align-items:center; width:100%; max-width:300px;">
-                <label for="single-batch-select" style="font-weight:600; margin:0;">Batching</label>
+                <label for="single-batch-select" style="font-weight:600; margin:0;">${escapeHtml(copy.step2.batchingLabel)}</label>
                 <select id="single-batch-select" class="compact-select" style="width:100%;">
-                  <option value="multi">Multiple Batches</option>
-                  <option value="single">Single-Batch</option>
+                  <option value="multi">${escapeHtml(copy.step2.batchingMultiple)}</option>
+                  <option value="single">${escapeHtml(copy.step2.batchingSingle)}</option>
                 </select>
               </div>
               <div style="display:flex; flex-direction:column; gap:6px; align-items:center; width:100%; max-width:300px;">
-                <label for="timestamps-select" style="font-weight:600; margin:0;">Timestamps</label>
+                <label for="timestamps-select" style="font-weight:600; margin:0;">${escapeHtml(copy.step2.timestampsLabel)}</label>
                 <select id="timestamps-select" class="compact-select" style="width:100%;">
-                  <option value="original">Original Timestamps</option>
-                  <option value="send">Send Timestamps to AI</option>
+                  <option value="original">${escapeHtml(copy.step2.timestampsOriginal)}</option>
+                  <option value="send">${escapeHtml(copy.step2.timestampsSend)}</option>
                 </select>
               </div>
             </div>
@@ -2610,26 +2729,26 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 
         <div class="flex" style="margin-top:10px; flex-direction:column; align-items:center; gap:6px;">
           <p class="muted" id="translation-context" style="margin:0; text-align:center; width:100%;">${initialTranslationContext}</p>
-          <button id="translate-btn" type="button">Translate Subtitles</button>
+          <button id="translate-btn" type="button">${escapeHtml(copy.step2.translateButton)}</button>
         </div>
 
         <div class="log-header" aria-hidden="true">
           <span class="pulse"></span>
-          <span class="label">Live log</span>
-          <span>Auto-filled while translations run.</span>
+          <span class="label">${escapeHtml(copy.step2.logHeader)}</span>
+          <span>${escapeHtml(copy.step2.logSub)}</span>
         </div>
         <div class="log" id="translate-log" style="margin-top:8px;" aria-live="polite"></div>
 
         <div class="result-box">
           <div class="result-head">
             <div>
-              <div class="eyebrow">Outputs</div>
-              <h4>Translated subtitles</h4>
+              <div class="eyebrow">${escapeHtml(copy.step2.outputsEyebrow)}</div>
+              <h4>${escapeHtml(copy.step2.outputsTitle)}</h4>
             </div>
           </div>
           <div id="translated-downloads" class="downloads"></div>
-          <div class="result-empty" id="translated-empty">No translations yet. Pick a track and translate to see them here.</div>
-          <div class="notice" id="reload-hint" style="display:none;">Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries.</div>
+          <div class="result-empty" id="translated-empty">${escapeHtml(copy.step2.outputsEmpty)}</div>
+          <div class="notice" id="reload-hint" style="display:none;">${escapeHtml(copy.step2.reloadHint)}</div>
         </div>
       </div>
     </section>
@@ -2645,6 +2764,40 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     const BOOTSTRAP = ${safeJsonSerialize(bootstrap)};
     const PAGE = { configStr: BOOTSTRAP.configStr, videoId: BOOTSTRAP.videoId, filename: BOOTSTRAP.filename || '', videoHash: BOOTSTRAP.videoHash || '' };
     const tt = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
+    const metaCopy = BOOTSTRAP.strings?.videoMeta || {};
+    const metaTemplates = {
+      title: metaCopy.title || 'Title: {title}',
+      videoId: metaCopy.videoId || 'Video ID: {id}',
+      episode: metaCopy.episode || 'Episode: {episode}',
+      file: metaCopy.file || 'File: {file}',
+      none: metaCopy.none || 'No stream linked',
+      waiting: metaCopy.waiting || 'Waiting for a linked stream...',
+      unavailable: metaCopy.unavailable || 'Video ID unavailable'
+    };
+    const statusLabels = BOOTSTRAP.strings?.statusLabels || {};
+    const buttonCopy = BOOTSTRAP.strings?.buttons || {};
+    const translationContextTemplate = BOOTSTRAP.strings?.translationContextTemplate || "You're translating subtitles for {label}";
+    const translationContextFallback = BOOTSTRAP.strings?.translationContextFallback || 'your linked stream';
+    const extractBlockedCopy = BOOTSTRAP.strings?.extractBlocked || 'Refresh the stream link in Stremio, then try again.';
+    function formatMetaLabel(type, value) {
+      if (!value) return '';
+      const template = metaTemplates[type] || '{value}';
+      const fallback = template
+        .replace('{title}', value)
+        .replace('{id}', value)
+        .replace('{episode}', value)
+        .replace('{file}', value);
+      const vars = type === 'videoId'
+        ? { id: value }
+        : (type === 'episode' ? { episode: value } : (type === 'file' ? { file: value } : { title: value }));
+      return tt('toolbox.embedded.meta.' + (type === 'videoId' ? 'videoId' : type), vars, fallback);
+    }
+    function statusLabel(key) {
+      if (!key) return '';
+      const norm = String(key).toLowerCase();
+      const fallback = statusLabels[norm] || norm;
+      return tt('toolbox.embedded.status.' + norm, {}, fallback);
+    }
     function normalizeTargetLangCode(lang) {
       return (lang || '').toString().trim().toLowerCase();
     }
@@ -2684,7 +2837,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       lastProgressStatus: null,  // Track last logged progress message to prevent spam
       extractMessageId: null,
       targetOptions: baseTargetOptions,
-      placeholderBlocked: isPlaceholderStreamValue(PAGE.videoId) || isPlaceholderStreamValue(PAGE.filename)
+      placeholderBlocked: isPlaceholderStreamValue(PAGE.videoId) || isPlaceholderStreamValue(PAGE.filename),
+      cacheBlocked: false,
+      cacheBlockInfo: null,
+      streamHashInfo: null
     };
     const translatedHistory = new Set();
     const instructionsEls = {
@@ -2786,6 +2942,218 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         hash = (hash * 31 + base.charCodeAt(i)) >>> 0;
       }
       return Math.abs(hash).toString(16).padStart(8, '0');
+    }
+
+    // Lightweight MD5 implementation (client-side) to mirror deriveVideoHash on the server
+    function md5hex(str) {
+      function rotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
+      function addUnsigned(lX, lY) {
+        const lX4 = lX & 0x40000000;
+        const lY4 = lY & 0x40000000;
+        const lX8 = lX & 0x80000000;
+        const lY8 = lY & 0x80000000;
+        const lResult = (lX & 0x3FFFFFFF) + (lY & 0x3FFFFFFF);
+        if (lX4 & lY4) return lResult ^ 0x80000000 ^ lX8 ^ lY8;
+        if (lX4 | lY4) {
+          if (lResult & 0x40000000) return lResult ^ 0xC0000000 ^ lX8 ^ lY8;
+          return lResult ^ 0x40000000 ^ lX8 ^ lY8;
+        }
+        return lResult ^ lX8 ^ lY8;
+      }
+      function F(x, y, z) { return (x & y) | (~x & z); }
+      function G(x, y, z) { return (x & z) | (y & ~z); }
+      function H(x, y, z) { return x ^ y ^ z; }
+      function I(x, y, z) { return y ^ (x | ~z); }
+      function FF(a, b, c, d, x, s, ac) { a = addUnsigned(a, addUnsigned(addUnsigned(F(b, c, d), x), ac)); return addUnsigned(rotateLeft(a, s), b); }
+      function GG(a, b, c, d, x, s, ac) { a = addUnsigned(a, addUnsigned(addUnsigned(G(b, c, d), x), ac)); return addUnsigned(rotateLeft(a, s), b); }
+      function HH(a, b, c, d, x, s, ac) { a = addUnsigned(a, addUnsigned(addUnsigned(H(b, c, d), x), ac)); return addUnsigned(rotateLeft(a, s), b); }
+      function II(a, b, c, d, x, s, ac) { a = addUnsigned(a, addUnsigned(addUnsigned(I(b, c, d), x), ac)); return addUnsigned(rotateLeft(a, s), b); }
+      function convertToWordArray(strVal) {
+        const lWordCount = [];
+        let lMessageLength = strVal.length;
+        let lNumberOfWordsTempOne = lMessageLength + 8;
+        const lNumberOfWordsTempTwo = (lNumberOfWordsTempOne - (lNumberOfWordsTempOne % 64)) / 64;
+        const lNumberOfWords = (lNumberOfWordsTempTwo + 1) * 16;
+        for (let i = 0; i < lNumberOfWords; i++) lWordCount[i] = 0;
+        let lBytePosition = 0;
+        let lByteCount = 0;
+        while (lByteCount < lMessageLength) {
+          const lWordCountIndex = (lByteCount - (lByteCount % 4)) / 4;
+          lBytePosition = (lByteCount % 4) * 8;
+          lWordCount[lWordCountIndex] |= strVal.charCodeAt(lByteCount) << lBytePosition;
+          lByteCount++;
+        }
+        const lWordCountIndex = (lByteCount - (lByteCount % 4)) / 4;
+        lBytePosition = (lByteCount % 4) * 8;
+        lWordCount[lWordCountIndex] |= 0x80 << lBytePosition;
+        lWordCount[lNumberOfWords - 2] = lMessageLength << 3;
+        lWordCount[lNumberOfWords - 1] = lMessageLength >>> 29;
+        return lWordCount;
+      }
+      function wordToHex(lValue) {
+        let wordToHexValue = '';
+        for (let lCount = 0; lCount <= 3; lCount++) {
+          const lByte = (lValue >>> (lCount * 8)) & 255;
+          const wordToHexValueTemp = '0' + lByte.toString(16);
+          wordToHexValue += wordToHexValueTemp.substr(wordToHexValueTemp.length - 2, 2);
+        }
+        return wordToHexValue;
+      }
+      function utf8Encode(string) {
+        string = string.replace(/\r\n/g, '\n');
+        let utftext = '';
+        for (let n = 0; n < string.length; n++) {
+          const c = string.charCodeAt(n);
+          if (c < 128) utftext += String.fromCharCode(c);
+          else if (c < 2048) {
+            utftext += String.fromCharCode((c >> 6) | 192);
+            utftext += String.fromCharCode((c & 63) | 128);
+          } else {
+            utftext += String.fromCharCode((c >> 12) | 224);
+            utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+            utftext += String.fromCharCode((c & 63) | 128);
+          }
+        }
+        return utftext;
+      }
+      const x = convertToWordArray(utf8Encode(str));
+      let a = 0x67452301;
+      let b = 0xEFCDAB89;
+      let c = 0x98BADCFE;
+      let d = 0x10325476;
+      for (let k = 0; k < x.length; k += 16) {
+        const AA = a; const BB = b; const CC = c; const DD = d;
+        a = FF(a, b, c, d, x[k + 0], 7, 0xD76AA478);
+        d = FF(d, a, b, c, x[k + 1], 12, 0xE8C7B756);
+        c = FF(c, d, a, b, x[k + 2], 17, 0x242070DB);
+        b = FF(b, c, d, a, x[k + 3], 22, 0xC1BDCEEE);
+        a = FF(a, b, c, d, x[k + 4], 7, 0xF57C0FAF);
+        d = FF(d, a, b, c, x[k + 5], 12, 0x4787C62A);
+        c = FF(c, d, a, b, x[k + 6], 17, 0xA8304613);
+        b = FF(b, c, d, a, x[k + 7], 22, 0xFD469501);
+        a = FF(a, b, c, d, x[k + 8], 7, 0x698098D8);
+        d = FF(d, a, b, c, x[k + 9], 12, 0x8B44F7AF);
+        c = FF(c, d, a, b, x[k + 10], 17, 0xFFFF5BB1);
+        b = FF(b, c, d, a, x[k + 11], 22, 0x895CD7BE);
+        a = FF(a, b, c, d, x[k + 12], 7, 0x6B901122);
+        d = FF(d, a, b, c, x[k + 13], 12, 0xFD987193);
+        c = FF(c, d, a, b, x[k + 14], 17, 0xA679438E);
+        b = FF(b, c, d, a, x[k + 15], 22, 0x49B40821);
+        a = GG(a, b, c, d, x[k + 1], 5, 0xF61E2562);
+        d = GG(d, a, b, c, x[k + 6], 9, 0xC040B340);
+        c = GG(c, d, a, b, x[k + 11], 14, 0x265E5A51);
+        b = GG(b, c, d, a, x[k + 0], 20, 0xE9B6C7AA);
+        a = GG(a, b, c, d, x[k + 5], 5, 0xD62F105D);
+        d = GG(d, a, b, c, x[k + 10], 9, 0x02441453);
+        c = GG(c, d, a, b, x[k + 15], 14, 0xD8A1E681);
+        b = GG(b, c, d, a, x[k + 4], 20, 0xE7D3FBC8);
+        a = GG(a, b, c, d, x[k + 9], 5, 0x21E1CDE6);
+        d = GG(d, a, b, c, x[k + 14], 9, 0xC33707D6);
+        c = GG(c, d, a, b, x[k + 3], 14, 0xF4D50D87);
+        b = GG(b, c, d, a, x[k + 8], 20, 0x455A14ED);
+        a = GG(a, b, c, d, x[k + 13], 5, 0xA9E3E905);
+        d = GG(d, a, b, c, x[k + 2], 9, 0xFCEFA3F8);
+        c = GG(c, d, a, b, x[k + 7], 14, 0x676F02D9);
+        b = GG(b, c, d, a, x[k + 12], 20, 0x8D2A4C8A);
+        a = HH(a, b, c, d, x[k + 5], 4, 0xFFFA3942);
+        d = HH(d, a, b, c, x[k + 8], 11, 0x8771F681);
+        c = HH(c, d, a, b, x[k + 11], 16, 0x6D9D6122);
+        b = HH(b, c, d, a, x[k + 14], 23, 0xFDE5380C);
+        a = HH(a, b, c, d, x[k + 1], 4, 0xA4BEEA44);
+        d = HH(d, a, b, c, x[k + 4], 11, 0x4BDECFA9);
+        c = HH(c, d, a, b, x[k + 7], 16, 0xF6BB4B60);
+        b = HH(b, c, d, a, x[k + 10], 23, 0xBEBFBC70);
+        a = HH(a, b, c, d, x[k + 13], 4, 0x289B7EC6);
+        d = HH(d, a, b, c, x[k + 0], 11, 0xEAA127FA);
+        c = HH(c, d, a, b, x[k + 3], 16, 0xD4EF3085);
+        b = HH(b, c, d, a, x[k + 6], 23, 0x04881D05);
+        a = HH(a, b, c, d, x[k + 9], 4, 0xD9D4D039);
+        d = HH(d, a, b, c, x[k + 12], 11, 0xE6DB99E5);
+        c = HH(c, d, a, b, x[k + 15], 16, 0x1FA27CF8);
+        b = HH(b, c, d, a, x[k + 2], 23, 0xC4AC5665);
+        a = II(a, b, c, d, x[k + 0], 6, 0xF4292244);
+        d = II(d, a, b, c, x[k + 7], 10, 0x432AFF97);
+        c = II(c, d, a, b, x[k + 14], 15, 0xAB9423A7);
+        b = II(b, c, d, a, x[k + 5], 21, 0xFC93A039);
+        a = II(a, b, c, d, x[k + 12], 6, 0x655B59C3);
+        d = II(d, a, b, c, x[k + 3], 10, 0x8F0CCC92);
+        c = II(c, d, a, b, x[k + 10], 15, 0xFFEFF47D);
+        b = II(b, c, d, a, x[k + 1], 21, 0x85845DD1);
+        a = II(a, b, c, d, x[k + 8], 6, 0x6FA87E4F);
+        d = II(d, a, b, c, x[k + 15], 10, 0xFE2CE6E0);
+        c = II(c, d, a, b, x[k + 6], 15, 0xA3014314);
+        b = II(b, c, d, a, x[k + 13], 21, 0x4E0811A1);
+        a = II(a, b, c, d, x[k + 4], 6, 0xF7537E82);
+        d = II(d, a, b, c, x[k + 11], 10, 0xBD3AF235);
+        c = II(c, d, a, b, x[k + 2], 15, 0x2AD7D2BB);
+        b = II(b, c, d, a, x[k + 9], 21, 0xEB86D391);
+        a = addUnsigned(a, AA);
+        b = addUnsigned(b, BB);
+        c = addUnsigned(c, CC);
+        d = addUnsigned(d, DD);
+      }
+      return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
+    }
+
+    function deriveVideoHashFromParts(filename, videoId) {
+      const name = (filename && String(filename).trim()) || '';
+      const fallback = (videoId && String(videoId).trim()) || '';
+      const base = [name, fallback].filter(Boolean).join('::');
+      if (!base) return '';
+      return md5hex(base).substring(0, 16);
+    }
+
+    function extractStreamFilename(streamUrl) {
+      try {
+        const url = new URL(streamUrl);
+        const paramKeys = ['filename', 'file', 'name', 'download', 'dn'];
+        for (const key of paramKeys) {
+          const val = url.searchParams.get(key);
+          if (val && val.trim()) return decodeURIComponent(val.trim().split('/').pop());
+        }
+        const parts = (url.pathname || '').split('/').filter(Boolean);
+        if (!parts.length) return '';
+        return decodeURIComponent(parts[parts.length - 1]);
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function normalizeVideoIdCandidate(value) {
+      if (!value) return '';
+      const trimmed = String(value).trim();
+      if (/^tt\d+$/i.test(trimmed)) return trimmed.toLowerCase().startsWith('tt') ? trimmed : 'tt' + trimmed;
+      if (/^\d+$/.test(trimmed) && trimmed.length >= 5) return 'tt' + trimmed;
+      return trimmed;
+    }
+
+    function extractStreamVideoId(streamUrl) {
+      try {
+        const url = new URL(streamUrl);
+        const paramKeys = ['videoId', 'video', 'id', 'mediaid', 'imdb', 'tmdb', 'kitsu', 'anidb', 'mal', 'anilist'];
+        for (const key of paramKeys) {
+          const val = url.searchParams.get(key);
+          if (val && val.trim()) return normalizeVideoIdCandidate(val);
+        }
+        const parts = (url.pathname || '').split('/').filter(Boolean);
+        const directId = parts.find(p => /^tt\d+/i.test(p) || p.includes(':'));
+        if (directId) return normalizeVideoIdCandidate(directId);
+        return '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function deriveStreamHashFromUrl(streamUrl, fallback = {}) {
+      const filename = extractStreamFilename(streamUrl) || fallback.filename || fallback.streamFilename || '';
+      const streamVideoId = extractStreamVideoId(streamUrl) || fallback.videoId || '';
+      const hash = deriveVideoHashFromParts(filename, streamVideoId);
+      return {
+        hash,
+        filename,
+        videoId: streamVideoId,
+        source: 'stream-url'
+      };
     }
 
     function syncVideoHash(payload = {}) {
@@ -3008,8 +3376,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     };
     const tr = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
     const buttonLabels = {
-      extract: els.extractBtn?.textContent || 'Extract Subtitles',
-      translate: els.translateBtn?.textContent || 'Translate Subtitles'
+      extract: buttonCopy.extract || els.extractBtn?.textContent || 'Extract Subtitles',
+      translate: buttonCopy.translate || els.translateBtn?.textContent || 'Translate Subtitles'
     };
     const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
 
@@ -3108,11 +3476,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     function updateTranslationContext(source = {}) {
       if (!els.translationContext) return;
       const label = buildTranslationContextLabel(source);
-      if (label) {
-        els.translationContext.textContent = "You're translating subtitles for " + label;
-      } else {
-        els.translationContext.textContent = "You're translating subtitles for your linked stream";
-      }
+      const targetLabel = label || translationContextFallback;
+      const fallback = translationContextTemplate.replace('{label}', targetLabel);
+      els.translationContext.textContent = tt('toolbox.embedded.step2.translationContext', { label: targetLabel }, fallback);
     }
 
     function applyExtractDisabled() {
@@ -3120,7 +3486,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const blocked = !!state.placeholderBlocked;
       const disabled = !!state.extractionInFlight || blocked;
       els.extractBtn.disabled = disabled;
-      els.extractBtn.textContent = state.extractionInFlight ? 'Extracting...' : buttonLabels.extract;
+      const busyLabel = buttonCopy.extracting || tt('toolbox.embedded.buttons.extracting', {}, 'Extracting...');
+      els.extractBtn.textContent = state.extractionInFlight ? busyLabel : buttonLabels.extract;
       if (els.extractError) {
         els.extractError.style.display = blocked ? 'block' : 'none';
       }
@@ -3137,18 +3504,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (!els.videoMetaTitle || !els.videoMetaSubtitle) return;
       const source = payload || BOOTSTRAP;
       updatePlaceholderBlock(source);
-      const title = source.title || cleanVideoName(source.filename) || cleanVideoName(source.videoId) || 'No stream linked';
+      const title = source.title || cleanVideoName(source.filename) || cleanVideoName(source.videoId) || metaTemplates.none;
       const episodeTag = formatEpisodeTag(source.videoId);
       const fallbackDetails = [];
       if (source.title) {
-        fallbackDetails.push('Title: ' + source.title);
+        fallbackDetails.push(formatMetaLabel('title', source.title));
       } else if (source.videoId) {
-        fallbackDetails.push('Video ID: ' + source.videoId);
+        fallbackDetails.push(formatMetaLabel('videoId', source.videoId));
       }
-      if (episodeTag) fallbackDetails.push('Episode: ' + episodeTag);
-      if (source.filename) fallbackDetails.push('File: ' + source.filename);
-      els.videoMetaTitle.textContent = title;
-      els.videoMetaSubtitle.textContent = fallbackDetails.join(' - ') || 'Waiting for a linked stream...';
+      if (episodeTag) fallbackDetails.push(formatMetaLabel('episode', episodeTag));
+      if (source.filename) fallbackDetails.push(formatMetaLabel('file', source.filename));
+      els.videoMetaTitle.textContent = title || metaTemplates.none;
+      els.videoMetaSubtitle.textContent = fallbackDetails.join(' - ') || metaTemplates.waiting;
       updateTranslationContext({ ...source, title, videoId: source.videoId, filename: source.filename });
 
       const requestId = ++linkedTitleRequestId;
@@ -3157,16 +3524,16 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 
       const details = [];
       if (fetchedTitle) {
-        details.push('Title: ' + fetchedTitle);
+        details.push(formatMetaLabel('title', fetchedTitle));
       } else if (source.videoId) {
-        details.push('Video ID: ' + source.videoId);
+        details.push(formatMetaLabel('videoId', source.videoId));
       }
-      if (episodeTag) details.push('Episode: ' + episodeTag);
-      if (source.filename) details.push('File: ' + source.filename);
+      if (episodeTag) details.push(formatMetaLabel('episode', episodeTag));
+      if (source.filename) details.push(formatMetaLabel('file', source.filename));
 
-      const resolvedTitle = fetchedTitle || title;
+      const resolvedTitle = fetchedTitle || title || metaTemplates.none;
       els.videoMetaTitle.textContent = resolvedTitle;
-      els.videoMetaSubtitle.textContent = details.join(' - ') || 'Waiting for a linked stream...';
+      els.videoMetaSubtitle.textContent = details.join(' - ') || metaTemplates.waiting;
       updateTranslationContext({ ...source, title: resolvedTitle, videoId: source.videoId, filename: source.filename });
     }
 
@@ -3223,6 +3590,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       state.activeTranslations = 0;
       state.selectedTrackId = null;
       state.lastProgressStatus = null;
+      state.cacheBlocked = false;
+      state.cacheBlockInfo = null;
+      state.streamHashInfo = null;
       renderSelectedTrackSummary();
       renderDownloads();
       renderTargets();
@@ -3240,7 +3610,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (els.modeSelect) {
         els.modeSelect.disabled = !!active;
       }
-      updateExtensionStatus(state.extensionReady, lastExtensionLabel || (state.extensionReady ? 'Ready' : ''), state.extensionReady ? 'ok' : 'warn');
+      const readyLabel = tt('toolbox.autoSubs.extension.ready', {}, 'Ready');
+      updateExtensionStatus(state.extensionReady, lastExtensionLabel || (state.extensionReady ? readyLabel : ''), state.extensionReady ? 'ok' : 'warn');
       if (!state.extractionInFlight) {
         // No auto-apply of pending stream; user must click Update
       }
@@ -3319,9 +3690,9 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       if (els.extLabel) {
         const label = ready
           ? (state.extractionInFlight
-            ? (window.t ? window.t('toolbox.logs.extracting', {}, 'Extracting via xSync…') : 'Extracting via xSync…')
-            : (text || lastExtensionLabel || (window.t ? window.t('toolbox.status.ready', {}, 'Ready') : 'Ready')))
-          : (text || (window.t ? window.t('toolbox.logs.extensionMissing', {}, 'Extension not detected') : 'Extension not detected'));
+            ? tt('toolbox.logs.extracting', {}, 'Extracting via xSync…')
+            : (text || lastExtensionLabel || tt('toolbox.autoSubs.extension.ready', {}, 'Ready')))
+          : (text || tt('toolbox.logs.extensionMissing', {}, 'Extension not detected'));
         els.extLabel.textContent = label;
         if (ready) {
           els.extLabel.classList.add('ready');
@@ -3405,7 +3776,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         const status = state.targets[lang.code]?.status;
         return {
           value: lang.code,
-          text: lang.name + ' (' + lang.code + ')' + (status ? ' - ' + status : '')
+          text: lang.name + ' (' + lang.code + ')' + (status ? ' - ' + statusLabel(status) : '')
         };
       });
       syncSelectOptions(els.targetSelect, desired);
@@ -3559,11 +3930,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       Object.entries(state.targets || {}).forEach(([lang, entry]) => {
         if (entry.status === 'done') {
           const trackRef = entry.trackId || state.selectedTrackId || 'track';
+          const localOnly = entry.local === true;
+          const downloadUrl = localOnly
+            ? createTextBlobUrl(entry.content || '')
+            : '/addon/' + encodeURIComponent(BOOTSTRAP.configStr) + '/xembedded/' + encodeURIComponent(getVideoHash()) + '/' + encodeURIComponent(lang) + '/' + encodeURIComponent(trackRef);
+          const suffix = localOnly ? '_manual' : '_xembed';
+          const baseLabel = tr('toolbox.downloads.translatedLabel', { lang, track: trackRef }, 'Translated ' + lang + ' (track ' + trackRef + ')');
+          const label = localOnly ? baseLabel + ' - manual download only' : baseLabel;
           translated.push({
-            label: tr('toolbox.downloads.translatedLabel', { lang, track: trackRef }, 'Translated ' + lang + ' (track ' + trackRef + ')'),
-            url: '/addon/' + encodeURIComponent(BOOTSTRAP.configStr) + '/xembedded/' + encodeURIComponent(getVideoHash()) + '/' + encodeURIComponent(lang) + '/' + encodeURIComponent(trackRef),
-            filename: (getVideoHash() || 'video') + '_' + lang + '_xembed.srt',
-            type: 'translated'
+            label,
+            url: downloadUrl,
+            filename: (getVideoHash() || 'video') + '_' + lang + suffix + '.srt',
+            type: localOnly ? 'translated-local' : 'translated'
           });
         }
       });
@@ -3583,6 +3961,12 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const { data, mime } = resolveTrackData(track);
       if (!data) return '#';
       const blob = new Blob([data], { type: mime || 'application/octet-stream' });
+      return URL.createObjectURL(blob);
+    }
+
+    function createTextBlobUrl(content, mime = 'text/plain') {
+      const payload = content == null ? '' : content;
+      const blob = new Blob([payload], { type: mime || 'text/plain' });
       return URL.createObjectURL(blob);
     }
 
@@ -3764,6 +4148,14 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     }
 
     async function persistOriginals(batchId) {
+      if (state.cacheBlocked) {
+        const diff = state.cacheBlockInfo;
+        const msg = diff && diff.linked && diff.stream
+          ? 'Hash mismatch detected (linked ' + diff.linked + ' vs stream ' + diff.stream + '). Originals will not be uploaded; downloads stay available.'
+          : 'Hash mismatch detected. Originals will not be uploaded to xEmbed; downloads stay available.';
+        logExtract(msg);
+        return;
+      }
       for (const track of state.tracks) {
         try {
           const { data, mime } = resolveTrackData(track);
@@ -3850,6 +4242,14 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         return;
       }
       try {
+        const skipCacheUploads = state.cacheBlocked === true;
+        if (skipCacheUploads) {
+          const diff = state.cacheBlockInfo;
+          const warn = diff && diff.linked && diff.stream
+            ? 'Hash mismatch (' + diff.linked + ' vs ' + diff.stream + '); translations will be download-only (not uploaded to Stremio).'
+            : 'Hash mismatch detected; translations will be download-only (not uploaded to Stremio).';
+          logTranslate(warn);
+        }
         const resp = await fetch('/api/translate-embedded', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3873,18 +4273,30 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
               extractedAt: track.extractedAt || Date.now(),
               batchId: track.batchId || state.currentBatchId || null
             },
-            forceRetranslate: isRetranslate
+            forceRetranslate: isRetranslate,
+            skipCache: skipCacheUploads
           })
         });
         const data = await resp.json();
         if (!resp.ok || data.error) throw new Error(data.error || (window.t ? window.t('toolbox.logs.translationFailed', {}, 'Translation failed') : 'Translation failed'));
         translatedHistory.add(historyKey);
-        state.targets[targetLang] = { status: 'done', cacheKey: data.cacheKey, trackId: track.id, retranslate: isRetranslate };
-        const doneKey = data.cached ? 'toolbox.logs.finishedCached' : 'toolbox.logs.finished';
-        const finishFallback = data.cached ? ('Finished ' + targetLang + ' (cached)') : ('Finished ' + targetLang);
-        const finishMsg = window.t ? window.t(doneKey, { lang: targetLang }, finishFallback) : finishFallback;
+        state.targets[targetLang] = {
+          status: 'done',
+          cacheKey: skipCacheUploads ? null : data.cacheKey,
+          trackId: track.id,
+          retranslate: isRetranslate,
+          local: skipCacheUploads,
+          content: skipCacheUploads ? data.translatedContent : null
+        };
+        const doneKey = skipCacheUploads ? null : (data.cached ? 'toolbox.logs.finishedCached' : 'toolbox.logs.finished');
+        const finishFallback = skipCacheUploads
+          ? ('Finished ' + targetLang + ' (download only; not uploaded)')
+          : (data.cached ? ('Finished ' + targetLang + ' (cached)') : ('Finished ' + targetLang));
+        const finishMsg = doneKey && window.t ? window.t(doneKey, { lang: targetLang }, finishFallback) : finishFallback;
         logTranslate(finishMsg);
-        els.reloadHint.style.display = 'block';
+        if (els.reloadHint) {
+          els.reloadHint.style.display = skipCacheUploads ? 'none' : 'block';
+        }
         renderTargets();
       } catch (e) {
         state.targets[targetLang] = { status: 'failed', error: e.message };
@@ -3922,7 +4334,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           clearTimeout(pingTimer);
           pingTimer = null;
         }
-        updateExtensionStatus(true, 'Ready (v' + (msg.version || '-') + ')');
+        const readyWithVersion = tt('toolbox.autoSubs.extension.readyWithVersion', { version: msg.version || '-' }, 'Ready (v' + (msg.version || '-') + ')');
+        updateExtensionStatus(true, readyWithVersion);
       } else if (msg.type === 'SUBMAKER_DEBUG_LOG') {
         const level = (msg.level || 'info').toUpperCase();
         const text = msg.text || (window.t ? window.t('toolbox.logs.event', {}, 'Log event') : 'Log event');
@@ -3998,7 +4411,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             const rawLang = resolveTrackLanguage(normalizedTrack);
             return {
               id: t.id || idx,
-              label: t.label || ('Track ' + (idx + 1)),
+              label: t.label || tr('toolbox.downloads.trackLabel', { id: idx + 1 }, 'Track ' + (idx + 1)),
               language: rawLang ? rawLang.toLowerCase() : 'und',
               codec: t.codec || t.format || 'subtitle',
               binary: false,
@@ -4061,7 +4474,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
       if (state.extractionInFlight) return;
       if (state.placeholderBlocked) {
-        const label = 'Refresh the stream link in Stremio, then try again.';
+        const label = tt('toolbox.embedded.step1.extractBlocked', {}, extractBlockedCopy);
         logExtract(label);
         return;
       }
@@ -4078,6 +4491,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       }
       resetExtractionState(true);
       if (els.extractLog) els.extractLog.innerHTML = '';
+      const linkedHash = getVideoHash();
+      const streamHashInfo = deriveStreamHashFromUrl(streamUrl, { videoId: PAGE.videoId || BOOTSTRAP.videoId, filename: PAGE.filename || BOOTSTRAP.filename });
+      state.streamHashInfo = streamHashInfo;
+      state.cacheBlocked = Boolean(streamHashInfo.hash && linkedHash && streamHashInfo.hash !== linkedHash);
+      state.cacheBlockInfo = state.cacheBlocked ? { linked: linkedHash, stream: streamHashInfo.hash } : null;
+      if (state.cacheBlocked) {
+        const mismatchMsg = 'Hash mismatch detected: linked stream (' + linkedHash + ') vs pasted URL (' + streamHashInfo.hash + '). Uploads to xEmbed are disabled; you can still download/translate and drag into Stremio manually.';
+        logExtract(mismatchMsg);
+        if (els.reloadHint) {
+          els.reloadHint.style.display = 'none';
+        }
+      }
       const mode = state.extractMode === 'complete' ? 'complete' : 'smart';
       const messageId = 'extract_' + Date.now();
       setStep2Enabled(false);
