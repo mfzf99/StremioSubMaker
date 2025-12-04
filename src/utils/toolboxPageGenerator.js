@@ -5268,6 +5268,243 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
         }
       }
 
+      function setPreview(content) {
+        if (els.srtPreview) {
+          els.srtPreview.textContent = content || tt('toolbox.autoSubs.status.noOutput', {}, 'No output yet.');
+        }
+      }
+
+      function handleHashStatus(hashes = {}, cacheBlocked = false) {
+        const hashEl = els.hashStatus;
+        const linked = hashes.linked || PAGE.videoHash || '';
+        const streamHash = hashes.stream || '';
+        const hasMismatch = linked && streamHash && linked !== streamHash;
+        state.cacheBlocked = cacheBlocked || hasMismatch;
+        if (hashEl) {
+          if (hasMismatch) {
+            hashEl.textContent = 'Hash mismatch: linked ' + linked + ' vs pasted ' + streamHash + '. Cache uploads disabled.';
+            hashEl.classList.add('warn');
+          } else if (streamHash) {
+            hashEl.textContent = 'Linked: ' + linked + ' | Stream: ' + streamHash + (cacheBlocked ? ' (cache disabled)' : '');
+            hashEl.classList.remove('warn');
+          } else {
+            hashEl.textContent = tt('toolbox.autoSubs.badges.waitingExtension', {}, 'Waiting for stream hash...');
+          }
+        }
+      }
+
+      function updateHashStatusFromInput() {
+        if (!els.streamUrl) return;
+        const url = (els.streamUrl.value || '').trim();
+        if (!url) {
+          handleHashStatus({ linked: PAGE.videoHash, stream: '' }, false);
+          return;
+        }
+        const derived = deriveStreamHashFromUrl(url, { filename: PAGE.filename, videoId: PAGE.videoId });
+        handleHashStatus({ linked: PAGE.videoHash, stream: derived.hash }, state.cacheBlocked);
+      }
+
+      async function runAutoSubs() {
+        if (state.autoSubsInFlight) return;
+        const stream = (els.streamUrl?.value || '').trim();
+        if (!stream) {
+          appendLog('Paste a stream URL first.');
+          setStatus('Awaiting input...');
+          return;
+        }
+        const targets = getSelectedTargets();
+        if (els.translateToggle?.checked && targets.length === 0) {
+          appendLog('Select at least one target language or disable translation.');
+          return;
+        }
+        setInFlight(true);
+        resetPills();
+        markStep('fetch', 'check');
+        setStatus(tt('toolbox.autoSubs.status.fetching', {}, 'Fetching stream...'));
+        setProgress(10);
+        appendLog('Sending request to Cloudflare Workers AI...');
+
+        const payload = {
+          configStr: PAGE.configStr,
+          streamUrl: stream,
+          videoId: PAGE.videoId,
+          filename: PAGE.filename,
+          engine: 'remote',
+          model: els.model?.value || '@cf/openai/whisper',
+          sourceLanguage: els.sourceLang?.value || '',
+          targetLanguages: targets,
+          translate: els.translateToggle?.checked !== false,
+          translationProvider: els.provider?.value || '',
+          translationModel: (els.providerModel?.value || '').trim(),
+          sendTimestampsToAI: els.sendTimestamps?.checked === true,
+          singleBatchMode: els.singleBatch?.checked === true,
+          translationPrompt: '',
+          diarization: els.diarization?.checked === true
+        };
+
+        try {
+          const resp = await fetch('/api/auto-subtitles/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok || data.success !== true) {
+            const msg = data?.error || `Request failed (${resp.status})`;
+            throw new Error(msg);
+          }
+          handleHashStatus(data.hashes || {}, data.cacheBlocked);
+          markStep('transcribe', 'check');
+          setProgress(60);
+          setStatus('Transcription complete. Preparing downloads...');
+          setPreview(data.original?.srt || '');
+          setDownloads(data.original, data.translations || []);
+          if (payload.translate && targets.length) {
+            markStep('translate', (data.translations || []).some(t => t.error) ? 'warn' : 'check');
+          } else {
+            markStep('translate', 'warn');
+          }
+          markStep('deliver', 'check');
+          setProgress(100);
+          setStatus(tt('toolbox.autoSubs.status.done', {}, 'Done. Ready to download.'));
+          appendLog('Finished. Downloads are ready.' + (data.cacheBlocked ? ' Cache uploads were skipped due to hash mismatch.' : ''));
+        } catch (error) {
+          markStep('translate', 'danger');
+          setStatus('Failed: ' + error.message);
+          appendLog('Error: ' + error.message);
+        } finally {
+          setInFlight(false);
+        }
+      }
+
+      function previewPlan() {
+        setStatus(tt('toolbox.autoSubs.status.previewPlan', {}, 'Pipeline: fetch -> transcribe -> align -> translate -> deliver.'));
+      }
+
+      function initDefaults() {
+        if (els.model && BOOTSTRAP.defaults?.whisperModel) {
+          els.model.value = BOOTSTRAP.defaults.whisperModel;
+        }
+        if (els.sendTimestamps) {
+          els.sendTimestamps.checked = BOOTSTRAP.defaults?.sendTimestampsToAI === true;
+        }
+        if (els.singleBatch) {
+          els.singleBatch.checked = BOOTSTRAP.defaults?.singleBatchMode === true;
+        }
+        if (els.providerModel && BOOTSTRAP.defaults?.translationModel) {
+          els.providerModel.value = BOOTSTRAP.defaults.translationModel;
+        }
+        hydrateTargets();
+        renderProviders();
+        updateHashStatusFromInput();
+      }
+
+      function bindEvents() {
+        els.startBtn?.addEventListener('click', runAutoSubs);
+        els.previewBtn?.addEventListener('click', previewPlan);
+        els.prefill?.addEventListener('click', () => {
+          if (BOOTSTRAP.filename) {
+            els.streamUrl.value = BOOTSTRAP.filename;
+          } else if (BOOTSTRAP.videoId) {
+            els.streamUrl.value = 'stremio://' + BOOTSTRAP.videoId;
+          }
+          updateHashStatusFromInput();
+        });
+        els.clear?.addEventListener('click', () => {
+          if (els.streamUrl) els.streamUrl.value = '';
+          setPreview(tt('toolbox.autoSubs.status.noOutput', {}, 'No output yet.'));
+          setDownloads(null, []);
+          setStatus(tt('toolbox.autoSubs.status.awaiting', {}, 'Awaiting input...'));
+          resetPills();
+          setProgress(0);
+          updateHashStatusFromInput();
+        });
+        els.streamUrl?.addEventListener('blur', updateHashStatusFromInput);
+        els.streamUrl?.addEventListener('change', updateHashStatusFromInput);
+      }
+
+      // Extension messaging (status only)
+      (function initExtensionPing() {
+        let pingRetries = 0;
+        let pingTimer = null;
+        const MAX_PING_RETRIES = 5;
+        const EXT_INSTALL_URL = (els.extLabel && els.extLabel.getAttribute('href')) || 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
+        function updateExtensionStatus(ready, text, tone) {
+          state.extensionReady = ready;
+          const dotTone = ready ? 'ok' : (tone || 'bad');
+          if (els.extDot) els.extDot.className = 'status-dot ' + dotTone;
+          if (els.extLabel) {
+            const readyText = text || tt('toolbox.status.ready', {}, 'Ready');
+            const missingText = text || tt('toolbox.autoSubs.extension.notDetected', {}, 'Extension not detected');
+            els.extLabel.textContent = ready ? readyText : missingText;
+            if (ready) {
+              els.extLabel.classList.add('ready');
+              els.extLabel.removeAttribute('href');
+              els.extLabel.removeAttribute('target');
+              els.extLabel.removeAttribute('rel');
+            } else {
+              els.extLabel.classList.remove('ready');
+              els.extLabel.setAttribute('href', EXT_INSTALL_URL);
+              els.extLabel.setAttribute('target', '_blank');
+              els.extLabel.setAttribute('rel', 'noopener noreferrer');
+            }
+          }
+          if (els.extStatus) els.extStatus.title = text || '';
+        }
+        window.addEventListener('message', (event) => {
+          const msg = event.data || {};
+          if (msg.source !== 'extension') return;
+          if (msg.type === 'SUBMAKER_PONG') {
+            pingRetries = 0;
+            if (pingTimer) {
+              clearTimeout(pingTimer);
+              pingTimer = null;
+            }
+            const readyLabel = msg.version
+              ? tt('toolbox.autoSubs.extension.readyWithVersion', { version: msg.version || '-' }, 'Ready (v' + (msg.version || '-') + ')')
+              : tt('toolbox.autoSubs.extension.ready', {}, 'Ready');
+            updateExtensionStatus(true, readyLabel);
+          }
+        });
+        function sendPing() {
+          if (pingTimer) {
+            clearTimeout(pingTimer);
+            pingTimer = null;
+          }
+          pingRetries = 0;
+          const tick = () => {
+            if (state.extensionReady) return;
+            pingRetries += 1;
+            const label = tt('toolbox.status.pinging', {}, 'Pinging extension...');
+            updateExtensionStatus(false, label, 'warn');
+            window.postMessage({ type: 'SUBMAKER_PING', source: 'webpage' }, '*');
+            if (pingRetries >= MAX_PING_RETRIES && !state.extensionReady) {
+              const notDetected = tt('toolbox.autoSubs.extension.notDetected', {}, 'Extension not detected');
+              updateExtensionStatus(false, notDetected, 'bad');
+              return;
+            }
+            pingTimer = setTimeout(tick, 5000);
+          };
+          tick();
+        }
+        setTimeout(sendPing, 500);
+      })();
+
+      bindEvents();
+      initDefaults();
+
+      // Episode change watcher (toast + manual update)
+      initStreamWatcher({
+        configStr: PAGE.configStr,
+        current: { videoId: PAGE.videoId, filename: PAGE.filename, videoHash: PAGE.videoHash },
+        buildUrl: (payload) => {
+          return '/auto-subtitles?config=' + encodeURIComponent(PAGE.configStr) +
+            '&videoId=' + encodeURIComponent(payload.videoId || '') +
+            '&filename=' + encodeURIComponent(payload.filename || '');
+        },
+      });
+    })();
+
   const defaults = {
     whisperModel: 'medium',
     diarization: false,
@@ -6191,211 +6428,6 @@ function generateAutoSubtitlePage(configStr, videoId, filename, config = {}) {
           '&filename=' + encodeURIComponent(payload.filename || '');
       }
     });
-
-    (function() {
-      const els = {
-        startBtn: document.getElementById('startAutoSubs'),
-        previewBtn: document.getElementById('previewSteps'),
-        status: document.getElementById('statusText'),
-        progress: document.getElementById('progressFill'),
-        log: document.getElementById('logArea'),
-        streamUrl: document.getElementById('streamUrl'),
-        hashStatus: document.getElementById('hashStatus'),
-        sourceLang: document.getElementById('detectedLang'),
-        targetLang: document.getElementById('targetLang'),
-        model: document.getElementById('whisperModel'),
-        translateToggle: document.getElementById('translateOutput'),
-        sendTimestamps: document.getElementById('sendTimestamps'),
-        singleBatch: document.getElementById('singleBatchMode'),
-        diarization: document.getElementById('enableDiarization'),
-        provider: document.getElementById('translationProvider'),
-        providerModel: document.getElementById('translationModel'),
-        srtPreview: document.getElementById('srtPreview'),
-        dlSrt: document.getElementById('downloadSrt'),
-        dlVtt: document.getElementById('downloadVtt'),
-        translations: document.getElementById('translationDownloads'),
-        prefill: document.getElementById('prefillFromVideo'),
-        clear: document.getElementById('clearInputs'),
-        extDot: document.getElementById('ext-dot'),
-        extLabel: document.getElementById('ext-label'),
-        extStatus: document.getElementById('ext-status')
-      };
-      const stepPills = {
-        fetch: document.getElementById('stepFetch'),
-        transcribe: document.getElementById('stepTranscribe'),
-        translate: document.getElementById('stepTranslate'),
-        deliver: document.getElementById('stepDeliver')
-      };
-      const startBtnLabel = els.startBtn ? els.startBtn.textContent : tt('toolbox.autoSubs.actions.start', {}, ${JSON.stringify(copy.steps.start)});
-      const state = {
-        extensionReady: false,
-        cacheBlocked: false,
-        autoSubsInFlight: false
-      };
-
-      function updateExtensionStatus(ready, text, tone) {
-        extensionReady = ready;
-        const dotTone = ready ? 'ok' : (tone || 'bad');
-        if (extDot) extDot.className = 'status-dot ' + dotTone;
-        if (extLabel) {
-          const readyText = text || tt('toolbox.status.ready', {}, 'Ready');
-          const missingText = text || tt('toolbox.autoSubs.extension.notDetected', {}, 'Extension not detected');
-          extLabel.textContent = ready ? readyText : missingText;
-          if (ready) {
-            extLabel.classList.add('ready');
-            extLabel.removeAttribute('href');
-            extLabel.removeAttribute('target');
-            extLabel.removeAttribute('rel');
-          } else {
-            extLabel.classList.remove('ready');
-            extLabel.setAttribute('href', EXT_INSTALL_URL);
-            extLabel.setAttribute('target', '_blank');
-            extLabel.setAttribute('rel', 'noopener noreferrer');
-          }
-        }
-        if (extStatus) extStatus.title = text || '';
-      }
-
-      function setAutoSubsInFlight(active) {
-        autoSubsInFlight = !!active;
-        if (startBtn) {
-          startBtn.disabled = autoSubsInFlight;
-          startBtn.textContent = autoSubsInFlight ? tt('toolbox.autoSubs.status.running', {}, 'Running...') : startBtnLabel;
-        }
-      }
-
-      window.addEventListener('message', (event) => {
-        const msg = event.data || {};
-        if (msg.source !== 'extension') return;
-        if (msg.type === 'SUBMAKER_PONG') {
-          pingRetries = 0;
-          if (pingTimer) {
-            clearTimeout(pingTimer);
-            pingTimer = null;
-          }
-          const readyLabel = msg.version
-            ? tt('toolbox.autoSubs.extension.readyWithVersion', { version: msg.version || '-' }, 'Ready (v' + (msg.version || '-') + ')')
-            : tt('toolbox.autoSubs.extension.ready', {}, 'Ready');
-          updateExtensionStatus(true, readyLabel);
-        }
-      });
-
-      function sendPing() {
-        if (pingTimer) {
-          clearTimeout(pingTimer);
-          pingTimer = null;
-        }
-        pingRetries = 0;
-        const tick = () => {
-          if (extensionReady) return;
-          pingRetries += 1;
-          const label = tt('toolbox.status.pinging', {}, 'Pinging extension...');
-          updateExtensionStatus(false, label, 'warn');
-          window.postMessage({ type: 'SUBMAKER_PING', source: 'webpage' }, '*');
-          if (pingRetries >= MAX_PING_RETRIES && !extensionReady) {
-            const notDetected = tt('toolbox.autoSubs.extension.notDetected', {}, 'Extension not detected');
-            updateExtensionStatus(false, notDetected, 'bad');
-            return;
-          }
-        pingTimer = setTimeout(tick, 5000);
-        };
-        tick();
-      }
-
-      setTimeout(sendPing, 500);
-
-      const pills = Object.values(stepPills);
-      function resetPills() {
-        pills.forEach(p => {
-          p.classList.remove('check', 'warn', 'danger');
-          p.textContent = p.textContent.replace(/^(OK|-)\s*/, '- ');
-        });
-        stepPills.fetch.classList.add('check');
-      }
-
-      function markStep(step, state = 'check') {
-        const pill = stepPills[step];
-        if (!pill) return;
-        pill.classList.remove('check', 'warn', 'danger');
-        pill.classList.add(state);
-        const label = pill.textContent.replace(/^(OK|-)\s*/, '');
-        const okLabel = tt('toolbox.autoSubs.status.ok', {}, 'OK');
-        pill.textContent = state === 'check' ? okLabel + ' ' + label : '- ' + label;
-      }
-
-      function simulateRun() {
-        setAutoSubsInFlight(true);
-        resetPills();
-        statusText.textContent = tt('toolbox.autoSubs.status.fetching', {}, 'Fetching stream...');
-        progressFill.style.width = '10%';
-
-        const steps = [
-          { key: 'transcribe', label: tt('toolbox.autoSubs.status.transcribing', { model: whisperModel.value }, 'Transcribing with Whisper (' + whisperModel.value + ')') },
-          { key: 'align', label: tt('toolbox.autoSubs.status.aligning', {}, 'Aligning and cleaning timestamps') },
-          { key: 'translate', label: translateOutput.checked ? tt('toolbox.autoSubs.status.translating', { target: targetLang.value || 'targets' }, 'Translating to ' + (targetLang.value || 'targets')) : tt('toolbox.autoSubs.status.skipTranslate', {}, 'Skipping translation') },
-          { key: 'deliver', label: tt('toolbox.autoSubs.status.preparing', {}, 'Preparing downloads') }
-        ];
-
-        steps.forEach((step, index) => {
-          setTimeout(() => {
-            markStep(step.key, 'check');
-            statusText.textContent = step.label;
-            progressFill.style.width = ((index + 2) * 20) + '%';
-
-            if (step.key === 'deliver') {
-              srtPreview.textContent = tt('toolbox.autoSubs.status.sample', {}, '1\\n00:00:00,000 --> 00:00:02,000\\n[Sample subtitle generated by Whisper]\\n');
-              downloadSrt.disabled = false;
-              downloadVtt.disabled = false;
-              statusText.textContent = tt('toolbox.autoSubs.status.done', {}, 'Done. Ready to download.');
-              progressFill.style.width = '100%';
-              setAutoSubsInFlight(false);
-            }
-          }, 600 * (index + 1));
-        });
-      }
-
-      startBtn?.addEventListener('click', () => {
-        if (autoSubsInFlight) return;
-        simulateRun();
-      });
-      previewBtn?.addEventListener('click', () => {
-        statusText.textContent = tt('toolbox.autoSubs.status.previewPlan', {}, 'Pipeline: fetch -> transcribe -> align -> translate -> deliver.');
-      });
-
-      prefillFromVideo?.addEventListener('click', () => {
-        if (BOOTSTRAP.filename) {
-          streamUrl.value = BOOTSTRAP.filename;
-        } else if (BOOTSTRAP.videoId) {
-          streamUrl.value = 'stremio://' + BOOTSTRAP.videoId;
-        } else {
-          streamUrl.value = '';
-        }
-      });
-
-      clearInputs?.addEventListener('click', () => {
-        streamUrl.value = '';
-        resetPills();
-        progressFill.style.width = '0%';
-        statusText.textContent = tt('toolbox.autoSubs.status.awaiting', {}, 'Awaiting input...');
-        srtPreview.textContent = tt('toolbox.autoSubs.status.noOutput', {}, 'No output yet.');
-        downloadSrt.disabled = true;
-        downloadVtt.disabled = true;
-        setAutoSubsInFlight(false);
-      });
-
-      // Episode change watcher (toast + manual update)
-    initStreamWatcher({
-      configStr: PAGE.configStr,
-      current: { videoId: PAGE.videoId, filename: PAGE.filename, videoHash: PAGE.videoHash },
-      buildUrl: (payload) => {
-        return '/auto-subtitles?config=' + encodeURIComponent(PAGE.configStr) +
-          '&videoId=' + encodeURIComponent(payload.videoId || '') +
-          '&filename=' + encodeURIComponent(payload.filename || '');
-      },
-      onEpisode: handleStreamUpdate,
-      notify: forwardMenuNotification
-    });
-  })();
   </script>
 </body>
 </html>
