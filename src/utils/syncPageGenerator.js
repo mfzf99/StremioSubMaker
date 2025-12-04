@@ -2316,14 +2316,14 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 hashStatusEl.textContent = tt(
                     'toolbox.autoSubs.hash.mismatch',
                     { linked, stream },
-                    `Hash mismatch: linked ${linked} vs pasted ${stream}. Cache uploads disabled.`
+                    'Hash mismatch: linked ' + linked + ' vs pasted ' + stream + '. Cache uploads disabled.'
                 );
             } else if (stream) {
                 const cacheLabel = cacheFlag ? tt('toolbox.autoSubs.hash.cacheDisabled', {}, ' (cache disabled)') : '';
                 hashStatusEl.textContent = tt(
                     'toolbox.autoSubs.hash.linked',
                     { linked, stream, cache: cacheLabel },
-                    `Linked: ${linked} | Stream: ${stream}${cacheLabel}`
+                    'Linked: ' + linked + ' | Stream: ' + stream + cacheLabel
                 );
             } else {
                 hashStatusEl.textContent = tt('toolbox.autoSubs.hash.waiting', {}, 'Waiting for stream hash...');
