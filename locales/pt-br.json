@@ -358,7 +358,8 @@
           "outputsEyebrow": "Resultados",
           "outputsTitle": "Legendas traduzidas",
           "outputsEmpty": "Ainda não há traduções. Escolha uma faixa e traduza para vê-las aqui.",
-          "reloadHint": "Pronto! Recarregue a lista de legendas no Stremio para ver as entradas xEmbed (Idioma)."
+          "reloadHint": "Pronto! Recarregue a lista de legendas no Stremio para ver as entradas xEmbed (Idioma).",
+          "reloadHintManual": "Foi detectada uma incompatibilidade de hash; as traduções foram salvas localmente. Baixe o SRT acima e arraste-o para o Stremio manualmente."
         },
         "status": {
           "queued": "na fila",

@@ -451,7 +451,6 @@ function quickNavScript() {
       let lastSig = '';
       let hasBaseline = false;
       let lastSeenTs = Date.now();
-      let staleCheckTimer = null;
       const MAX_SSE_RETRIES = 5;
       const POLL_INTERVAL_MS = Math.max(15000, Number(opts.pollIntervalMs) || 15000); // Faster fallback when SSE is blocked
       const POLL_BACKOFF_MAX_MS = 60000;
@@ -877,7 +876,6 @@ function quickNavScript() {
         if (sseRetryTimer) clearTimeout(sseRetryTimer);
         if (sseProbeTimer) clearTimeout(sseProbeTimer);
         if (ownerLeaseTimer) clearInterval(ownerLeaseTimer);
-        if (staleCheckTimer) clearInterval(staleCheckTimer);
         releaseOwner();
         releaseLock();
       });
@@ -888,13 +886,6 @@ function quickNavScript() {
         startSse();
       }
 
-      // Backstop: if SSE/broadcast is blocked, force a quick poll so we still surface updates
-      staleCheckTimer = setInterval(() => {
-        const isStale = (Date.now() - lastSeenTs) > STALE_BACKSTOP_MS;
-        if (isStale) {
-          pollOnce(true);
-        }
-      }, Math.min(STALE_BACKSTOP_MS, POLL_INTERVAL_MS));
     };
 
     (function() {

@@ -1488,7 +1488,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       outputsEyebrow: t('toolbox.embedded.step2.outputsEyebrow', {}, 'Outputs'),
       outputsTitle: t('toolbox.embedded.step2.outputsTitle', {}, 'Translated subtitles'),
       outputsEmpty: t('toolbox.embedded.step2.outputsEmpty', {}, 'No translations yet. Pick a track and translate to see them here.'),
-      reloadHint: t('toolbox.embedded.step2.reloadHint', {}, 'Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries.')
+      reloadHint: t('toolbox.embedded.step2.reloadHint', {}, 'Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries.'),
+      reloadHintManual: t('toolbox.embedded.step2.reloadHintManual', {}, 'Hash mismatch detected; translations were saved locally. Download the SRT above and drag it into Stremio manually.')
     },
     status: {
       queued: t('toolbox.embedded.status.queued', {}, 'queued'),
@@ -2305,6 +2306,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       background-size: 18px 18px, 18px 18px, auto;
       background-position: 0 0, 9px 9px, 0 0;
     }
+    .log-alert {
+      margin: 8px auto 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(239,68,68,0.35);
+      background: rgba(239,68,68,0.08);
+      color: var(--danger);
+      font-weight: 800;
+      text-align: center;
+      width: min(780px, 100%);
+      box-shadow: 0 8px 22px rgba(239,68,68,0.12);
+    }
     .log-header {
       display: inline-flex;
       align-items: center;
@@ -2658,6 +2671,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
             <span>${escapeHtml(copy.step1.logSub)}</span>
           </div>
           <div class="log" id="extract-log" aria-live="polite"></div>
+          <div class="log-alert" id="hash-mismatch-alert" style="display:none;" role="status" aria-live="polite"></div>
 
           <div class="result-box">
             <div class="result-head">
@@ -3373,7 +3387,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       step2Card: document.getElementById('step2Card'),
       selectedTrackSummary: document.getElementById('selected-track-summary'),
       modeSelect: document.getElementById('extract-mode'),
-      extractError: document.getElementById('extract-blocked-msg')
+      extractError: document.getElementById('extract-blocked-msg'),
+      hashMismatchAlert: document.getElementById('hash-mismatch-alert')
     };
     const tr = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
     const buttonLabels = {
@@ -3583,6 +3598,28 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       els.translateLog.insertBefore(logEntry, els.translateLog.firstChild);
     }
 
+    function updateReloadHint(visible) {
+      if (!els.reloadHint) return;
+      if (!visible) {
+        els.reloadHint.style.display = 'none';
+        return;
+      }
+      const message = state.cacheBlocked ? copy.step2.reloadHintManual : copy.step2.reloadHint;
+      els.reloadHint.textContent = message;
+      els.reloadHint.style.display = 'block';
+    }
+
+    function setHashMismatchAlert(message) {
+      if (!els.hashMismatchAlert) return;
+      if (!message) {
+        els.hashMismatchAlert.style.display = 'none';
+        els.hashMismatchAlert.textContent = '';
+        return;
+      }
+      els.hashMismatchAlert.textContent = message;
+      els.hashMismatchAlert.style.display = 'block';
+    }
+
     function resetExtractionState(clearLogs = false) {
       state.tracks = [];
       state.currentBatchId = null;
@@ -3594,6 +3631,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       state.cacheBlocked = false;
       state.cacheBlockInfo = null;
       state.streamHashInfo = null;
+      updateReloadHint(false);
+      setHashMismatchAlert('');
       renderSelectedTrackSummary();
       renderDownloads();
       renderTargets();
@@ -3948,9 +3987,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       });
 
       renderDownloadCards(els.translatedDownloads, els.translatedEmpty, translated);
-      if (els.reloadHint) {
-        els.reloadHint.style.display = translated.length ? 'block' : 'none';
-      }
+      updateReloadHint(translated.length > 0);
     }
 
     function renderDownloads() {
@@ -4295,9 +4332,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
           : (data.cached ? ('Finished ' + targetLang + ' (cached)') : ('Finished ' + targetLang));
         const finishMsg = doneKey && window.t ? window.t(doneKey, { lang: targetLang }, finishFallback) : finishFallback;
         logTranslate(finishMsg);
-        if (els.reloadHint) {
-          els.reloadHint.style.display = skipCacheUploads ? 'none' : 'block';
-        }
+        updateReloadHint(true);
         renderTargets();
       } catch (e) {
         state.targets[targetLang] = { status: 'failed', error: e.message };
@@ -4498,11 +4533,15 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       state.cacheBlocked = Boolean(streamHashInfo.hash && linkedHash && streamHashInfo.hash !== linkedHash);
       state.cacheBlockInfo = state.cacheBlocked ? { linked: linkedHash, stream: streamHashInfo.hash } : null;
       if (state.cacheBlocked) {
-        const mismatchMsg = 'Hash mismatch detected: linked stream (' + linkedHash + ') vs pasted URL (' + streamHashInfo.hash + '). Uploads to xEmbed are disabled; you can still download/translate and drag into Stremio manually.';
+        const mismatchMsg = 'Hash mismatch detected: linked stream (' + linkedHash + ') vs pasted URL (' + streamHashInfo.hash + '). The pasted URL and Linked Stream should match. Uploads to xEmbed are disabled; you can still download/translate and drag into Stremio manually.';
+        const stampedMsg = '[' + new Date().toLocaleTimeString() + '] ' + mismatchMsg;
+        setHashMismatchAlert(stampedMsg);
         logExtract(mismatchMsg);
         if (els.reloadHint) {
           els.reloadHint.style.display = 'none';
         }
+      } else {
+        setHashMismatchAlert('');
       }
       const mode = state.extractMode === 'complete' ? 'complete' : 'smart';
       const messageId = 'extract_' + Date.now();

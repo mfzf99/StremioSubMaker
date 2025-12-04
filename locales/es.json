@@ -358,7 +358,8 @@
           "outputsEyebrow": "Resultados",
           "outputsTitle": "Subtítulos traducidos",
           "outputsEmpty": "Aún no hay traducciones. Elige una pista y tradúcela para verlas aquí.",
-          "reloadHint": "¡Listo! Recarga la lista de subtítulos en Stremio para ver las entradas xEmbed (Idioma)."
+          "reloadHint": "¡Listo! Recarga la lista de subtítulos en Stremio para ver las entradas xEmbed (Idioma).",
+          "reloadHintManual": "Se detectó una discrepancia de hash; las traducciones se guardaron localmente. Descarga el SRT arriba y arrástralo a Stremio manualmente."
         },
         "status": {
           "queued": "en cola",

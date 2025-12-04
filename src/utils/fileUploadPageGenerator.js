@@ -146,8 +146,20 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
     const formatLanguageLabel = (code, fallback) => {
         if (!code) return fallback || '';
         const normalized = String(code).replace('_', '-');
-        const localized = languageDisplayNames ? (languageDisplayNames.of(normalized) || languageDisplayNames.of(normalized.split('-')[0])) : '';
-        return localized || fallback || code;
+        const localized = languageDisplayNames
+            ? (languageDisplayNames.of(normalized) || languageDisplayNames.of(normalized.split('-')[0]))
+            : '';
+
+        // Some Intl.DisplayNames implementations echo back the code for unknown/custom languages
+        // (e.g., 'pob' -> 'pob'), which would hide our friendly fallback. Treat those as missing.
+        const normalizedCode = normalized.toLowerCase();
+        const localizedValue = (localized || '').toString().trim();
+        const isCodeEcho = localizedValue &&
+            (localizedValue.toLowerCase() === normalizedCode ||
+             localizedValue.toLowerCase() === normalizedCode.replace('-', '_'));
+
+        if (localized && !isCodeEcho) return localized;
+        return fallback || code;
     };
 
     const targetLangs = clientConfig.targetLanguages.map(lang => {

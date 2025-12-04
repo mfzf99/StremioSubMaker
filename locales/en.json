@@ -358,7 +358,8 @@
           "outputsEyebrow": "Outputs",
           "outputsTitle": "Translated subtitles",
           "outputsEmpty": "No translations yet. Pick a track and translate to see them here.",
-          "reloadHint": "Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries."
+          "reloadHint": "Done! Reload the stream subtitle list in Stremio to see xEmbed (Language) entries.",
+          "reloadHintManual": "Hash mismatch detected; translations were saved locally. Download the SRT above and drag it into Stremio manually."
         },
         "status": {
           "queued": "queued",
