@@ -774,18 +774,29 @@ async function createAssemblyTranscript(apiKey, payload = {}, logger = null) {
             if (typeof logger === 'function') logger(message, level);
         } catch (_) { /* ignore logger errors */ }
     };
+    const languageCode = (payload.language_code || payload.languageCode || '').toString().trim();
+    // Keep payload compliant with AssemblyAI's transcript schema (unknown keys trigger schema errors)
     const requestBody = {
         punctuate: true,
         format_text: true,
-        language_code: payload.language_code || payload.languageCode || undefined,
         speaker_labels: payload.speaker_labels === true || payload.diarization === true,
-        words: true,
         filter_profanity: false,
         auto_chapters: false,
-        boost_param: null,
         disfluencies: true,
         audio_url: payload.audio_url
     };
+    if (languageCode) {
+        requestBody.language_code = languageCode;
+    } else {
+        // Let AssemblyAI auto-detect when the source language is unknown
+        requestBody.language_detection = true;
+    }
+    if (payload.word_boost && Array.isArray(payload.word_boost) && payload.word_boost.length > 0) {
+        requestBody.word_boost = payload.word_boost;
+    }
+    if (typeof payload.boost_param === 'string' && payload.boost_param) {
+        requestBody.boost_param = payload.boost_param;
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), ASSEMBLY_FETCH_TIMEOUT_MS);
     try {
@@ -800,8 +811,19 @@ async function createAssemblyTranscript(apiKey, payload = {}, logger = null) {
         });
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.id) {
-            const msg = data?.error || data?.message || `AssemblyAI transcript request failed (${response.status})`;
-            throw new Error(msg);
+            const errorDetails = [];
+            if (Array.isArray(data?.invalid_keys) && data.invalid_keys.length) {
+                errorDetails.push(`invalid keys: ${data.invalid_keys.join(', ')}`);
+            }
+            if (Array.isArray(data?.valid_keys) && data.valid_keys.length) {
+                errorDetails.push(`expected keys include: ${data.valid_keys.slice(0, 8).join(', ')}`);
+            }
+            const msg = [data?.error || data?.message || `AssemblyAI transcript request failed (${response.status})`, errorDetails.join(' | ')]
+                .filter(Boolean)
+                .join(' - ');
+            const err = new Error(msg);
+            err.details = data;
+            throw err;
         }
         logStep(`AssemblyAI transcript id: ${data.id}`, 'info');
         return data.id;
