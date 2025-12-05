@@ -5377,6 +5377,11 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         error: copy?.badges?.decodeError || tt('toolbox.autoSubs.badges.decodeError', {}, 'Decode failed')
       };
       function setDecodeBadge(tone, text, pulsing = false) {
+        if (els.decodeBadge) {
+          els.decodeBadge.classList.remove('check', 'warn', 'danger');
+          const toneClass = tone === 'ok' ? 'check' : tone === 'bad' ? 'danger' : 'warn';
+          els.decodeBadge.classList.add(toneClass);
+        }
         if (els.decodeBadgeDot) {
           const pulseClass = pulsing ? ' pulse' : '';
           els.decodeBadgeDot.className = 'status-dot ' + (tone || 'warn') + pulseClass;
@@ -5760,6 +5765,26 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         if (els.status) els.status.textContent = text;
       }
 
+      function enableDownloadLink(el, href, filename) {
+        if (!el) return;
+        if (href) el.href = href;
+        if (filename) el.download = filename;
+        el.classList.remove('disabled');
+        el.removeAttribute('aria-disabled');
+        el.style.pointerEvents = '';
+        el.style.opacity = '';
+      }
+
+      function disableDownloadLink(el) {
+        if (!el) return;
+        el.removeAttribute('href');
+        el.removeAttribute('download');
+        el.classList.add('disabled');
+        el.setAttribute('aria-disabled', 'true');
+        el.style.pointerEvents = 'none';
+        el.style.opacity = '0.6';
+      }
+
       function setProgress(pct) {
         if (els.progress) els.progress.style.width = Math.min(100, Math.max(0, pct || 0)) + '%';
       }
@@ -5831,22 +5856,42 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         renderVideoMeta({ ...source, title: fetched });
       }
 
+      function getPillParts(pill) {
+        if (!pill) return {};
+        const valueEl = pill.querySelector('.pill-value') || pill.querySelector('strong') || pill;
+        const dotEl = pill.querySelector('.status-dot');
+        const baseLabel =
+          pill.getAttribute('data-label') ||
+          (valueEl ? valueEl.textContent.replace(/^(OK|-)/, '').trim() : '');
+        return { valueEl, dotEl, baseLabel };
+      }
+
+      function applyPillState(pill, state = 'warn') {
+        const { valueEl, dotEl, baseLabel } = getPillParts(pill);
+        pill.classList.remove('check', 'warn', 'danger');
+        pill.classList.add(state);
+        const okLabel = tt('toolbox.autoSubs.status.ok', {}, 'OK');
+        if (valueEl && baseLabel) {
+          valueEl.textContent = state === 'check' ? `${okLabel} ${baseLabel}` : `- ${baseLabel}`;
+        }
+        if (dotEl) {
+          const tone = state === 'check' ? 'ok' : state === 'danger' ? 'bad' : 'warn';
+          const pulse = state === 'warn' ? ' pulse' : '';
+          dotEl.className = 'status-dot ' + tone + pulse;
+        }
+      }
+
       function resetPills() {
         Object.values(stepPills).forEach((pill) => {
           if (!pill) return;
-          pill.classList.remove('check', 'warn', 'danger');
-          pill.textContent = pill.textContent.replace(/^(OK|-)/, '-');
+          applyPillState(pill, 'warn');
         });
       }
 
       function markStep(step, state = 'check') {
         const pill = stepPills[step];
         if (!pill) return;
-        pill.classList.remove('check', 'warn', 'danger');
-        pill.classList.add(state);
-        const baseLabel = pill.textContent.replace(/^(OK|-)/, '').trim();
-        const okLabel = tt('toolbox.autoSubs.status.ok', {}, 'OK');
-        pill.textContent = state === 'check' ? `${okLabel} ${baseLabel}` : `- ${baseLabel}`;
+        applyPillState(pill, state);
       }
 
       function setInFlight(active) {
@@ -5988,21 +6033,25 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         if (els.dlSrt) {
           if (original?.srt) {
             const blob = new Blob([original.srt], { type: 'text/plain' });
-            els.dlSrt.href = original.downloadUrl || URL.createObjectURL(blob);
-            els.dlSrt.download = (PAGE.videoHash || 'video') + '_' + (original.languageCode || 'und') + '_autosub.srt';
-            els.dlSrt.disabled = false;
+            enableDownloadLink(
+              els.dlSrt,
+              original.downloadUrl || URL.createObjectURL(blob),
+              (PAGE.videoHash || 'video') + '_' + (original.languageCode || 'und') + '_autosub.srt'
+            );
           } else {
-            els.dlSrt.disabled = true;
+            disableDownloadLink(els.dlSrt);
           }
         }
         if (els.dlVtt) {
           if (original?.vtt) {
             const blob = new Blob([original.vtt], { type: 'text/vtt' });
-            els.dlVtt.href = original.downloadUrl || URL.createObjectURL(blob);
-            els.dlVtt.download = (PAGE.videoHash || 'video') + '_' + (original.languageCode || 'und') + '_autosub.vtt';
-            els.dlVtt.disabled = false;
+            enableDownloadLink(
+              els.dlVtt,
+              original.downloadUrl || URL.createObjectURL(blob),
+              (PAGE.videoHash || 'video') + '_' + (original.languageCode || 'und') + '_autosub.vtt'
+            );
           } else {
-            els.dlVtt.disabled = true;
+            disableDownloadLink(els.dlVtt);
           }
         }
 
@@ -6086,16 +6135,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         state.autoSubsCompleted = false;
         resetDecodeBadge();
         setPreview('');
-        if (els.dlSrt) {
-          els.dlSrt.disabled = true;
-          els.dlSrt.removeAttribute('href');
-          els.dlSrt.removeAttribute('download');
-        }
-        if (els.dlVtt) {
-          els.dlVtt.disabled = true;
-          els.dlVtt.removeAttribute('href');
-          els.dlVtt.removeAttribute('download');
-        }
+        disableDownloadLink(els.dlSrt);
+        disableDownloadLink(els.dlVtt);
         if (els.translations) {
           els.translations.innerHTML = '';
         }
@@ -6103,7 +6144,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       function setPreview(content) {
         if (els.srtPreview) {
-          els.srtPreview.textContent = content || tt('toolbox.autoSubs.status.noOutput', {}, 'No output yet.');
+          const maxLines = 80;
+          const maxChars = 4000;
+          const text = (content || '').toString();
+          const lines = text.split(/\r?\n/);
+          let display = text;
+          if (lines.length > maxLines) {
+            display = lines.slice(0, maxLines).join('\n') + `\n... (${lines.length - maxLines} more lines)`;
+          }
+          if (display.length > maxChars) {
+            display = display.slice(0, maxChars) + '\n... (preview truncated)';
+          }
+          els.srtPreview.textContent = display || tt('toolbox.autoSubs.status.noOutput', {}, 'No output yet.');
         }
       }
 
@@ -7190,17 +7242,28 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         linear-gradient(135deg, var(--surface), var(--surface-light));
     }
 
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 12px;
-      border-radius: 12px;
-      background: var(--surface-muted);
-      border: 1px solid var(--border);
-      font-weight: 700;
-      color: var(--text-primary);
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+    .pill-badge {
+      background: linear-gradient(135deg, rgba(8,164,213,0.14), rgba(255,255,255,0.08));
+      border: 1px solid rgba(8,164,213,0.25);
+      box-shadow: 0 12px 30px rgba(8,164,213,0.16);
+      padding: 10px 12px;
+    }
+    .pill-badge .pill-value { font-size: 14px; }
+    .pill-badge.warn {
+      border-color: rgba(251,191,36,0.45);
+      background: linear-gradient(135deg, rgba(251,191,36,0.14), rgba(255,255,255,0.08));
+      box-shadow: 0 12px 30px rgba(251,191,36,0.16);
+    }
+    .pill-badge.check {
+      border-color: rgba(34,197,94,0.45);
+      background: linear-gradient(135deg, rgba(34,197,94,0.14), rgba(255,255,255,0.08));
+      box-shadow: 0 12px 30px rgba(34,197,94,0.16);
+    }
+    .pill-badge.danger {
+      border-color: rgba(244,63,94,0.45);
+      background: linear-gradient(135deg, rgba(244,63,94,0.14), rgba(255,255,255,0.08));
+      box-shadow: 0 12px 30px rgba(244,63,94,0.16);
     }
 
     .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
@@ -7838,11 +7901,48 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             </div>
             <div class="status" id="statusText">${escapeHtml(copy.steps.awaiting)}</div>
             <div class="chips" style="margin-top:10px;">
-              <span class="pill check" id="stepFetch">- ${escapeHtml(copy.steps.pills.fetch)}</span>
-              <span class="pill" id="stepTranscribe">- ${escapeHtml(copy.steps.pills.transcribe)}</span>
-              <span class="pill" id="stepAlign">- ${escapeHtml(copy.steps.pills.align)}</span>
-              <span class="pill" id="stepTranslate">- ${escapeHtml(copy.steps.pills.translate)}</span>
-              <span class="pill" id="stepDeliver">- ${escapeHtml(copy.steps.pills.deliver)}</span>
+              <div class="status-badge pill-badge warn" id="stepFetch" data-label="${escapeHtml(copy.steps.pills.fetch)}" style="gap:8px;">
+                <span class="status-dot warn" id="stepFetchDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.steps.pills.fetch)}</span>
+                  <strong class="pill-value">${escapeHtml('- ' + copy.steps.pills.fetch)}</strong>
+                </div>
+              </div>
+              <div class="status-badge pill-badge warn" id="decodeBadge" style="gap:8px;">
+                <span class="status-dot warn" id="decodeBadgeDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.badges.decode)}</span>
+                  <strong id="decodeBadgeValue">${escapeHtml(copy.badges.pending)}</strong>
+                </div>
+              </div>
+              <div class="status-badge pill-badge warn" id="stepTranscribe" data-label="${escapeHtml(copy.steps.pills.transcribe)}" style="gap:8px;">
+                <span class="status-dot warn" id="stepTranscribeDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.steps.pills.transcribe)}</span>
+                  <strong class="pill-value">${escapeHtml('- ' + copy.steps.pills.transcribe)}</strong>
+                </div>
+              </div>
+              <div class="status-badge pill-badge warn" id="stepAlign" data-label="${escapeHtml(copy.steps.pills.align)}" style="gap:8px;">
+                <span class="status-dot warn" id="stepAlignDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.steps.pills.align)}</span>
+                  <strong class="pill-value">${escapeHtml('- ' + copy.steps.pills.align)}</strong>
+                </div>
+              </div>
+              <div class="status-badge pill-badge warn" id="stepTranslate" data-label="${escapeHtml(copy.steps.pills.translate)}" style="gap:8px;">
+                <span class="status-dot warn" id="stepTranslateDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.steps.pills.translate)}</span>
+                  <strong class="pill-value">${escapeHtml('- ' + copy.steps.pills.translate)}</strong>
+                </div>
+              </div>
+              <div class="status-badge pill-badge warn" id="stepDeliver" data-label="${escapeHtml(copy.steps.pills.deliver)}" style="gap:8px;">
+                <span class="status-dot warn" id="stepDeliverDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.steps.pills.deliver)}</span>
+                  <strong class="pill-value">${escapeHtml('- ' + copy.steps.pills.deliver)}</strong>
+                </div>
+              </div>
             </div>
             <div class="log-block">
               <div class="log-header" aria-hidden="true">
@@ -7859,24 +7959,15 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         <div class="step-card locked" id="autoStep4Card" data-locked-label="${escapeHtml(copy.locks.needContinue)}">
           <div class="step-title"><span class="step-chip">${escapeHtml(copy.steps.four)}</span><span>${escapeHtml(copy.steps.outputTitle)}</span></div>
           <div class="step-body">
-            <div class="badge-row" style="margin-bottom:8px; justify-content:flex-start;">
-              <div class="status-badge" id="decodeBadge">
-                <span class="status-dot warn" id="decodeBadgeDot"></span>
-                <div class="status-labels">
-                  <span class="label-eyebrow">${escapeHtml(copy.badges.decode)}</span>
-                  <strong id="decodeBadgeValue">${escapeHtml(copy.badges.pending)}</strong>
-                </div>
-              </div>
-            </div>
             <div class="row">
               <div>
                 <label>${escapeHtml(copy.steps.generated)}</label>
-                <div style="padding:12px; border:1px solid var(--border); border-radius:12px; background: var(--surface-light); min-height:120px;" id="srtPreview">
+                <div style="padding:12px; border:1px solid var(--border); border-radius:12px; background: var(--surface-light); min-height:120px; max-height:240px; overflow:auto; white-space:pre-wrap; font-family: var(--mono-font, Consolas, 'Courier New', monospace);" id="srtPreview">
                   ${escapeHtml(copy.steps.noOutput)}
                 </div>
                 <div class="controls" style="margin-top:8px;">
-                  <button class="btn secondary" disabled id="downloadSrt">${escapeHtml(copy.steps.downloadSrt)}</button>
-                  <button class="btn secondary" disabled id="downloadVtt">${escapeHtml(copy.steps.downloadVtt)}</button>
+                  <a class="btn secondary disabled" aria-disabled="true" id="downloadSrt">${escapeHtml(copy.steps.downloadSrt)}</a>
+                  <a class="btn secondary disabled" aria-disabled="true" id="downloadVtt">${escapeHtml(copy.steps.downloadVtt)}</a>
                 </div>
               </div>
               <div>

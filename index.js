@@ -1020,6 +1020,18 @@ function resolveAutoSubTranslationProvider(config, providerKeyOverride, modelOve
     const mergedParams = mergeProviderParameters(getDefaultProviderParameters(), config?.providerParameters || {});
     const normalizeKey = (key) => String(key || '').trim().toLowerCase();
     const desiredKey = normalizeKey(providerKeyOverride || config?.mainProvider || 'gemini');
+    const maybeBuildProvider = (key, cfgOverride = null) => {
+        const params = mergedParams[key] || mergedParams.default || {};
+        const cfg = cfgOverride || (providers[key] || {});
+        const provider = createProviderInstance(key, cfg, params);
+        if (!provider) return null;
+        return {
+            provider,
+            providerName: key,
+            providerModel: cfg.model,
+            fallbackProviderName: ''
+        };
+    };
     const findProviderConfig = () => {
         if (providers[desiredKey]) return providers[desiredKey];
         const match = Object.keys(providers || {}).find((k) => normalizeKey(k) === desiredKey);
@@ -1034,17 +1046,44 @@ function resolveAutoSubTranslationProvider(config, providerKeyOverride, modelOve
         return null;
     };
     const providerConfig = findProviderConfig();
-    if (!providerConfig || providerConfig.enabled === false) return null;
-    const params = mergedParams[desiredKey] || mergedParams.default || {};
-    const cfg = { ...providerConfig, model: modelOverride || providerConfig.model || config?.geminiModel };
-    const provider = createProviderInstance(desiredKey, cfg, params);
-    if (!provider) return null;
-    return {
-        provider,
-        providerName: desiredKey,
-        providerModel: cfg.model,
-        fallbackProviderName: ''
-    };
+    if (providerConfig && providerConfig.enabled !== false) {
+        const params = mergedParams[desiredKey] || mergedParams.default || {};
+        const cfg = { ...providerConfig, model: modelOverride || providerConfig.model || config?.geminiModel };
+        const provider = createProviderInstance(desiredKey, cfg, params);
+        if (provider) {
+            return {
+                provider,
+                providerName: desiredKey,
+                providerModel: cfg.model,
+                fallbackProviderName: ''
+            };
+        }
+    }
+    // Fallback: try any enabled provider with a key (Gemini first)
+    const geminiKey = config?.geminiApiKey || config?.geminiKey;
+    if (geminiKey) {
+        const fallback = maybeBuildProvider('gemini', {
+            enabled: true,
+            apiKey: geminiKey,
+            model: modelOverride || config?.geminiModel
+        });
+        if (fallback) {
+            fallback.fallbackProviderName = desiredKey || 'gemini';
+            return fallback;
+        }
+    }
+    const firstAvailable = Object.keys(providers || {}).find((k) => {
+        const cfg = providers[k];
+        return cfg && cfg.apiKey && cfg.enabled !== false;
+    });
+    if (firstAvailable) {
+        const fallback = maybeBuildProvider(firstAvailable);
+        if (fallback) {
+            fallback.fallbackProviderName = desiredKey;
+            return fallback;
+        }
+    }
+    return null;
 }
 
 // Security: LRU cache for request deduplication to prevent duplicate processing (max 500 entries)
@@ -4630,7 +4669,10 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                 log.warn(() => '[Auto Subs API] No translation provider resolved; skipping translations');
                 logStep('No translation provider configured; skipping translations', 'warn');
             } else {
-                logStep(`Using translation provider ${providerBundle.providerName} (${providerBundle.providerModel || 'default model'})`, 'info');
+                const providerLabelFull = providerBundle.fallbackProviderName
+                    ? `${providerBundle.providerName} (fallback from ${providerBundle.fallbackProviderName})`
+                    : providerBundle.providerName;
+                logStep(`Using translation provider ${providerLabelFull} (${providerBundle.providerModel || 'default model'})`, 'info');
                 const translationEngine = new TranslationEngine(
                     providerBundle.provider,
                     providerBundle.providerModel,
