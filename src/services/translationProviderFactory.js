@@ -171,6 +171,21 @@ function resolveCfWorkersCredentials(rawKey) {
 function createProviderInstance(providerKey, providerConfig = {}, providerParams = {}) {
   const key = String(providerKey || '').toLowerCase();
   switch (key) {
+    case 'gemini':
+      return new GeminiService(
+        providerConfig.apiKey,
+        providerConfig.model,
+        {
+          ...providerParams,
+          // Keep compatibility with existing advancedSettings usage
+          maxOutputTokens: providerParams.maxOutputTokens,
+          translationTimeout: providerParams.translationTimeout,
+          maxRetries: providerParams.maxRetries,
+          thinkingBudget: providerParams.thinkingBudget,
+          temperature: providerParams.temperature,
+          topP: providerParams.topP
+        }
+      );
     case 'openai':
       return new OpenAICompatibleProvider({
         apiKey: providerConfig.apiKey,
