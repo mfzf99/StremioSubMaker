@@ -889,6 +889,14 @@ function assemblyWordsToSegments(words = [], fallbackText = '') {
         if (fallbackText) return [{ start: 0, end: Math.max(2, Math.min(8, fallbackText.split(' ').length / 2)), text: fallbackText }];
         return [];
     }
+    const normalizeTimeSec = (raw) => {
+        const n = Number(raw ?? 0);
+        if (!Number.isFinite(n)) return 0;
+        // AssemblyAI returns milliseconds; some clients might already send seconds (floats).
+        if (n >= 1000) return n / 1000;
+        if (Number.isInteger(n) && n > 10) return n / 1000; // integer but small -> likely ms
+        return n; // assume already in seconds (float)
+    };
     const segments = [];
     let buffer = [];
     let segStart = null;
@@ -911,10 +919,8 @@ function assemblyWordsToSegments(words = [], fallbackText = '') {
         lastEnd = null;
     };
     words.forEach((word) => {
-        const startMs = Number(word.start ?? word.start_time ?? word.offset_start_ms ?? 0);
-        const endMs = Number(word.end ?? word.end_time ?? word.offset_end_ms ?? 0);
-        const startSec = startMs > 1000 ? startMs / 1000 : startMs;
-        const endSec = endMs > 1000 ? endMs / 1000 : endMs;
+        const startSec = normalizeTimeSec(word.start ?? word.start_time ?? word.offset_start_ms ?? 0);
+        const endSec = normalizeTimeSec(word.end ?? word.end_time ?? word.offset_end_ms ?? 0);
         if (segStart === null) segStart = startSec;
         lastEnd = endSec || startSec;
         buffer.push((word.text || word.word || '').toString());
