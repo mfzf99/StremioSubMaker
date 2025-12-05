@@ -377,6 +377,10 @@
         "heroSubtitle": "توليد ترجمات باستخدام Whisper ثم ترجمتها",
         "badges": {
           "hash": "تجزئة (Hash)",
+          "decode": "فك التشفير",
+          "decodeWorking": "فك التشفير عبر FFmpeg",
+          "decodeReady": "اكتمل فك التشفير",
+          "decodeError": "فشل فك التشفير",
           "versionFallback": "غير متاح",
           "pending": "قيد الانتظار"
         },

@@ -5279,7 +5279,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         assemblySendFullVideo: document.getElementById('assemblySendFullVideo'),
         assemblyOptions: document.getElementById('assemblyOptions'),
         modeHelperText: document.getElementById('modeHelperText'),
-        assemblyModeHelper: document.getElementById('assemblyModeHelper')
+        assemblyModeHelper: document.getElementById('assemblyModeHelper'),
+        decodeBadge: document.getElementById('decodeBadge'),
+        decodeBadgeDot: document.getElementById('decodeBadgeDot'),
+        decodeBadgeValue: document.getElementById('decodeBadgeValue')
       };
       const stepPills = {
         fetch: document.getElementById('stepFetch'),
@@ -5294,6 +5297,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       const state = {
         extensionReady: false,
         cacheBlocked: false,
+        decodeStatus: 'pending',
         autoSubsInFlight: false,
         step1Confirmed: false,
         step2Confirmed: false,
@@ -5364,6 +5368,71 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         needStep2: (copy?.locks && copy.locks.needStep2) || tt('toolbox.autoSubs.locks.needStep2', {}, 'Complete Step 2 and press Continue to proceed.'),
         needRun: (copy?.locks && copy.locks.needRun) || tt('toolbox.autoSubs.locks.needRun', {}, 'Run auto-subs to unlock downloads.')
       };
+      const decodeLabels = {
+        pending: copy?.badges?.pending || tt('toolbox.autoSubs.badges.pending', {}, 'pending'),
+        working: copy?.badges?.decodeWorking || tt('toolbox.autoSubs.badges.decodeWorking', {}, 'FFmpeg decoding'),
+        ready: copy?.badges?.decodeReady || tt('toolbox.autoSubs.badges.decodeReady', {}, 'Decode ready'),
+        error: copy?.badges?.decodeError || tt('toolbox.autoSubs.badges.decodeError', {}, 'Decode failed')
+      };
+      function setDecodeBadge(tone, text, pulsing = false) {
+        if (els.decodeBadgeDot) {
+          const pulseClass = pulsing ? ' pulse' : '';
+          els.decodeBadgeDot.className = 'status-dot ' + (tone || 'warn') + pulseClass;
+        }
+        if (els.decodeBadgeValue) {
+          els.decodeBadgeValue.textContent = text || decodeLabels.pending;
+        }
+      }
+      function resetDecodeBadge() {
+        state.decodeStatus = 'pending';
+        setDecodeBadge('warn', decodeLabels.pending, false);
+      }
+      function markDecodeWorking(text) {
+        if (state.decodeStatus === 'done' || state.decodeStatus === 'error') return;
+        state.decodeStatus = 'working';
+        setDecodeBadge('warn', text || decodeLabels.working, true);
+      }
+      function markDecodeDone(text) {
+        state.decodeStatus = 'done';
+        setDecodeBadge('ok', text || decodeLabels.ready, false);
+      }
+      function markDecodeError(text) {
+        state.decodeStatus = 'error';
+        setDecodeBadge('bad', text || decodeLabels.error, false);
+      }
+      function maybeUpdateDecodeFromLog(message, tone = '') {
+        const text = (message || '').toString();
+        if (!text) return;
+        const lower = text.toLowerCase();
+        const toneLower = (tone || '').toString().toLowerCase();
+        const successHit =
+          lower.includes('audio extraction complete') ||
+          lower.includes('audio ready') ||
+          lower.includes('ffmpeg produced') ||
+          lower.includes('ffmpeg demux: completed') ||
+          lower.includes('demux: completed');
+        if (successHit) {
+          markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+          return;
+        }
+        const errorHit =
+          lower.includes('audio extraction failed') ||
+          (lower.includes('ffmpeg') && (lower.includes('fail') || lower.includes('error'))) ||
+          (lower.includes('decode') && lower.includes('audio') && lower.includes('fail'));
+        if (errorHit || toneLower === 'error') {
+          markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+          return;
+        }
+        const workingHit =
+          lower.includes('ffmpeg') ||
+          lower.includes('audio extraction') ||
+          lower.includes('audio windows') ||
+          lower.includes('demux') ||
+          (lower.includes('decode') && lower.includes('audio'));
+        if (workingHit) {
+          markDecodeWorking(copy?.badges?.decodeWorking || decodeLabels.working);
+        }
+      }
       function lockSection(el, label) {
         if (!el) return;
         if (label) el.setAttribute('data-locked-label', label);
@@ -5660,6 +5729,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         entry.appendChild(time);
         entry.appendChild(text);
         els.log.insertBefore(entry, els.log.firstChild);
+
+        maybeUpdateDecodeFromLog(message, tone);
 
         while (els.log.childNodes.length > LOG_LIMIT) {
           els.log.removeChild(els.log.lastChild);
@@ -5997,6 +6068,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           markStep('translate', 'warn');
         }
         markStep('deliver', 'check');
+        if (state.decodeStatus !== 'done') {
+          markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+        }
         setProgress(100);
         setStatus(tt('toolbox.autoSubs.status.done', {}, 'Done. Ready to download.'));
         const finishedMsg = tt('toolbox.autoSubs.logs.finished', {}, 'Finished. Downloads are ready.');
@@ -6008,6 +6082,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       function resetOutputs() {
         state.autoSubsCompleted = false;
+        resetDecodeBadge();
         setPreview('');
         if (els.dlSrt) {
           els.dlSrt.disabled = true;
@@ -6098,6 +6173,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         state.autoSubsResolver = null;
         state.autoSubsReject = null;
         const err = new Error('Extension did not return a transcript in time');
+        if (state.decodeStatus !== 'done') {
+          markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+        }
         if (typeof rejecter === 'function') rejecter(err);
         else appendLog(err.message, 'error');
       }
@@ -6201,8 +6279,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           setProgress(Math.max(current, Math.min(95, msg.progress)));
         }
         if (msg.stage === 'fetch') {
+          markDecodeWorking(copy?.badges?.decodeWorking || decodeLabels.working);
           markStep('fetch', logTone === 'error' ? 'danger' : 'check');
         } else if (msg.stage === 'transcribe') {
+          if (state.decodeStatus !== 'done') {
+            markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+          }
           markStep('transcribe', logTone === 'error' ? 'danger' : 'warn');
         } else if (msg.stage === 'package') {
           markStep('align', 'warn');
@@ -6293,6 +6375,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         resetAutoSubWait();
         refreshStepLocks(lockReasons.needRun);
         clearLog();
+        markDecodeWorking(copy?.badges?.decodeWorking || decodeLabels.working);
         appendLog(tt('toolbox.autoSubs.logs.previewPlan', {}, 'Pipeline: fetch -> transcribe -> align -> translate -> deliver.'), 'info');
         setInFlight(true);
         resetPills();
@@ -6326,6 +6409,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             transcript = data.original || null;
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
+            if (state.decodeStatus !== 'done') {
+              markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+            }
             setProgress(60);
             appendLog(tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.'), 'success');
             setPreview(transcript?.srt || '');
@@ -6357,6 +6443,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             }
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
+            if (state.decodeStatus !== 'done') {
+              markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+            }
             setProgress(60);
             appendLog(tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.'), 'success');
             setPreview(transcript.srt || '');
@@ -6389,6 +6478,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             appendLog(tt('toolbox.autoSubs.logs.cfBody', {}, 'Cloudflare response: ') + String(error.cfBody).slice(0, 400), 'warn');
           }
           appendLog(tt('toolbox.autoSubs.logs.errorPrefix', {}, 'Error: ') + (error.message || error), 'error');
+          if (state.decodeStatus !== 'done') {
+            markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+          }
         } finally {
           state.autoSubsCompleted = state.autoSubsCompleted === true;
           refreshStepLocks(lockReasons.needRun);
@@ -6672,6 +6764,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       extension: t('toolbox.status.extension', {}, 'Extension'),
       waitingExtension: t('toolbox.autoSubs.extension.waiting', {}, 'Waiting for extension...'),
       hash: t('toolbox.autoSubs.badges.hash', {}, 'Hash'),
+      decode: t('toolbox.autoSubs.badges.decode', {}, 'Decode'),
+      decodeWorking: t('toolbox.autoSubs.badges.decodeWorking', {}, 'FFmpeg decoding'),
+      decodeReady: t('toolbox.autoSubs.badges.decodeReady', {}, 'Decode ready'),
+      decodeError: t('toolbox.autoSubs.badges.decodeError', {}, 'Decode failed'),
       versionFallback: t('toolbox.autoSubs.badges.versionFallback', {}, 'n/a'),
       pending: t('toolbox.autoSubs.badges.pending', {}, 'pending')
     },
@@ -7761,6 +7857,15 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         <div class="step-card locked" id="autoStep4Card" data-locked-label="${escapeHtml(copy.locks.needContinue)}">
           <div class="step-title"><span class="step-chip">${escapeHtml(copy.steps.four)}</span><span>${escapeHtml(copy.steps.outputTitle)}</span></div>
           <div class="step-body">
+            <div class="badge-row" style="margin-bottom:8px; justify-content:flex-start;">
+              <div class="status-badge" id="decodeBadge">
+                <span class="status-dot warn" id="decodeBadgeDot"></span>
+                <div class="status-labels">
+                  <span class="label-eyebrow">${escapeHtml(copy.badges.decode)}</span>
+                  <strong id="decodeBadgeValue">${escapeHtml(copy.badges.pending)}</strong>
+                </div>
+              </div>
+            </div>
             <div class="row">
               <div>
                 <label>${escapeHtml(copy.steps.generated)}</label>
