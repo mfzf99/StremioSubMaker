@@ -1719,11 +1719,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(copy.meta.documentTitle)}</title>
   ${localeBootstrap}
-  <link rel="icon" type="image/svg+xml" href="/favicon-toolbox.svg">
-  <link rel="shortcut icon" href="/favicon-toolbox.svg">
-  <link rel="apple-touch-icon" href="/favicon-toolbox.svg">
-  <script src="/js/sw-register.js" defer></script>
-  <link rel="stylesheet" href="/css/combobox.css">
+  <link rel="icon" type="image/svg+xml" href="/favicon-toolbox.svg?_cb=${escapeHtml(appVersion || 'dev')}">
+  <link rel="shortcut icon" href="/favicon-toolbox.svg?_cb=${escapeHtml(appVersion || 'dev')}">
+  <link rel="apple-touch-icon" href="/favicon-toolbox.svg?_cb=${escapeHtml(appVersion || 'dev')}">
+  <script src="/js/sw-register.js?_cb=${escapeHtml(appVersion || 'dev')}" defer></script>
+  <link rel="stylesheet" href="/css/combobox.css?_cb=${escapeHtml(appVersion || 'dev')}">
   <script>
     (function() {
       var html = document.documentElement;
@@ -2975,8 +2975,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     </section>
   </div>
 
-  <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}"></script>
-  <script src="/js/combobox.js"></script>
+  <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
+  <script src="/js/combobox.js?_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script>
     ${quickNavScript()}
     if (window.ComboBox && typeof window.ComboBox.enhanceAll === 'function') {
@@ -7346,8 +7346,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     </div>
   </div>
 
-  <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}"></script>
-  <script src="/js/combobox.js"></script>
+  <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
+  <script src="/js/combobox.js?_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script>
     ${quickNavScript()}
     const BOOTSTRAP = ${safeJsonSerialize({
