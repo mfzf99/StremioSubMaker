@@ -182,14 +182,17 @@ function buildLinkedVideoLabel(videoId, streamFilename, resolvedTitle, t) {
   const parsed = parseStremioId(videoId);
   const cleanedFilename = streamFilename ? cleanDisplayName(streamFilename) : '';
   const movieTitle = resolvedTitle || cleanedFilename || parsed?.imdbId || parsed?.animeId || streamFilename;
+  const fallbackTitle = (t ? t('sync.meta.linkedFallback', {}, 'linked stream') : 'linked stream');
+  const baseTitle = movieTitle || fallbackTitle;
 
   if (parsed && (parsed.type === 'episode' || parsed.type === 'anime-episode')) {
-    const baseTitle = movieTitle || (t ? t('sync.meta.linkedFallback', {}, 'linked stream') : 'linked stream');
     const suffix = formatEpisodeTag(parsed) || (t ? t('sync.meta.episodeFallback', {}, 'Episode') : 'Episode');
+    if (!suffix) return baseTitle;
+    if (baseTitle && suffix && baseTitle.toUpperCase().includes(suffix.toUpperCase())) return baseTitle;
     return `${baseTitle} - ${suffix}`;
   }
 
-  return movieTitle || (t ? t('sync.meta.linkedFallback', {}, 'linked stream') : 'linked stream');
+  return baseTitle;
 }
 
 async function fetchLinkedTitleServer(videoId) {
@@ -421,7 +424,9 @@ function formatProviderName(name) {
     together: 'Together',
     xai: 'xAI',
     ollama: 'Ollama',
-    localai: 'LocalAI'
+    localai: 'LocalAI',
+    cfworkers: 'Cloudflare',
+    cloudflare: 'Cloudflare'
   };
   if (map[lower]) return map[lower];
   return raw
@@ -452,14 +457,19 @@ function getProviderSummary(config, translator) {
     const providers = config.providers || {};
     const names = [];
     const seen = new Set();
-    const add = (name, enabled) => {
+    const add = (name, enabled, front) => {
       const norm = String(name || '').trim();
       if (!norm || enabled !== true) return;
       const key = norm.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-      names.push(norm);
+      if (front) names.unshift(norm);
+      else names.push(norm);
     };
+    const geminiConfigured = Boolean(config.geminiModel || config.geminiKey || config.geminiApiKey || providers.gemini);
+    const geminiEnabled = providers.gemini ? providers.gemini.enabled !== false : geminiConfigured;
+    // Always show Gemini first when present
+    if (geminiConfigured) add(formatProviderName('Gemini'), geminiEnabled, true);
     if (config.multiProviderEnabled && config.mainProvider) {
       add(formatProviderName(config.mainProvider), providers[config.mainProvider]?.enabled === true);
     }
@@ -469,9 +479,6 @@ function getProviderSummary(config, translator) {
     Object.keys(providers).forEach(key => {
       add(formatProviderName(key), providers[key]?.enabled);
     });
-    const geminiConfigured = Boolean(config.geminiModel || config.geminiKey || config.geminiApiKey || providers.gemini);
-    const geminiEnabled = providers.gemini ? providers.gemini.enabled !== false : geminiConfigured;
-    if (geminiConfigured) add(formatProviderName('Gemini'), geminiEnabled);
     const fallback = translator ? translator('toolbox.summary.notSet', {}, 'Not set yet') : 'Not set yet';
     return names.length ? names.join(', ') : fallback;
   } catch (_) {
@@ -3726,6 +3733,17 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const spaced = withoutExt.replace(/[_\\.]+/g, ' ').replace(/\s+/g, ' ').trim();
       return spaced || withoutExt || lastSegment;
     }
+    function isPlaceholderTitle(title, filename, videoId) {
+      if (!title) return true;
+      const normalizedTitle = cleanLinkedName(title).toLowerCase();
+      const candidates = [
+        cleanLinkedName(filename || '').toLowerCase(),
+        cleanLinkedName(videoId || '').toLowerCase(),
+        String(videoId || '').toLowerCase()
+      ].filter(Boolean);
+      if (!normalizedTitle) return true;
+      return candidates.includes(normalizedTitle);
+    }
 
     function normalizeImdbId(id) {
       if (!id) return '';
@@ -3814,12 +3832,15 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const cleanedVideoId = cleanLinkedName(videoId);
       const movieTitle = resolvedTitle || cleanedFilename || cleanedVideoId || videoId;
       const episodeTag = formatEpisodeTag(videoId);
+      const fallbackTitle = tt('sync.meta.linkedFallback', {}, 'linked stream');
+      const baseTitle = movieTitle || fallbackTitle;
       if (parsed && (parsed.type === 'episode' || parsed.type === 'anime')) {
-        const baseTitle = movieTitle || tt('sync.meta.linkedFallback', {}, 'linked stream');
         const suffix = episodeTag || tt('sync.meta.episodeFallback', {}, 'Episode');
-      return suffix ? (baseTitle + ' - ' + suffix) : baseTitle;
+        if (!suffix) return baseTitle;
+        if (baseTitle && suffix && baseTitle.toUpperCase().includes(suffix.toUpperCase())) return baseTitle;
+        return suffix ? (baseTitle + ' - ' + suffix) : baseTitle;
       }
-      return movieTitle || tt('sync.meta.linkedFallback', {}, 'linked stream');
+      return baseTitle;
     }
 
     function updateTranslationContext(source = {}) {
@@ -3859,11 +3880,12 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     async function updateVideoMeta(payload) {
       if (!els.videoMetaTitle || !els.videoMetaSubtitle) return;
       const source = payload || BOOTSTRAP;
+      const knownTitle = source.title || source.linkedTitle || BOOTSTRAP.linkedTitle || '';
       updatePlaceholderBlock(source);
       const episodeTag = formatEpisodeTag(source.videoId);
-      const fallbackTitle = buildLinkedVideoLabel(source.videoId, source.filename, source.title);
+      const fallbackTitle = buildLinkedVideoLabel(source.videoId, source.filename, knownTitle);
       const fallbackDetails = [];
-      if (source.title) fallbackDetails.push(formatMetaLabel('title', source.title));
+      if (knownTitle) fallbackDetails.push(formatMetaLabel('title', knownTitle));
       else if (source.videoId) fallbackDetails.push(formatMetaLabel('videoId', source.videoId));
       if (episodeTag) fallbackDetails.push(formatMetaLabel('episode', episodeTag));
       if (source.filename) fallbackDetails.push(formatMetaLabel('file', source.filename));
@@ -3873,16 +3895,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       updateTranslationContext({ ...source, title: renderedFallbackTitle, videoId: source.videoId, filename: source.filename });
 
       const requestId = ++linkedTitleRequestId;
-      const fetchedTitle = source.title || await fetchLinkedTitle(source.videoId);
+      const shouldFetch = source.videoId && (!knownTitle || isPlaceholderTitle(knownTitle, source.filename, source.videoId));
+      const fetchedTitle = shouldFetch ? await fetchLinkedTitle(source.videoId) : knownTitle;
       if (requestId !== linkedTitleRequestId) return;
 
       const details = [];
-      if (fetchedTitle) details.push(formatMetaLabel('title', fetchedTitle));
+      const resolvedFetchedTitle = fetchedTitle || knownTitle;
+      if (resolvedFetchedTitle) details.push(formatMetaLabel('title', resolvedFetchedTitle));
       else if (source.videoId) details.push(formatMetaLabel('videoId', source.videoId));
       if (episodeTag) details.push(formatMetaLabel('episode', episodeTag));
       if (source.filename) details.push(formatMetaLabel('file', source.filename));
 
-      const resolvedTitle = buildLinkedVideoLabel(source.videoId, source.filename, fetchedTitle);
+      const resolvedTitle = buildLinkedVideoLabel(source.videoId, source.filename, resolvedFetchedTitle);
       const renderedResolvedTitle = resolvedTitle || metaTemplates.none;
       els.videoMetaTitle.textContent = renderedResolvedTitle;
       els.videoMetaSubtitle.textContent = details.join(metaSeparator) || metaTemplates.waiting;
