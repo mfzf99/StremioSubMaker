@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.15
+
+- **Locale/i18n resilience:** `/api/locale` now favors explicit `lang` values, syncs translators to the resolved language, falls back safely to defaults, and reapplies translations after late partial/combobox loads; the UI-language dock self-builds if the partial is missing and flags force emoji-safe fonts.
+- **Safer i18n attributes:** `data-i18n-attr` accepts comma/space lists, filters invalid names, and guards setter errors so broken attributes no longer throw while preserving fallbacks.
+- **Auto-sub log redesign:** Auto-subtitles toolbox log is now a styled live feed with timestamps, severity coloring, capped history, and a pipeline preview to make each run’s status readable.
+- **Upstream error clarity:** Cloudflare transcription responses parse non-JSON bodies, return upstream status codes/body snippets, and surface 5xx hints in API/toolbox flows so failures are actionable.
+
 ## SubMaker v1.4.14
 
 - **xEmbed language grouping:** Embedded originals now surface with canonical language codes, so extracted tracks merge into the same Stremio language bucket instead of creating duplicate language entries.

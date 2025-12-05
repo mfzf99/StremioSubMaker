@@ -107,6 +107,15 @@
             --glow: rgba(8, 164, 213, 0.45);
         }
 
+        /* Ship emoji/flag font so desktop renders regional indicators as flags */
+        @font-face {
+            font-family: 'Twemoji';
+            src: url('../fonts/Twemoji.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
         /* Dark mode specific overrides */
         [data-theme="dark"] body {
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 60%, var(--bg-primary) 100%);
@@ -377,7 +386,7 @@
             font-weight: 800;
             color: var(--text-primary);
             /* Force emoji-capable fonts so regional indicators render as flags on desktop too */
-            font-family: "Twemoji Country Flags", "Twemoji Mozilla", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Noto Emoji", "Segoe UI Symbol", 'Inter', sans-serif;
+            font-family: 'Twemoji', 'Twemoji Color', 'Twemoji Mozilla', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Noto Emoji', 'Segoe UI Symbol', 'Inter', sans-serif;
             font-variant-emoji: emoji;
             background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7)),
                 linear-gradient(145deg, rgba(8, 164, 213, 0.14), rgba(51, 185, 225, 0.12));
