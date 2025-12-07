@@ -9,6 +9,13 @@
 
 const log = require('./logger');
 
+function normalizeUserHash(rawHash) {
+  if (!rawHash || typeof rawHash !== 'string') return '';
+  const trimmed = rawHash.trim();
+  if (!trimmed || trimmed === 'anonymous') return '';
+  return trimmed;
+}
+
 /**
  * Generate cache keys for translation caching
  *
@@ -35,9 +42,10 @@ function generateCacheKeys(config, sourceFileId, targetLang) {
   // Get user hash for user-scoped caching
   // CRITICAL: userHash must be a valid non-empty string for bypass cache
   // If missing, bypass cache would be shared across all users!
-  const userHash = (config && typeof config.__configHash === 'string' && config.__configHash.length > 0)
+  const rawHash = (config && typeof config.__configHash === 'string' && config.__configHash.length > 0)
     ? config.__configHash
     : '';
+  const userHash = normalizeUserHash(rawHash);
   const hasUserHash = userHash.length > 0;
   // Only allow permanent caching when we have a scoped config hash
   let allowPermanent = hasUserHash;

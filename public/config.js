@@ -825,7 +825,7 @@ Translate to {target_language}.`;
             ...defaults,
             ...(currentConfig.autoSubs || {})
         };
-        currentConfig.otherApiKeysEnabled = true;
+        currentConfig.otherApiKeysEnabled = isDevModeEnabled();
     }
 
     function ensureUiLanguageDockExists() {
@@ -957,6 +957,14 @@ Translate to {target_language}.`;
         }
         const betaToggle = document.getElementById('betaMode');
         return betaToggle ? betaToggle.checked === true : false;
+    }
+
+    function isDevModeEnabled() {
+        if (currentConfig && typeof currentConfig.devMode === 'boolean') {
+            return currentConfig.devMode === true;
+        }
+        const devToggle = document.getElementById('devMode');
+        return devToggle ? devToggle.checked === true : false;
     }
 
     function hasActiveMultiProviderState(config) {
@@ -2426,6 +2434,14 @@ Translate to {target_language}.`;
         if (betaToggle) {
             betaToggle.addEventListener('change', (e) => {
                 toggleBetaModeUI(!!e.target.checked);
+            });
+        }
+
+        const devModeToggle = document.getElementById('devMode');
+        if (devModeToggle) {
+            devModeToggle.addEventListener('change', (e) => {
+                currentConfig.devMode = !!e.target.checked;
+                toggleOtherApiKeysSection();
             });
         }
 
@@ -4055,11 +4071,13 @@ Translate to {target_language}.`;
 
     function toggleOtherApiKeysSection() {
         const card = document.getElementById('otherApiKeysCard');
+        const devEnabled = isDevModeEnabled();
         if (card) {
-            card.style.display = '';
+            card.style.display = devEnabled ? '' : 'none';
+            card.setAttribute('aria-hidden', devEnabled ? 'false' : 'true');
         }
         if (currentConfig) {
-            currentConfig.otherApiKeysEnabled = true;
+            currentConfig.otherApiKeysEnabled = devEnabled;
         }
     }
 
@@ -4594,7 +4612,6 @@ Translate to {target_language}.`;
         if (cloudflareKeyInput) {
             cloudflareKeyInput.value = currentConfig.cloudflareWorkersApiKey || '';
         }
-        toggleOtherApiKeysSection();
 
         // Load Gemini model
         const modelSelect = document.getElementById('geminiModel');
@@ -4637,6 +4654,7 @@ Translate to {target_language}.`;
                 devModeGroup.style.display = 'block';
             }
         }
+        toggleOtherApiKeysSection();
 
         ensureProviderParametersInState();
         const multiToggle = document.getElementById('enableMultiProviders');
@@ -4844,7 +4862,7 @@ Translate to {target_language}.`;
             geminiApiKey: document.getElementById('geminiApiKey').value.trim(),
             assemblyAiApiKey: (function(){ const el = document.getElementById('assemblyAiApiKey'); return el ? el.value.trim() : ''; })(),
             cloudflareWorkersApiKey: (function(){ const el = document.getElementById('cloudflareWorkersApiKey'); return el ? el.value.trim() : ''; })(),
-            otherApiKeysEnabled: true,
+            otherApiKeysEnabled: isDevModeEnabled(),
             autoSubs: {
                 ...currentConfig.autoSubs,
                 defaultMode: currentConfig.autoSubs?.defaultMode || 'cloudflare',

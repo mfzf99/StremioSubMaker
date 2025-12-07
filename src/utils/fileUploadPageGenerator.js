@@ -119,13 +119,15 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
     const autoSubtitlesLink = `/auto-subtitles?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
     const embeddedSubsLink = `/embedded-subtitles?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
     const configureLink = `/configure?config=${encodeURIComponent(configStr)}`;
+    const historyLink = `/sub-history?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
     const navLinks = {
         subToolbox: subToolboxLink,
         translateFiles: translateFilesLink,
         syncSubtitles: syncSubtitlesLink,
         embeddedSubs: embeddedSubsLink,
         automaticSubs: autoSubtitlesLink,
-        configure: configureLink
+        configure: configureLink,
+        history: historyLink
     };
     const t = getTranslator(config?.uiLanguage || 'en');
     const localeBootstrap = buildClientBootstrap(loadLocale(config?.uiLanguage || 'en'));

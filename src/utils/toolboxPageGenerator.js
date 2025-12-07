@@ -387,14 +387,20 @@ function themeToggleStyles() {
 function buildToolLinks(configStr, videoId, filename) {
   const shared = { config: configStr, videoId };
   const withFile = { ...shared, filename: filename || '' };
+  const historyParams = {
+    config: configStr,
+    videoId: videoId || 'Stream and Refresh',
+    filename: filename || 'Stream and Refresh'
+  };
 
   return {
-    translateFiles: `/file-upload${buildQuery(shared)}`,
+    translateFiles: `/file-upload${buildQuery(withFile)}`,
     syncSubtitles: `/subtitle-sync${buildQuery(withFile)}`,
     embeddedSubs: `/embedded-subtitles${buildQuery(withFile)}`,
     automaticSubs: `/auto-subtitles${buildQuery(withFile)}`,
     subToolbox: `/sub-toolbox${buildQuery(withFile)}`,
-    configure: `/configure${buildQuery({ config: configStr })}`
+    configure: `/configure${buildQuery({ config: configStr })}`,
+    history: `/sub-history${buildQuery(historyParams)}`
   };
 }
 
@@ -891,6 +897,20 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       box-shadow: 0 12px 32px rgba(8, 164, 213, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06);
       transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
     }
+    .button.dev-disabled {
+      opacity: 0.4;
+      pointer-events: none;
+      cursor: not-allowed;
+      filter: grayscale(0.7);
+      box-shadow: none;
+      border-color: var(--border);
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+    .button.dev-disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
     .button.primary {
       background: linear-gradient(120deg, #5af0ff, #33b9e1 60%, #0ea5e9);
       color: #04101a;
@@ -1242,8 +1262,8 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
           <div class="chip">${t('toolbox.chips.stream', {}, 'Stream')} <span>${streamHint}</span></div>
         </div>
         <div class="cta-row">
-          <a class="button primary" href="${links.translateFiles}">${t('toolbox.hero.primary', {}, 'Translate a file')}</a>
-          <a class="button ghost" href="${links.configure}">${t('toolbox.hero.secondary', {}, 'Adjust configs')}</a>
+          <a class="button primary" href="${links.history}">${t('toolbox.hero.primary', {}, 'Translation Status')}</a>
+          <a class="button ghost" href="${links.configure}">${t('toolbox.hero.secondary', {}, 'Configure')}</a>
         </div>
       </div>
 

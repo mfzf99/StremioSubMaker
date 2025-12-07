@@ -253,6 +253,27 @@ function quickNavStyles() {
       .quick-nav-link.quick-nav-refresh { width: 46px; height: 46px; }
     }
 
+    @media (max-width: 1260px) {
+      body { font-size: 0.95rem; }
+      .page, .container, main, .content {
+        max-width: min(980px, calc(100% - 36px));
+        margin-inline: auto;
+      }
+      .quick-nav {
+        width: min(960px, calc(100% - 36px));
+        padding: 0.45rem 0.55rem;
+        gap: 0.35rem;
+        font-size: 0.84rem;
+      }
+      .quick-nav-links {
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 0.35rem;
+      }
+      .quick-nav-link { padding: 0.45rem 0.78rem; }
+      .quick-nav-link.quick-nav-refresh { width: 42px; height: 42px; }
+    }
+
     @media (max-width: 1100px) {
       .mobile-menu-toggle { display: inline-flex !important; }
 
@@ -338,6 +359,11 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
       <a class="quick-nav-link${activeKey === 'configure' ? ' active' : ''}" href="${links.configure}">
         <span>🛠️</span>
         <span>${label('configure', 'Configure')}</span>
+      </a>
+      <a class="quick-nav-link${activeKey === 'history' ? ' active' : ''}" href="${links.history}">
+        <span>📜</span>
+        <span>${label('history', 'History')}</span>
+        ${activeKey === 'history' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
     </div>
   </nav>

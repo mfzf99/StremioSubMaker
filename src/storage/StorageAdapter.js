@@ -124,7 +124,8 @@ StorageAdapter.CACHE_TYPES = {
   PARTIAL: 'partial',              // In-flight partial translations (10GB, 1h TTL)
   SYNC: 'sync',                    // Synced subtitles (50GB)
   EMBEDDED: 'embedded',            // Extracted/translated embedded subtitles (50GB)
-  SESSION: 'session'               // Session persistence (no limit)
+  SESSION: 'session',              // Session persistence (no limit)
+  HISTORY: 'history'               // Translation history (1GB)
 };
 
 // Cache size limits in bytes
@@ -140,6 +141,7 @@ StorageAdapter.CACHE_TYPES = {
 // - CACHE_LIMIT_PARTIAL (default: 0.5GB)
 // - CACHE_LIMIT_SYNC (default: 0.5GB)
 // - CACHE_LIMIT_EMBEDDED (default: 0.5GB)
+// - CACHE_LIMIT_HISTORY (default: 1GB)
 //
 // Example for larger deployments:
 // CACHE_LIMIT_TRANSLATION=50000000000 (50GB) - requires Redis with 120GB+ RAM
@@ -149,7 +151,8 @@ StorageAdapter.SIZE_LIMITS = {
   [StorageAdapter.CACHE_TYPES.PARTIAL]: parseInt(process.env.CACHE_LIMIT_PARTIAL) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.SYNC]: parseInt(process.env.CACHE_LIMIT_SYNC) || (0.5 * 1024 * 1024 * 1024),               // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.EMBEDDED]: parseInt(process.env.CACHE_LIMIT_EMBEDDED) || (0.5 * 1024 * 1024 * 1024),       // 0.5GB - mirrors sync cache
-  [StorageAdapter.CACHE_TYPES.SESSION]: null                                                                              // No limit
+  [StorageAdapter.CACHE_TYPES.SESSION]: null,                                                                             // No limit
+  [StorageAdapter.CACHE_TYPES.HISTORY]: parseInt(process.env.CACHE_LIMIT_HISTORY) || (1024 * 1024 * 1024)                 // 1GB default
 };
 
 // Default TTL in seconds
@@ -159,7 +162,8 @@ StorageAdapter.DEFAULT_TTL = {
   [StorageAdapter.CACHE_TYPES.PARTIAL]: 60 * 60,     // 1 hour
   [StorageAdapter.CACHE_TYPES.SYNC]: null,            // No expiry
   [StorageAdapter.CACHE_TYPES.EMBEDDED]: null,        // No expiry (shared cache across users)
-  [StorageAdapter.CACHE_TYPES.SESSION]: null          // No expiry
+  [StorageAdapter.CACHE_TYPES.SESSION]: null,         // No expiry
+  [StorageAdapter.CACHE_TYPES.HISTORY]: 30 * 24 * 60 * 60 // 30 days
 };
 
 module.exports = StorageAdapter;

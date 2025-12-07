@@ -27,7 +27,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -38,6 +38,7 @@ const syncCache = require('./src/utils/syncCache');
 const embeddedCache = require('./src/utils/embeddedCache');
 const { generateSubtitleSyncPage } = require('./src/utils/syncPageGenerator');
 const { generateSubToolboxPage, generateEmbeddedSubtitlePage, generateAutoSubtitlePage } = require('./src/utils/toolboxPageGenerator');
+const { generateHistoryPage } = require('./src/utils/historyPageGenerator');
 const { deriveVideoHash } = require('./src/utils/videoHash');
 const { registerFileUploadRoutes } = require('./src/routes/fileUploadRoutes');
 const {
@@ -698,10 +699,10 @@ async function downloadFullStreamToFile(streamUrl, options = {}, logger = null) 
         return { path: tempPath, bytes, contentType, filename, source: 'video' };
     } catch (error) {
         if (writer) {
-            try { writer.destroy(); } catch (_) {}
+            try { writer.destroy(); } catch (_) { }
         }
         try {
-            if (fs.existsSync(tempPath)) fs.unlink(tempPath, () => {});
+            if (fs.existsSync(tempPath)) fs.unlink(tempPath, () => { });
         } catch (_) { /* ignore cleanup errors */ }
         if (error.name === 'AbortError') {
             throw new Error(`Stream download timed out after ${Math.round(timeoutMs / 1000)}s`);
@@ -1053,7 +1054,7 @@ async function transcribeWithAssemblyAi(streamUrl, opts = {}, logger = null) {
     } finally {
         if (upload && upload.path) {
             try {
-                fs.unlink(upload.path, () => {});
+                fs.unlink(upload.path, () => { });
             } catch (_) { /* ignore cleanup errors */ }
         }
     }
@@ -1524,7 +1525,7 @@ function normalizeSubtitleFormatParams(req, _res, next) {
         if (req.params && typeof req.params.targetLang === 'string') {
             req.params.targetLang = req.params.targetLang.replace(/\.(srt|vtt)$/i, '');
         }
-    } catch (_) {}
+    } catch (_) { }
     next();
 }
 
@@ -2002,7 +2003,7 @@ app.use(compression({
 
 // Expose version on all responses
 app.use((req, res, next) => {
-    try { res.setHeader('X-SubMaker-Version', version); } catch (_) {}
+    try { res.setHeader('X-SubMaker-Version', version); } catch (_) { }
     next();
 });
 
@@ -2038,6 +2039,7 @@ app.use((req, res, next) => {
         '/api/save-embedded-subtitle',
         '/api/translate-embedded',
         '/sub-toolbox',
+        '/sub-history',
         '/embedded-subtitles',
         '/auto-subtitles'
     ];
@@ -2049,6 +2051,7 @@ app.use((req, res, next) => {
             req.path.includes('/file-translate/') ||
             req.path.includes('/sync-subtitles/') ||
             req.path.includes('/sub-toolbox/') ||
+            req.path.includes('/sub-history/') ||
             req.path.includes('/embedded-subtitles/') ||
             req.path.includes('/auto-subtitles/')
         );
@@ -2126,7 +2129,7 @@ app.use(express.json({ limit: '6mb' }));
 app.use((req, res, next) => {
     try {
         getTranslatorFromRequest(req, res);
-    } catch (_) {}
+    } catch (_) { }
     next();
 });
 
@@ -2169,6 +2172,7 @@ app.use('/addon/:config', (req, res, next) => {
         '/translate-embedded',  // embedded translation API
         '/sync-subtitles',      // sync tool
         '/sub-toolbox',         // toolbox page
+        '/sub-history',         // history page
         '/embedded-subtitles',  // embedded extractor
         '/auto-subtitles'       // auto subtitles tool
     ].some(fragment => req.path.includes(fragment));
@@ -2523,14 +2527,14 @@ app.get('/api/test-opensubtitles', async (req, res) => {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         const OpenSubtitlesService = require('./src/services/opensubtitles');
         const opensubtitles = new OpenSubtitlesService();
-        
+
         // Test with a known movie (The Matrix - tt0133093)
         const testParams = {
             imdb_id: 'tt0133093',
             type: 'movie',
             languages: ['eng', 'spa']
         };
-        
+
         log.debug(() => '[Test] Testing OpenSubtitles with:', testParams);
         const results = await opensubtitles.searchSubtitles(testParams);
 
@@ -3019,10 +3023,10 @@ app.post('/api/validate-gemini', async (req, res) => {
         }
     } catch (error) {
         const isAuthError = error.response?.status === 401 ||
-                           error.response?.status === 403 ||
-                           error.message?.toLowerCase().includes('api key') ||
-                           error.message?.toLowerCase().includes('invalid') ||
-                           error.message?.toLowerCase().includes('permission');
+            error.response?.status === 403 ||
+            error.message?.toLowerCase().includes('api key') ||
+            error.message?.toLowerCase().includes('invalid') ||
+            error.message?.toLowerCase().includes('permission');
 
         res.json({
             valid: false,
@@ -4008,6 +4012,7 @@ app.get('/addon/:config/translate-selector/:videoId/:targetLang', searchLimiter,
         }
         t = getTranslatorFromRequest(req, res, config);
         const configKey = ensureConfigHash(config, configStr);
+        const streamFilename = req.query.filename || req.query.file || config?.lastStream?.filename || '';
 
         // Create deduplication key based on video ID and config
         const dedupKey = `translate-selector:${configKey}:${videoId}:${targetLang}`;
@@ -4027,7 +4032,7 @@ app.get('/addon/:config/translate-selector/:videoId/:targetLang', searchLimiter,
         );
 
         // Generate HTML page for subtitle selection
-        const html = generateTranslationSelectorPage(subtitles, videoId, targetLang, configStr, config, t, res.locals?.uiLanguage);
+        const html = generateTranslationSelectorPage(subtitles, videoId, targetLang, configStr, config, t, res.locals?.uiLanguage, streamFilename);
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
@@ -4169,7 +4174,15 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
 
         // Deduplicate translation requests - handles the first request
         const subtitleContent = await deduplicate(dedupKey, () =>
-            handleTranslation(sourceFileId, targetLang, config, { waitForFullTranslation })
+            handleTranslation(sourceFileId, targetLang, config, {
+                waitForFullTranslation,
+                sourceFileId,
+                targetLanguage: targetLang,
+                filename: req.query.filename || req.query.file || req.query.name || '',
+                videoId: req.query.videoId || req.query.id || '',
+                sourceLanguage: req.query.sourceLanguage || req.query.lang || (config.sourceLanguages?.[0] || 'auto'),
+                from: 'addon'
+            })
         );
 
         // Validate content before processing
@@ -4180,9 +4193,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
 
         // Check if this is a loading message or actual translation
         const isLoadingMessage = subtitleContent.includes('Please wait while the selected subtitle is being translated') ||
-                                 subtitleContent.includes('Translation is happening in the background') ||
-                                 subtitleContent.includes('Click this subtitle again to confirm translation') ||
-                                 subtitleContent.includes('TRANSLATION IN PROGRESS');
+            subtitleContent.includes('Translation is happening in the background') ||
+            subtitleContent.includes('Click this subtitle again to confirm translation') ||
+            subtitleContent.includes('TRANSLATION IN PROGRESS');
         log.debug(() => `[Translation] Serving ${isLoadingMessage ? 'loading message' : 'translated content'} for ${sourceFileId} (was duplicate: ${isAlreadyInFlight})`);
         log.debug(() => `[Translation] Content length: ${subtitleContent.length} characters, first 200 chars: ${subtitleContent.substring(0, 200)}`);
 
@@ -4312,7 +4325,7 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
                 const subsrt = require('subsrt-ts');
                 sourceContent = subsrt.convert(sourceContent, { to: 'srt' });
             }
-        } catch (_) {}
+        } catch (_) { }
 
         // If we have partial translation, serve partial VTT immediately
         const partial = await readFromPartialCache(cacheKey);
@@ -4326,7 +4339,12 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         // If we already have cached full translation, fetch it quickly via translation handler
         const hasCache = await hasCachedTranslation(sourceFileId, targetLang, config);
         if (hasCache) {
-            const translatedSrt = await handleTranslation(sourceFileId, targetLang, config);
+            const translatedSrt = await handleTranslation(sourceFileId, targetLang, config, {
+                filename: sourceContent ? `learn_${targetLang}.srt` : 'unknown',
+                videoId: config.videoId || videoId || 'unknown',
+                sourceLanguage: 'und',
+                from: 'learn'
+            });
             const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
             res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
@@ -4334,7 +4352,12 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         }
 
         // Start translation in background and serve a loading VTT (source on top, status on bottom)
-        handleTranslation(sourceFileId, targetLang, config).catch(() => {});
+        handleTranslation(sourceFileId, targetLang, config, {
+            filename: sourceContent ? `learn_${targetLang}.srt` : 'unknown',
+            videoId: config.videoId || videoId || 'unknown',
+            sourceLanguage: 'und',
+            from: 'learn'
+        }).catch(() => { });
 
         const loadingSrt = createLoadingSubtitle(config?.uiLanguage || baseConfig?.uiLanguage || 'en');
         const vtt = srtPairToWebVTT(sourceContent, loadingSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
@@ -4402,6 +4425,105 @@ app.get('/sub-toolbox', async (req, res) => {
         if (respondStorageUnavailable(res, error, '[Sub Toolbox Page]', t)) return;
         log.error(() => '[Sub Toolbox Page] Error:', error);
         res.status(500).send(t('server.errors.subToolboxPageFailed', {}, 'Failed to load Sub Toolbox page'));
+    }
+});
+
+// Translation History Page
+app.get('/sub-history', async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr, videoId, filename } = req.query;
+
+        if (!configStr) {
+            return res.status(400).send(t('server.errors.missingConfig', {}, 'Missing config'));
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Sub History Page] config', t);
+        if (!config) return;
+        t = getTranslatorFromRequest(req, res, config);
+        ensureConfigHash(config, configStr);
+
+        setNoStore(res);
+
+        const historyUserHash = resolveHistoryUserHash(config);
+        if (!historyUserHash) {
+            log.warn(() => '[Sub History Page] Missing config hash for history request - rejecting');
+            return res.status(400).send(t('server.errors.missingHistoryHash', {}, 'Missing user hash for history requests'));
+        }
+
+        log.debug(() => `[Sub History Page] Loading history for user ${historyUserHash}`);
+
+        const history = await getHistoryForUser(historyUserHash);
+
+        const isPlaceholder = (val) => {
+            const v = (val || '').toString().trim().toLowerCase();
+            return !v || v === 'unknown' || v === 'stream and refresh' || v === 'streamandrefresh';
+        };
+        const pickBest = (...candidates) => {
+            for (const c of candidates) {
+                if (c === undefined || c === null) continue;
+                const str = c.toString().trim();
+                if (!str || isPlaceholder(str)) continue;
+                return str;
+            }
+            return '';
+        };
+
+        // Opportunistic enrichment: use provided/query metadata to fill missing titles/videoIds/filenames
+        const fallbackVideoId = pickBest(videoId, config?.videoId, config?.lastStream?.videoId);
+        const fallbackFilename = pickBest(filename, config?.lastStream?.filename, config?.streamFilename);
+        for (const entry of history) {
+            const needsVideo = !entry.videoId || entry.videoId === 'unknown';
+            const needsTitle = !entry.title || entry.title === 'unknown' || entry.title === entry.filename;
+            const needsFilename = !entry.filename || entry.filename === 'unknown' || isPlaceholder(entry.filename);
+            if (!needsVideo && !needsTitle && !needsFilename) continue;
+            try {
+                const effectiveVideoId = !needsVideo ? entry.videoId : pickBest(fallbackVideoId, entry.videoId);
+                const effectiveFilename = !needsFilename ? entry.filename : pickBest(fallbackFilename, entry.filename, entry.title);
+                const meta = await resolveHistoryTitle(effectiveVideoId || entry.videoId || '', effectiveFilename || entry.title || entry.filename || '');
+                entry.videoId = pickBest(effectiveVideoId, meta.videoId, entry.videoId) || 'unknown';
+                entry.filename = pickBest(effectiveFilename, entry.filename, meta.title) || 'unknown';
+                entry.title = pickBest(meta.title, entry.title, entry.filename) || 'Unknown title';
+                if (meta.season != null) entry.season = meta.season;
+                if (meta.episode != null) entry.episode = meta.episode;
+                if (!entry.videoHash || entry.videoHash === 'unknown') {
+                    entry.videoHash = deriveVideoHash(entry.filename || entry.title || '', entry.videoId);
+                }
+                await saveRequestToHistory(historyUserHash, entry);
+            } catch (e) {
+                log.debug(() => [`[Sub History Page] Enrichment skipped:`, e.message]);
+            }
+        }
+        const html = generateHistoryPage(configStr, history, config, videoId, filename);
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Sub History Page]', t)) return;
+        log.error(() => '[Sub History Page] Error:', error);
+        res.status(500).send(t('server.errors.historyPageFailed', {}, 'Failed to load History page'));
+    }
+});
+
+// Addon route: History (redirects to standalone page)
+app.get('/addon/:config/sub-history', async (req, res) => {
+    try {
+        setNoStore(res);
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+
+        const { config: configStr } = req.params;
+        const resolvedConfig = await resolveConfigGuarded(configStr, req, res, '[Sub History Addon] config', t);
+        if (!resolvedConfig) return;
+
+        log.debug(() => `[Sub History] Addon redirect for config hash ${resolvedConfig.userHash}`);
+
+        res.redirect(302, `/sub-history?config=${encodeURIComponent(configStr)}`);
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Sub History Addon Route]', t)) return;
+        log.error(() => '[Sub History Addon Route] Error:', error);
+        res.status(500).send(t('server.errors.historyAddonFailed', {}, 'Failed to load History page'));
     }
 });
 
@@ -4634,7 +4756,7 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
             const audioMeta = (typeof transcriptPayload.audio === 'object') ? transcriptPayload.audio : {};
             const audioBytes = Number.isFinite(transcriptPayload.audioBytes) ? transcriptPayload.audioBytes
                 : Number.isFinite(audioMeta.bytes) ? audioMeta.bytes
-                : (Array.isArray(audioMeta.windows) ? audioMeta.windows.reduce((sum, w) => sum + (Number(w.bytes) || 0), 0) : null);
+                    : (Array.isArray(audioMeta.windows) ? audioMeta.windows.reduce((sum, w) => sum + (Number(w.bytes) || 0), 0) : null);
             const audioSource = transcriptPayload.audioSource || audioMeta.source || 'extension';
             const audioContentType = transcriptPayload.contentType || audioMeta.contentType || 'audio/wav';
             const transcriptModel = transcriptPayload.model || model || '@cf/openai/whisper';
@@ -4899,12 +5021,15 @@ app.get('/subtitle-sync', async (req, res) => {
 
         // Get available subtitles for this video
         const subtitleHandler = createSubtitleHandler(config);
-        const subtitlesData = await subtitleHandler({ type: 'movie', id: videoId, extra: { filename
-} });
+        const subtitlesData = await subtitleHandler({
+            type: 'movie', id: videoId, extra: {
+                filename
+            }
+        });
 
         // Generate HTML page for subtitle syncing
         const html = await generateSubtitleSyncPage(subtitlesData.subtitles ||
-[], videoId, filename, configStr, config);
+            [], videoId, filename, configStr, config);
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
@@ -5179,6 +5304,26 @@ app.post('/api/save-embedded-subtitle', userDataWriteLimiter, async (req, res) =
 
 // API endpoint: Translate embedded subtitle (with TranslationEngine options)
 app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res) => {
+    let historyEntry = null;
+    let historyUserHash = '';
+    let historyEnabled = false;
+    const persistHistory = (status, extra = {}) => {
+        if (!historyEnabled || !historyEntry || !historyUserHash) return;
+        const nextEntry = { ...historyEntry };
+        if (extra && typeof extra === 'object') {
+            Object.assign(nextEntry, extra);
+        }
+        if (status) {
+            nextEntry.status = status;
+            if (status === 'completed' || status === 'failed') {
+                nextEntry.completedAt = Date.now();
+            }
+        }
+        historyEntry = nextEntry;
+        return saveRequestToHistory(historyUserHash, nextEntry).catch(err => {
+            log.warn(() => [`[History] Failed to persist embedded translation history:`, err.message]);
+        });
+    };
     try {
         setNoStore(res); // prevent caching of user-config-bearing request/response
         let t = res.locals?.t || getTranslatorFromRequest(req, res, req.body);
@@ -5228,6 +5373,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             t = getTranslatorFromRequest(req, res, baseConfig);
             return res.status(401).json({ error: t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token') });
         }
+        ensureConfigHash(baseConfig, configStr);
         t = getTranslatorFromRequest(req, res, baseConfig);
         const workingConfig = {
             ...baseConfig,
@@ -5330,6 +5476,45 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             ? crypto.createHash('sha1').update(String(workingConfig.translationPrompt)).digest('hex')
             : '';
 
+        // History tracking (Sub Toolbox translations previously skipped history)
+        const normalizeHistoryLabel = (value, fallback) => {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed) return trimmed.slice(0, 200);
+            }
+            return fallback;
+        };
+        historyUserHash = resolveHistoryUserHash(baseConfig);
+        historyEnabled = !!historyUserHash;
+        if (!historyEnabled) {
+            log.warn(() => '[History] Skipping history for embedded translation: missing user hash');
+        }
+        const ensureHistoryEntry = () => {
+            if (!historyEnabled) return false;
+            if (historyEntry) return true;
+            const videoHash = deriveVideoHash(
+                normalizeHistoryLabel(mergedMetadata.label || metadata?.label || '', '') || safeVideoHash,
+                safeVideoHash || ''
+            );
+            historyEntry = {
+                id: crypto.randomUUID(),
+                status: 'processing',
+                title: normalizeHistoryLabel(mergedMetadata.label || metadata?.label, `Track ${safeTrackId}`),
+                filename: normalizeHistoryLabel(mergedMetadata.label || metadata?.label, `Track ${safeTrackId}`),
+                videoId: safeVideoHash || 'unknown',
+                videoHash,
+                trackId: safeTrackId,
+                sourceLanguage: safeSourceLanguage || 'und',
+                targetLanguage: safeTargetLanguage,
+                createdAt: Date.now(),
+                provider: requestedProviderName || workingConfig.mainProvider || 'unknown',
+                model: requestedModel || workingConfig.geminiModel || 'default',
+                scope: 'embedded'
+            };
+            persistHistory('processing');
+            return true;
+        };
+
         const cacheMatchesOptions = (meta = {}) => {
             if (meta.singleBatchMode !== undefined && meta.singleBatchMode !== singleBatchMode) {
                 return false;
@@ -5403,15 +5588,19 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             }
         }
 
+        ensureHistoryEntry();
+
         // Load original if not provided
         let sourceContent = subtitleContent;
         let originalEntry = null;
         if (!sourceContent) {
             if (!KEEP_EMBEDDED_ORIGINALS || skipCacheWrites) {
+                persistHistory('failed', { error: t('server.errors.originalEmbeddedRequired', {}, 'Original embedded subtitle required: send content or enable KEEP_EMBEDDED_ORIGINALS=true') });
                 return res.status(400).json({ error: t('server.errors.originalEmbeddedRequired', {}, 'Original embedded subtitle required: send content or enable KEEP_EMBEDDED_ORIGINALS=true') });
             }
             originalEntry = await embeddedCache.getOriginalEmbedded(safeVideoHash, safeTrackId, safeSourceLanguage);
             if (!originalEntry || !originalEntry.content) {
+                persistHistory('failed', { error: t('server.errors.originalEmbeddedMissing', {}, 'Original embedded subtitle not found') });
                 return res.status(404).json({ error: t('server.errors.originalEmbeddedMissing', {}, 'Original embedded subtitle not found') });
             }
             sourceContent = originalEntry.content;
@@ -5462,6 +5651,11 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
         const targetLangName = getLanguageName(safeTargetLanguage) || safeTargetLanguage;
         const { provider, providerName, model, fallbackProviderName } = createTranslationProvider(workingConfig);
+        if (historyEntry) {
+            historyEntry.provider = providerName || fallbackProviderName || historyEntry.provider || requestedProviderName || 'unknown';
+            historyEntry.model = model || requestedModel || historyEntry.model || workingConfig.geminiModel || 'default';
+            persistHistory('processing');
+        }
         const engine = new TranslationEngine(
             provider,
             model || workingConfig.geminiModel,
@@ -5500,6 +5694,12 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             log.debug(() => `[Embedded Translate] Skipped cache write for ${safeVideoHash}_${safeTargetLanguage}_${safeTrackId} (skipCache=true)`);
         }
 
+        persistHistory('completed', {
+            provider: providerName || historyEntry?.provider || 'unknown',
+            model: model || requestedModel || historyEntry?.model || workingConfig.geminiModel || 'default',
+            cached: false
+        });
+
         res.json({
             success: true,
             cached: false,
@@ -5508,6 +5708,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             metadata: { ...saveMeta, skipCache: skipCacheWrites || undefined }
         });
     } catch (error) {
+        persistHistory('failed', { error: error?.message || 'Unknown error' });
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         if (respondStorageUnavailable(res, error, '[Embedded Translate]', t)) return;
         log.error(() => ['[Embedded Translate] Error:', error]);
@@ -5533,15 +5734,19 @@ function escapeHtml(text) {
 }
 
 // Generate HTML page for translation selector
-function generateTranslationSelectorPage(subtitles, videoId, targetLang, configStr, config, t, lang) {
+function generateTranslationSelectorPage(subtitles, videoId, targetLang, configStr, config, t, lang, streamFilename = '') {
     const selectedLang = lang || (config && config.uiLanguage) || DEFAULT_LANG;
     const tx = typeof t === 'function' ? t : getTranslator(selectedLang);
     const targetLangName = getLanguageName(targetLang) || targetLang;
     const sourceLangs = config.sourceLanguages.map(lang => getLanguageName(lang) || lang).join(', ');
+    const translateQueryParts = [];
+    if (videoId) translateQueryParts.push(`videoId=${encodeURIComponent(videoId)}`);
+    if (streamFilename) translateQueryParts.push(`filename=${encodeURIComponent(streamFilename)}`);
+    const translateQuery = translateQueryParts.length ? `?${translateQueryParts.join('&')}` : '';
 
     const subtitleOptions = subtitles.map(sub => `
         <div class="subtitle-option">
-            <a href="/addon/${encodeURIComponent(configStr)}/translate/${sub.fileId}/${targetLang}.srt" class="subtitle-link">
+            <a href="/addon/${encodeURIComponent(configStr)}/translate/${sub.fileId}/${targetLang}.srt${translateQuery}" class="subtitle-link">
                 <div class="subtitle-info">
                     <div class="subtitle-name">${escapeHtml(sub.name)}</div>
                     <div class="subtitle-meta">
@@ -6044,7 +6249,7 @@ function generateTranslationSelectorPage(subtitles, videoId, targetLang, configS
     </div>
 
     <script>
-    const PAGE = { configStr: ${JSON.stringify(configStr)}, videoId: ${JSON.stringify(videoId)}, filename: ${JSON.stringify(config?.lastStream?.filename || '')}, videoHash: ${JSON.stringify(config?.videoHash || '')} };
+    const PAGE = { configStr: ${JSON.stringify(configStr)}, videoId: ${JSON.stringify(videoId)}, filename: ${JSON.stringify(streamFilename || config?.lastStream?.filename || '')}, videoHash: ${JSON.stringify(config?.videoHash || '')} };
     ${quickNavScript()}
     // Theme switching functionality
     (function() {
@@ -6166,7 +6371,7 @@ app.use('/addon/:config', (req, res, next) => {
 
     // Intercept both res.json() and res.end() to replace {{ADDON_URL}} placeholder
     const originalJson = res.json;
-    res.json = function(obj) {
+    res.json = function (obj) {
         const jsonStr = JSON.stringify(obj);
         const replaced = jsonStr.replace(/\{\{ADDON_URL\}\}/g, addonUrl);
         const parsed = JSON.parse(replaced);
@@ -6174,7 +6379,7 @@ app.use('/addon/:config', (req, res, next) => {
     };
 
     const originalEnd = res.end;
-    res.end = function(chunk, encoding) {
+    res.end = function (chunk, encoding) {
         // Prevent res.end() from being called multiple times
         if (responseEnded) {
             log.warn(() => '[Server] res.end() called multiple times on response');
@@ -6516,19 +6721,19 @@ app.use((error, req, res, next) => {
 
     // Start server and setup graceful shutdown
     const server = app.listen(PORT, () => {
-    // Get log level and file logging status
-    const logLevel = (process.env.LOG_LEVEL || 'warn').toUpperCase();
-    const logToFile = process.env.LOG_TO_FILE !== 'false' ? 'ENABLED' : 'DISABLED';
-    const logDir = process.env.LOG_DIR || 'logs/';
-    const storageType = (process.env.STORAGE_TYPE || 'redis').toUpperCase();
-    // Session stats (after readiness, so counts are accurate)
-    // Use synchronous access to cache size for startup banner (storage count requires async)
-    const activeSessions = sessionManager.cache.size;
-    const maxSessions = sessionManager.maxSessions;
-    const sessionsInfo = maxSessions ? `${activeSessions} / ${maxSessions}` : String(activeSessions);
+        // Get log level and file logging status
+        const logLevel = (process.env.LOG_LEVEL || 'warn').toUpperCase();
+        const logToFile = process.env.LOG_TO_FILE !== 'false' ? 'ENABLED' : 'DISABLED';
+        const logDir = process.env.LOG_DIR || 'logs/';
+        const storageType = (process.env.STORAGE_TYPE || 'redis').toUpperCase();
+        // Session stats (after readiness, so counts are accurate)
+        // Use synchronous access to cache size for startup banner (storage count requires async)
+        const activeSessions = sessionManager.cache.size;
+        const maxSessions = sessionManager.maxSessions;
+        const sessionsInfo = maxSessions ? `${activeSessions} / ${maxSessions}` : String(activeSessions);
 
-    // Use console.startup to ensure banner always shows regardless of log level
-    console.startup(`
+        // Use console.startup to ensure banner always shows regardless of log level
+        console.startup(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║   🎬 SubMaker - Subtitle Translator Addon                ║
@@ -6548,11 +6753,11 @@ app.use((error, req, res, next) => {
 ╚═══════════════════════════════════════════════════════════╝
     `);
 
-    // Also print a concise session count line
-    console.startup(`Active sessions: ${sessionsInfo}`);
+        // Also print a concise session count line
+        console.startup(`Active sessions: ${sessionsInfo}`);
 
-    // Setup graceful shutdown handlers now that server is running
-    sessionManager.setupShutdownHandlers(server);
+        // Setup graceful shutdown handlers now that server is running
+        sessionManager.setupShutdownHandlers(server);
     });
 })();
 

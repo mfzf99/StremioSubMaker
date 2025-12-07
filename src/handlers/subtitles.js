@@ -18,6 +18,7 @@ const { StorageFactory, StorageAdapter } = require('../storage');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached } = require('../utils/downloadCache');
 const log = require('../utils/logger');
 const { generateCacheKeys } = require('../utils/cacheKeys');
+const { version } = require('../../package.json');
 
 const fs = require('fs');
 const path = require('path');
@@ -68,6 +69,20 @@ const tmdbToImdbCache = new LRUCache({
   max: 5000,
   ttl: 24 * 60 * 60 * 1000, // 24 hours
   updateAgeOnGet: true,
+});
+
+// History metadata cache (title/season/episode) to avoid repeat Cinemeta lookups
+const historyTitleCache = new LRUCache({
+  max: 500,
+  ttl: 24 * 60 * 60 * 1000, // 24 hours
+  updateAgeOnGet: true
+});
+
+// Track subtitle source metadata (videoId/filename/title) by sourceFileId for history enrichment
+const translationSourceMeta = new LRUCache({
+  max: 5000,
+  ttl: 6 * 60 * 60 * 1000, // 6 hours
+  updateAgeOnGet: true
 });
 
 // Security: LRU cache for request deduplication for subtitle searches (max 200 entries)
@@ -316,7 +331,7 @@ function buildPartialSrtWithTail(mergedSrt, uiLanguage = 'en') {
     }
 
     const reindexed = entries.map((e, idx) => ({ id: idx + 1, timecode: e.timecode, text: (e.text || '').trim() }))
-                             .filter(e => e.timecode && e.text);
+      .filter(e => e.timecode && e.text);
 
     if (reindexed.length === 0) {
       // No valid entries after filtering, but we have content - append loading tail
@@ -648,7 +663,7 @@ async function verifyBypassCacheIntegrity() {
           removedCount++;
         }
       } catch (error) {
-        try { await fs.promises.unlink(filePath); } catch (_) {}
+        try { await fs.promises.unlink(filePath); } catch (_) { }
       }
     }
 
@@ -932,7 +947,7 @@ async function readFromPartialCache(cacheKey) {
   try {
     const adapter = await getStorageAdapter();
     const cached = await adapter.get(cacheKey, StorageAdapter.CACHE_TYPES.PARTIAL);
-    
+
     if (!cached) {
       return null;
     }
@@ -1097,36 +1112,36 @@ setInterval(() => {
  * @returns {Promise} - Promise result
  */
 async function deduplicateSearch(key, fn) {
-    // Check completed results cache first (persistent cache)
-    const cachedResult = subtitleSearchResultsCache.get(key);
-    if (cachedResult) {
-        log.debug(() => `[Subtitle Cache] Found cached search results for: ${shortKey(key)} (${cachedResult.length} subtitles)`);
-        return cachedResult;
+  // Check completed results cache first (persistent cache)
+  const cachedResult = subtitleSearchResultsCache.get(key);
+  if (cachedResult) {
+    log.debug(() => `[Subtitle Cache] Found cached search results for: ${shortKey(key)} (${cachedResult.length} subtitles)`);
+    return cachedResult;
+  }
+
+  // Check in-flight requests (prevents duplicate API calls for concurrent requests)
+  const cached = inFlightSearches.get(key);
+  if (cached) {
+    log.debug(() => `[Dedup] Subtitle search already in flight: ${shortKey(key)}`);
+    return cached.promise;
+  }
+
+  log.debug(() => `[Dedup] Processing new subtitle search: ${shortKey(key)}`);
+  const promise = fn();
+
+  inFlightSearches.set(key, { promise });
+
+  try {
+    const result = await promise;
+    // Cache the completed result for future requests
+    if (result && Array.isArray(result)) {
+      subtitleSearchResultsCache.set(key, result);
+      log.debug(() => `[Subtitle Cache] Cached search results for: ${shortKey(key)} (${result.length} subtitles)`);
     }
-
-    // Check in-flight requests (prevents duplicate API calls for concurrent requests)
-    const cached = inFlightSearches.get(key);
-    if (cached) {
-        log.debug(() => `[Dedup] Subtitle search already in flight: ${shortKey(key)}`);
-        return cached.promise;
-    }
-
-    log.debug(() => `[Dedup] Processing new subtitle search: ${shortKey(key)}`);
-    const promise = fn();
-
-    inFlightSearches.set(key, { promise });
-
-    try {
-        const result = await promise;
-        // Cache the completed result for future requests
-        if (result && Array.isArray(result)) {
-            subtitleSearchResultsCache.set(key, result);
-            log.debug(() => `[Subtitle Cache] Cached search results for: ${shortKey(key)} (${result.length} subtitles)`);
-        }
-        return result;
-    } finally {
-        inFlightSearches.delete(key);
-    }
+    return result;
+  } finally {
+    inFlightSearches.delete(key);
+  }
 }
 
 /**
@@ -1454,7 +1469,7 @@ function calculateFilenameMatchScore(streamFilename, subtitleName) {
       const subtitleRes = parseInt(subtitleMeta.resolution);
 
       if ((streamRes === 720 && subtitleRes === 1080) ||
-          (streamRes === 1080 && subtitleRes === 720)) {
+        (streamRes === 1080 && subtitleRes === 720)) {
         score += 400; // 720p/1080p cross-match (still works)
       } else if (streamRes < subtitleRes) {
         score += 200; // Higher quality subtitle on lower res stream (works)
@@ -1582,7 +1597,7 @@ function calculateFilenameMatchScore(streamFilename, subtitleName) {
 
   // BONUS: If subtitle name is very similar in structure/length, it's probably the right one
   const tokenRatio = Math.min(streamTokens.length, subtitleTokens.length) /
-                     Math.max(streamTokens.length, subtitleTokens.length);
+    Math.max(streamTokens.length, subtitleTokens.length);
   if (tokenRatio > 0.8) {
     score *= 1.3; // Very similar structure = very good sign (increased threshold and bonus)
   } else if (tokenRatio > 0.6) {
@@ -1622,7 +1637,7 @@ function rankSubtitlesByFilename(subtitles, streamFilename, videoInfo = null) {
     let finalScore = 0;
     let matchTier = 'none';
     let matchDetails = '';
- 
+
     // TIER 1: SubDL Releases Array Exact Match (100,000+ points)
     // Highest priority - exact string match in SubDL's releases array
     if (sub.provider === 'subdl' && Array.isArray(sub.releases) && sub.releases.length > 0) {
@@ -1712,7 +1727,8 @@ function rankSubtitlesByFilename(subtitles, streamFilename, videoInfo = null) {
       ...sub,
       _matchScore: finalScore,
       _matchTier: matchTier,
-      _matchDetails: matchDetails    };
+      _matchDetails: matchDetails
+    };
   });
 
   // Add episode metadata match bonus/penalty (for TV shows and anime)
@@ -2068,7 +2084,7 @@ function createSubtitleHandler(config) {
                   if (error?.authError === true || error?.statusCode === 400 || error?.statusCode === 401 || error?.statusCode === 403 || msg.includes('auth')) {
                     openSubsAuthFailed = true;
                   }
-                } catch (_) {}
+                } catch (_) { }
                 return ({ provider: `OpenSubtitles (${implementationType})`, results: [], error });
               })
           );
@@ -2270,6 +2286,11 @@ function createSubtitleHandler(config) {
       // Add translation buttons for each target language (skip in no-translation mode)
       const translationEntries = [];
       if (!config.noTranslationMode) {
+        const translateQueryParts = [];
+        if (id) translateQueryParts.push(`videoId=${encodeURIComponent(id)}`);
+        if (streamFilename) translateQueryParts.push(`filename=${encodeURIComponent(streamFilename)}`);
+        const translateQuery = translateQueryParts.length ? `?${translateQueryParts.join('&')}` : '';
+
         // Normalize and deduplicate target languages
         const normalizedTargetLangs = [...new Set(config.targetLanguages.map(lang => {
           const normalized = normalizeLanguageCode(lang);
@@ -2325,10 +2346,20 @@ function createSubtitleHandler(config) {
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
           for (const sourceSub of sourceSubtitles) {
+            // Cache source metadata for later history enrichment (Stremio may drop query params)
+            try {
+              const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceSub.fileId}`;
+              translationSourceMeta.set(metaKey, {
+                videoId: id,
+                filename: streamFilename,
+                title: sourceSub.name || ''
+              });
+            } catch (_) { /* ignore */ }
+
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
               lang: displayName, // Display as "Make Language" in Stremio UI
-              url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}.srt`
+              url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}.srt${translateQuery}`
             };
             translationEntries.push(translationEntry);
           }
@@ -2634,7 +2665,7 @@ async function handleSubtitleDownload(fileId, language, config) {
         const tTooSmall = getTranslator(config.uiLanguage || 'en');
         return createInvalidSubtitleMessage(tTooSmall('subtitle.invalidSubtitleTooSmall', {}, 'The subtitle file is too small and seems corrupted.'), config.uiLanguage || 'en');
       }
-    } catch (_) {}
+    } catch (_) { }
 
     return content;
 
@@ -2866,11 +2897,130 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       sourceFileId,
       targetLanguage
     );
+    // Generate a unique ID for this translation request to track it
+    const requestId = crypto.randomUUID();
+    const historyUserHash = resolveHistoryUserHash(config, userHash);
+    const historyEnabled = !!historyUserHash;
+    if (!historyEnabled) {
+      auditHistorySkip('missing user hash for translation history', {
+        requestId,
+        sourceFileId,
+        targetLanguage
+      });
+    }
     // Shared in-flight key for permanent translations so other configs don't start duplicate work
     const sharedInFlightKey = (!bypass && allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) ? baseKey : null;
     const sharedLockKey = sharedInFlightKey || runtimeKey;
 
     log.debug(() => `[Translation] Cache key: ${cacheKey} (bypass: ${bypass && bypassEnabled}, runtimeKey=${runtimeKey})`);
+
+    let historyEntry = null;
+    const isPlaceholder = (val) => {
+      const v = (val || '').toString().trim().toLowerCase();
+      if (!v) return true;
+      return v === 'stream and refresh' || v === 'unknown' || v === 'unknown title';
+    };
+    const pickBest = (...candidates) => {
+      for (const c of candidates) {
+        if (c === undefined || c === null) continue;
+        const str = c.toString().trim();
+        if (!str) continue;
+        if (isPlaceholder(str)) continue;
+        return str;
+      }
+      return '';
+    };
+
+    const ensureHistoryEntry = () => {
+      if (!historyEnabled) return false;
+      if (historyEntry) return true;
+      const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceFileId}`;
+      const cachedMeta = translationSourceMeta.get(metaKey) || {};
+      const latestStream = (() => {
+        try {
+          return config?.__configHash ? streamActivity.getLatestStreamActivity(config.__configHash) : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      const fallbackFilename = pickBest(
+        options.filename,
+        cachedMeta.filename,
+        cachedMeta.title,
+        latestStream?.filename,
+        config?.lastStream?.filename,
+        config?.streamFilename,
+        options.sourceFileId,
+        sourceFileId
+      ) || 'unknown';
+      const fallbackVideoId = pickBest(
+        options.videoId,
+        cachedMeta.videoId,
+        latestStream?.videoId,
+        config?.lastStream?.videoId,
+        config?.videoId
+      ) || 'unknown';
+      const fallbackSourceLang =
+        options.sourceLanguage
+        || (Array.isArray(config.sourceLanguages) && config.sourceLanguages[0])
+        || 'auto';
+      const videoHash = deriveVideoHash(fallbackFilename, fallbackVideoId || sourceFileId || '');
+      historyEntry = {
+        id: requestId,
+        status: 'processing',
+        scope: options.from || 'standard',
+        title: fallbackFilename,
+        filename: fallbackFilename,
+        videoId: fallbackVideoId,
+        videoHash: videoHash || '',
+        sourceFileId: options.sourceFileId || sourceFileId || 'unknown',
+        sourceLanguage: fallbackSourceLang, // Will update if detected
+        targetLanguage: targetLanguage,
+        createdAt: Date.now(),
+        provider: config.mainProvider || 'unknown',
+        model: config.geminiModel || 'default'
+      };
+      saveRequestToHistory(historyUserHash, historyEntry).catch(err => {
+        log.warn(() => [`[History] Failed to save initial history for ${requestId}:`, err.message]);
+      });
+      // Best-effort metadata enrichment (async, non-blocking)
+      resolveHistoryTitle(options.videoId || '', fallbackFilename, options.season, options.episode)
+        .then(meta => {
+          updateHistory(null, {
+            title: meta.title,
+            season: meta.season,
+            episode: meta.episode,
+            videoHash: videoHash || historyEntry.videoHash,
+            videoId: historyEntry.videoId === 'unknown' ? (options.videoId || cachedMeta.videoId || meta.videoId || historyEntry.videoId) : historyEntry.videoId
+          });
+        })
+        .catch(() => { /* ignore */ });
+      return true;
+    };
+    const updateHistory = (status, extra = {}) => {
+      if (!historyEnabled || !historyEntry) return;
+      if (status) historyEntry.status = status;
+      if ((status === 'completed' || status === 'failed') && !historyEntry.completedAt) {
+        historyEntry.completedAt = Date.now();
+      }
+      if (extra && extra.cacheKey && !historyEntry.cacheKey) {
+        historyEntry.cacheKey = extra.cacheKey;
+      }
+      if (extra && extra.sourceLanguage && (!historyEntry.sourceLanguage || historyEntry.sourceLanguage === 'auto')) {
+        historyEntry.sourceLanguage = extra.sourceLanguage;
+      }
+      Object.assign(historyEntry, extra);
+      saveRequestToHistory(historyUserHash, historyEntry).catch(err => {
+        log.warn(() => [`[History] Failed to save history update for ${requestId}:`, err.message]);
+      });
+      if (historyEntry.status === 'completed' || historyEntry.status === 'failed') {
+        try {
+          const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceFileId}`;
+          translationSourceMeta.delete(metaKey);
+        } catch (_) { /* ignore */ }
+      }
+    };
+
 
 
     if (bypass) {
@@ -3007,7 +3157,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
     try {
       sharedLock = await isSharedTranslationInFlight(sharedLockKey);
       sharedLockInProgress = !!(sharedLock && sharedLock.inProgress !== false);
-    } catch (_) {}
+    } catch (_) { }
 
     // Check if translation is in progress (for backward compatibility)
     const status = translationStatus.get(runtimeKey)
@@ -3042,7 +3192,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
             log.debug(() => '[Translation] Serving partial SRT from partial cache');
             return partial.content;
           }
-        } catch (_) {}
+        } catch (_) { }
         const loadingMsg = createLoadingSubtitle(config.uiLanguage || 'en');
         log.debug(() => `[Translation] No partial available, returning loading SRT (size=${loadingMsg.length})`);
         return loadingMsg;
@@ -3058,6 +3208,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
     }
 
     // === PRE-FLIGHT VALIDATION ===
+    ensureHistoryEntry();
     // Download and validate source subtitle BEFORE returning loading message
     // This prevents users from being stuck at "TRANSLATION IN PROGRESS" if subtitle is corrupted
     log.debug(() => `[Translation] Pre-flight validation: downloading source subtitle ${sourceFileId}`);
@@ -3103,7 +3254,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
           // Save to download cache for subsequent operations
           try {
             saveDownloadCached(sourceFileId, sourceContent);
-          } catch (_) {}
+          } catch (_) { }
         } else {
           log.debug(() => `[Translation] Pre-flight: using cached source (${sourceContent.length} bytes)`);
         }
@@ -3124,6 +3275,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       if (!error || !error._alreadyLogged) {
         log.error(() => ['[Translation] Pre-flight validation failed:', error?.message || String(error)]);
       }
+      updateHistory('failed', { error: error?.message || 'Pre-flight validation failed' });
       // Return error message instead of loading message
       const tError = getTranslator(config.uiLanguage || 'en');
       const reasonText = tError('subtitleErrors.downloadFailedReason', { reason: error.message || '' }, `Download failed: ${error.message}`);
@@ -3158,24 +3310,34 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
     }
 
     // Start translation in background (don't await here)
-    translationPromise.catch(error => {
-      // Only log if not already logged by upstream handler
-      if (!error._alreadyLogged) {
-        log.error(() => ['[Translation] Background translation failed:', error.message]);
-      }
-      // Mark as failed so it can be retried
-      try {
-        translationStatus.delete(runtimeKey);
-        if (sharedInFlightKey) translationStatus.delete(sharedInFlightKey);
-      } catch (_) {}
-    }).finally(async () => {
-      // Clean up the in-flight promise when done
-      inFlightTranslations.delete(runtimeKey);
-      if (sharedInFlightKey) inFlightTranslations.delete(sharedInFlightKey);
-      try {
-        await clearSharedTranslationInFlight(sharedLockKey);
-      } catch (_) {}
-    });
+    translationPromise
+      .then((result) => {
+        // Update history with success
+        const sourceLang = (result && typeof result === 'object') ? (result.detectedLanguage || historyEntry?.sourceLanguage) : historyEntry?.sourceLanguage;
+        updateHistory('completed', sourceLang ? { sourceLanguage: sourceLang } : {});
+        return result;
+      })
+      .catch(error => {
+        // Update history with failure
+        updateHistory('failed', { error: error.message || 'Unknown error' });
+
+        // Only log if not already logged by upstream handler
+        if (!error._alreadyLogged) {
+          log.error(() => ['[Translation] Background translation failed:', error.message]);
+        }
+        // Mark as failed so it can be retried
+        try {
+          translationStatus.delete(runtimeKey);
+          if (sharedInFlightKey) translationStatus.delete(sharedInFlightKey);
+        } catch (_) { }
+      }).finally(async () => {
+        // Clean up the in-flight promise when done
+        inFlightTranslations.delete(runtimeKey);
+        if (sharedInFlightKey) inFlightTranslations.delete(sharedInFlightKey);
+        try {
+          await clearSharedTranslationInFlight(sharedLockKey);
+        } catch (_) { }
+      });
 
     // In mobile mode, hold the response until the translation finishes to avoid stale Android caching
     if (waitForFullTranslation) {
@@ -3230,51 +3392,51 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       // Fallback: Fetch subtitle content, preferring 10min download cache first
       // This avoids re-downloading the same source when translating after a direct download
       sourceContent = getDownloadCached(sourceFileId);
-    if (sourceContent) {
-      log.debug(() => `[Translation] Using cached source subtitle for ${sourceFileId} (${sourceContent.length} bytes)`);
-    } else {
-      // Download subtitle from provider
-      log.debug(() => `[Translation] Cache miss â€“ downloading source subtitle from provider`);
-
-      if (sourceFileId.startsWith('subdl_')) {
-        // SubDL subtitle
-        if (!config.subtitleProviders?.subdl?.enabled) {
-          throw new Error('SubDL provider is disabled');
-        }
-
-        const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
-        sourceContent = await subdl.downloadSubtitle(sourceFileId);
-      } else if (sourceFileId.startsWith('subsource_')) {
-        // SubSource subtitle
-        if (!config.subtitleProviders?.subsource?.enabled) {
-          throw new Error('SubSource provider is disabled');
-        }
-
-        const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
-        sourceContent = await subsource.downloadSubtitle(sourceFileId);
-      } else if (sourceFileId.startsWith('v3_')) {
-        // OpenSubtitles V3 subtitle
-        if (!config.subtitleProviders?.opensubtitles?.enabled) {
-          throw new Error('OpenSubtitles provider is disabled');
-        }
-
-        const opensubtitlesV3 = new OpenSubtitlesV3Service();
-        sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId);
+      if (sourceContent) {
+        log.debug(() => `[Translation] Using cached source subtitle for ${sourceFileId} (${sourceContent.length} bytes)`);
       } else {
-        // OpenSubtitles subtitle (Auth implementation - default)
-        if (!config.subtitleProviders?.opensubtitles?.enabled) {
-          throw new Error('OpenSubtitles provider is disabled');
+        // Download subtitle from provider
+        log.debug(() => `[Translation] Cache miss â€“ downloading source subtitle from provider`);
+
+        if (sourceFileId.startsWith('subdl_')) {
+          // SubDL subtitle
+          if (!config.subtitleProviders?.subdl?.enabled) {
+            throw new Error('SubDL provider is disabled');
+          }
+
+          const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
+          sourceContent = await subdl.downloadSubtitle(sourceFileId);
+        } else if (sourceFileId.startsWith('subsource_')) {
+          // SubSource subtitle
+          if (!config.subtitleProviders?.subsource?.enabled) {
+            throw new Error('SubSource provider is disabled');
+          }
+
+          const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
+          sourceContent = await subsource.downloadSubtitle(sourceFileId);
+        } else if (sourceFileId.startsWith('v3_')) {
+          // OpenSubtitles V3 subtitle
+          if (!config.subtitleProviders?.opensubtitles?.enabled) {
+            throw new Error('OpenSubtitles provider is disabled');
+          }
+
+          const opensubtitlesV3 = new OpenSubtitlesV3Service();
+          sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId);
+        } else {
+          // OpenSubtitles subtitle (Auth implementation - default)
+          if (!config.subtitleProviders?.opensubtitles?.enabled) {
+            throw new Error('OpenSubtitles provider is disabled');
+          }
+
+          const opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
+          sourceContent = await opensubtitles.downloadSubtitle(sourceFileId);
         }
 
-        const opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
-        sourceContent = await opensubtitles.downloadSubtitle(sourceFileId);
+        // Save the freshly downloaded source to the 10min download cache for subsequent operations
+        try {
+          saveDownloadCached(sourceFileId, sourceContent);
+        } catch (_) { }
       }
-
-      // Save the freshly downloaded source to the 10min download cache for subsequent operations
-      try {
-        saveDownloadCached(sourceFileId, sourceContent);
-      } catch (_) {}
-    }
 
       // Validate source size before translation (only if not pre-validated)
       try {
@@ -3294,7 +3456,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           log.debug(() => '[Translation] Aborted due to invalid/corrupted source subtitle (too small).');
           return;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Convert VTT originals to SRT for translation
@@ -3548,10 +3710,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     // Clean up partial cache now that final translation is saved
     // Partial cache is no longer needed and should be deleted to free disk space
-      try {
-        const adapter = await getStorageAdapter();
-        await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
-        log.debug(() => `[Translation] Cleaned up partial cache for ${runtimeKey}`);
+    try {
+      const adapter = await getStorageAdapter();
+      await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
+      log.debug(() => `[Translation] Cleaned up partial cache for ${runtimeKey}`);
     } catch (e) {
       // Ignore - partial cache might not exist or already cleaned
       log.debug(() => `[Translation] Partial cache cleanup skipped (might not exist): ${e.message}`);
@@ -3644,7 +3806,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     try {
       translationStatus.delete(runtimeKey);
       if (sharedInFlightKey) translationStatus.delete(sharedInFlightKey);
-    } catch (_) {}
+    } catch (_) { }
 
     // Clean up partial cache on error as well
     try {
@@ -3664,7 +3826,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       if (current > 1) userTranslationCounts.set(key, current - 1);
       else userTranslationCounts.delete(key);
       log.debug(() => `[Translation] User concurrency updated user=${key} count=${userTranslationCounts.get(key) || 0}`);
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -3814,7 +3976,7 @@ setInterval(() => {
 }, 1000 * 60 * 60); // Every hour (less frequent for disk operations)
 
 setInterval(() => {
-  verifyBypassCacheIntegrity().catch(() => {});
+  verifyBypassCacheIntegrity().catch(() => { });
 }, 1000 * 60 * 60);
 
 // Note: No manual cleanup needed for translationStatus - LRU cache handles TTL automatically
@@ -3890,7 +4052,7 @@ module.exports = {
         try {
           translationStatus.delete(runtimeKey);
           log.debug(() => `[Purge] Cleared user-scoped translation status for ${runtimeKey}`);
-        } catch (_) {}
+        } catch (_) { }
 
       } else {
         // User is using PERMANENT CACHE - only delete permanent cache
@@ -3903,7 +4065,7 @@ module.exports = {
             // Best-effort cleanup of legacy un-namespaced keys
             try {
               await adapter.delete(getTranslationStorageKey(cacheKey), StorageAdapter.CACHE_TYPES.TRANSLATION);
-            } catch (_) {}
+            } catch (_) { }
           } catch (e) {
             log.warn(() => [`[Purge] Failed removing permanent cache for ${baseKey}:`, e.message]);
           }
@@ -3916,7 +4078,7 @@ module.exports = {
           translationStatus.delete(runtimeKey);
           translationStatus.delete(baseKey);
           log.debug(() => `[Purge] Cleared translation status for ${runtimeKey}`);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // ALWAYS delete partial cache (in-flight translations)
@@ -3934,19 +4096,261 @@ module.exports = {
       log.error(() => ['[Purge] Error purging translation cache:', error.message]);
       return false;
     }
-  },
-  /**
-   * Check if a user can start a new translation without hitting the concurrency limit
-   * Used by the 3-click reset safety check to prevent purging cache if re-translation would fail
-   */
+  }
+};
+
+// Max history items per user to fetch/store (soft limit for display)
+const MAX_HISTORY_ITEMS = 20;
+const historyMetrics = {
+  skippedMissingHash: 0
+};
+
+function sanitizeHistoryComponent(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 200);
+}
+
+function buildHistoryKey(userHash, entryId) {
+  const safeHash = sanitizeHistoryComponent(userHash);
+  const safeId = sanitizeHistoryComponent(entryId);
+  // Double underscore separators avoid collision with legacy single-underscore form
+  return `hist__${safeHash}__${safeId}`;
+}
+
+function buildHistoryPatterns(userHash) {
+  const safeHash = sanitizeHistoryComponent(userHash);
+  // Preferred key format plus legacy single-underscore and colon-delimited formats for backward compatibility
+  return [
+    `hist__${safeHash}__*`,
+    `hist_${safeHash}_*`,
+    `hist:${safeHash}:*`
+  ];
+}
+
+async function resolveHistoryTitle(videoId, fallbackTitle = '', seasonHint = null, episodeHint = null) {
+  if (!videoId || typeof videoId !== 'string') {
+    return { title: fallbackTitle || 'Unknown title', season: seasonHint, episode: episodeHint };
+  }
+
+  if (historyTitleCache.has(videoId)) {
+    const cached = historyTitleCache.get(videoId);
+    if (cached) return cached;
+  }
+
+  let title = fallbackTitle || '';
+  let season = seasonHint;
+  let episode = episodeHint;
+
+  try {
+    const parsed = parseStremioId(videoId);
+    const metaType = parsed?.type === 'movie' ? 'movie' : 'series';
+    const metaId = parsed?.imdbId || parsed?.id || videoId;
+    if (parsed?.season) season = parsed.season;
+    if (parsed?.episode) episode = parsed.episode;
+
+    if (metaId) {
+      const url = `https://v3-cinemeta.strem.io/meta/${metaType}/${encodeURIComponent(metaId)}.json`;
+      const resp = await axios.get(url, { timeout: 7500 });
+      const meta = resp?.data?.meta;
+      if (meta?.name) title = meta.name;
+      if (!season && Number.isFinite(Number(meta?.season))) season = Number(meta.season);
+      if (!episode && Number.isFinite(Number(meta?.episode))) episode = Number(meta.episode);
+    }
+  } catch (err) {
+    log.debug(() => [`[History] Cinemeta lookup failed for ${videoId}:`, err.message]);
+  }
+
+  const resolved = {
+    title: title || fallbackTitle || videoId || 'Unknown title',
+    season: seasonHint ?? season ?? null,
+    episode: episodeHint ?? episode ?? null
+  };
+  historyTitleCache.set(videoId, resolved);
+  return resolved;
+}
+
+function normalizeHistoryUserHash(rawHash) {
+  if (!rawHash || typeof rawHash !== 'string') return '';
+  const trimmed = rawHash.trim();
+  if (!trimmed || trimmed === 'anonymous') return '';
+  return trimmed;
+}
+
+function resolveHistoryUserHash(config = {}, explicitHash = '') {
+  return normalizeHistoryUserHash(explicitHash)
+    || normalizeHistoryUserHash(config.userHash)
+    || normalizeHistoryUserHash(config.__configHash)
+    || '';
+}
+
+function auditHistorySkip(reason, context = {}) {
+  historyMetrics.skippedMissingHash++;
+  const ctxParts = [];
+  if (context.requestId) ctxParts.push(`req=${context.requestId}`);
+  if (context.sourceFileId) ctxParts.push(`src=${context.sourceFileId}`);
+  if (context.targetLanguage) ctxParts.push(`target=${context.targetLanguage}`);
+  const contextStr = ctxParts.length ? ` | ${ctxParts.join(' ')}` : '';
+  log.warn(() => `[History] Skipping history: ${reason}${contextStr}`);
+}
+
+async function saveRequestToHistory(userHash, entry) {
+  try {
+    const normalizedHash = normalizeHistoryUserHash(userHash);
+    if (!normalizedHash || !entry || !entry.id) {
+      if (!normalizedHash && entry && entry.id) {
+        auditHistorySkip('missing user hash in saveRequestToHistory', { requestId: entry.id, status: entry.status });
+      }
+      return;
+    }
+    const adapter = await getStorageAdapter();
+    const key = buildHistoryKey(normalizedHash, entry.id);
+    // Store individual entry with TTL
+    await adapter.set(key, entry, StorageAdapter.CACHE_TYPES.HISTORY, StorageAdapter.DEFAULT_TTL[StorageAdapter.CACHE_TYPES.HISTORY]);
+  } catch (err) {
+    log.warn(() => [`[History] Error saving history entry:`, err.message]);
+  }
+}
+
+async function getHistoryForUser(userHash) {
+  try {
+    const normalizedHash = normalizeHistoryUserHash(userHash);
+    if (!normalizedHash) return [];
+    const adapter = await getStorageAdapter();
+    // Fetch both new and legacy key patterns
+    const patterns = buildHistoryPatterns(normalizedHash);
+    const keySets = await Promise.all(patterns.map(p => adapter.list(StorageAdapter.CACHE_TYPES.HISTORY, p)));
+    const keys = Array.from(new Set((keySets || []).flat().filter(Boolean)));
+
+    if (!keys || keys.length === 0) return [];
+
+    // Parallel fetch
+    const entries = await Promise.all(
+      keys.slice(0, MAX_HISTORY_ITEMS * 2) // Fetch a bit more to sort and slice
+        .map(k => adapter.get(k, StorageAdapter.CACHE_TYPES.HISTORY))
+    );
+
+    return entries
+      .filter(Boolean)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, MAX_HISTORY_ITEMS);
+  } catch (err) {
+    log.error(() => [`[History] Error fetching history for ${userHash}:`, err.message]);
+    return [];
+  }
+}
+
+// Re-export everything properly
+module.exports = {
+  createSubtitleHandler,
+  handleSubtitleDownload,
+  handleTranslation,
+  getAvailableSubtitlesForTranslation,
+  createLoadingSubtitle,
+  createSessionTokenErrorSubtitle,
+  createOpenSubtitlesAuthErrorSubtitle,
+  createOpenSubtitlesAuthMissingSubtitle,
+  createOpenSubtitlesQuotaExceededSubtitle,
+  createProviderDownloadErrorSubtitle,
+  createInvalidSubtitleMessage,
+  createOpenSubtitlesV3RateLimitSubtitle,
+  createOpenSubtitlesV3ServiceUnavailableSubtitle,
+  createConcurrencyLimitSubtitle,
+  createTranslationErrorSubtitle,
+  readFromPartialCache,
+  translationStatus,
+  // Export methods from the object above if needed, but they seem to be attached to module.exports?
+  // Wait, existing code had a mix of exports. 
+  // Let's look at lines 3843-3856 in Step 85. 
+  // The code HAD `module.exports = { ... }` starting at 3843.
+  // And `hasCachedTranslation` was inside it.
+
+  hasCachedTranslation: module.exports.hasCachedTranslation, // This won't work if I replaced the block.
+  // I need to redefine them or move them out.
+  // The complexity is that `hasCachedTranslation` and `purgeTranslationCache` WERE inside the module.exports block.
+
+  // Okay, easier path: Define them as standalone functions first, then export.
+
   canUserStartTranslation,
-  /**
-   * In-flight translations tracker
-   * Used by the 3-click reset safety check to prevent purging cache during active translations
-   */
   inFlightTranslations,
-  /**
-   * Cross-instance in-flight translation detector (shared lock)
-   */
-  isSharedTranslationInFlight
+  initializeCacheDirectory,
+  purgeLegacyTranslationCacheEntries,
+  verifyCacheIntegrity,
+  verifyBypassCacheIntegrity,
+  markSharedTranslationInFlight,
+  clearSharedTranslationInFlight,
+  isSharedTranslationInFlight,
+  readFromStorage,
+  resolveHistoryUserHash,
+  getHistoryForUser,
+  saveRequestToHistory,
+  resolveHistoryTitle
+};
+
+// Append the complex object methods to module.exports since they were defined inline
+module.exports.hasCachedTranslation = async function (sourceFileId, targetLanguage, config) {
+  try {
+    const { cacheKey, baseKey, bypass, bypassEnabled, userHash, allowPermanent } = generateCacheKeys(config, sourceFileId, targetLanguage);
+
+    if (bypass && bypassEnabled && userHash) {
+      const cached = await readFromBypassStorage(cacheKey);
+      return !!(cached && ((cached.content && typeof cached.content === 'string' && cached.content.length > 0) || (typeof cached === 'string' && cached.length > 0)));
+    } else if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
+      let cached = await readFromStorage(baseKey);
+      return !!(cached && ((cached.content && typeof cached.content === 'string' && cached.content.length > 0) || (typeof cached === 'string' && cached.length > 0)));
+    }
+  } catch (_) {
+    return false;
+  }
+};
+
+module.exports.purgeTranslationCache = async function (sourceFileId, targetLanguage, config) {
+  try {
+    const { cacheKey, baseKey, runtimeKey, bypass, bypassEnabled, userHash, allowPermanent } = generateCacheKeys(config, sourceFileId, targetLanguage);
+    const adapter = await getStorageAdapter();
+
+    if (bypass && bypassEnabled && userHash) {
+      log.debug(() => `[Purge] User is using bypass cache - deleting bypass entries only`);
+      try {
+        await adapter.delete(cacheKey, StorageAdapter.CACHE_TYPES.BYPASS);
+        log.debug(() => `[Purge] Removed user-scoped bypass cache for ${cacheKey}`);
+        try {
+          await adapter.delete(baseKey, StorageAdapter.CACHE_TYPES.BYPASS);
+        } catch (e) { }
+      } catch (e) {
+        log.warn(() => [`[Purge] Failed removing bypass cache for ${baseKey}:`, e.message]);
+      }
+      try {
+        translationStatus.delete(runtimeKey);
+      } catch (_) { }
+
+    } else {
+      log.debug(() => `[Purge] User is using permanent cache - deleting permanent entries only`);
+      if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
+        try {
+          await adapter.delete(getTranslationStorageKey(baseKey), StorageAdapter.CACHE_TYPES.TRANSLATION);
+          try {
+            await adapter.delete(getTranslationStorageKey(cacheKey), StorageAdapter.CACHE_TYPES.TRANSLATION);
+          } catch (_) { }
+        } catch (e) {
+          log.warn(() => [`[Purge] Failed removing permanent cache for ${baseKey}:`, e.message]);
+        }
+      }
+      try {
+        translationStatus.delete(runtimeKey);
+        translationStatus.delete(baseKey);
+      } catch (_) { }
+    }
+
+    try {
+      await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
+      log.debug(() => `[Purge] Removed partial cache for ${runtimeKey}`);
+    } catch (e) { }
+
+    return true;
+  } catch (error) {
+    log.error(() => ['[Purge] Error purging translation cache:', error.message]);
+    return false;
+  }
 };

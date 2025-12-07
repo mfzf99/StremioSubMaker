@@ -521,7 +521,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         embeddedSubs: `/embedded-subtitles?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
         automaticSubs: `/auto-subtitles?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
         subToolbox: `/sub-toolbox?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
-        configure: `/configure?config=${encodeURIComponent(configStr || '')}`
+        configure: `/configure?config=${encodeURIComponent(configStr || '')}`,
+        history: `/sub-history?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`
     };
     const devMode = (config || {}).devMode === true;
     const languageMaps = buildLanguageLookupMaps();

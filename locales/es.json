@@ -178,8 +178,8 @@
         "eyebrow": "Sub Toolbox",
         "title": "Elige una herramienta sin salir de tu emisión",
         "body": "Usa el botón Sub Toolbox en la lista de subtítulos de Stremio. Tus API keys, idiomas destino y caché llegan automáticamente.",
-        "primary": "Traducir un archivo",
-        "secondary": "Ajustar configuración"
+        "primary": "Panel de traducción",
+        "secondary": "Configurar"
       },
       "toast": {
         "title": "Nuevo stream detectado",
