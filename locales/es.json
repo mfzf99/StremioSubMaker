@@ -949,7 +949,7 @@
       },
       "learnMode": {
         "label": "Learn Mode",
-        "description": "Agrega entradas \"Learn (Idioma)\" que generan WebVTT bilingüe con líneas de origen y traducción. Después de habilitarlo, define los idiomas Learn en la sección superior.",
+        "description": "Agrega entradas \"Learn (Idioma)\" que generan WebVTT bilingüe con líneas de origen y traducción. Después de habilitarlo, define los idiomas Learn en la sección \"Idiomas\" superior.",
         "orderLabel": "Orden de subtítulos en Learn Mode",
         "orderDescription": "Elige qué idioma aparece arriba y abajo.",
         "sourceTop": "Origen arriba - Destino abajo",

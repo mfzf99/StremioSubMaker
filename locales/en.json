@@ -946,7 +946,7 @@
       },
       "learnMode": {
         "label": "Learn Mode",
-        "description": "Adds \"Learn (Language)\" entries that output dual-language WebVTT with source and translated lines for language learning. After enabling, set Target Learn Languages in the section above.",
+        "description": "Adds \"Learn (Language)\" entries that output dual-language WebVTT with source and translated lines for language learning. After enabling, set Target Learn Languages in the \"Languages\" section above.",
         "orderLabel": "Learn Mode Subtitle Order",
         "orderDescription": "Choose which language appears at the top and bottom of the screen.",
         "sourceTop": "Source Top - Target Bottom",

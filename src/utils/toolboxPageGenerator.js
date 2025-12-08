@@ -6885,8 +6885,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       three: t('toolbox.autoSubs.steps.step3Chip', {}, 'Step 3'),
       four: t('toolbox.autoSubs.steps.step4Chip', {}, 'Step 4'),
       inputTitle: t('toolbox.autoSubs.steps.step1Title', {}, 'Input audio or video'),
-      streamLabel: t('toolbox.autoSubs.steps.streamLabel', {}, 'Stream URL:'),
-      streamPlaceholder: t('toolbox.autoSubs.steps.streamPlaceholder', {}, 'https://example.com/video.mkv'),
+      streamLabel: t('toolbox.embedded.step1.streamLabel', {}, t('toolbox.autoSubs.steps.streamLabel', {}, 'Stream URL:')),
+      streamPlaceholder: t('toolbox.embedded.step1.streamPlaceholder', {}, t('toolbox.autoSubs.steps.streamPlaceholder', {}, 'Paste the video/stream URL from Stremio or your browser')),
       langModelTitle: t('toolbox.autoSubs.steps.step2Title', {}, 'Mode & audio'),
       modeLabel: t('toolbox.autoSubs.steps.modeLabel', {}, 'Auto-subtitles mode'),
       modeHelper: t('toolbox.autoSubs.steps.modeHelper', {}, 'Cloudflare runs via the xSync extension. The server will not fetch your stream.'),
@@ -7387,7 +7387,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     .translation-settings-content { padding: 12px; border-top: 1px solid var(--border); display: none; }
     .translation-settings.open .translation-settings-content { display: block; }
     .hash-mismatch-alert {
-      margin-top: 10px;
+      margin: 8px auto 0;
       padding: 10px 12px;
       border-radius: 12px;
       border: 1px solid rgba(239,68,68,0.35);
@@ -7396,23 +7396,17 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       font-weight: 700;
       font-size: 14px;
       box-shadow: 0 8px 22px rgba(239,68,68,0.12);
-      display: block;
-      width: 100%;
-      box-sizing: border-box;
+      width: min(780px, 100%);
       text-align: center;
-      align-self: stretch;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
       word-break: break-word;
       overflow-wrap: anywhere;
-      min-height: var(--hash-alert-min-height, 74px);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity 0.15s ease;
     }
     .hash-mismatch-alert.is-visible {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: flex;
     }
     .hash-mismatch-alert .alert-head {
       color: #fff;
@@ -7422,16 +7416,6 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       font-size: 12px;
       font-weight: 700;
       box-shadow: 0 10px 18px rgba(185,28,28,0.18);
-      text-align: center;
-      margin: 0 auto 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      flex-wrap: wrap;
-      word-break: break-word;
-      overflow-wrap: anywhere;
     }
     .hash-mismatch-alert .alert-body {
       font-size: 13px;
@@ -7527,6 +7511,47 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     .step-body .status,
     .step-body .chips,
     .step-body .log-area { width: 100%; align-self: center; }
+    #autoStep1Card .field-block {
+      width: min(720px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+    #autoStep1Card .form-group {
+      width: 100%;
+      margin: 4px auto 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+    #autoStep1Card .form-group label {
+      margin: 0;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      text-align: center;
+    }
+    #autoStep1Card .form-group input[type="text"],
+    #autoStep1Card .form-group input[type="url"] {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      font-family: inherit;
+      text-align: center;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    #autoStep1Card .form-group input[type="text"]:focus,
+    #autoStep1Card .form-group input[type="url"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px var(--glow);
+    }
 
     .btn {
       display: inline-flex;
@@ -7817,8 +7842,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
               </div>
             </div>
-            <label for="streamUrl">${escapeHtml(copy.steps.streamLabel)}</label>
-            <input type="text" id="streamUrl" placeholder="${escapeHtml(copy.steps.streamPlaceholder)}">
+            <div class="field-block form-group">
+              <label for="streamUrl">${escapeHtml(copy.steps.streamLabel)}</label>
+              <input type="text" id="streamUrl" placeholder="${escapeHtml(copy.steps.streamPlaceholder)}">
+            </div>
             <div class="hash-mismatch-alert" id="auto-hash-mismatch" role="status" aria-live="polite" aria-hidden="true"></div>
             <div class="controls" style="margin-top:12px;">
               <button class="btn" id="autoContinue"><span>➡️</span> ${escapeHtml(copy.actions.continue)}</button>

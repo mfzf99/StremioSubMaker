@@ -4225,14 +4225,21 @@ async function getHistoryForUser(userHash) {
 
     if (!keys || keys.length === 0) return [];
 
-    // Parallel fetch
-    const entries = await Promise.all(
-      keys.slice(0, MAX_HISTORY_ITEMS * 2) // Fetch a bit more to sort and slice
-        .map(k => adapter.get(k, StorageAdapter.CACHE_TYPES.HISTORY))
+    // Fetch all, dedupe by entry.id, keep the newest copy per id
+    const fetched = await Promise.all(
+      keys.map(k => adapter.get(k, StorageAdapter.CACHE_TYPES.HISTORY))
     );
 
-    return entries
-      .filter(Boolean)
+    const deduped = new Map();
+    for (const entry of fetched) {
+      if (!entry || !entry.id) continue;
+      const existing = deduped.get(entry.id);
+      if (!existing || (entry.createdAt || 0) > (existing.createdAt || 0)) {
+        deduped.set(entry.id, entry);
+      }
+    }
+
+    return Array.from(deduped.values())
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, MAX_HISTORY_ITEMS);
   } catch (err) {
