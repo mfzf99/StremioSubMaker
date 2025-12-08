@@ -716,6 +716,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
+      justify-content: center;
       align-items: stretch;
     }
     .status-badge {
@@ -7410,7 +7411,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         linear-gradient(135deg, var(--surface), var(--surface-light));
     }
 
-    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; justify-content: center; }
     .pill-badge {
       background: linear-gradient(135deg, rgba(8,164,213,0.14), rgba(255,255,255,0.08));
       border: 1px solid rgba(8,164,213,0.25);
@@ -7639,6 +7640,36 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     .step-body .status,
     .step-body .chips,
     .step-body .log-area { width: 100%; align-self: center; }
+    #autoStep2Card {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    #autoStep2Card .step-title { justify-content: center; width: 100%; text-align: center; }
+    #autoStep2Card .step-body {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 14px;
+    }
+    #autoStep2Card .step-body > * { width: min(100%, 640px); }
+    #autoStep2Card .row { width: 100%; justify-items: center; }
+    #autoStep2Card .row > div { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+    #autoStep2Card label { text-align: center; }
+    #autoStep2Card .controls.wrap { justify-content: center; }
+    #autoStep2Card #assemblyOptions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      margin-top: 8px;
+    }
+    #autoTranslationCard {
+      max-width: 600px;
+      width: 100%;
+      margin: 0 auto;
+    }
     #autoStep1Card .field-block {
       width: min(720px, 100%);
       display: flex;
