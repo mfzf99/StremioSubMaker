@@ -966,7 +966,7 @@
       },
       "multiProvider": {
         "label": "مزودون متعددون (بيتا)",
-        "description": "يتيح مزودي ذكاء اصطناعي متعددين."
+        "description": "Enables multiple AI providers. You can set primary/secondary providers in \"Translation Settings\"."
       },
       "otherSettings": {
         "title": "إعدادات أخرى",

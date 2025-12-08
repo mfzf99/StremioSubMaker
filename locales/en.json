@@ -988,7 +988,7 @@
       },
       "multiProvider": {
         "label": "Multiple providers (beta)",
-        "description": "Enables multiple AI providers."
+        "description": "Enables multiple AI providers. You can set primary/secondary providers in \"Translation Settings\"."
       },
       "otherSettings": {
         "title": "Other Settings",

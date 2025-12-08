@@ -991,7 +991,7 @@
       },
       "multiProvider": {
         "label": "Múltiplos provedores (beta)",
-        "description": "Habilita múltiplos provedores de IA."
+        "description": "Habilita múltiplos provedores de IA. Você pode definir provedores principal/secundário em \"Configurações de Tradução\"."
       },
       "otherSettings": {
         "title": "Outras Configurações",

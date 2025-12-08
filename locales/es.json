@@ -991,7 +991,7 @@
       },
       "multiProvider": {
         "label": "Múltiples proveedores (beta)",
-        "description": "Activa múltiples proveedores de IA."
+        "description": "Activa múltiples proveedores de IA. Puedes fijar proveedor principal/secundario en \"Configuración de traducción\"."
       },
       "otherSettings": {
         "title": "Otros ajustes",
