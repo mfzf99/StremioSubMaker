@@ -376,7 +376,7 @@
                                     <input type="checkbox" id="enableMultiProviders">
                                     <span data-i18n="config.multiProvider.label">Multiple providers (beta)</span>
                                 </label>
-                                <span class="label-description" data-i18n="config.multiProvider.description">Enables multiple AI providers.</span>
+                                <span class="label-description" data-i18n="config.multiProvider.description">Enables multiple AI providers. You can set primary/secondary providers in "Translation Settings".</span>
                             </div>
 
                             <div id="multiProvidersContainer"
@@ -999,9 +999,7 @@
                 <div class="form-group">
                     <label for="databaseMode" class="form-label">
                         <span class="label-title" data-i18n="config.translationSettings.database.label">SubMaker Database</span>
-                        <span class="label-description" data-i18n="config.translationSettings.database.description">Choose how to handle the SubMaker translation database. The main
-                            database caches translations permanently to reduce API usage. Bypass mode forces fresh
-                            translations and stores them temporarily (12 hours).</span>
+                        <span class="label-description" data-i18n="config.translationSettings.database.description">SubMaker's database caches translations permanently to reduce community AI API costs/usage. Bypass mode skips the shared database and stores translations temporarily (12 hours).</span>
                     </label>
                     <select id="databaseMode" class="styled-select">
                         <option value="use" data-i18n="config.translationSettings.database.use">Use SubMaker Database</option>
@@ -1076,7 +1074,7 @@
                         <input type="checkbox" id="learnModeEnabled">
                         <span id="learnModeLabel" data-i18n="config.learnMode.label">Learn Mode</span>
                         <span class="label-description" id="learnModeDescription" data-i18n="config.learnMode.description">Adds "Learn (Language)" entries that output dual-language WebVTT
-                            with source and translated lines for language learning.</span>
+                            with source and translated lines for language learning. After enabling, set Target Learn Languages in the section above.</span>
                     </label>
                 </div>
 
