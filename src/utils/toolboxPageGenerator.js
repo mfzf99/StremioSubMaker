@@ -5285,6 +5285,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         srtPreview: document.getElementById('srtPreview'),
         dlSrt: document.getElementById('downloadSrt'),
         dlVtt: document.getElementById('downloadVtt'),
+        dlRaw: document.getElementById('downloadRawTranscript'),
         translations: document.getElementById('translationDownloads'),
         videoMetaTitle: document.getElementById('video-meta-title'),
         videoMetaSubtitle: document.getElementById('video-meta-subtitle'),
@@ -5305,7 +5306,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         assemblyModeHelper: document.getElementById('assemblyModeHelper'),
         decodeBadge: document.getElementById('decodeBadge'),
         decodeBadgeDot: document.getElementById('decodeBadgeDot'),
-        decodeBadgeValue: document.getElementById('decodeBadgeValue')
+        decodeBadgeValue: document.getElementById('decodeBadgeValue'),
+        audioTrackPrompt: document.getElementById('autoTrackPrompt'),
+        audioTrackSelect: document.getElementById('autoAudioTrack'),
+        audioTrackContinue: document.getElementById('autoTrackContinue')
       };
       const stepPills = {
         fetch: document.getElementById('stepFetch'),
@@ -5335,7 +5339,11 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         lastServerLogTs: 0,
         liveLogSource: null,
         liveLogPoll: null,
-        liveLogJobId: null
+        liveLogJobId: null,
+        audioTracks: [],
+        selectedAudioTrack: null,
+        awaitingTrackChoice: false,
+        rawTranscript: null
       };
       const AUTO_SUB_TIMEOUT_MS = 15 * 60 * 1000;
       const escapeHtmlClient = (value) => {
@@ -5536,6 +5544,57 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         resetOutputs();
         resetPills();
         refreshStepLocks(reason || lockReasons.needContinue);
+      }
+      function renderAudioTrackOptions(tracks = [], preferredIdx = null, extractedIdx = null) {
+        if (!els.audioTrackSelect) return;
+        const options = Array.isArray(tracks) ? tracks : [];
+        els.audioTrackSelect.innerHTML = '';
+        options.forEach((track, idx) => {
+          const option = document.createElement('option');
+          const trackId = Number.isInteger(track?.trackNumber) ? track.trackNumber : (Number.isInteger(track?.index) ? track.index + 1 : idx + 1);
+          const langLabel = (track?.language || 'und').toString().toUpperCase();
+          const name = track?.name ? ` - ${track.name}` : '';
+          const codec = track?.codec ? ` [${track.codec}]` : '';
+          option.value = Number.isInteger(track?.index) ? track.index : idx;
+          option.textContent = `Track ${trackId} (${langLabel})${name}${codec}`;
+          els.audioTrackSelect.appendChild(option);
+        });
+        const desired = Number.isInteger(preferredIdx) ? preferredIdx : (Number.isInteger(extractedIdx) ? extractedIdx : null);
+        if (desired !== null) {
+          els.audioTrackSelect.value = String(desired);
+        } else if (!els.audioTrackSelect.value && options.length) {
+          const first = options[0];
+          const fallbackVal = Number.isInteger(first?.index) ? first.index : 0;
+          els.audioTrackSelect.value = String(fallbackVal);
+        }
+      }
+      function showAudioTrackPrompt(tracks = [], preferredIdx = null, extractedIdx = null) {
+        if (!els.audioTrackPrompt || !els.audioTrackSelect) return;
+        state.awaitingTrackChoice = true;
+        state.audioTracks = Array.isArray(tracks) ? tracks : [];
+        const desiredTrack = Number.isInteger(preferredIdx) ? preferredIdx : (Number.isInteger(extractedIdx) ? extractedIdx : null);
+        state.selectedAudioTrack = desiredTrack !== null ? desiredTrack : 0;
+        const helper = document.getElementById('autoTrackHelper');
+        if (helper) {
+          helper.textContent = copy?.steps?.audioTrackHelper || 'Multiple audio tracks detected. Choose one, then continue.';
+        }
+        renderAudioTrackOptions(state.audioTracks, preferredIdx, extractedIdx);
+        els.audioTrackPrompt.classList.add('show');
+        if (els.audioTrackContinue) {
+          els.audioTrackContinue.disabled = false;
+        }
+        pauseAutoSubTimeout();
+      }
+      function hideAudioTrackPrompt() {
+        state.awaitingTrackChoice = false;
+        state.audioTracks = [];
+        state.selectedAudioTrack = null;
+        if (els.audioTrackPrompt) {
+          els.audioTrackPrompt.classList.remove('show');
+        }
+        if (els.audioTrackContinue) {
+          els.audioTrackContinue.disabled = false;
+        }
       }
       let videoMetaRequestId = 0;
       const urlSchemePattern = new RegExp('^[a-z][a-z0-9+.-]*://', 'i');
@@ -6176,7 +6235,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
       }
 
-      function setDownloads(original, translations) {
+      function setDownloads(original, translations, rawTranscript) {
+        const raw = rawTranscript || state.rawTranscript;
         if (els.dlSrt) {
           if (original?.srt) {
             const blob = new Blob([original.srt], { type: 'text/plain' });
@@ -6199,6 +6259,19 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             );
           } else {
             disableDownloadLink(els.dlVtt);
+          }
+        }
+        if (els.dlRaw) {
+          if (raw?.srt) {
+            const blob = new Blob([raw.srt], { type: 'text/plain' });
+            const langCode = raw.languageCode || raw.language || original?.languageCode || 'und';
+            enableDownloadLink(
+              els.dlRaw,
+              raw.downloadUrl || URL.createObjectURL(blob),
+              (PAGE.videoHash || 'video') + '_' + (langCode || 'und') + '_autosub_raw.srt'
+            );
+          } else {
+            disableDownloadLink(els.dlRaw);
           }
         }
 
@@ -6246,13 +6319,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       function processAutoSubResult(data, transcript, translateEnabled, targets, serverLogs = []) {
         appendServerLogs(serverLogs);
         handleHashStatus(data?.hashes || {}, data?.cacheBlocked);
+        state.rawTranscript = transcript || state.rawTranscript || null;
         markStep('align', 'check');
         const okLabel = tt('toolbox.autoSubs.status.ok', {}, 'OK');
         setPillLabel('align', okLabel);
         setProgress(80);
         appendLog(tt('toolbox.autoSubs.logs.alignmentDone', {}, 'Alignment and timestamp generation complete.'), 'info');
         setPreview((data?.original && data.original.srt) || transcript?.srt || '');
-        setDownloads(data?.original, data?.translations || []);
+        setDownloads(data?.original, data?.translations || [], transcript);
         state.autoSubsCompleted = true;
         if (translateEnabled && targets.length) {
           const hasTranslationErrors = (data.translations || []).some(t => t.error);
@@ -6290,10 +6364,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       function resetOutputs() {
         state.autoSubsCompleted = false;
+        state.rawTranscript = null;
+        state.selectedAudioTrack = null;
+        hideAudioTrackPrompt();
         resetDecodeBadge();
         setPreview('');
         disableDownloadLink(els.dlSrt);
         disableDownloadLink(els.dlVtt);
+        disableDownloadLink(els.dlRaw);
         if (els.translations) {
           els.translations.innerHTML = '';
         }
@@ -6380,6 +6458,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       function failAutoSubTimeout() {
         clearAutoSubTimeout();
+        hideAudioTrackPrompt();
+        state.awaitingTrackChoice = false;
         const rejecter = state.autoSubsReject;
         state.autoSubsMessageId = null;
         state.autoSubsResolver = null;
@@ -6397,6 +6477,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         state.autoSubsTimer = setTimeout(failAutoSubTimeout, AUTO_SUB_TIMEOUT_MS);
       }
 
+      function pauseAutoSubTimeout() {
+        clearAutoSubTimeout();
+      }
+
       function resetAutoSubWait() {
         clearAutoSubTimeout();
         state.autoSubsMessageId = null;
@@ -6411,6 +6495,41 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           state.autoSubsReject = reject;
           refreshAutoSubTimeout();
         });
+      }
+
+      function handleTrackOptionsMessage(msg) {
+        if (!state.autoSubsInFlight) return;
+        if (!msg || !state.autoSubsMessageId || (msg.messageId && msg.messageId !== state.autoSubsMessageId)) return;
+        state.audioTracks = Array.isArray(msg.tracks) ? msg.tracks : [];
+        const suggested = Number.isInteger(msg.suggestedIndex) ? msg.suggestedIndex : msg.extractedIndex;
+        const extracted = Number.isInteger(msg.extractedIndex) ? msg.extractedIndex : null;
+        showAudioTrackPrompt(state.audioTracks, suggested, extracted);
+        const promptStatus = copy?.steps?.audioTrackHelper || tt('toolbox.autoSubs.status.audioTrackPrompt', {}, 'Multiple audio tracks detected. Choose one to continue.');
+        setStatus(promptStatus);
+        appendLog(promptStatus, 'info');
+        markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+      }
+
+      function submitAudioTrackSelection() {
+        if (!state.awaitingTrackChoice || !state.autoSubsMessageId) return;
+        const rawValue = els.audioTrackSelect ? parseInt(els.audioTrackSelect.value, 10) : NaN;
+        const choice = Number.isInteger(rawValue) && rawValue >= 0 ? rawValue : 0;
+        state.selectedAudioTrack = choice;
+        state.awaitingTrackChoice = false;
+        if (els.audioTrackContinue) {
+          els.audioTrackContinue.disabled = true;
+        }
+        const status = tt('toolbox.autoSubs.status.continuingTrack', { track: choice + 1 }, `Continuing with audio track ${choice + 1}...`);
+        appendLog(status, 'info');
+        setStatus(status);
+        window.postMessage({
+          type: 'SUBMAKER_AUTOSUB_SELECT_TRACK',
+          source: 'webpage',
+          messageId: state.autoSubsMessageId,
+          trackIndex: choice
+        }, '*');
+        refreshAutoSubTimeout();
+        hideAudioTrackPrompt();
       }
 
       async function submitTranscriptToServer(transcript, stream, targets, translateEnabled, overrides = {}) {
@@ -6510,6 +6629,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           markFetchComplete();
           markStep('align', 'warn');
           if (statusText) setPillLabel('align', statusText);
+        } else if (msg.stage === 'select-track') {
+          markFetchComplete();
+          if (statusText) setPillLabel('fetch', statusText);
+          if (state.decodeStatus !== 'done') {
+            markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+          }
         } else if (msg.stage === 'error') {
           markStep('fetch', 'danger');
           markStep('transcribe', 'danger');
@@ -6523,6 +6648,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       function handleAutoSubResponseMessage(msg) {
         if (!msg || !state.autoSubsMessageId || (msg.messageId && msg.messageId !== state.autoSubsMessageId)) return;
         clearAutoSubTimeout();
+        hideAudioTrackPrompt();
+        state.awaitingTrackChoice = false;
+        state.audioTracks = [];
+        state.selectedAudioTrack = null;
         const resolver = state.autoSubsResolver;
         const rejecter = state.autoSubsReject;
         state.autoSubsResolver = null;
@@ -6660,6 +6789,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             if (!transcript || transcript === true) {
               throw new Error('Extension returned no transcript');
             }
+            state.rawTranscript = transcript || null;
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
             if (state.decodeStatus !== 'done') {
@@ -6708,6 +6838,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             if (!transcript || transcript === true) {
               throw new Error('Extension returned no transcript');
             }
+            state.rawTranscript = transcript || null;
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
             if (state.decodeStatus !== 'done') {
@@ -6836,6 +6967,13 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         els.translationSettingsToggle?.addEventListener('click', () => toggleTranslationSettings());
         els.provider?.addEventListener('change', renderProviderModels);
         els.targetLang?.addEventListener('change', () => refreshStepLocks());
+        els.audioTrackSelect?.addEventListener('change', () => {
+          const raw = els.audioTrackSelect ? parseInt(els.audioTrackSelect.value, 10) : NaN;
+          if (Number.isInteger(raw) && raw >= 0) {
+            state.selectedAudioTrack = raw;
+          }
+        });
+        els.audioTrackContinue?.addEventListener('click', submitAudioTrackSelection);
         els.continueBtn?.addEventListener('click', () => {
           const stream = (els.streamUrl?.value || '').trim();
           const linkedHash = PAGE.videoHash || '';
@@ -6943,6 +7081,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           }
           if (msg.type === 'SUBMAKER_AUTOSUB_PROGRESS') {
             handleAutoSubProgressMessage(msg);
+          } else if (msg.type === 'SUBMAKER_AUTOSUB_TRACKS') {
+            handleTrackOptionsMessage(msg);
           } else if (msg.type === 'SUBMAKER_AUTOSUB_RESPONSE') {
             handleAutoSubResponseMessage(msg);
           } else if (msg.type === 'SUBMAKER_DEBUG_LOG' && state.autoSubsInFlight) {
@@ -7108,6 +7248,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       previewPlan: t('toolbox.autoSubs.actions.preview', {}, 'Preview plan'),
       progressAria: t('toolbox.autoSubs.actions.progress', {}, 'Progress'),
       awaiting: t('toolbox.autoSubs.status.awaiting', {}, 'Awaiting input...'),
+      audioTrackLabel: t('toolbox.autoSubs.steps.audioTrackLabel', {}, 'Audio track for transcription'),
+      audioTrackHelper: t('toolbox.autoSubs.steps.audioTrackHelper', {}, 'Multiple audio tracks detected. Choose one, then continue.'),
       pills: {
         fetch: t('toolbox.autoSubs.steps.fetchPill', {}, 'Fetch stream'),
         transcribe: t('toolbox.autoSubs.steps.transcribePill', {}, 'Transcribe'),
@@ -7121,6 +7263,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       downloads: t('toolbox.autoSubs.steps.downloads', {}, 'Downloads'),
       downloadSrt: t('toolbox.autoSubs.actions.downloadSrt', {}, 'Download SRT'),
       downloadVtt: t('toolbox.autoSubs.actions.downloadVtt', {}, 'Download VTT'),
+      downloadRawTranscript: t('toolbox.autoSubs.actions.downloadRawTranscript', {}, 'Download raw transcript'),
       translationsEmpty: t('toolbox.autoSubs.steps.translationsEmpty', {}, 'No translations yet.'),
       translationCardTitle: t('toolbox.autoSubs.steps.translationCardTitle', { lang: '{lang}' }, 'Translated {lang}'),
       translationCardFallback: t('toolbox.autoSubs.steps.translationCardFallback', {}, 'Translated subtitle'),
@@ -7133,7 +7276,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       needRun: t('toolbox.autoSubs.locks.needRun', {}, 'Run auto-subs to unlock downloads.')
     },
     actions: {
-      continue: t('toolbox.autoSubs.actions.continue', {}, 'Continue')
+      continue: t('toolbox.autoSubs.actions.continue', {}, 'Continue'),
+      useTrack: t('toolbox.autoSubs.actions.useTrack', {}, 'Continue with track')
     },
     options: {
       addTargets: t('toolbox.autoSubs.options.addTargets', {}, 'Add target languages in Configure')
@@ -7624,6 +7768,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       gap: 14px;
       align-items: flex-start;
     }
+    .section-joined .joined-grid > .step-card { align-self: center; height: auto; }
     @media (min-width: 1024px) {
       .section-joined .joined-grid::before {
         content: '';
@@ -7699,16 +7844,16 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     .step-body .chips,
     .step-body .log-area { width: 100%; align-self: center; }
     #autoStep2Card {
-      align-items: stretch;
+      align-items: center;
       justify-content: center;
       text-align: center;
-      align-self: start;
+      align-self: center;
     }
     #autoStep2Card .step-title { justify-content: flex-start; width: 100%; text-align: left; }
     #autoStep2Card .step-body {
       flex: 0 0 auto;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       text-align: center;
       gap: 10px;
     }
@@ -8017,6 +8162,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       font-size: 13px;
       word-break: break-word;
     }
+    .audio-track-prompt {
+      display: none;
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .audio-track-prompt.show { display: block; }
+    .audio-track-prompt .controls { justify-content: flex-start; gap: 10px; }
+    .audio-track-prompt select { min-width: 220px; }
+    .audio-track-prompt p { margin: 4px 0 8px; color: var(--text-secondary); }
 
     @media (max-width: 900px) {
       .wrap { padding: 2rem 1.25rem; }
@@ -8247,6 +8404,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
               <div class="progress-fill" id="progressFill"></div>
             </div>
             <div class="status" id="statusText">${escapeHtml(copy.steps.awaiting)}</div>
+            <div class="audio-track-prompt" id="autoTrackPrompt">
+              <label for="autoAudioTrack">${escapeHtml(copy.steps.audioTrackLabel)}</label>
+              <p class="muted" id="autoTrackHelper">${escapeHtml(copy.steps.audioTrackHelper)}</p>
+              <div class="controls wrap">
+                <select id="autoAudioTrack"></select>
+                <button class="btn secondary" type="button" id="autoTrackContinue">${escapeHtml(copy.actions.useTrack)}</button>
+              </div>
+            </div>
             <div class="controls">
               <button class="btn" id="startAutoSubs">${escapeHtml(copy.steps.start)}</button>
             </div>
@@ -8274,6 +8439,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 <div class="controls" style="margin-top:8px;">
                   <a class="btn secondary disabled" aria-disabled="true" id="downloadSrt">${escapeHtml(copy.steps.downloadSrt)}</a>
                   <a class="btn secondary disabled" aria-disabled="true" id="downloadVtt">${escapeHtml(copy.steps.downloadVtt)}</a>
+                  <a class="btn secondary disabled" aria-disabled="true" id="downloadRawTranscript">${escapeHtml(copy.steps.downloadRawTranscript)}</a>
                 </div>
               </div>
               <div>

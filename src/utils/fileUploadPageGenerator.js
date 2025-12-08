@@ -2543,7 +2543,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         const cancelResetBtn = document.getElementById('cancelResetBtn');
         const closeResetConfirmBtn = document.getElementById('closeResetConfirmBtn');
 
-        // Pre-rendered language option markup (injected from server-side list)
+        // Pre-rendered language option markup (injected from backend list)
         const languageOptionsMarkup = ${JSON.stringify(languageOptions)};
         const allLanguageOptionsMarkup = ${JSON.stringify(allLanguageOptions)};
 

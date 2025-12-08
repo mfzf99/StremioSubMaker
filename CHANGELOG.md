@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Secondary provider/config fixes:** Secondary provider dropdown now builds from currently enabled providers before toggling, preserves/auto-defaults the choice with a placeholder option, translation workflow details moved into a tooltip, Learn Mode/config helper text points to the Languages section, and descriptions respect intentional line breaks.
 - **Offscreen buffer reuse:** Autosubs and embedded-subtitles offscreen demux now reuse shared buffers and avoid cloning full-span views, so IDB stash logs no longer balloon with one entry per window/buffer.
 - **Auto-subs UI polish:** Status pills start at `WAITING`/`OK`, update labels per stage (fetch/transcribe/align/translate/deliver), and reset when Step 1 edits occur; translation chips show skipped/failed counts, hash/linked-stream cards and Step 2/targets are centered/narrowed to match the embedded page, and errors surface clearly via badges/tooltips.
-- **AssemblyAI via extension + live logs:** AssemblyAI auto-subs now request transcripts through the xSync extension (with optional full-video uploads) and stream live log trails via `/api/auto-subtitles/logs` (SSE or JSON) keyed by `jobId`; server-side auto-subs accept extension-supplied transcripts/diagnostics, force diarization, and strip speaker labels from Cloudflare/Assembly outputs.
+- **AssemblyAI via extension + live logs:** AssemblyAI auto-subs now request transcripts through the xSync extension (with optional full-video uploads) and stream live log trails via `/api/auto-subtitles/logs` (SSE or JSON) keyed by `jobId`; auto-subs accept extension-supplied transcripts/diagnostics, force diarization, and strip speaker labels from Cloudflare/Assembly outputs.
 - **Stream update stability:** Placeholder Stremio pings (missing filename/hash or "Stream and Refresh") no longer overwrite a good linked stream snapshot, and QuickNav tracks the latest signature/timestamp so duplicate or stale "Update linked stream" toasts are cleared promptly on toolbox/sync pages.
 - **xSync/xEmbed language scoping:** Synced/embedded subtitle cache entries are only surfaced when their language matches the user’s configured source/target (or no-translation) languages, preventing cross-language leakage and unnecessary cache scans.
 
@@ -30,7 +30,7 @@ All notable changes to this project will be documented in this file.
 
 - **Config page experience:** Config UI copy reorganized (new Cloudflare Workers auto-subs field + validator, refreshed toolbox instructions, advanced settings split, icon/section styling, mobile preview), and Cloudflare/Assembly keys are preserved for auto-subs flows.
 - **Translation history:** Added a `/sub-history` page that shows per-user translation runs (titles, source/target, provider/model, status, download links); it pulls Cinemeta titles when available and is now linked from QuickNav and the Sub Toolbox for all users (no Dev Mode required).
-- **Auto-subs AssemblyAI path:** Added a server-side AssemblyAI mode (with optional full-video uploads up to 5GB, timeout/polling guards, and diarized SRT fallbacks) that auto-selects when Cloudflare keys are missing; diarization is now forced for all auto-subs engines and speaker labels are stripped from outputs.
+- **Auto-subs AssemblyAI path:** Added an AssemblyAI auto-subs mode (with optional full-video uploads up to 5GB, timeout/polling guards, and diarized SRT fallbacks) that auto-selects when Cloudflare keys are missing; diarization is now forced for all auto-subs engines and speaker labels are stripped from outputs.
 - **Auto-subs UX polish:** Toolbox pills now track decode/transcribe/translate states with a dedicated FFmpeg decode badge, long previews are truncated safely, downloads are proper links, duplicate logs are suppressed, and auto-sub requests use longer, refreshed timeouts with clearer hash mismatch copy.
 - **Auto-subs providers:** Cloudflare Workers keys get stricter parsing/validation in the config and toolbox, translation provider resolution prefers Gemini and falls back to any available provider when the chosen one is missing, and Gemini provider creation is fixed.
 - **Embedded/linked streams:** Linked stream titles avoid placeholder collisions and episode tags now render correctly; extraction hash-mismatch messaging explicitly calls out Linked Stream vs Stream URL alignment; autosubs Step 2 layout/text is left-aligned for readability.
@@ -432,7 +432,7 @@ This release implements comprehensive automatic recovery for corrupted, missing,
 - AI timestamps mode (toggle in Advanced Settings): trust the active translation provider to return/repair timestamps per batch, stream partial SRTs with AI timecodes where supported (Gemini), and rebuild partials safely while throttling with new `SINGLE_BATCH_*` env controls.
 - Single-batch Translation Mode with streaming partials to Stremio, token-aware chunking, and new `SINGLE_BATCH_*` env knobs to throttle streaming rebuild/log cadence.
 - Beta Mode added to config page - enabling it creates a "Multiple Providers" option on "AI Translation API Keys" section and shows "Advanced Configs" section for changing Gemini parameters.
-- Multi-provider translation pipeline: oOpenAI, Anthropic, XAI/Grok, DeepSeek, DeepL, Mistral, OpenRouter, and Cloudflare Workers AI providers with per-provider keys/model pickers and server-side model discovery with a new parallel translation workflow.
+- Multi-provider translation pipeline: oOpenAI, Anthropic, XAI/Grok, DeepSeek, DeepL, Mistral, OpenRouter, and Cloudflare Workers AI providers with per-provider keys/model pickers and automatic model discovery with a new parallel translation workflow.
 - Secondary provider fallback option added to config page (BETA).
 - Main Gemini translation workflow now supports Streaming (much faster partials and batch translations). Also implemented to other providers.
 
@@ -490,7 +490,7 @@ This release implements comprehensive automatic recovery for corrupted, missing,
 - 3-click cache resets are now rate limited based on time (defaults: 6/15m for permanent cache, 12/15m for bypass cache) and configurable via `CACHE_RESET_LIMIT_TRANSLATION`, `CACHE_RESET_LIMIT_BYPASS`, and `CACHE_RESET_WINDOW_MINUTES`.
 - Config/UI: Source-language selection cap is now configurable via `MAX_SOURCE_LANGUAGES`.
 - Config/UI: Added combined target/learn languages cap (default 6) configurable via `MAX_TARGET_LANGUAGES` to prevent oversized selections.
-- Just Fetch mode: Added a configurable cap on fetched languages (default 9) via `MAX_NO_TRANSLATION_LANGUAGES`, with UI enforcement and server-side validation.
+- Just Fetch mode: Added a configurable cap on fetched languages (default 9) via `MAX_NO_TRANSLATION_LANGUAGES`, with UI enforcement and backend validation.
 - Config/UI: Updated Gemini model options to use `gemini-flash-latest` and `gemini-flash-lite-latest` for the Flash defaults.
 - Translation engine: Each batch prompt now carries an explicit `BATCH X/Y` header so the model knows which chunk it is translating.
 - Advanced settings: New “Send timestamps to AI” toggle sends timecodes to Gemini and trusts the model to return corrected timestamps per batch using the default translation prompt.
@@ -551,7 +551,7 @@ This release implements comprehensive automatic recovery for corrupted, missing,
 
 - 429/503 handling: V3 download errors now return a single-cue error subtitle (0>4h) with clear wait-and-retry guidance, consistent with other provider and safety messages.
 - Filename extraction: add a single retry after 2s when HEAD requests return 429 during filename extraction; per-attempt timeout remains 3s (processed in batches of 10).
-- Format awareness and file-upload translation: infer actual format for OpenSubtitles V3 results from filename/URL (no longer hardcoded SRT); convert uploaded VTT/ASS/SSA to SRT server-side before translation; and always download translated uploads as .srt.
+- Format awareness and file-upload translation: infer actual format for OpenSubtitles V3 results from filename/URL (no longer hardcoded SRT); convert uploaded VTT/ASS/SSA to SRT before translation; and always download translated uploads as .srt.
 
 **Other Improvements:**
 

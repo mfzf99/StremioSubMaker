@@ -459,6 +459,7 @@
           "progress": "Progresso",
           "downloadSrt": "Baixar SRT",
           "downloadVtt": "Baixar VTT",
+          "downloadRawTranscript": "Baixar transcrição bruta",
           "downloadTranslation": "Baixar {lang}",
           "continue": "Continuar"
         },

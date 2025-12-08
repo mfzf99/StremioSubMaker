@@ -4993,7 +4993,7 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
         } else {
             // Client-supplied transcription (xSync extension, Cloudflare Workers AI)
             if (!transcriptSrt) {
-                logStep('Client transcript missing; server-side fetch/transcribe is disabled for auto-subs', 'error');
+                logStep('Client transcript missing; built-in fetch/transcribe is disabled for auto-subs', 'error');
                 return respond(400, {
                     error: t('server.errors.autoSubsClientRequired', {}, 'Automatic subtitles now require a client-provided transcript (xSync extension).'),
                     logTrail

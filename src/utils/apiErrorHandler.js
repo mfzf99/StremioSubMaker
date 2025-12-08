@@ -64,7 +64,7 @@ function parseApiError(error, serviceName = 'API', options = {}) {
       parsed.userMessage = translate('apiErrors.serviceUnavailable', { service: serviceLabel }, 'Service temporarily unavailable. Please try again in a few minutes.');
     }
     // OpenSubtitles 469 (Database connection error - custom status code)
-    // This is a server-side error that should be retried
+    // This is a backend error that should be retried
     else if (parsed.statusCode === 469) {
       parsed.type = 'database_error';
       parsed.isRetryable = true;
