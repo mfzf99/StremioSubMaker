@@ -2964,11 +2964,17 @@ Translate to {target_language}.`;
         }));
         syncSelectOptions(select, desiredOptions);
 
+        // Prefer the caller's requested key, otherwise preserve current selection when valid
         if (selectedKey && filtered.includes(selectedKey)) {
             select.value = selectedKey;
         } else if (select.value && filtered.includes(select.value)) {
             // keep current selection
         } else {
+            select.value = filtered[0];
+        }
+
+        // If fallback is enabled but no value was saved (e.g., previous UI bug), default to first available
+        if (toggle.checked && (!select.value || !filtered.includes(select.value))) {
             select.value = filtered[0];
         }
 
