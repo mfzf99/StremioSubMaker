@@ -894,6 +894,12 @@
             background: linear-gradient(135deg, rgba(26, 26, 38, 0.9), rgba(26, 26, 38, 0.6));
         }
 
+        [data-theme="true-dark"] .section-close-link {
+            background: linear-gradient(135deg, rgba(12, 12, 18, 0.94), rgba(26, 26, 32, 0.78));
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.9);
+        }
+
         .section-close-link:hover {
             color: var(--primary);
             border-color: var(--primary);
