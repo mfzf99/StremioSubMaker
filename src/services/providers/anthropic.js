@@ -3,6 +3,7 @@ const { handleTranslationError, logApiError } = require('../../utils/apiErrorHan
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const log = require('../../utils/logger');
 const { DEFAULT_TRANSLATION_PROMPT } = require('../gemini');
+const { normalizeTargetLanguageForPrompt } = require('../utils/normalizeTargetLanguageForPrompt');
 
 const ANTHROPIC_API_URL = process.env.ANTHROPIC_API_BASE || 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || '2023-06-01';
@@ -32,7 +33,7 @@ class AnthropicProvider {
   }
 
   normalizeTargetName(name) {
-    return String(name || '').trim() || 'target language';
+    return normalizeTargetLanguageForPrompt(name);
   }
 
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {

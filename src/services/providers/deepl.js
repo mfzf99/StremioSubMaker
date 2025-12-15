@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { DEFAULT_TRANSLATION_PROMPT } = require('../gemini');
+const { normalizeTargetLanguageForPrompt } = require('../utils/normalizeTargetLanguageForPrompt');
 const { handleTranslationError, logApiError } = require('../../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const { findISO6391ByName, toISO6391 } = require('../../utils/languages');
@@ -145,7 +146,7 @@ class DeepLProvider {
   }
 
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {
-    const normalizedTarget = String(targetLanguage || '').trim() || 'target language';
+    const normalizedTarget = normalizeTargetLanguageForPrompt(targetLanguage);
     const systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
     const userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
     return { userPrompt, systemPrompt, normalizedTarget };

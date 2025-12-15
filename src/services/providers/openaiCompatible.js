@@ -9,6 +9,8 @@ const {
   toISO6391,
   toISO6392
 } = require('../../utils/languages');
+const { resolveLanguageDisplayName } = require('../../utils/languageResolver');
+const { normalizeTargetLanguageForPrompt } = require('../utils/normalizeTargetLanguageForPrompt');
 
 /**
  * Minimal OpenAI-compatible provider wrapper.
@@ -74,12 +76,17 @@ class OpenAICompatibleProvider {
 
     // Prefer explicit regional display names when we know them
     const variantDisplay = this.variantNameFromCode(code);
-    if (variantDisplay) return variantDisplay;
+    if (variantDisplay) return normalizeTargetLanguageForPrompt(variantDisplay);
+
+    const displayFromUi = resolveLanguageDisplayName(code) || resolveLanguageDisplayName(raw);
+    if (displayFromUi) {
+      return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(displayFromUi));
+    }
 
     // Try direct name lookup by code (covers ISO-639-2 codes and custom variants like pt-br)
     const nameFromCode = getLanguageName(code) || getLanguageName(code.replace(/-/g, ''));
     if (nameFromCode) {
-      return this.normalizeVariantDisplayName(nameFromCode);
+      return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(nameFromCode));
     }
 
     // ISO-639-1 -> ISO-639-2 -> display name
@@ -88,13 +95,12 @@ class OpenAICompatibleProvider {
       if (Array.isArray(iso2) && iso2.length > 0) {
         const display = getLanguageName(iso2[0].code2);
         if (display) {
-          return this.normalizeVariantDisplayName(display);
+          return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(display));
         }
       }
     }
 
-    // Fallback: normalize human-friendly name variants
-    return this.normalizeVariantDisplayName(raw) || 'target language';
+    return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(raw) || raw);
   }
 
   /**
@@ -108,10 +114,13 @@ class OpenAICompatibleProvider {
       [/^portuguese\s*\(brazil(ian)?\)$/i, 'Portuguese (Brazilian)'],
       [/^portuguese\s*\(portugal\)$/i, 'Portuguese (Portugal)'],
       [/^european portuguese$/i, 'Portuguese (Portugal)'],
+      [/^portuguese$/i, 'Portuguese (Portugal)'],
       [/^spanish\s*\(latin america\)$/i, 'Spanish (Latin America)'],
       [/^latin american spanish$/i, 'Spanish (Latin America)'],
+      [/^spanish$/i, 'Spanish (Spain)'],
       [/^chinese\s*\(traditional\)$/i, 'Chinese (Traditional)'],
-      [/^chinese\s*\(simplified\)$/i, 'Chinese (Simplified)']
+      [/^chinese\s*\(simplified\)$/i, 'Chinese (Simplified)'],
+      [/^chinese$/i, 'Chinese (Simplified)']
     ];
     for (const [re, out] of rules) {
       if (re.test(n)) return out;

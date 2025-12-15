@@ -2,29 +2,19 @@ const axios = require('axios');
 const { handleTranslationError, logApiError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 const log = require('../utils/logger');
+const { resolveLanguageDisplayName } = require('../utils/languageResolver');
+const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 
 // Use v1beta endpoint - v1 endpoint doesn't support /models/{model} operations
 const GEMINI_API_URL = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
 
 // Normalize human-readable target language names for Gemini prompts
 function normalizeTargetName(name) {
-  let n = String(name || '').trim();
-  const rules = [
-    [/^Portuguese\s*\(Brazil(ian)?\)$/i, 'Brazilian Portuguese'],
-    [/^Spanish\s*\(Latin America\)$/i, 'Latin American Spanish'],
-    [/^Chinese\s*\(Simplified\)$/i, 'Simplified Chinese'],
-    [/^Chinese\s*\(Traditional\)$/i, 'Traditional Chinese'],
-    [/^Portuguese\s*\(Portugal\)$/i, 'European Portuguese'],
-    [/^Portuguese\s*\(European\)$/i, 'European Portuguese'],
-    // Fix for plain variants - default to standard/main variant to prevent Gemini ambiguity
-    [/^Portuguese$/i, 'European Portuguese'],
-    [/^Spanish$/i, 'Castilian Spanish'],
-    [/^Chinese$/i, 'Simplified Chinese']
-  ];
-  for (const [re, out] of rules) {
-    if (re.test(n)) return out;
-  }
-  return n;
+  const raw = String(name || '').trim();
+  if (!raw) return 'target language';
+
+  const resolved = resolveLanguageDisplayName(raw) || raw;
+  return normalizeTargetLanguageForPrompt(resolved);
 }
 
 // Default translation prompt (base - thinking rules added conditionally)

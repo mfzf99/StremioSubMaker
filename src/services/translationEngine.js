@@ -21,6 +21,7 @@ const GeminiService = require('./gemini');
 const { DEFAULT_TRANSLATION_PROMPT } = GeminiService;
 const crypto = require('crypto');
 const log = require('../utils/logger');
+const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
@@ -787,7 +788,8 @@ class TranslationEngine {
    * Create translation prompt for timestamp-aware batches
    */
   createTimestampPrompt(targetLanguage, batchIndex = 0, totalBatches = 1) {
-    const base = DEFAULT_TRANSLATION_PROMPT.replace('{target_language}', targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const base = DEFAULT_TRANSLATION_PROMPT.replace('{target_language}', targetLabel);
     return this.addBatchHeader(base, batchIndex, totalBatches);
   }
 
@@ -795,7 +797,8 @@ class TranslationEngine {
    * Create translation prompt for a batch
    */
   createBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const customPromptText = customPrompt ? customPrompt.replace('{target_language}', targetLanguage) : '';
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const customPromptText = customPrompt ? customPrompt.replace('{target_language}', targetLabel) : '';
 
     let contextInstructions = '';
     if (context && (context.surroundingOriginal?.length > 0 || context.previousTranslations?.length > 0)) {
@@ -810,15 +813,15 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are translating subtitle text to ${targetLanguage}.
+    const promptBody = `You are translating subtitle text to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the numbered text entries (1. 2. 3. etc.)
 2. PRESERVE the numbering exactly (1. 2. 3. etc.)
 3. Return EXACTLY ${expectedCount} numbered entries
 4. Keep line breaks within each entry
-5. Maintain natural dialogue flow for ${targetLanguage}
-6. Use appropriate colloquialisms for ${targetLanguage}${context ? '\n7. Use the provided context to ensure consistency with previous translations' : ''}
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use appropriate colloquialisms for ${targetLabel}${context ? '\n7. Use the provided context to ensure consistency with previous translations' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS (from user/config):\n${customPromptText}\n\n` : ''}
 DO NOT add ANY acknowledgements, explanations, notes, or commentary.
