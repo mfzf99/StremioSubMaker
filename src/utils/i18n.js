@@ -46,7 +46,11 @@ function loadLocale(lang) {
     }
   };
 
-  const messages = readLocale(safeLang) || readLocale(DEFAULT_LANG) || {};
+  const messages =
+    readLocale(safeLang) ||
+    (safeLang === 'pt-pt' ? readLocale('pt-br') : null) ||
+    readLocale(DEFAULT_LANG) ||
+    {};
   const payload = { lang: messages.lang || safeLang, messages: messages.messages || {} };
 
   // Freeze to prevent accidental cross-request mutation of cached locale objects

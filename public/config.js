@@ -2124,7 +2124,9 @@ Translate to {target_language}.`;
             dock.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const clickedFlag = e.target && e.target.closest ? e.target.closest('.ui-lang-flag') : null;
-                if (clickedFlag) return;
+                // Allow clicking the active flag to expand/collapse the menu.
+                // Non-active flags have their own click handler to switch languages.
+                if (clickedFlag && !clickedFlag.classList.contains('active')) return;
                 setUiLanguageExpanded(!uiLanguageExpanded);
             });
         }

@@ -372,6 +372,14 @@
             z-index: 1;
         }
 
+        .ui-language-dock.expanded {
+            align-items: flex-start;
+        }
+
+        .ui-language-dock.expanded .ui-language-flag-row {
+            flex-direction: column;
+        }
+
         .ui-language-flag-row.collapsed .ui-lang-flag:not(.active) {
             display: none;
         }
