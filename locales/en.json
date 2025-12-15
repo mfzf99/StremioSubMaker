@@ -1040,7 +1040,7 @@
       "otherSettings": {
         "title": "Other Settings",
         "subToolbox": {
-          "label": "Enable \"Sub Toolbox\" (Alpha)",
+          "label": "Enable \"Sub Toolbox\" (Beta)",
           "description": "Shows the Sub Toolbox entry in Stremio subtitles for brower access to all tools.",
           "instructionsLink": "Read instructions",
           "tools": "Tools: SRT Files Translation, Embedded Subs Extraction, AutoSync and AutoSubbing."

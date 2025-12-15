@@ -1042,7 +1042,7 @@
       "otherSettings": {
         "title": "Outras Configurações",
         "subToolbox": {
-          "label": "Habilitar \"Sub Toolbox\" (Alpha)",
+          "label": "Habilitar \"Sub Toolbox\" (Beta)",
           "description": "Mostra a entrada Sub Toolbox nas legendas do Stremio para acesso via navegador a todas as ferramentas.",
           "instructionsLink": "Ler instruções",
           "tools": "Ferramentas: Tradução de arquivos SRT, Extração de legendas embutidas, AutoSync e AutoSubbing."

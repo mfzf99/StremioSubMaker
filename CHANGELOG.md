@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## SubMaker v1.4.23
 
 - **Target language prompt normalization:** Translation providers now use consistent, canonical target language labels across config codes (e.g., `por`/`pob` Portuguese variants, `spa`/`spn` Spanish variants, `chi`/`zhs`/`zht` Chinese variants) to reduce dialect mismatches and improve prompt reliability.
+- **Exclude SDH/HI subtitles:** Added an option to filter out SDH/HI subtitles (e.g., captions with hearing-impaired cues) when fetching results, improving subtitle matching for standard dialogue-only tracks.
+- **UI language (pt-PT):** Added Portuguese (Portugal) (`pt-pt`) to the interface language selector.
 
 ## SubMaker v1.4.22
 
