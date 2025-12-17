@@ -3087,3 +3087,99 @@
 .subtle-link:hover {
     color: var(--primary);
 }
+
+/* Gemini API Key Rotation Styles */
+.gemini-key-input-wrapper {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.gemini-key-input-wrapper input {
+    flex: 1;
+    min-width: 0;
+}
+
+.gemini-key-input-wrapper .validate-api-btn {
+    flex-shrink: 0;
+}
+
+/* Compact validation button for inline use */
+.validate-api-btn.compact {
+    padding: 0.5rem 0.75rem;
+    min-width: 70px;
+    font-size: 0.8rem;
+}
+
+.validate-api-btn.compact .validate-icon {
+    font-size: 0.9rem;
+}
+
+/* Dynamic keys list styling */
+.dynamic-keys-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.gemini-key-row {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.gemini-key-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.875rem;
+}
+
+.gemini-key-row .validate-api-btn {
+    padding: 0.35rem 0.5rem;
+    min-width: auto;
+    font-size: 0.75rem;
+    border-radius: 6px;
+}
+
+.gemini-key-row .validate-api-btn .validate-icon {
+    font-size: 0.85rem;
+}
+
+.gemini-key-row .btn-danger {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+    min-width: 28px;
+    border-radius: 6px;
+}
+
+/* More compact API Keys container */
+#geminiApiKeysContainer {
+    margin-top: 0.5rem;
+}
+
+#geminiApiKeysContainer label {
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+#geminiApiKeysContainer .label-description {
+    font-size: 0.75rem;
+}
+
+#addGeminiKeyBtn {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.8rem;
+}
+
+/* Key Rotation Mode selector compact */
+#geminiApiKeysContainer .form-group {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+#geminiApiKeysContainer select {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.875rem;
+}

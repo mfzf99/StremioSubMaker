@@ -962,6 +962,20 @@
           "betaAdvice": "If you have translation problems, use Flash-Lite.",
           "rateWarningTitle": "⚠️ Free Tier Limitation:",
           "rateWarningBody": "If using a free API key, Gemini 2.5 Pro may trigger rate limits (HTTP 429). You'll likely only be able to translate one subtitle at a time."
+        },
+        "keyRotation": {
+          "label": "Enable Gemini API key rotation",
+          "description": "Distribute API calls across multiple keys to avoid rate limits.",
+          "additionalKeysLabel": "Additional API Keys",
+          "additionalKeys": "additional",
+          "addKey": "Add Key",
+          "testKey": "Test this key",
+          "removeKey": "Remove this key",
+          "keyPlaceholder": "Enter API key",
+          "modeLabel": "Rotation Frequency",
+          "modeDescription": "How often to switch between API keys",
+          "modePerRequest": "Per Request (once per file)",
+          "modePerBatch": "Per Batch (each translation batch)"
         }
       },
       "otherApiKeys": {

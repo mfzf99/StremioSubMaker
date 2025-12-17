@@ -3371,66 +3371,27 @@ Translate to {target_language}.`;
     }
 
     // Maximum number of Gemini API keys allowed (fetched from server via /api/session-stats)
-    let MAX_GEMINI_API_KEYS = 10; // default, will be updated from server
+    let MAX_GEMINI_API_KEYS = 5; // default matches backend, can be updated from server
 
     /**
      * Toggle the Gemini API key rotation UI visibility
-     * When enabled, shows the keys list and migrates the single key if present
+     * When enabled, shows the keys list for additional keys (Key 2+)
+     * The single key field always remains visible as Key 1
      */
     function toggleGeminiKeyRotationUI(enabled) {
         const container = document.getElementById('geminiApiKeysContainer');
-        const singleKeyInput = document.getElementById('geminiApiKey');
-        const singleKeyValidateBtn = document.getElementById('validateGemini');
-        const singleKeyWrapper = singleKeyInput?.closest('div[style*="display: flex"]');
-        const singleKeyError = document.getElementById('geminiApiKeyError');
-        const singleKeyFeedback = document.getElementById('geminiValidationFeedback');
 
         if (!container) return;
 
         if (enabled) {
             container.style.display = 'block';
-            // Hide only the single key input wrapper and its related elements (NOT the entire form-group)
-            if (singleKeyWrapper) {
-                singleKeyWrapper.style.display = 'none';
-            }
-            if (singleKeyError) {
-                singleKeyError.style.display = 'none';
-            }
-            if (singleKeyFeedback) {
-                singleKeyFeedback.style.display = 'none';
-            }
-            // Migrate existing single key to array if present
-            const existingKey = singleKeyInput?.value?.trim();
+            // Add one empty input for Key 2 if the list is empty
             const keysList = document.getElementById('geminiApiKeysList');
             if (keysList && keysList.children.length === 0) {
-                if (existingKey) {
-                    addGeminiKeyInput(existingKey);
-                } else {
-                    addGeminiKeyInput(); // Add one empty input
-                }
-            }
-            // Sync first key from array to single key for backend compatibility
-            const keys = getGeminiApiKeys();
-            if (keys.length > 0 && singleKeyInput) {
-                singleKeyInput.value = keys[0];
+                addGeminiKeyInput(); // Add one empty input for Key 2
             }
         } else {
             container.style.display = 'none';
-            // Show the single key input wrapper again
-            if (singleKeyWrapper) {
-                singleKeyWrapper.style.display = '';
-            }
-            if (singleKeyError) {
-                singleKeyError.style.display = '';
-            }
-            if (singleKeyFeedback) {
-                singleKeyFeedback.style.display = '';
-            }
-            // Sync first key from array back to single key input
-            const keys = getGeminiApiKeys();
-            if (keys.length > 0 && singleKeyInput) {
-                singleKeyInput.value = keys[0];
-            }
         }
         updateGeminiKeysCount();
     }
@@ -3570,18 +3531,13 @@ Translate to {target_language}.`;
 
     /**
      * Remove a Gemini API key input row
+     * Note: Key 1 is always present in the single key field, so rotation list can be empty
      */
     function removeGeminiKeyInput(row) {
         const keysList = document.getElementById('geminiApiKeysList');
         if (!keysList) return;
 
         row.remove();
-
-        // Ensure at least one input remains
-        if (keysList.children.length === 0) {
-            addGeminiKeyInput();
-        }
-
         updateGeminiKeysCount();
     }
 
@@ -3595,31 +3551,41 @@ Translate to {target_language}.`;
 
         if (!label || !keysList) return;
 
-        const count = keysList.children.length;
-        label.textContent = `(${count}/${MAX_GEMINI_API_KEYS} ${tConfig('config.gemini.keyRotation.keysCount', {}, 'keys')})`;
+        const additionalCount = keysList.children.length;
+        const totalCount = additionalCount + 1; // +1 for the single key field (Key 1)
+        label.textContent = `(+${additionalCount} ${tConfig('config.gemini.keyRotation.additionalKeys', {}, 'additional')})`;
 
-        // Disable add button if at max
+        // Disable add button if at max (total keys including Key 1)
         if (addBtn) {
-            addBtn.disabled = count >= MAX_GEMINI_API_KEYS;
+            addBtn.disabled = totalCount >= MAX_GEMINI_API_KEYS;
         }
     }
 
     /**
      * Get all Gemini API keys from the UI
-     * @returns {string[]} Array of non-empty API keys
+     * @returns {string[]} Array of non-empty API keys (single key + rotation keys)
      */
     function getGeminiApiKeys() {
-        const keysList = document.getElementById('geminiApiKeysList');
-        if (!keysList) return [];
-
-        const inputs = keysList.querySelectorAll('.gemini-api-key-input');
         const keys = [];
-        inputs.forEach(input => {
-            const value = input.value?.trim();
-            if (value) {
-                keys.push(value);
-            }
-        });
+
+        // Key 1: The single key field
+        const singleKey = document.getElementById('geminiApiKey')?.value?.trim();
+        if (singleKey) {
+            keys.push(singleKey);
+        }
+
+        // Key 2+: Additional rotation keys
+        const keysList = document.getElementById('geminiApiKeysList');
+        if (keysList) {
+            const inputs = keysList.querySelectorAll('.gemini-api-key-input');
+            inputs.forEach(input => {
+                const value = input.value?.trim();
+                if (value) {
+                    keys.push(value);
+                }
+            });
+        }
+
         return keys;
     }
 

@@ -355,7 +355,7 @@
                         <button type="button" class="collapse-btn collapsed" data-collapse="gemini"></button>
                     </div>
                     <div class="card-content">
-                        <div class="form-group">
+                        <div class="form-group" id="geminiSingleKeyGroup">
                             <label for="geminiApiKey">
                                 <span data-i18n="config.gemini.apiKey.label">Gemini API Key</span>
                                 <span class="label-description" id="geminiApiHelper">
@@ -365,12 +365,12 @@
                                         style="color: var(--primary-light);">Google AI Studio</a>
                                 </span>
                             </label>
-                            <div style="display: flex; gap: 0.5rem; align-items: start;">
+                            <div class="gemini-key-input-wrapper">
                                 <input type="text" class="sensitive-input masked" id="geminiApiKey"
                                     placeholder="Enter your Gemini API key" data-i18n="config.gemini.apiKey.placeholder"
-                                    data-i18n-attr="placeholder" style="flex: 1;" autocomplete="off"
-                                    autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text">
-                                <button type="button" class="validate-api-btn" id="validateGemini"
+                                    data-i18n-attr="placeholder" autocomplete="off" autocapitalize="none"
+                                    autocorrect="off" spellcheck="false" inputmode="text">
+                                <button type="button" class="validate-api-btn compact" id="validateGemini"
                                     title="Validate API key" data-i18n="config.gemini.apiKey.validateTitle"
                                     data-i18n-attr="title">
                                     <span class="validate-icon">✓</span>
@@ -380,55 +380,44 @@
                             <div class="validation-feedback" id="geminiValidationFeedback"></div>
                             <div class="field-error" id="geminiApiKeyError"
                                 data-i18n="config.validation.geminiKeyRequired">API key is required</div>
+                        </div>
 
-                            <!-- Gemini API Key Rotation Toggle -->
-                            <div class="form-group" style="margin-top: 1rem;">
-                                <label>
-                                    <input type="checkbox" id="geminiKeyRotationEnabled">
-                                    <span data-i18n="config.gemini.keyRotation.label">Enable API key rotation</span>
-                                    <span class="label-description" data-i18n="config.gemini.keyRotation.description">
-                                        Distribute API calls across multiple keys to avoid rate limits
+                        <!-- Dynamic API Keys List (shown when rotation is enabled) -->
+                        <div id="geminiApiKeysContainer" class="api-keys-list"
+                            style="display: none; padding: 0.75rem; background: var(--surface-elevated); border-radius: 8px;">
+                            <label style="display: block; margin-bottom: 0.35rem;">
+                                <span data-i18n="config.gemini.keyRotation.additionalKeysLabel">Additional API
+                                    Keys</span>
+                                <span class="label-description" id="geminiKeysCountLabel">(+0 additional)</span>
+                            </label>
+                            <div id="geminiApiKeysList" class="dynamic-keys-list">
+                                <!-- Dynamic key inputs will be added here -->
+                            </div>
+                            <button type="button" id="addGeminiKeyBtn" class="btn btn-secondary btn-sm"
+                                style="margin-top: 0.5rem;">
+                                <span>+</span> <span data-i18n="config.gemini.keyRotation.addKey">Add Key</span>
+                            </button>
+                            <div class="field-error" id="geminiApiKeysError"
+                                data-i18n="config.validation.geminiKeysRequired" style="display: none;">At least one
+                                API key is required for rotation</div>
+
+                            <!-- Key Rotation Mode Selector -->
+                            <div class="form-group"
+                                style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+                                <label for="geminiKeyRotationMode">
+                                    <span data-i18n="config.gemini.keyRotation.modeLabel">Rotation Frequency</span>
+                                    <span class="label-description"
+                                        data-i18n="config.gemini.keyRotation.modeDescription">
+                                        How often to switch between API keys
                                     </span>
                                 </label>
-                            </div>
-
-                            <!-- Dynamic API Keys List (shown when rotation is enabled) -->
-                            <div id="geminiApiKeysContainer" class="api-keys-list"
-                                style="display: none; margin-top: 0.75rem; padding: 1rem; background: var(--surface-elevated); border-radius: 8px;">
-                                <label style="display: block; margin-bottom: 0.5rem;">
-                                    <span data-i18n="config.gemini.keyRotation.keysLabel">API Keys for Rotation</span>
-                                    <span class="label-description" id="geminiKeysCountLabel">(0/5 keys)</span>
-                                </label>
-                                <div id="geminiApiKeysList" class="dynamic-keys-list"
-                                    style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                    <!-- Dynamic key inputs will be added here -->
-                                </div>
-                                <button type="button" id="addGeminiKeyBtn" class="btn btn-secondary btn-sm"
-                                    style="margin-top: 0.75rem;">
-                                    <span>+</span> <span data-i18n="config.gemini.keyRotation.addKey">Add Key</span>
-                                </button>
-                                <div class="field-error" id="geminiApiKeysError"
-                                    data-i18n="config.validation.geminiKeysRequired" style="display: none;">At least one
-                                    API key is required for rotation</div>
-
-                                <!-- Key Rotation Mode Selector -->
-                                <div class="form-group"
-                                    style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                                    <label for="geminiKeyRotationMode">
-                                        <span data-i18n="config.gemini.keyRotation.modeLabel">Rotation Frequency</span>
-                                        <span class="label-description"
-                                            data-i18n="config.gemini.keyRotation.modeDescription">
-                                            How often to switch between API keys
-                                        </span>
-                                    </label>
-                                    <select id="geminiKeyRotationMode">
-                                        <option value="per-request"
-                                            data-i18n="config.gemini.keyRotation.modePerRequest">Per Request (once per
-                                            file)</option>
-                                        <option value="per-batch" data-i18n="config.gemini.keyRotation.modePerBatch">Per
-                                            Batch (each translation batch)</option>
-                                    </select>
-                                </div>
+                                <select id="geminiKeyRotationMode">
+                                    <option value="per-request" data-i18n="config.gemini.keyRotation.modePerRequest">Per
+                                        Request (once per
+                                        file)</option>
+                                    <option value="per-batch" data-i18n="config.gemini.keyRotation.modePerBatch">Per
+                                        Batch (each translation batch)</option>
+                                </select>
                             </div>
                         </div>
 
@@ -493,9 +482,19 @@
                             </select>
                         </div>
 
-                        <!-- Advanced Settings removed by request -->
-                        <div class="form-group" id="multiProvidersGroup"
+                        <!-- Gemini API Key Rotation Toggle -->
+                        <div class="form-group" id="geminiKeyRotationGroup"
                             style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                            <label style="display:flex; align-items:center; gap:0.5rem;">
+                                <input type="checkbox" id="geminiKeyRotationEnabled">
+                                <span data-i18n="config.gemini.keyRotation.label">Enable Gemini API key rotation</span>
+                            </label>
+                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute
+                                API calls across multiple keys to avoid rate limits.</span>
+                        </div>
+
+                        <!-- Advanced Settings removed by request -->
+                        <div class="form-group" id="multiProvidersGroup">
                             <label style="display:flex; align-items:center; gap:0.5rem;">
                                 <input type="checkbox" id="enableMultiProviders">
                                 <span data-i18n="config.multiProvider.label">Multiple providers (beta)</span>
