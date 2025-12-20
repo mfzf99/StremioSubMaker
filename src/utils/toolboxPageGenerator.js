@@ -3832,9 +3832,44 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     async function fetchLinkedTitle(videoId) {
       const parsed = parseVideoId(videoId);
       if (!parsed) return null;
+      
+      // Handle anime IDs - fetch from Kitsu API
+      if (parsed.isAnime && parsed.animeId) {
+        // Extract numeric ID from animeId (e.g., "kitsu:201" -> "201")
+        const numericIdMatch = parsed.animeId.match(/(?:kitsu|anidb|mal|anilist)[:-]?(\\d+)/i);
+        if (numericIdMatch && parsed.animeIdType === 'kitsu') {
+          const numericId = numericIdMatch[1];
+          const animeCacheKey = 'anime:' + numericId;
+          if (linkedTitleCache.has(animeCacheKey)) return linkedTitleCache.get(animeCacheKey);
+          
+          try {
+            const resp = await fetch('https://kitsu.io/api/edge/anime/' + numericId, {
+              headers: {
+                'Accept': 'application/vnd.api+json'
+              }
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              const title = data?.data?.attributes?.canonicalTitle || 
+                           data?.data?.attributes?.titles?.en || 
+                           data?.data?.attributes?.titles?.en_us || null;
+              linkedTitleCache.set(animeCacheKey, title);
+              return title;
+            }
+          } catch (err) {
+            console.warn('[fetchLinkedTitle] Kitsu API error:', err);
+          }
+          linkedTitleCache.set(animeCacheKey, null);
+          return null;
+        }
+        // For other anime platforms, we don't have direct API access client-side
+        return null;
+      }
+      
+      // Handle IMDB/TMDB IDs - fetch from Cinemeta
       const metaType = parsed.type === 'episode' ? 'series' : 'movie';
       const metaId = (() => {
-        if (parsed.imdbId && /^tt\d{3,}$/i.test(parsed.imdbId)) return parsed.imdbId.toLowerCase();
+        if (parsed.imdbId && /^tt\\d{3,}$/i.test(parsed.imdbId)) return parsed.imdbId.toLowerCase();
         if (parsed.tmdbId) return 'tmdb:' + parsed.tmdbId;
         return null;
       })();
@@ -3858,6 +3893,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         return null;
       }
     }
+
 
     function formatEpisodeTag(videoId) {
       const parsed = parseVideoId(videoId);

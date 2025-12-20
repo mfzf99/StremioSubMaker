@@ -309,9 +309,15 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
     const downloadLink = (entry.scope !== 'embedded' && entry.sourceFileId && entry.targetLanguage && entry.status === 'completed')
       ? `<span class="history-download-wrap"><a class="history-download" href="/addon/${encodeURIComponent(configStr)}/translate/${encodeURIComponent(entry.sourceFileId)}/${encodeURIComponent(entry.targetLanguage)}${downloadQuery}" title="Download translated subtitle">Download</a><span class="history-download-hint"> - or reload the subtitle in Stremio!</span></span>`
       : '';
-    const seasonEpisode = (entry.season || entry.episode)
-      ? `S${entry.season || '?'}E${entry.episode || '?'}`
-      : '';
+    // Format season/episode tag - only show season if it's actually a number
+    const hasSeason = typeof entry.season === 'number' && Number.isFinite(entry.season);
+    const hasEpisode = typeof entry.episode === 'number' && Number.isFinite(entry.episode);
+    let seasonEpisode = '';
+    if (hasSeason && hasEpisode) {
+      seasonEpisode = `S${String(entry.season).padStart(2, '0')}E${String(entry.episode).padStart(2, '0')}`;
+    } else if (hasEpisode) {
+      seasonEpisode = `E${String(entry.episode).padStart(2, '0')}`; // Anime-style seasonless
+    }
     const rawTitle = entry.title || entry.filename || entry.videoId || 'Unknown title';
     const titleText = escapeHtml(rawTitle);
     const displayTitle = escapeHtml(truncateText(rawTitle, 96));
