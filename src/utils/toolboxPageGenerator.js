@@ -3836,9 +3836,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       // Handle anime IDs - fetch from Kitsu API
       if (parsed.isAnime && parsed.animeId) {
         // Extract numeric ID from animeId (e.g., "kitsu:201" -> "201")
-        const numericIdMatch = parsed.animeId.match(/(?:kitsu|anidb|mal|anilist)[:-]?(\\d+)/i);
-        if (numericIdMatch && parsed.animeIdType === 'kitsu') {
-          const numericId = numericIdMatch[1];
+        // Use string split to avoid regex escaping issues in template literals
+        const animeIdParts = parsed.animeId.split(':');
+        const numericId = animeIdParts.length >= 2 ? animeIdParts[1] : null;
+        if (numericId && parsed.animeIdType === 'kitsu') {
+
           const animeCacheKey = 'anime:' + numericId;
           if (linkedTitleCache.has(animeCacheKey)) return linkedTitleCache.get(animeCacheKey);
           
