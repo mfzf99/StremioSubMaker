@@ -1572,7 +1572,8 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       label: t('toolbox.embedded.videoMeta.label', {}, 'Linked stream'),
       none: t('toolbox.embedded.videoMeta.none', {}, 'No stream linked'),
       unavailable: t('toolbox.embedded.videoMeta.unavailable', {}, 'Video ID unavailable'),
-      waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...')
+      waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...'),
+      refreshTitle: t('toolbox.embedded.videoMeta.refreshTitle', {}, 'Refresh linked stream')
     },
     step1: {
       chip: t('toolbox.embedded.step1.chip', {}, 'Step 1'),
@@ -1596,6 +1597,11 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         'toolbox.embedded.step1.hashMismatchLine1',
         {},
         'Hashes must match (Linked Stream and Stream URL) before extraction can start.'
+      ),
+      hashMismatchLine2: t(
+        'toolbox.embedded.step1.hashMismatchLine2',
+        {},
+        'Stream something and refresh the linked stream, then copy and paste the Stream URL.'
       ),
       logHeader: t('toolbox.embedded.step1.logHeader', {}, 'Live log'),
       logSub: t('toolbox.embedded.step1.logSub', {}, 'Auto-filled while extraction runs.'),
@@ -1667,7 +1673,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
   const step1HelperTip = (copy.step1.helperTip && copy.step1.helperTip !== 'toolbox.embedded.step1.helperTip')
     ? copy.step1.helperTip
     : '';
-  const hashAlertLines = [copy.step1.hashMismatchLine1].filter(Boolean);
+  const hashAlertLines = [copy.step1.hashMismatchLine1, copy.step1.hashMismatchLine2].filter(Boolean);
   const providerOptions = (() => {
     const options = [];
     const providers = config.providers || {};
@@ -2668,12 +2674,49 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       text-align: center;
     }
     .video-meta-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
       margin: 0 0 4px;
       font-weight: 700;
+    }
+    .linked-stream-refresh {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .linked-stream-refresh:hover {
+      background: var(--surface-light);
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: scale(1.05);
+    }
+    .linked-stream-refresh:active {
+      transform: scale(0.95);
+    }
+    .linked-stream-refresh.spinning {
+      animation: spin 0.8s linear infinite;
+    }
+    .linked-stream-refresh:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     .video-meta-title {
       margin: 0;
@@ -2945,7 +2988,10 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         <div class="step-stack">
           <div class="linked-stream-wrapper">
             <div class="video-meta" id="linked-stream-card">
-              <p class="video-meta-label">${escapeHtml(copy.videoMeta.label)}</p>
+              <p class="video-meta-label">
+                <span>${escapeHtml(copy.videoMeta.label)}</span>
+                <button type="button" class="linked-stream-refresh" id="linkedStreamRefresh" title="${escapeHtml(copy.videoMeta.refreshTitle)}">⟳</button>
+              </p>
               <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
               <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
             </div>
@@ -3740,6 +3786,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extractError: document.getElementById('extract-blocked-msg'),
       hashMismatchAlert: document.getElementById('hash-mismatch-alert')
       , hashMismatchInline: document.getElementById('hash-mismatch-inline')
+      , linkedStreamRefresh: document.getElementById('linkedStreamRefresh')
     };
     const tr = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
     const buttonLabels = {
@@ -5241,6 +5288,45 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       });
     }
 
+    // Linked stream refresh button handler
+    if (els.linkedStreamRefresh) {
+      els.linkedStreamRefresh.addEventListener('click', async () => {
+        const btn = els.linkedStreamRefresh;
+        if (btn.disabled || btn.classList.contains('spinning')) return;
+        btn.disabled = true;
+        btn.classList.add('spinning');
+        try {
+          const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(PAGE.configStr), { cache: 'no-store' });
+          if (resp.status === 204) {
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+            return;
+          }
+          if (!resp.ok) throw new Error('Bad response');
+          const data = await resp.json();
+          if (!data || !data.videoId) {
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+            return;
+          }
+          const currentSig = [PAGE.videoHash || '', PAGE.videoId || '', PAGE.filename || ''].join('::');
+          const newSig = [data.videoHash || '', data.videoId || '', data.filename || ''].join('::');
+          if (newSig !== currentSig && newSig.trim()) {
+            // Navigate to updated page
+            const targetUrl = '/embedded-subtitles?config=' + encodeURIComponent(PAGE.configStr) +
+              '&videoId=' + encodeURIComponent(data.videoId || '') +
+              '&filename=' + encodeURIComponent(data.filename || '');
+            window.location.href = targetUrl;
+            return;
+          }
+        } catch (e) {
+          console.warn('Linked stream refresh failed:', e);
+        }
+        btn.classList.remove('spinning');
+        btn.disabled = false;
+      });
+    }
+
     // Initial render
     renderProviders();
     renderTargets();
@@ -5429,7 +5515,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         decodeBadgeValue: document.getElementById('decodeBadgeValue'),
         audioTrackPrompt: document.getElementById('autoTrackPrompt'),
         audioTrackSelect: document.getElementById('autoAudioTrack'),
-        audioTrackContinue: document.getElementById('autoTrackContinue')
+        audioTrackContinue: document.getElementById('autoTrackContinue'),
+        linkedStreamRefresh: document.getElementById('linkedStreamRefresh')
       };
       const stepPills = {
         fetch: document.getElementById('stepFetch'),
@@ -7321,6 +7408,42 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           state.autoSubsCompleted = false;
           refreshStepLocks();
         });
+
+        // Linked stream refresh button handler
+        els.linkedStreamRefresh?.addEventListener('click', async () => {
+          const btn = els.linkedStreamRefresh;
+          if (btn.disabled || btn.classList.contains('spinning')) return;
+          btn.disabled = true;
+          btn.classList.add('spinning');
+          try {
+            const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(PAGE.configStr), { cache: 'no-store' });
+            if (resp.status === 204) {
+              btn.classList.remove('spinning');
+              btn.disabled = false;
+              return;
+            }
+            if (!resp.ok) throw new Error('Bad response');
+            const data = await resp.json();
+            if (!data || !data.videoId) {
+              btn.classList.remove('spinning');
+              btn.disabled = false;
+              return;
+            }
+            const currentSig = [PAGE.videoHash || '', PAGE.videoId || '', PAGE.filename || ''].join('::');
+            const newSig = [data.videoHash || '', data.videoId || '', data.filename || ''].join('::');
+            if (newSig !== currentSig && newSig.trim()) {
+              const targetUrl = '/auto-subtitles?config=' + encodeURIComponent(PAGE.configStr) +
+                '&videoId=' + encodeURIComponent(data.videoId || '') +
+                '&filename=' + encodeURIComponent(data.filename || '');
+              window.location.href = targetUrl;
+              return;
+            }
+          } catch (e) {
+            console.warn('Linked stream refresh failed:', e);
+          }
+          btn.classList.remove('spinning');
+          btn.disabled = false;
+        });
       }
 
       // Extension messaging (status only)
@@ -7485,7 +7608,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       label: t('toolbox.embedded.videoMeta.label', {}, 'Linked stream'),
       none: t('toolbox.embedded.videoMeta.none', {}, 'No stream linked'),
       unavailable: t('toolbox.embedded.videoMeta.unavailable', {}, 'Video ID unavailable'),
-      waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...')
+      waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...'),
+      refreshTitle: t('toolbox.embedded.videoMeta.refreshTitle', {}, 'Refresh linked stream')
     },
     sections: {
       linkAndPrep: t('toolbox.autoSubs.sections.setup', {}, 'Link a stream & prep the model'),
@@ -8430,12 +8554,49 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       text-align: center;
     }
     .video-meta-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
       margin: 0 0 4px;
       font-weight: 700;
+    }
+    .linked-stream-refresh {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .linked-stream-refresh:hover {
+      background: var(--surface-light);
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: scale(1.05);
+    }
+    .linked-stream-refresh:active {
+      transform: scale(0.95);
+    }
+    .linked-stream-refresh.spinning {
+      animation: spin 0.8s linear infinite;
+    }
+    .linked-stream-refresh:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     .video-meta-title {
       margin: 0;
@@ -8461,6 +8622,11 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     .audio-track-prompt .controls { justify-content: flex-start; gap: 10px; }
     .audio-track-prompt select { min-width: 220px; }
     .audio-track-prompt p { margin: 4px 0 8px; color: var(--text-secondary); }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
     @media (max-width: 900px) {
       .wrap { padding: 2rem 1.25rem; }
@@ -8523,7 +8689,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           <div class="step-body">
             <div class="linked-stream-wrapper">
               <div class="video-meta" id="linked-stream-card">
-                <p class="video-meta-label">${escapeHtml(copy.videoMeta.label)}</p>
+                <p class="video-meta-label">
+                  <span>${escapeHtml(copy.videoMeta.label)}</span>
+                  <button type="button" class="linked-stream-refresh" id="linkedStreamRefresh" title="${escapeHtml(copy.videoMeta.refreshTitle)}">⟳</button>
+                </p>
                 <p class="video-meta-title" id="video-meta-title">${initialVideoTitle}</p>
                 <p class="video-meta-subtitle" id="video-meta-subtitle">${initialVideoSubtitle}</p>
               </div>

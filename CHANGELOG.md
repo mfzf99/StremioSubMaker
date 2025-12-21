@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.26
+
+- **Linked stream refresh button:** Added a refresh action on Sync, Embedded Subtitles, and Auto-subs pages so users can pull the latest linked stream metadata without leaving the page.
+- **Clearer hash mismatch guidance:** Updated the embedded tools helper copy to instruct users to refresh the linked stream before pasting the Stream URL.
+
 ## SubMaker v1.4.25
 
 

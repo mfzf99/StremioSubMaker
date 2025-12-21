@@ -316,7 +316,8 @@
           "label": "Linked stream",
           "none": "No stream linked",
           "unavailable": "Video ID unavailable",
-          "waiting": "Waiting for a linked stream..."
+          "waiting": "Waiting for a linked stream...",
+          "refreshTitle": "Refresh linked stream"
         },
         "step1": {
           "chip": "Step 1",
@@ -336,7 +337,7 @@
           "extractBlocked": "Extraction is blocked until the Stream URL matches your linked stream.",
           "hashMismatchInline": "Hashes do not match. Extraction stays blocked until the pasted URL matches your linked stream.",
           "hashMismatchLine1": "Hashes must match (Linked Stream and Stream URL) before extraction can start.",
-          "hashMismatchLine2": "Copy the stream link directly from Stremio to unblock extraction.",
+          "hashMismatchLine2": "Stream something and refresh the linked stream, then copy and paste the Stream URL.",
           "logHeader": "Live log",
           "logSub": "Auto-filled while extraction runs.",
           "outputsEyebrow": "Outputs",
