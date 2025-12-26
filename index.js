@@ -2675,7 +2675,8 @@ if (process.env.FORCE_SESSION_READY !== 'false') {
             req.path.endsWith('.js') ||
             req.path.endsWith('.html') ||
             req.path === '/' ||
-            req.path === '/configure') {
+            req.path === '/configure' ||
+            req.path.startsWith('/configure/')) {
             return next();
         }
 
@@ -2705,6 +2706,17 @@ app.get('/configure', (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (can receive config via query params)
     setNoStore(res);
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
+});
+
+app.get('/configure/:config', (req, res) => {
+    // CRITICAL: Prevent caching to avoid cross-user config contamination (supports path-style config tokens)
+    setNoStore(res);
+    const params = new URLSearchParams(req.query || {});
+    if (req.params.config) {
+        params.set('config', req.params.config);
+    }
+    const qs = params.toString();
+    res.redirect(302, `/configure${qs ? `?${qs}` : ''}`);
 });
 
 // Health check endpoint for Kubernetes/Docker readiness and liveness probes
