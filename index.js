@@ -2702,10 +2702,10 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
-// Normalize trailing slashes on configure routes so relative assets resolve correctly.
+// Serve trailing-slash configure without redirect to avoid proxy-induced redirect loops.
 app.get('/configure/', (req, res) => {
-    const qs = new URLSearchParams(req.query || {}).toString();
-    res.redirect(302, `/configure${qs ? `?${qs}` : ''}`);
+    setNoStore(res);
+    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
 app.get('/configure/:config/', (req, res) => {
