@@ -9,6 +9,25 @@ const log = require('./src/utils/logger');
 const sentry = require('./src/utils/sentry');
 sentry.init();
 
+// Global error handlers to catch unhandled errors and report to Sentry
+process.on('unhandledRejection', (reason, promise) => {
+    log.error(() => ['[Process] Unhandled Promise Rejection:', reason]);
+    sentry.captureErrorForced(reason instanceof Error ? reason : new Error(String(reason)), {
+        module: 'UnhandledRejection',
+        type: 'unhandledRejection'
+    });
+});
+
+process.on('uncaughtException', (error) => {
+    log.error(() => ['[Process] Uncaught Exception:', error]);
+    sentry.captureErrorForced(error, {
+        module: 'UncaughtException',
+        type: 'uncaughtException'
+    });
+    // Give Sentry time to send the error before crashing
+    setTimeout(() => process.exit(1), 1000);
+});
+
 const express = require('express');
 const compression = require('compression');
 const cors = require('cors');

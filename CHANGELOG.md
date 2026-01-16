@@ -31,6 +31,10 @@ All notable changes to this project will be documented in this file.
 
 - **Fixed unhandled rejection on OpenSubtitles rate limit:** Fixed an issue where OpenSubtitles 429 (rate limit) errors during login caused unhandled promise rejections to be logged. The root cause was the login mutex promise being rejected when no concurrent requests were waiting on it. Added `.catch()` handler to swallow the rejection (the error is still handled by the try/catch block). Also improved the mutex waiter error handling to return `null` gracefully for rate limits and retryable errors instead of re-throwing.
 
+- **Added global unhandled error handlers:** Added `process.on('unhandledRejection')` and `process.on('uncaughtException')` handlers that log errors and report them to Sentry. This provides a safety net for any async errors that escape try/catch blocks across the entire application. Uncaught exceptions gracefully exit after giving Sentry time to send the error.
+
+- **Removed dead code from Subs.ro service:** Removed ~200 lines of unused extraction methods (`_findFirstSubtitleFile`, `_findEpisodeFile`, `_extractAndConvertSubtitle`) that were superseded by the centralized `archiveExtractor.js` utility.
+
 ## SubMaker v1.4.29
 
 **New Subtitle Providers:**
