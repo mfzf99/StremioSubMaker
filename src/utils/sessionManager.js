@@ -9,7 +9,7 @@ const { StorageUnavailableError } = require('../storage/errors');
 const log = require('./logger');
 const { shutdownLogger } = require('./logger');
 const sentry = require('./sentry');
-const { encryptUserConfig, decryptUserConfig } = require('./encryption');
+const { encryptUserConfig, decryptUserConfig, getDecryptionWarnings } = require('./encryption');
 const { redactToken } = require('./security');
 const { getRedisPassword } = require('./redisHelper');
 
@@ -932,12 +932,27 @@ class SessionManager extends EventEmitter {
         }
 
         const fingerprint = computeConfigFingerprint(decryptedConfig);
-        if (metadata.fingerprint && metadata.fingerprint !== fingerprint) {
+
+        // Check if decryption had warnings (indicates encryption key mismatch between server instances)
+        // If so, skip fingerprint validation since the fingerprint was computed from decrypted config
+        // which may contain encrypted (undecrypted) values due to key mismatch
+        const hasDecryptionWarnings = decryptedConfig.__decryptionWarning === true;
+        if (hasDecryptionWarnings) {
+            const warningFields = decryptedConfig.__decryptionWarningFields || [];
+            log.warn(() => `[SessionManager] getSession: Decryption warnings detected for ${redactToken(token)} - fields: ${warningFields.join(', ')}. Skipping fingerprint validation. User may need to re-enter credentials.`);
+            // Clean up warning flags before returning
+            delete decryptedConfig.__decryptionWarning;
+            delete decryptedConfig.__decryptionWarningFields;
+        }
+
+        // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+        if (!hasDecryptionWarnings && metadata.fingerprint && metadata.fingerprint !== fingerprint) {
             log.warn(() => `[SessionManager] Session fingerprint metadata mismatch for ${redactToken(token)} - deleting session`);
             this.deleteSession(token);
             return null;
         }
-        if (sessionData.fingerprint && fingerprint !== sessionData.fingerprint) {
+        // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+        if (!hasDecryptionWarnings && sessionData.fingerprint && fingerprint !== sessionData.fingerprint) {
             log.warn(() => `[SessionManager] Fingerprint mismatch for ${redactToken(token)} - discarding contaminated session`);
             this.deleteSession(token);
             return null;
@@ -1301,6 +1316,18 @@ class SessionManager extends EventEmitter {
 
                 const fingerprint = computeConfigFingerprint(decryptedConfig);
 
+                // Check if decryption had warnings (indicates encryption key mismatch between server instances)
+                // If so, skip fingerprint validation since the fingerprint was computed from decrypted config
+                // which may contain encrypted (undecrypted) values due to key mismatch
+                const hasDecryptionWarnings = decryptedConfig.__decryptionWarning === true;
+                if (hasDecryptionWarnings) {
+                    const warningFields = decryptedConfig.__decryptionWarningFields || [];
+                    log.warn(() => `[SessionManager] loadSessionFromStorage: Decryption warnings detected for ${redactToken(token)} - fields: ${warningFields.join(', ')}. Skipping fingerprint validation to preserve session. User may need to re-enter credentials.`);
+                    // Clean up warning flags before returning
+                    delete decryptedConfig.__decryptionWarning;
+                    delete decryptedConfig.__decryptionWarningFields;
+                }
+
                 if (metadata?.token && metadata.token !== token) {
                     log.warn(() => `[SessionManager] Session token metadata mismatch on storage load for ${redactToken(token)} - deleting session`);
                     await deleteFromStorage();
@@ -1309,7 +1336,8 @@ class SessionManager extends EventEmitter {
                     return null;
                 }
 
-                if (metadata?.fingerprint && metadata.fingerprint !== fingerprint) {
+                // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+                if (!hasDecryptionWarnings && metadata?.fingerprint && metadata.fingerprint !== fingerprint) {
                     log.warn(() => `[SessionManager] Session fingerprint metadata mismatch on storage load for ${redactToken(token)} - deleting session`);
                     await deleteFromStorage();
                     this.cache.delete(token);
@@ -1317,7 +1345,8 @@ class SessionManager extends EventEmitter {
                     return null;
                 }
 
-                if (stored.fingerprint && fingerprint !== stored.fingerprint) {
+                // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+                if (!hasDecryptionWarnings && stored.fingerprint && fingerprint !== stored.fingerprint) {
                     log.warn(() => `[SessionManager] Fingerprint mismatch on storage load for ${redactToken(token)} - removing corrupted session`);
                     await deleteFromStorage();
                     this.cache.delete(token);

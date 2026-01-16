@@ -1,0 +1,930 @@
+/**
+ * Subs.ro API Integration
+ * 
+ * Subs.ro is a Romanian subtitle database with a REST API access.
+ * Primarily focuses on Romanian subtitles but supports multiple languages.
+ * 
+ * API Version: 1.0
+ * API Docs: https://subs.ro/api
+ * OpenAPI Spec: https://subs.ro/apiv10-openapispecyaml
+ * 
+ * Features:
+ * - Supports search by IMDB ID, TMDB ID, title, or release name
+ * - Language filtering (ro, en, ita, fra, ger, ung, gre, por, spa, alt)
+ * - Direct subtitle download (returns ZIP archives)
+ * - Daily quota limits with API key
+ * 
+ * Authentication:
+ * - Requires API key (generated in user profile at subs.ro)
+ * - API key sent via X-Subs-Api-Key header or ?apiKey= query param
+ */
+
+const axios = require('axios');
+const { toISO6391 } = require('../utils/languages');
+const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
+const { appendHiddenInformationalNote } = require('../utils/subtitle');
+const log = require('../utils/logger');
+const { version } = require('../utils/version');
+
+const SUBS_RO_API_URL = 'https://subs.ro/api/v1.0';
+const USER_AGENT = `SubMaker v${version}`;
+
+// Maximum results per language to prevent overwhelming the user with choices
+const MAX_RESULTS_PER_LANGUAGE = 14;
+
+// Maximum ZIP file size to process (25MB - same as other providers)
+const MAX_ZIP_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Language mapping: ISO 639-2/B (SubMaker internal) → subs.ro codes
+ * subs.ro uses a limited set of language codes: ro, en, ita, fra, ger, ung, gre, por, spa, alt
+ */
+const ISO2_TO_SUBSRO = {
+    // Romanian
+    'rum': 'ro', 'ron': 'ro', 'ro': 'ro',
+    // English
+    'eng': 'en', 'en': 'en',
+    // Italian
+    'ita': 'ita', 'it': 'ita',
+    // French
+    'fre': 'fra', 'fra': 'fra', 'fr': 'fra',
+    // German
+    'ger': 'ger', 'deu': 'ger', 'de': 'ger',
+    // Hungarian
+    'hun': 'ung', 'hu': 'ung',
+    // Greek
+    'gre': 'gre', 'ell': 'gre', 'el': 'gre',
+    // Portuguese (including Brazilian)
+    'por': 'por', 'pob': 'por', 'pt': 'por',
+    // Spanish
+    'spa': 'spa', 'spn': 'spa', 'es': 'spa'
+    // All other languages would map to 'alt' (handled in code)
+};
+
+/**
+ * Reverse mapping: subs.ro language codes → ISO 639-2/B (SubMaker internal)
+ */
+const SUBSRO_TO_ISO2 = {
+    'ro': 'rum',
+    'en': 'eng',
+    'ita': 'ita',
+    'fra': 'fre',
+    'ger': 'ger',
+    'ung': 'hun',
+    'gre': 'gre',
+    'por': 'por',
+    'spa': 'spa',
+    'alt': 'und'  // Unknown/other
+};
+
+/**
+ * Convert ISO 639-2/B language code to subs.ro format
+ * @param {string} lang - ISO 639-2/B language code
+ * @returns {string|null} - subs.ro language code or null if not supported
+ */
+function toSubsRoLanguage(lang) {
+    if (!lang) return null;
+    const lower = lang.toLowerCase().trim();
+    return ISO2_TO_SUBSRO[lower] || null;
+}
+
+/**
+ * Normalize language code from subs.ro format to SubMaker's ISO 639-2/B
+ * @param {string} lang - Language code from subs.ro API
+ * @returns {string} - ISO 639-2/B language code for SubMaker
+ */
+function normalizeLanguageCode(lang) {
+    if (!lang) return 'und';
+    const lower = lang.toLowerCase().trim();
+    return SUBSRO_TO_ISO2[lower] || 'und';
+}
+
+/**
+ * Create an informative SRT subtitle when an episode is not found in a season pack
+ * @param {number} episode - Episode number that was not found
+ * @param {number} season - Season number
+ * @param {Array<string>} availableFiles - List of files that were found in the pack
+ * @returns {string} - SRT subtitle content
+ */
+function createEpisodeNotFoundSubtitle(episode, season, availableFiles = []) {
+    try {
+        const seasonEpisodeStr = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+
+        const foundEpisodes = (availableFiles || [])
+            .map(filename => {
+                const labeled = String(filename || '').match(/(?:episode|episodio|capitulo|cap|ep|e|ova|oad)\s*(\d{1,4})/i);
+                if (labeled && labeled[1]) return parseInt(labeled[1], 10);
+
+                const generic = String(filename || '').match(/(?:^|[^0-9])(\d{1,4})(?=[^0-9]|$)/);
+                if (generic && generic[1]) {
+                    const n = parseInt(generic[1], 10);
+                    if (Number.isNaN(n)) return null;
+                    if ([480, 720, 1080, 2160].includes(n)) return null;
+                    if (n >= 1900 && n <= 2099) return null;
+                    return n;
+                }
+                return null;
+            })
+            .filter(ep => ep !== null && ep < 4000)
+            .sort((a, b) => a - b);
+
+        const uniqueEpisodes = [...new Set(foundEpisodes)];
+        const availableInfo = uniqueEpisodes.length > 0
+            ? `Pack contains ~${uniqueEpisodes.length} files, episodes ${uniqueEpisodes[0]}-${uniqueEpisodes[uniqueEpisodes.length - 1]}`
+            : 'No episode numbers detected in pack.';
+
+        const message = `1
+00:00:00,000 --> 04:00:00,000
+Episode ${seasonEpisodeStr} not found in this subtitle pack.
+${availableInfo}
+Try another subtitle or a different provider.`;
+
+        return appendHiddenInformationalNote(message);
+    } catch (_) {
+        const fallback = `1
+00:00:00,000 --> 04:00:00,000
+Episode not found in this subtitle pack.
+`;
+        return appendHiddenInformationalNote(fallback);
+    }
+}
+
+/**
+ * Create an informative SRT subtitle for ZIP too large error
+ * @param {number} limitBytes - Maximum allowed size
+ * @param {number} actualBytes - Actual size received
+ * @returns {string} - SRT formatted error message
+ */
+function createZipTooLargeSubtitle(limitBytes, actualBytes) {
+    const toMb = (bytes) => (bytes / 1024 / 1024).toFixed(1);
+    const message = `1
+00:00:00,000 --> 04:00:00,000
+Subs.ro Download Failed
+This subtitle pack is too large (${toMb(actualBytes)} MB, limit: ${toMb(limitBytes)} MB).
+Please try a different subtitle from the list.`;
+    return appendHiddenInformationalNote(message);
+}
+
+/**
+ * Infer subtitle format from filename
+ * @param {string} filename - Filename to check
+ * @returns {string} - Detected format or 'srt' as default
+ */
+function inferFormatFromFilename(filename) {
+    if (!filename) return 'srt';
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.srt')) return 'srt';
+    if (lower.endsWith('.vtt')) return 'vtt';
+    if (lower.endsWith('.ass')) return 'ass';
+    if (lower.endsWith('.ssa')) return 'ssa';
+    if (lower.endsWith('.sub')) return 'sub';
+    return 'srt';
+}
+
+class SubsRoService {
+    static initLogged = false;
+
+    /**
+     * Create a new SubsRoService instance
+     * @param {string|null} apiKey - subs.ro API key (required for authenticated access)
+     */
+    constructor(apiKey = null) {
+        this.apiKey = apiKey;
+
+        const headers = {
+            'User-Agent': USER_AGENT,
+            'Accept': 'application/json'
+        };
+
+        // Add API key to headers if provided
+        if (apiKey && apiKey.trim()) {
+            headers['X-Subs-Api-Key'] = apiKey.trim();
+        }
+
+        this.client = axios.create({
+            baseURL: SUBS_RO_API_URL,
+            headers,
+            httpAgent,
+            httpsAgent,
+            lookup: dnsLookup,
+            timeout: 15000 // 15 second timeout
+        });
+
+        if (!SubsRoService.initLogged) {
+            log.debug(() => `[SubsRo] Initialized Subs.ro service (API key: ${apiKey ? 'provided' : 'missing'})`);
+            SubsRoService.initLogged = true;
+        }
+    }
+
+    /**
+     * Search for subtitles using Subs.ro API
+     * @param {Object} params - Search parameters
+     * @param {string} params.imdb_id - IMDB ID (with 'tt' prefix)
+     * @param {string} params.tmdb_id - TMDB ID (numeric)
+     * @param {string} params.type - 'movie' or 'episode'
+     * @param {number} params.season - Season number (for episodes)
+     * @param {number} params.episode - Episode number (for episodes)
+     * @param {Array<string>} params.languages - Array of ISO-639-2 language codes
+     * @param {boolean} params.excludeHearingImpairedSubtitles - Whether to exclude HI subs
+     * @returns {Promise<Array>} - Array of subtitle objects
+     */
+    async searchSubtitles(params) {
+        try {
+            const { imdb_id, tmdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles } = params;
+
+            // Determine search field and value
+            // Priority: IMDB ID > TMDB ID
+            let searchField, searchValue;
+
+            if (imdb_id && imdb_id !== 'undefined') {
+                searchField = 'imdbid';
+                // subs.ro expects IMDB ID without 'tt' prefix
+                searchValue = imdb_id.replace(/^tt/i, '');
+            } else if (tmdb_id && tmdb_id !== 'undefined') {
+                searchField = 'tmdbid';
+                searchValue = String(tmdb_id).replace(/^tt/i, ''); // Remove tt if accidentally included
+            } else {
+                log.debug(() => '[SubsRo] No IMDB/TMDB ID available, skipping search');
+                return [];
+            }
+
+            // Convert requested languages to subs.ro format
+            // Filter out unsupported languages
+            const subsRoLangs = [];
+            if (languages && languages.length > 0) {
+                for (const lang of languages) {
+                    const subsRoLang = toSubsRoLanguage(lang);
+                    if (subsRoLang) {
+                        subsRoLangs.push(subsRoLang);
+                    }
+                }
+                // Warn if none of the requested languages are supported
+                if (subsRoLangs.length === 0) {
+                    log.warn(() => `[SubsRo] None of the requested languages (${languages.join(', ')}) are supported. Subs.ro supports: ro, en, ita, fra, ger, ung, gre, por, spa, alt`);
+                }
+            }
+
+            // Build URL: /search/{searchField}/{value}
+            let url = `/search/${searchField}/${searchValue}`;
+
+            // Add language filter if we have supported languages
+            if (subsRoLangs.length > 0) {
+                const uniqueLangs = [...new Set(subsRoLangs)];
+                url += `?language=${uniqueLangs.join(',')}`;
+            }
+
+            log.debug(() => `[SubsRo] Searching: ${url}`);
+
+            const response = await this.client.get(url);
+
+            // Check for valid response
+            if (!response.data) {
+                log.debug(() => '[SubsRo] Empty response');
+                return [];
+            }
+
+            // API returns: { status: 200, meta: {...}, count: N, items: [...] }
+            if (response.data.status !== 200) {
+                log.debug(() => `[SubsRo] Non-200 status in response: ${response.data.status}`);
+                return [];
+            }
+
+            const items = response.data.items || [];
+            if (items.length === 0) {
+                log.debug(() => '[SubsRo] No subtitles found');
+                return [];
+            }
+
+            log.debug(() => `[SubsRo] Found ${items.length} subtitle(s)`);
+
+            // Track language stats for debugging
+            const langStats = new Map();
+            const languageCounts = new Map();
+
+            // Determine if we're searching for TV episode
+            const isEpisodeSearch = (type === 'episode' || type === 'anime-episode') && episode;
+            const targetSeason = season || 1;
+            const targetEpisode = episode;
+
+            let results = items
+                .map(sub => {
+                    // Normalize language code from subs.ro to SubMaker's ISO 639-2/B
+                    const normalizedLang = normalizeLanguageCode(sub.language);
+
+                    // Track for stats
+                    const key = sub.language === normalizedLang ? sub.language : `${sub.language}→${normalizedLang}`;
+                    langStats.set(key, (langStats.get(key) || 0) + 1);
+
+                    // Build display name from available data
+                    // Format: [translator] description OR title (year)
+                    let displayName = sub.description || '';
+                    if (!displayName && sub.title) {
+                        displayName = sub.year ? `${sub.title} (${sub.year})` : sub.title;
+                    }
+                    if (!displayName) {
+                        displayName = `[Subs.ro] ${sub.language || 'Unknown'}`;
+                    }
+
+                    // Add translator info if available
+                    if (sub.translator && !displayName.includes(sub.translator)) {
+                        displayName = `[${sub.translator}] ${displayName}`;
+                    }
+
+                    // Use createdAt for upload date (for quality scoring)
+                    const uploadDate = sub.createdAt || sub.updatedAt || null;
+
+                    // Infer format from filename if available
+                    const inferredFormat = inferFormatFromFilename(displayName);
+
+                    // Heuristic HI detection from filename patterns (API doesn't provide this field)
+                    // Common patterns: "HI", "SDH", "hearing impaired", "closed captions", "CC"
+                    const lowerName = displayName.toLowerCase();
+                    const hearingImpairedHeuristic = /\[(?:hi|sdh|cc)\]|\((?:hi|sdh|cc)\)|\.hi\.|\.sdh\.|hearing.?impaired|closed.?caption/i.test(lowerName);
+
+                    return {
+                        id: `subsro_${sub.id}`,
+                        language: sub.language,
+                        languageCode: normalizedLang, // ISO 639-2/B for SubMaker filtering
+                        name: displayName,
+                        url: sub.downloadLink || sub.link,
+                        downloads: 0, // subs.ro API doesn't provide download counts
+                        rating: 0,
+                        uploadDate: uploadDate,
+                        format: inferredFormat, // Inferred from filename, fallback to 'srt'
+                        hearing_impaired: hearingImpairedHeuristic, // Heuristic - not 100% reliable
+                        foreign_parts_only: false,
+                        machine_translated: false,
+                        provider: 'subsro', // Use lowercase for providerReputation matching
+                        translator: sub.translator,
+                        year: sub.year,
+                        type: sub.type, // 'movie' or 'series'
+                        imdbid: sub.imdbid,
+                        tmdbid: sub.tmdbid,
+                        poster: sub.poster,
+                        createdAt: sub.createdAt,
+                        updatedAt: sub.updatedAt,
+                        fileId: `subsro_${sub.id}`,
+                        _subsRoId: sub.id
+                    };
+                });
+
+            // CLIENT-SIDE EPISODE FILTERING for TV shows
+            // subs.ro API doesn't support season/episode filtering, so we must filter results
+            if (isEpisodeSearch) {
+                const beforeCount = results.length;
+
+                results = results.filter(sub => {
+                    const name = String(sub.name || '').toLowerCase();
+
+                    // Season pack patterns (keep as fallback, mark for extraction)
+                    const seasonPackPatterns = [
+                        new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\d)`, 'i'),
+                        new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
+                        new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
+                    ];
+
+                    // Anime-specific season pack patterns
+                    const animeSeasonPackPatterns = [
+                        /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
+                        /\[(?:batch|complete|full)\]/i,
+                        /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i
+                    ];
+
+                    let isSeasonPack = false;
+                    if (type === 'anime-episode') {
+                        isSeasonPack = animeSeasonPackPatterns.some(p => p.test(name)) &&
+                            !new RegExp(`(?:^|[^0-9])0*${targetEpisode}(?:v\\d+)?(?:[^0-9]|$)`, 'i').test(name);
+                    } else {
+                        isSeasonPack = seasonPackPatterns.some(p => p.test(name)) &&
+                            !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(name);
+                    }
+
+                    if (isSeasonPack) {
+                        // Mark as season pack for download extraction
+                        sub.is_season_pack = true;
+                        sub.season_pack_season = targetSeason;
+                        sub.season_pack_episode = targetEpisode;
+
+                        // Encode episode info in fileId for download extraction
+                        const originalFileId = sub.fileId || sub.id;
+                        sub.fileId = `${originalFileId}_seasonpack_s${targetSeason}e${targetEpisode}`;
+                        sub.id = sub.fileId;
+
+                        log.debug(() => `[SubsRo] Detected season pack: ${sub.name}`);
+                        return true;
+                    }
+
+                    // Episode match patterns
+                    const seasonEpisodePatterns = [
+                        new RegExp(`s0*${targetSeason}e0*${targetEpisode}(?![0-9])`, 'i'),
+                        new RegExp(`${targetSeason}x0*${targetEpisode}(?![0-9])`, 'i'),
+                        new RegExp(`s0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),
+                        new RegExp(`0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),
+                        new RegExp(`s0*${targetSeason}\\.e0*${targetEpisode}(?![0-9])`, 'i'),
+                        new RegExp(`season\\s*0*${targetSeason}.*episode\\s*0*${targetEpisode}(?![0-9])`, 'i')
+                    ];
+
+                    // Anime episode patterns (episode only, no season)
+                    const animeEpisodePatterns = [
+                        new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e(?:p(?:isode)?)?[\\s._-]*0*${targetEpisode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
+                        new RegExp(`(?:^|[\\s\\[\\(\\-_.])0*${targetEpisode}(?:v\\d+)?(?=$|[\\s\\[\\]\\(\\)\\-_.])`, 'i'),
+                        new RegExp(`(?:episode|episodio|ep|cap(?:itulo)?)\\s*0*${targetEpisode}(?![0-9])`, 'i')
+                    ];
+
+                    // Check for exact episode match
+                    if (seasonEpisodePatterns.some(p => p.test(name))) {
+                        return true;
+                    }
+
+                    // For anime, also check episode-only patterns
+                    if (type === 'anime-episode' && animeEpisodePatterns.some(p => p.test(name))) {
+                        return true;
+                    }
+
+                    // Check if subtitle explicitly mentions a DIFFERENT episode - exclude it
+                    const episodeMatch = name.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
+                    if (episodeMatch) {
+                        const subSeason = parseInt(episodeMatch[1] || episodeMatch[3], 10);
+                        const subEpisode = parseInt(episodeMatch[2] || episodeMatch[4], 10);
+                        if (subSeason === targetSeason && subEpisode !== targetEpisode) {
+                            return false; // Wrong episode - exclude
+                        }
+                    }
+
+                    // Keep subtitles that don't specify any episode (might be movie format or generic)
+                    // Only if this is actually a series type from the API
+                    if (sub.type === 'series') {
+                        // If it's marked as series but has no episode info, it might be a season pack
+                        // Keep it but don't mark as season pack yet (could be single file for the show)
+                        return true;
+                    }
+
+                    // Keep generic subtitles as they might still be relevant
+                    return true;
+                });
+
+                const filteredCount = beforeCount - results.length;
+                const seasonPackCount = results.filter(s => s.is_season_pack).length;
+                if (filteredCount > 0 || seasonPackCount > 0) {
+                    log.debug(() => `[SubsRo] Episode filtering: kept ${results.length}/${beforeCount}, season packs: ${seasonPackCount}`);
+                }
+            }
+
+            // Client-side HI subtitle filtering using filename heuristics
+            // Since subs.ro API doesn't provide HI flag, we use filename pattern detection
+            if (excludeHearingImpairedSubtitles === true) {
+                const beforeHiCount = results.length;
+                results = results.filter(sub => !sub.hearing_impaired);
+                const removedHi = beforeHiCount - results.length;
+                if (removedHi > 0) {
+                    log.debug(() => `[SubsRo] HI filtering: removed ${removedHi} subtitle(s) based on filename heuristics (patterns like .HI., [SDH], etc.)`);
+                }
+            }
+
+            // Apply per-language limit
+            results = results.filter(sub => {
+                const lang = sub.languageCode || 'unknown';
+                const count = languageCounts.get(lang) || 0;
+                if (count >= MAX_RESULTS_PER_LANGUAGE) {
+                    return false;
+                }
+                languageCounts.set(lang, count + 1);
+                return true;
+            });
+
+            // Log language stats
+            if (langStats.size > 0) {
+                const statsStr = Array.from(langStats.entries())
+                    .map(([k, v]) => `${k}:${v}`)
+                    .join(', ');
+                log.debug(() => `[SubsRo] Languages received: ${statsStr}`);
+            }
+
+            log.debug(() => `[SubsRo] Returning ${results.length} results (limited to ${MAX_RESULTS_PER_LANGUAGE} per language)`);
+
+            return results;
+
+        } catch (error) {
+            // Use warn instead of error for operational failures
+            if (error.response?.status === 404) {
+                log.debug(() => `[SubsRo] No results (404) for requested content`);
+            } else if (error.response?.status === 400) {
+                log.debug(() => `[SubsRo] Bad request (400): ${error.response?.data?.message || error.message}`);
+            } else if (error.response?.status === 401) {
+                log.warn(() => `[SubsRo] API key rejected (401) - check your subs.ro API key`);
+            } else {
+                log.warn(() => `[SubsRo] Search failed: ${error.message}`);
+            }
+            return [];
+        }
+    }
+
+    /**
+     * Download subtitle content from Subs.ro
+     * The API returns binary ZIP archives that need to be extracted
+     * @param {string} fileId - File ID from search results (format: subsro_{id} or subsro_{id}_seasonpack_s{season}e{episode})
+     * @param {number} maxRetries - Maximum number of retries (default: 3)
+     * @returns {Promise<string>} - Subtitle content as text
+     */
+    async downloadSubtitle(fileId, maxRetries = 3) {
+        // Validate fileId format
+        if (!fileId || !fileId.startsWith('subsro_')) {
+            throw new Error('Invalid Subs.ro file ID format');
+        }
+
+        // Check for season pack encoding in fileId
+        let isSeasonPack = false;
+        let seasonPackSeason = null;
+        let seasonPackEpisode = null;
+        let baseFileId = fileId;
+
+        const seasonPackMatch = fileId.match(/^(subsro_\d+)_seasonpack_s(\d+)e(\d+)$/i);
+        if (seasonPackMatch) {
+            isSeasonPack = true;
+            baseFileId = seasonPackMatch[1];
+            seasonPackSeason = parseInt(seasonPackMatch[2], 10);
+            seasonPackEpisode = parseInt(seasonPackMatch[3], 10);
+            log.debug(() => `[SubsRo] Season pack download: S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
+        }
+
+        // Extract the numeric ID
+        const subsroId = baseFileId.substring(7); // Remove 'subsro_' prefix
+        if (!subsroId || !/^\d+$/.test(subsroId)) {
+            throw new Error(`Invalid Subs.ro subtitle ID: ${subsroId}`);
+        }
+
+        const downloadUrl = `/subtitle/${subsroId}/download`;
+
+        log.debug(() => `[SubsRo] Downloading subtitle ID: ${subsroId}`);
+
+        let lastError;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log.debug(() => `[SubsRo] Download attempt ${attempt}/${maxRetries}`);
+
+                const response = await this.client.get(downloadUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 20000 // 20 second timeout for downloads
+                });
+
+                const buffer = Buffer.from(response.data);
+
+                // Check size limits
+                if (buffer.length > MAX_ZIP_BYTES) {
+                    log.warn(() => `[SubsRo] ZIP too large: ${buffer.length} bytes > ${MAX_ZIP_BYTES} limit`);
+                    return createZipTooLargeSubtitle(MAX_ZIP_BYTES, buffer.length);
+                }
+
+                // Check if it's a ZIP file (starts with PK magic bytes)
+                const isZip = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4B;
+
+                if (isZip) {
+                    log.debug(() => `[SubsRo] Received ZIP archive (${buffer.length} bytes), extracting...`);
+
+                    // Extract subtitle from ZIP using JSZip (async)
+                    const JSZip = require('jszip');
+                    let zip;
+                    try {
+                        zip = await JSZip.loadAsync(buffer, { base64: false });
+                    } catch (zipErr) {
+                        log.error(() => ['[SubsRo] Failed to parse ZIP:', zipErr.message]);
+                        throw new Error('Invalid ZIP file from Subs.ro (corrupted or incomplete)');
+                    }
+
+                    const entries = Object.keys(zip.files);
+
+                    if (!entries || entries.length === 0) {
+                        throw new Error('ZIP archive is empty');
+                    }
+
+                    // Find target entry based on whether this is a season pack
+                    let selectedEntry = null;
+
+                    if (isSeasonPack && seasonPackSeason && seasonPackEpisode) {
+                        log.debug(() => `[SubsRo] Searching for S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')} in ZIP`);
+                        log.debug(() => `[SubsRo] Available files: ${entries.join(', ')}`);
+
+                        selectedEntry = this._findEpisodeFile(zip, entries, seasonPackSeason, seasonPackEpisode);
+
+                        if (!selectedEntry) {
+                            log.warn(() => `[SubsRo] Episode not found in season pack ZIP`);
+                            return createEpisodeNotFoundSubtitle(seasonPackEpisode, seasonPackSeason, entries);
+                        }
+                    } else {
+                        // Not a season pack - find first subtitle file
+                        selectedEntry = this._findFirstSubtitleFile(zip, entries);
+                    }
+
+                    if (!selectedEntry) {
+                        log.warn(() => `[SubsRo] No subtitle file found in ZIP. Entries: ${entries.join(', ')}`);
+                        throw new Error('No subtitle file found in ZIP archive');
+                    }
+
+                    // Read and process the subtitle content
+                    return await this._extractAndConvertSubtitle(zip, selectedEntry);
+
+                } else {
+                    // Not a ZIP - try to handle as direct text content
+                    log.debug(() => `[SubsRo] Response is not a ZIP (${buffer.length} bytes), treating as direct content`);
+
+                    // Check if it looks like an error response
+                    const text = detectAndConvertEncoding(buffer, 'SubsRo');
+                    const trimmed = text.trim().toLowerCase();
+
+                    // Check for HTML error pages
+                    if (trimmed.startsWith('<!doctype') || trimmed.startsWith('<html')) {
+                        throw new Error('Received HTML error page instead of subtitle content');
+                    }
+
+                    // Check for JSON error responses
+                    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                        try {
+                            const json = JSON.parse(text);
+                            if (json.message || json.error) {
+                                throw new Error(`API error: ${json.message || json.error}`);
+                            }
+                        } catch (parseError) {
+                            // Not valid JSON, continue with content
+                        }
+                    }
+
+                    // Validate that it looks like subtitle content
+                    const hasTimecodes = /\d{2}:\d{2}:\d{2}[,.:]\d{2,3}/.test(text);
+                    if (!hasTimecodes && text.length < 100) {
+                        throw new Error('Response does not appear to be valid subtitle content');
+                    }
+
+                    return text;
+                }
+
+            } catch (error) {
+                lastError = error;
+                const status = error.response?.status;
+
+                // Don't retry for non-retryable errors
+                if (status === 404 || status === 401 || status === 403) {
+                    log.warn(() => `[SubsRo] Non-retryable error (${status}), aborting: ${error.message}`);
+                    break;
+                }
+
+                // Retry with backoff for server errors
+                if (status >= 500 && attempt < maxRetries) {
+                    const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                    log.warn(() => `[SubsRo] Download failed (status ${status}), retrying in ${backoffMs}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, backoffMs));
+                    continue;
+                }
+
+                // Rate limit - retry with longer backoff
+                if (status === 429 && attempt < maxRetries) {
+                    const backoffMs = 3000 * attempt;
+                    log.warn(() => `[SubsRo] Rate limited (429), retrying in ${backoffMs}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, backoffMs));
+                    continue;
+                }
+            }
+        }
+
+        throw new Error(`SubsRo download failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
+    }
+
+    /**
+     * Find the first subtitle file in a ZIP archive
+     * @param {JSZip} zip - JSZip instance
+     * @param {Array<string>} entries - Array of entry names
+     * @returns {string|null} - Entry name or null
+     */
+    _findFirstSubtitleFile(zip, entries) {
+        // Priority: SRT > VTT > SUB > ASS > SSA
+        const subtitleExtensions = ['.srt', '.vtt', '.sub', '.ass', '.ssa'];
+
+        for (const ext of subtitleExtensions) {
+            for (const entryName of entries) {
+                const lowerName = entryName.toLowerCase();
+                // Skip directories and hidden files
+                if (zip.files[entryName].dir || lowerName.startsWith('.') || lowerName.includes('/__macosx')) {
+                    continue;
+                }
+                if (lowerName.endsWith(ext)) {
+                    return entryName;
+                }
+            }
+        }
+
+        // Fallback: try any text file
+        for (const entryName of entries) {
+            if (zip.files[entryName].dir) continue;
+            const lowerName = entryName.toLowerCase();
+            if (lowerName.endsWith('.txt') || !lowerName.includes('.')) {
+                return entryName;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find episode file in a season pack ZIP
+     * @param {JSZip} zip - JSZip instance
+     * @param {Array<string>} entries - Array of entry names
+     * @param {number} season - Season number
+     * @param {number} episode - Episode number
+     * @returns {string|null} - Entry name or null
+     */
+    _findEpisodeFile(zip, entries, season, episode) {
+        // Episode patterns for regular TV shows
+        const seasonEpisodePatterns = [
+            new RegExp(`s0*${season}e0*${episode}(?:v\\d+)?(?![0-9])`, 'i'),
+            new RegExp(`${season}x0*${episode}(?:v\\d+)?(?![0-9])`, 'i'),
+            new RegExp(`s0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}(?:v\\d+)?(?![0-9])`, 'i'),
+            new RegExp(`0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}(?:v\\d+)?(?![0-9])`, 'i'),
+            new RegExp(`season\\s*0*${season}.*episode\\s*0*${episode}`, 'i'),
+            new RegExp(`s0*${season}\\.e0*${episode}(?:v\\d+)?`, 'i')
+        ];
+
+        // Anime episode patterns (episode only)
+        const animeEpisodePatterns = [
+            new RegExp(`(?<=\\b|\\s|\\[|\\(|-|_)e(?:p(?:isode)?)?[\\s._-]*0*${episode}(?:v\\d+)?(?=\\b|\\s|\\]|\\)|\\.|-|_|$)`, 'i'),
+            new RegExp(`(?:^|[\\s\\[\\(\\-_.])0*${episode}(?:v\\d+)?(?=$|[\\s\\[\\]\\(\\)\\-_.])`, 'i'),
+            new RegExp(`(?:episode|episodio|ep|cap(?:itulo)?)\\s*0*${episode}(?![0-9])`, 'i'),
+            new RegExp(`第?\\s*0*${episode}\\s*(?:話|集|화)`, 'i')
+        ];
+
+        // Prefer SRT files first
+        const srtFiles = entries.filter(name => name.toLowerCase().endsWith('.srt') && !zip.files[name].dir);
+
+        // Try season+episode patterns on SRT files
+        for (const filename of srtFiles) {
+            const lower = filename.toLowerCase();
+            if (seasonEpisodePatterns.some(p => p.test(lower))) {
+                return filename;
+            }
+        }
+
+        // Try anime patterns on SRT files
+        for (const filename of srtFiles) {
+            const lower = filename.toLowerCase();
+            // Skip resolution/year false positives
+            if (/(?:720|1080|480|2160)p|(?:19|20)\d{2}/.test(lower)) {
+                const episodeStr = String(episode).padStart(2, '0');
+                if (lower.includes(`${episodeStr}p`) || lower.includes(`20${episodeStr}`)) {
+                    continue;
+                }
+            }
+            if (animeEpisodePatterns.some(p => p.test(lower))) {
+                return filename;
+            }
+        }
+
+        // Try all files with season+episode patterns
+        for (const filename of entries) {
+            if (zip.files[filename].dir) continue;
+            const lower = filename.toLowerCase();
+            if (seasonEpisodePatterns.some(p => p.test(lower))) {
+                return filename;
+            }
+        }
+
+        // Try all files with anime patterns
+        for (const filename of entries) {
+            if (zip.files[filename].dir) continue;
+            const lower = filename.toLowerCase();
+            if (animeEpisodePatterns.some(p => p.test(lower))) {
+                return filename;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract and convert subtitle content from ZIP entry
+     * @param {JSZip} zip - JSZip instance
+     * @param {string} entryName - Entry name to extract
+     * @returns {Promise<string>} - Subtitle content
+     */
+    async _extractAndConvertSubtitle(zip, entryName) {
+        const subtitleBuffer = await zip.files[entryName].async('nodebuffer');
+        if (!subtitleBuffer || subtitleBuffer.length === 0) {
+            throw new Error(`Failed to read ${entryName} from ZIP`);
+        }
+
+        const lowerName = entryName.toLowerCase();
+
+        // For SRT files, just detect encoding and return
+        if (lowerName.endsWith('.srt')) {
+            const text = detectAndConvertEncoding(subtitleBuffer, 'SubsRo');
+            log.debug(() => `[SubsRo] Extracted ${entryName} (${text.length} chars)`);
+            return text;
+        }
+
+        // Handle BOM for non-SRT files
+        let raw;
+        if (subtitleBuffer.length >= 2 && subtitleBuffer[0] === 0xFF && subtitleBuffer[1] === 0xFE) {
+            raw = subtitleBuffer.slice(2).toString('utf16le');
+            log.debug(() => `[SubsRo] Detected UTF-16LE BOM in ${entryName}`);
+        } else if (subtitleBuffer.length >= 2 && subtitleBuffer[0] === 0xFE && subtitleBuffer[1] === 0xFF) {
+            const swapped = Buffer.allocUnsafe(Math.max(0, subtitleBuffer.length - 2));
+            for (let i = 2, j = 0; i + 1 < subtitleBuffer.length; i += 2, j += 2) {
+                swapped[j] = subtitleBuffer[i + 1];
+                swapped[j + 1] = subtitleBuffer[i];
+            }
+            raw = swapped.toString('utf16le');
+            log.debug(() => `[SubsRo] Detected UTF-16BE BOM in ${entryName}`);
+        } else {
+            raw = detectAndConvertEncoding(subtitleBuffer, 'SubsRo');
+        }
+
+        // Strip UTF-8 BOM if present
+        if (raw && typeof raw === 'string') {
+            raw = raw.replace(/^\uFEFF/, '');
+        }
+
+        // VTT - return as-is
+        if (lowerName.endsWith('.vtt')) {
+            log.debug(() => `[SubsRo] Keeping original VTT: ${entryName}`);
+            return raw;
+        }
+
+        // ASS/SSA - try to convert to VTT
+        if (lowerName.endsWith('.ass') || lowerName.endsWith('.ssa')) {
+            try {
+                const assConverter = require('../utils/assConverter');
+                const format = lowerName.endsWith('.ass') ? 'ass' : 'ssa';
+                const result = assConverter.convertASSToVTT(raw, format);
+                if (result.success) {
+                    log.debug(() => `[SubsRo] Converted ${entryName} to VTT successfully`);
+                    return result.content;
+                }
+                log.warn(() => `[SubsRo] ASS converter failed: ${result.error}, trying fallback`);
+            } catch (e) {
+                log.warn(() => `[SubsRo] ASS converter not available: ${e.message}`);
+            }
+
+            // Fallback: try subsrt-ts
+            try {
+                const subsrt = require('subsrt-ts');
+                const converted = lowerName.endsWith('.ass')
+                    ? subsrt.convert(raw, { to: 'vtt', from: 'ass' })
+                    : subsrt.convert(raw, { to: 'vtt', from: 'ssa' });
+                if (converted && converted.trim().length > 0) {
+                    log.debug(() => `[SubsRo] Converted ${entryName} to VTT via subsrt-ts`);
+                    return converted;
+                }
+            } catch (e) {
+                log.warn(() => `[SubsRo] subsrt-ts conversion failed: ${e.message}`);
+            }
+
+            // Return raw content as last resort
+            log.warn(() => `[SubsRo] Could not convert ${entryName}, returning raw content`);
+            return raw;
+        }
+
+        // SUB (MicroDVD) - try to convert
+        if (lowerName.endsWith('.sub')) {
+            const isMicroDVD = /^\s*\{\d+\}\{\d+\}/.test(raw);
+            if (isMicroDVD) {
+                try {
+                    const subsrt = require('subsrt-ts');
+                    const fps = 25; // Default PAL framerate
+                    const converted = subsrt.convert(raw, { to: 'vtt', from: 'sub', fps });
+                    if (converted && converted.trim().length > 0) {
+                        log.debug(() => `[SubsRo] Converted MicroDVD ${entryName} to VTT (fps=${fps})`);
+                        return converted;
+                    }
+                } catch (e) {
+                    log.warn(() => `[SubsRo] MicroDVD conversion failed: ${e.message}`);
+                }
+            } else {
+                log.warn(() => `[SubsRo] VobSub .sub format not supported: ${entryName}`);
+            }
+        }
+
+        // Return raw content for unhandled formats
+        log.debug(() => `[SubsRo] Extracted ${entryName} (${raw.length} chars)`);
+        return raw;
+    }
+
+    /**
+     * Check API quota status
+     * Useful for debugging and monitoring API usage
+     * @returns {Promise<Object|null>} - Quota information or null on error
+     */
+    async checkQuota() {
+        try {
+            const response = await this.client.get('/quota');
+            if (response.data && response.data.status === 200) {
+                const quota = response.data.quota;
+                log.debug(() => `[SubsRo] Quota: ${quota.remaining_quota}/${quota.total_quota} remaining (${quota.quota_type})`);
+                return quota;
+            }
+            return null;
+        } catch (error) {
+            log.warn(() => `[SubsRo] Failed to check quota: ${error.message}`);
+            return null;
+        }
+    }
+}
+
+module.exports = SubsRoService;

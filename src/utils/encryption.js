@@ -291,6 +291,12 @@ function encryptUserConfig(config) {
         encrypted.subtitleProviders.subsource.apiKey =
           encrypt(encrypted.subtitleProviders.subsource.apiKey);
       }
+
+      // Subs.ro API key
+      if (encrypted.subtitleProviders.subsro?.apiKey) {
+        encrypted.subtitleProviders.subsro.apiKey =
+          encrypt(encrypted.subtitleProviders.subsro.apiKey);
+      }
     }
 
     // Encrypt alternative AI provider API keys
@@ -317,10 +323,16 @@ function encryptUserConfig(config) {
  * @param {Object} config - User configuration object with encrypted fields
  * @returns {Object} Config with sensitive fields decrypted
  */
+// Track if any decryption operations fail during this call - helps detect encryption key mismatches
+let decryptionWarnings = [];
+
 function decryptUserConfig(config) {
   if (!config || typeof config !== 'object') {
     return config;
   }
+
+  // Reset warnings for this call
+  decryptionWarnings = [];
 
   // Clone config to avoid modifying original
   const decrypted = JSON.parse(JSON.stringify(config));
@@ -330,6 +342,19 @@ function decryptUserConfig(config) {
   // This is NOT double encryption - stored.config is the decrypted config object with encrypted fields inside it
   const isConfigEncrypted = decrypted._encrypted === true;
   log.debug(() => `[Encryption] decryptUserConfig called, isConfigEncrypted: ${isConfigEncrypted} (individual fields may be encrypted)`);
+
+  // Helper to decrypt with warning tracking
+  const safeDecrypt = (value, fieldName) => {
+    if (!value) return value;
+    const wasEncrypted = isEncrypted(value);
+    const result = decrypt(value, true);
+    // Check if decryption actually happened (value changed) or if it returned raw encrypted data
+    if (wasEncrypted && result === value) {
+      decryptionWarnings.push(fieldName);
+      log.warn(() => `[Encryption] Failed to decrypt ${fieldName} - encryption key mismatch? Returning raw encrypted data.`);
+    }
+    return result;
+  };
 
   try {
     // Decrypt Gemini API key
@@ -357,19 +382,19 @@ function decryptUserConfig(config) {
 
     // Decrypt subtitle provider credentials
     if (decrypted.subtitleProviders) {
-      // OpenSubtitles username/password
+      // OpenSubtitles username/password - use safeDecrypt to track failures
       if (decrypted.subtitleProviders.opensubtitles) {
         if (decrypted.subtitleProviders.opensubtitles.username &&
           (isConfigEncrypted || isEncrypted(decrypted.subtitleProviders.opensubtitles.username))) {
           log.debug(() => '[Encryption] Decrypting OpenSubtitles username');
           decrypted.subtitleProviders.opensubtitles.username =
-            decrypt(decrypted.subtitleProviders.opensubtitles.username, true);
+            safeDecrypt(decrypted.subtitleProviders.opensubtitles.username, 'opensubtitles.username');
         }
         if (decrypted.subtitleProviders.opensubtitles.password &&
           (isConfigEncrypted || isEncrypted(decrypted.subtitleProviders.opensubtitles.password))) {
           log.debug(() => '[Encryption] Decrypting OpenSubtitles password');
           decrypted.subtitleProviders.opensubtitles.password =
-            decrypt(decrypted.subtitleProviders.opensubtitles.password, true);
+            safeDecrypt(decrypted.subtitleProviders.opensubtitles.password, 'opensubtitles.password');
         }
       }
 
@@ -396,6 +421,18 @@ function decryptUserConfig(config) {
           log.debug(() => `[Encryption] SubSource key decrypted successfully, type: ${isString ? 'string' : 'NOT_STRING'}`);
         }
       }
+
+      // Subs.ro API key
+      if (decrypted.subtitleProviders.subsro?.apiKey) {
+        const subsroKeyEncrypted = isEncrypted(decrypted.subtitleProviders.subsro.apiKey);
+        log.debug(() => `[Encryption] Subs.ro API key exists, encrypted: ${subsroKeyEncrypted}, will decrypt: ${isConfigEncrypted || subsroKeyEncrypted}`);
+        if (isConfigEncrypted || subsroKeyEncrypted) {
+          decrypted.subtitleProviders.subsro.apiKey =
+            decrypt(decrypted.subtitleProviders.subsro.apiKey, true);
+          const isString = typeof decrypted.subtitleProviders.subsro.apiKey === 'string';
+          log.debug(() => `[Encryption] Subs.ro key decrypted successfully, type: ${isString ? 'string' : 'NOT_STRING'}`);
+        }
+      }
     }
 
     // Decrypt alternative AI provider API keys
@@ -413,6 +450,13 @@ function decryptUserConfig(config) {
     // Remove encryption marker
     delete decrypted._encrypted;
 
+    // Add warning flag if any decryption failed (helps diagnose encryption key mismatches)
+    if (decryptionWarnings.length > 0) {
+      decrypted.__decryptionWarning = true;
+      decrypted.__decryptionWarningFields = [...decryptionWarnings];
+      log.warn(() => `[Encryption] Decryption warnings detected for fields: ${decryptionWarnings.join(', ')}. This may indicate encryption key mismatch between server instances.`);
+    }
+
     return decrypted;
   } catch (error) {
     log.error(() => ['[Encryption] Failed to decrypt user config:', error.message]);
@@ -421,11 +465,17 @@ function decryptUserConfig(config) {
   }
 }
 
+// Get current decryption warnings (useful for debugging)
+function getDecryptionWarnings() {
+  return [...decryptionWarnings];
+}
+
 module.exports = {
   encrypt,
   decrypt,
   isEncrypted,
   encryptUserConfig,
   decryptUserConfig,
-  getEncryptionKey
+  getEncryptionKey,
+  getDecryptionWarnings
 };

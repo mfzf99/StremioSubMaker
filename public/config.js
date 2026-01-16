@@ -714,6 +714,12 @@ Translate to {target_language}.`;
                 subsource: {
                     enabled: true,
                     apiKey: DEFAULT_API_KEYS.SUBSOURCE
+                },
+                scs: {
+                    enabled: false // Stremio Community Subtitles - no API key needed
+                },
+                wyzie: {
+                    enabled: false // Wyzie Subs - free aggregator, no API key needed
                 }
             },
             translationCache: {
@@ -1116,7 +1122,9 @@ Translate to {target_language}.`;
             currentConfig.subtitleProviders = {
                 opensubtitles: { ...(defaults.subtitleProviders?.opensubtitles || {}), enabled: false },
                 subdl: { ...(defaults.subtitleProviders?.subdl || {}), enabled: false },
-                subsource: { ...(defaults.subtitleProviders?.subsource || {}), enabled: false }
+                subsource: { ...(defaults.subtitleProviders?.subsource || {}), enabled: false },
+                scs: { ...(defaults.subtitleProviders?.scs || {}), enabled: false },
+                wyzie: { ...(defaults.subtitleProviders?.wyzie || {}), enabled: false }
             };
         }
 
@@ -2106,6 +2114,19 @@ Translate to {target_language}.`;
         // Form submission
         document.getElementById('configForm').addEventListener('submit', handleSubmit);
 
+        // More Providers (beta) collapsible section toggle
+        const moreProvidersToggle = document.getElementById('moreProvidersToggle');
+        const moreProvidersContent = document.getElementById('moreProvidersContent');
+        const moreProvidersChevron = document.getElementById('moreProvidersChevron');
+        if (moreProvidersToggle && moreProvidersContent && moreProvidersChevron) {
+            moreProvidersToggle.addEventListener('click', () => {
+                const isExpanded = moreProvidersContent.style.display !== 'none';
+                moreProvidersContent.style.display = isExpanded ? 'none' : 'block';
+                moreProvidersChevron.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+                moreProvidersToggle.setAttribute('aria-expanded', (!isExpanded).toString());
+            });
+        }
+
         // Delegate language grid item clicks to containers (reduces per-item listeners)
         const gridMap = [
             ['sourceLanguages', 'source'],
@@ -2324,6 +2345,14 @@ Translate to {target_language}.`;
         document.getElementById('enableSubSource').addEventListener('change', (e) => {
             toggleProviderConfig('subsourceConfig', e.target.checked);
         });
+
+        // Subs.ro toggle and config visibility
+        const subsroToggle = document.getElementById('enableSubsRo');
+        if (subsroToggle) {
+            subsroToggle.addEventListener('change', (e) => {
+                toggleProviderConfig('subsroConfig', e.target.checked);
+            });
+        }
 
         // Install and copy buttons
         document.getElementById('installBtn').addEventListener('click', installAddon);
@@ -2640,6 +2669,12 @@ Translate to {target_language}.`;
         document.getElementById('validateSubSource').addEventListener('click', () => validateApiKey('subsource'));
         document.getElementById('validateSubDL').addEventListener('click', () => validateApiKey('subdl'));
         document.getElementById('validateGemini').addEventListener('click', () => validateApiKey('gemini'));
+
+        // Subs.ro validation button
+        const validateSubsRoBtn = document.getElementById('validateSubsRo');
+        if (validateSubsRoBtn) {
+            validateSubsRoBtn.addEventListener('click', () => validateApiKey('subsro'));
+        }
 
         // File translation toggle - show modal when enabled
         const toolboxToggle = document.getElementById('subToolboxEnabled');
@@ -3940,6 +3975,11 @@ Translate to {target_language}.`;
             feedback = document.getElementById('geminiValidationFeedback');
             apiKey = document.getElementById('geminiApiKey').value.trim();
             endpoint = '/api/validate-gemini';
+        } else if (provider === 'subsro') {
+            btn = document.getElementById('validateSubsRo');
+            feedback = document.getElementById('subsroValidationFeedback');
+            apiKey = document.getElementById('subsroApiKey').value.trim();
+            endpoint = '/api/validate-subsro';
         }
 
         // Validate input
@@ -4944,6 +4984,29 @@ Translate to {target_language}.`;
                     newConfig.subtitleProviders.subsource.enabled = oldSubsource.enabled !== false;
                     newConfig.subtitleProviders.subsource.apiKey = (oldSubsource.apiKey || '').trim();
                 }
+
+                // SCS: preserve enabled state if provider exists
+                if (defaults.subtitleProviders.scs) {
+                    const oldScs = oldConfig.subtitleProviders.scs || {};
+                    newConfig.subtitleProviders.scs.enabled = oldScs.enabled === true;
+                }
+
+                // Wyzie: preserve enabled state and sources config if provider exists
+                if (defaults.subtitleProviders.wyzie) {
+                    const oldWyzie = oldConfig.subtitleProviders.wyzie || {};
+                    newConfig.subtitleProviders.wyzie.enabled = oldWyzie.enabled === true;
+                    // Preserve sources config if it exists
+                    if (oldWyzie.sources && typeof oldWyzie.sources === 'object') {
+                        newConfig.subtitleProviders.wyzie.sources = { ...oldWyzie.sources };
+                    }
+                }
+
+                // Subs.ro: preserve enabled state and apiKey if provider exists
+                if (defaults.subtitleProviders.subsro) {
+                    const oldSubsro = oldConfig.subtitleProviders.subsro || {};
+                    newConfig.subtitleProviders.subsro.enabled = oldSubsro.enabled === true;
+                    newConfig.subtitleProviders.subsro.apiKey = (oldSubsro.apiKey || '').trim();
+                }
             }
 
             // Preserve standalone API keys for auto-subs flows
@@ -5220,6 +5283,47 @@ Translate to {target_language}.`;
             currentConfig.subtitleProviders?.subsource?.apiKey || DEFAULT_API_KEYS.SUBSOURCE;
         toggleProviderConfig('subsourceConfig', subsourceEnabled);
 
+        // Stremio Community Subtitles (SCS) - no API key needed
+        const scsEnabled = currentConfig.subtitleProviders?.scs?.enabled === true;
+        const scsToggle = document.getElementById('enableSCS');
+        if (scsToggle) scsToggle.checked = scsEnabled;
+
+        // Wyzie Subs - free aggregator, no API key needed
+        const wyzieEnabled = currentConfig.subtitleProviders?.wyzie?.enabled === true;
+        const wyzieToggle = document.getElementById('enableWyzie');
+        if (wyzieToggle) wyzieToggle.checked = wyzieEnabled;
+
+        // Wyzie Sources - show/hide and load saved preferences
+        const wyzieSources = document.getElementById('wyzieSources');
+        if (wyzieSources) {
+            wyzieSources.style.display = wyzieEnabled ? 'block' : 'none';
+        }
+        // Default all sources to enabled if not specified
+        const wyzieSourceConfig = currentConfig.subtitleProviders?.wyzie?.sources || {
+            opensubtitles: true, subf2m: true, subdl: true, podnapisi: true, gestdown: true, animetosho: true
+        };
+        const sourceIds = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho'];
+        sourceIds.forEach(src => {
+            const el = document.getElementById('wyzieSource' + src.charAt(0).toUpperCase() + src.slice(1));
+            if (el) el.checked = wyzieSourceConfig[src] !== false; // Default to true
+        });
+        // Add toggle listener to show/hide sources
+        if (wyzieToggle) {
+            wyzieToggle.addEventListener('change', (e) => {
+                if (wyzieSources) wyzieSources.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+
+        // Subs.ro - Romanian subtitle database, requires API key
+        const subsroEnabled = currentConfig.subtitleProviders?.subsro?.enabled === true;
+        const subsroToggle = document.getElementById('enableSubsRo');
+        if (subsroToggle) subsroToggle.checked = subsroEnabled;
+        const subsroApiKeyEl = document.getElementById('subsroApiKey');
+        if (subsroApiKeyEl) {
+            subsroApiKeyEl.value = currentConfig.subtitleProviders?.subsro?.apiKey || '';
+        }
+        toggleProviderConfig('subsroConfig', subsroEnabled);
+
         // Load Sub Toolbox setting (unifies file translation and sync actions)
         const toolboxEnabled = currentConfig.subToolboxEnabled === true
             || currentConfig.fileTranslationEnabled === true
@@ -5443,6 +5547,24 @@ Translate to {target_language}.`;
                 subsource: {
                     enabled: document.getElementById('enableSubSource').checked,
                     apiKey: document.getElementById('subsourceApiKey').value.trim()
+                },
+                scs: {
+                    enabled: document.getElementById('enableSCS')?.checked || false
+                },
+                wyzie: {
+                    enabled: document.getElementById('enableWyzie')?.checked || false,
+                    sources: {
+                        opensubtitles: document.getElementById('wyzieSourceOpensubtitles')?.checked !== false,
+                        subf2m: document.getElementById('wyzieSourceSubf2m')?.checked !== false,
+                        subdl: document.getElementById('wyzieSourceSubdl')?.checked !== false,
+                        podnapisi: document.getElementById('wyzieSourcePodnapisi')?.checked !== false,
+                        gestdown: document.getElementById('wyzieSourceGestdown')?.checked !== false,
+                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked !== false
+                    }
+                },
+                subsro: {
+                    enabled: document.getElementById('enableSubsRo')?.checked || false,
+                    apiKey: document.getElementById('subsroApiKey')?.value?.trim() || ''
                 }
             },
             translationCache: {
@@ -5523,6 +5645,9 @@ Translate to {target_language}.`;
         }
         if (config.subtitleProviders.subsource?.enabled && !config.subtitleProviders.subsource.apiKey?.trim()) {
             errors.push(tConfig('config.validation.subsourceKeyRequired', {}, '⚠️ SubSource is enabled but API key is missing'));
+        }
+        if (config.subtitleProviders.subsro?.enabled && !config.subtitleProviders.subsro.apiKey?.trim()) {
+            errors.push(tConfig('config.validation.subsroKeyRequired', {}, '⚠️ Subs.ro is enabled but API key is missing'));
         }
 
         // Validate that every enabled AI provider has an API key

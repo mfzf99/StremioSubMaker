@@ -641,7 +641,9 @@
       "providerUnavailableBody": "Por favor, tente novamente dentro de alguns minutos ou experimente uma legenda diferente.",
       "subsourceTimeoutTitle": "Falha na transferência do SubSource (tempo limite)",
       "subsourceTimeoutBody": "A API do SubSource não respondeu a tempo. Tente novamente dentro de alguns minutos ou escolha uma legenda diferente.",
-      "invalidSubtitleTooSmall": "O ficheiro de legenda é demasiado pequeno e parece corrompido."
+      "invalidSubtitleTooSmall": "O ficheiro de legenda é demasiado pequeno e parece corrompido.",
+      "credDecryptFailTitle": "Problema de configuração detectado",
+      "credDecryptFailBody": "As suas {fields} não puderam ser carregadas corretamente.\\nIsto pode acontecer após atualizações do servidor.\\nPor favor, introduza novamente as suas credenciais na página de configuração do addon."
     },
     "subtitleErrors": {
       "invalidGenericReason": "O ficheiro de legenda parece ser inválido ou incompleto.",
@@ -692,31 +694,31 @@
         "justNow": "agora mesmo",
         "secondsAgo": "há {seconds}s"
       }
+    },
+    "history": {
+      "eyebrow": "Sub Toolbox",
+      "documentTitle": "Histórico de Traduções - SubMaker",
+      "title": "Histórico de Traduções",
+      "subtitle": "Reveja as traduções realizadas nas suas ferramentas",
+      "cachedLabel": "Em cache",
+      "status": {
+        "completed": "Concluído",
+        "failed": "Falhou",
+        "processing": "A processar"
       },
-      "history": {
-        "eyebrow": "Sub Toolbox",
-        "documentTitle": "Histórico de Traduções - SubMaker",
-        "title": "Histórico de Traduções",
-        "subtitle": "Reveja as traduções realizadas nas suas ferramentas",
-        "cachedLabel": "Em cache",
-        "status": {
-          "completed": "Concluído",
-          "failed": "Falhou",
-          "processing": "A processar"
-        },
-        "retranslate": {
-          "button": "Retraduzir",
-          "tooltip": "Limpar cache e retraduzir esta legenda",
-          "loading": "A limpar...",
-          "done": "Concluído!",
-          "failed": "Falhou",
-          "failedReason": "A retradução falhou",
-          "successHint": "Cache limpo! Recarregue a legenda no Stremio ou clique em Transferir para obter a tradução atualizada.",
-          "missingParams": "Parâmetros obrigatórios em falta.",
-          "errorGeneric": "A retradução falhou. Por favor, tente novamente."
-        }
-      },
-      "config": {
+      "retranslate": {
+        "button": "Retraduzir",
+        "tooltip": "Limpar cache e retraduzir esta legenda",
+        "loading": "A limpar...",
+        "done": "Concluído!",
+        "failed": "Falhou",
+        "failedReason": "A retradução falhou",
+        "successHint": "Cache limpo! Recarregue a legenda no Stremio ou clique em Transferir para obter a tradução atualizada.",
+        "missingParams": "Parâmetros obrigatórios em falta.",
+        "errorGeneric": "A retradução falhou. Por favor, tente novamente."
+      }
+    },
+    "config": {
       "uiLanguageLabel": "Interface",
       "uiLanguageAria": "Idioma da interface",
       "uiLanguages": {
@@ -893,6 +895,7 @@
         "secondaryProvidersCount": "Fornecedor Secundário requer dois fornecedores de IA configurados (principal e fallback)",
         "subdlKeyRequired": "SubDL está ativado mas falta a chave API",
         "subsourceKeyRequired": "SubSource está ativado mas falta a chave API",
+        "subsroKeyRequired": "Subs.ro está ativado mas falta a chave API",
         "subtitleProviderRequired": "Por favor, ative pelo menos um fornecedor de legendas",
         "geminiKeysRequired": "É necessária pelo menos uma chave de API para rotação",
         "geminiKeysFillEmpty": "Preenche todos os campos de chave de API antes de adicionar uma nova",
@@ -945,6 +948,31 @@
           "validateTitle": "Validar chave API",
           "validateCta": "Testar",
           "toggleLabel": "Ativar SubDL"
+        },
+        "subsro": {
+          "title": "Subs.ro",
+          "description": "Apenas legendas em romeno. Obtenha a sua chave API de",
+          "linkLabel": "subs.ro",
+          "placeholder": "Insira a chave API Subs.ro",
+          "validateTitle": "Validar chave API",
+          "validateCta": "Testar",
+          "toggleLabel": "Ativar Subs.ro"
+        },
+        "wyzie": {
+          "title": "Wyzie Subs",
+          "description": "Agregador de legendas gratuito. Não precisa de chave API.",
+          "toggleLabel": "Ativar Wyzie Subs",
+          "note": "Wyzie agrega legendas de múltiplas fontes. Os resultados podem sobrepor-se a outros fornecedores ativados."
+        },
+        "scs": {
+          "title": "Stremio Community Subtitles",
+          "description": "Legendas curadas pela comunidade. Não precisa de chave API.",
+          "toggleLabel": "Ativar SCS",
+          "note": "SCS fornece legendas enviadas pela comunidade. Os resultados dependem das contribuições da comunidade para o seu ficheiro de vídeo específico."
+        },
+        "moreProviders": {
+          "title": "Mais fornecedores (beta)",
+          "description": "Fontes de legendas adicionais, incluindo fornecedores comunitários e agregadores."
         }
       },
       "providersUi": {

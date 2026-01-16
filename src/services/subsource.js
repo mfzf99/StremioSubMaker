@@ -833,8 +833,9 @@ class SubSourceService {
 
           if (type === 'anime-episode') {
             // For anime, use anime-specific patterns and don't require season numbers
+            const episodeExclusionPattern = new RegExp(`(?:^|[^0-9])0*${targetEpisode}(?:v\\d+)?(?:[^0-9]|$)`);
             isSeasonPack = animeSeasonPackPatterns.some(pattern => pattern.test(name)) &&
-              !/(?:^|[^0-9])0*${targetEpisode}(?:v\d+)?(?:[^0-9]|$)/.test(name); // Exclude if has specific episode number
+              !episodeExclusionPattern.test(name); // Exclude if has specific episode number
           } else {
             // For regular TV shows, use season-based patterns
             isSeasonPack = seasonPackPatterns.some(pattern => pattern.test(name)) &&

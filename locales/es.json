@@ -641,7 +641,9 @@
       "providerUnavailableBody": "Inténtalo de nuevo en unos minutos o prueba con otro subtítulo.",
       "subsourceTimeoutTitle": "Error de descarga en SubSource (timeout)",
       "subsourceTimeoutBody": "La API de SubSource no respondió a tiempo. Intenta de nuevo en unos minutos o elige otro subtítulo.",
-      "invalidSubtitleTooSmall": "El archivo de subtítulos es demasiado pequeño y parece dañado."
+      "invalidSubtitleTooSmall": "El archivo de subtítulos es demasiado pequeño y parece dañado.",
+      "credDecryptFailTitle": "Problema de configuración detectado",
+      "credDecryptFailBody": "No se pudieron cargar correctamente tus {fields}.\\nEsto puede ocurrir tras actualizaciones del servidor.\\nPor favor, vuelve a introducir tus credenciales en la página de configuración del addon."
     },
     "subtitleErrors": {
       "invalidGenericReason": "El archivo de subtítulos parece inválido o incompleto.",
@@ -692,31 +694,31 @@
         "justNow": "justo ahora",
         "secondsAgo": "hace {seconds}s"
       }
+    },
+    "history": {
+      "eyebrow": "Caja de herramientas de subtítulos",
+      "documentTitle": "Historial de traducciones - SubMaker",
+      "title": "Historial de traducciones",
+      "subtitle": "Revisa las traducciones realizadas en tus herramientas",
+      "cachedLabel": "En caché",
+      "status": {
+        "completed": "Completado",
+        "failed": "Falló",
+        "processing": "En proceso"
       },
-      "history": {
-        "eyebrow": "Caja de herramientas de subtítulos",
-        "documentTitle": "Historial de traducciones - SubMaker",
-        "title": "Historial de traducciones",
-        "subtitle": "Revisa las traducciones realizadas en tus herramientas",
-        "cachedLabel": "En caché",
-        "status": {
-          "completed": "Completado",
-          "failed": "Falló",
-          "processing": "En proceso"
-        },
-        "retranslate": {
-          "button": "Retraducir",
-          "tooltip": "Borrar caché y retraducir este subtítulo",
-          "loading": "Borrando...",
-          "done": "¡Listo!",
-          "failed": "Falló",
-          "failedReason": "La retraducción falló",
-          "successHint": "¡Caché borrada! Recarga el subtítulo en Stremio o haz clic en Descargar para obtener la traducción actualizada.",
-          "missingParams": "Faltan parámetros obligatorios.",
-          "errorGeneric": "La retraducción falló. Por favor, inténtalo de nuevo."
-        }
-      },
-      "config": {
+      "retranslate": {
+        "button": "Retraducir",
+        "tooltip": "Borrar caché y retraducir este subtítulo",
+        "loading": "Borrando...",
+        "done": "¡Listo!",
+        "failed": "Falló",
+        "failedReason": "La retraducción falló",
+        "successHint": "¡Caché borrada! Recarga el subtítulo en Stremio o haz clic en Descargar para obtener la traducción actualizada.",
+        "missingParams": "Faltan parámetros obligatorios.",
+        "errorGeneric": "La retraducción falló. Por favor, inténtalo de nuevo."
+      }
+    },
+    "config": {
       "uiLanguageLabel": "Interfaz",
       "uiLanguageAria": "Idioma de la interfaz",
       "uiLanguages": {
@@ -893,6 +895,7 @@
         "secondaryProvidersCount": "El Proveedor secundario requiere dos proveedores de IA configurados (principal y respaldo)",
         "subdlKeyRequired": "SubDL está activado pero falta la clave API",
         "subsourceKeyRequired": "SubSource está activado pero falta la clave API",
+        "subsroKeyRequired": "Subs.ro está activado pero falta la clave API",
         "subtitleProviderRequired": "Activa al menos un proveedor de subtítulos",
         "geminiKeysRequired": "Se requiere al menos una clave API para la rotación",
         "geminiKeysFillEmpty": "Completa todos los campos de clave API antes de añadir una nueva",
@@ -945,6 +948,31 @@
           "validateTitle": "Validar clave API",
           "validateCta": "Probar",
           "toggleLabel": "Activar SubDL"
+        },
+        "subsro": {
+          "title": "Subs.ro",
+          "description": "Solo subtítulos en rumano. Obtén tu clave API en",
+          "linkLabel": "subs.ro",
+          "placeholder": "Ingresa la clave API de Subs.ro",
+          "validateTitle": "Validar clave API",
+          "validateCta": "Probar",
+          "toggleLabel": "Activar Subs.ro"
+        },
+        "wyzie": {
+          "title": "Wyzie Subs",
+          "description": "Agregador de subtítulos gratuito. No se necesita clave API.",
+          "toggleLabel": "Activar Wyzie Subs",
+          "note": "Wyzie agrega subtítulos de múltiples fuentes. Los resultados pueden superponerse con otros proveedores habilitados."
+        },
+        "scs": {
+          "title": "Stremio Community Subtitles",
+          "description": "Subtítulos curados por la comunidad. No se necesita clave API.",
+          "toggleLabel": "Activar SCS",
+          "note": "SCS proporciona subtítulos subidos por la comunidad. Los resultados dependen de las contribuciones de la comunidad para tu archivo de video específico."
+        },
+        "moreProviders": {
+          "title": "Más proveedores (beta)",
+          "description": "Fuentes de subtítulos adicionales, incluyendo proveedores comunitarios y agregadores."
         }
       },
       "providersUi": {

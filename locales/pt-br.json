@@ -641,7 +641,9 @@
       "providerUnavailableBody": "Por favor, tente novamente em alguns minutos ou tente uma legenda diferente.",
       "subsourceTimeoutTitle": "Download do SubSource falhou (tempo limite)",
       "subsourceTimeoutBody": "A API do SubSource não respondeu a tempo. Tente novamente em alguns minutos ou escolha uma legenda diferente.",
-      "invalidSubtitleTooSmall": "O arquivo de legenda é muito pequeno e parece corrompido."
+      "invalidSubtitleTooSmall": "O arquivo de legenda é muito pequeno e parece corrompido.",
+      "credDecryptFailTitle": "Problema de configuração detectado",
+      "credDecryptFailBody": "Suas {fields} não puderam ser carregadas corretamente.\\nIsso pode acontecer após atualizações do servidor.\\nPor favor, insira novamente suas credenciais na página de configuração do addon."
     },
     "subtitleErrors": {
       "invalidGenericReason": "O arquivo de legenda parece ser inválido ou incompleto.",
@@ -893,6 +895,7 @@
         "secondaryProvidersCount": "O Provedor Secundário requer dois provedores de IA configurados (principal e fallback)",
         "subdlKeyRequired": "SubDL está habilitado, mas a chave da API está faltando",
         "subsourceKeyRequired": "SubSource está habilitado, mas a chave da API está faltando",
+        "subsroKeyRequired": "Subs.ro está habilitado, mas a chave da API está faltando",
         "subtitleProviderRequired": "Por favor, habilite pelo menos um provedor de legendas",
         "geminiKeysRequired": "Pelo menos uma chave de API é necessária para rotação",
         "geminiKeysFillEmpty": "Preencha todos os campos de chave de API antes de adicionar uma nova",
@@ -945,6 +948,31 @@
           "validateTitle": "Validar chave da API",
           "validateCta": "Teste",
           "toggleLabel": "Habilitar SubDL"
+        },
+        "subsro": {
+          "title": "Subs.ro",
+          "description": "Apenas legendas em romeno. Obtenha sua chave de API em",
+          "linkLabel": "subs.ro",
+          "placeholder": "Digite a chave de API do Subs.ro",
+          "validateTitle": "Validar chave da API",
+          "validateCta": "Teste",
+          "toggleLabel": "Habilitar Subs.ro"
+        },
+        "wyzie": {
+          "title": "Wyzie Subs",
+          "description": "Agregador de legendas gratuito. Não requer chave de API.",
+          "toggleLabel": "Habilitar Wyzie Subs",
+          "note": "Wyzie agrega legendas de várias fontes. Os resultados podem se sobrepor a outros provedores habilitados."
+        },
+        "scs": {
+          "title": "Stremio Community Subtitles",
+          "description": "Legendas curadas pela comunidade. Não requer chave de API.",
+          "toggleLabel": "Habilitar SCS",
+          "note": "SCS fornece legendas enviadas pela comunidade. Os resultados dependem das contribuições da comunidade para seu arquivo de vídeo específico."
+        },
+        "moreProviders": {
+          "title": "Mais provedores (beta)",
+          "description": "Fontes de legendas adicionais, incluindo provedores comunitários e agregadores."
         }
       },
       "providersUi": {

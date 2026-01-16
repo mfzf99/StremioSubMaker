@@ -619,7 +619,6 @@
       "translationRateLimitDeeplTitle": "فشل الترجمة: تم الوصول إلى حد الاستخدام (DeepL)",
       "translationRateLimitDeeplBody": "تم الوصول إلى حد استخدام واجهة DeepL. تحقق من خطتك/الحدود أو انتظر إعادة تعيين الحصة.",
       "translationTooLarge": "فشلت الترجمة: المحتوى كبير جداً",
-
       "translationTooLargeBody": "ملف الترجمة كبير جداً للترجمة الواحدة.\\nحاول النظام تقسيمه ولكنه لا يزال يتجاوز الحدود.",
       "translationTooLargeRetry": "(MAX_TOKENS) حاول ترجمة ملف ترجمة مختلف.\\nقد يساعد نموذج آخر. يرجى إعلامنا إذا استمرت المشكلة.",
       "translationFiltered": "فشلت الترجمة: تمت تصفية المحتوى",
@@ -642,7 +641,9 @@
       "providerUnavailableBody": "يرجى المحاولة مرة أخرى خلال بضع دقائق أو تجربة ترجمة مختلفة.",
       "subsourceTimeoutTitle": "فشل تحميل SubSource (انتهاء المهلة)",
       "subsourceTimeoutBody": "لم تستجب واجهة SubSource API في الوقت المناسب. حاول مرة أخرى خلال بضع دقائق أو اختر ترجمة مختلفة.",
-      "invalidSubtitleTooSmall": "ملف الترجمة صغير جداً ويبدو تالفاً."
+      "invalidSubtitleTooSmall": "ملف الترجمة صغير جداً ويبدو تالفاً.",
+      "credDecryptFailTitle": "تم اكتشاف مشكلة في الإعدادات",
+      "credDecryptFailBody": "تعذر تحميل {fields} بشكل صحيح.\\nقد يحدث هذا بعد تحديثات الخادم.\\nيرجى إعادة إدخال بيانات اعتمادك في صفحة إعدادات الإضافة."
     },
     "subtitleErrors": {
       "invalidGenericReason": "يبدو أن ملف الترجمة غير صالح أو غير مكتمل.",
@@ -693,31 +694,31 @@
         "justNow": "الآن",
         "secondsAgo": "منذ {seconds} ثانية"
       }
+    },
+    "history": {
+      "eyebrow": "صندوق أدوات الترجمة",
+      "documentTitle": "سجل الترجمات - SubMaker",
+      "title": "سجل الترجمات",
+      "subtitle": "راجع الترجمات التي تمت عبر أدواتك",
+      "cachedLabel": "من الذاكرة المؤقتة",
+      "status": {
+        "completed": "مكتمل",
+        "failed": "فشل",
+        "processing": "قيد المعالجة"
       },
-      "history": {
-        "eyebrow": "صندوق أدوات الترجمة",
-        "documentTitle": "سجل الترجمات - SubMaker",
-        "title": "سجل الترجمات",
-        "subtitle": "راجع الترجمات التي تمت عبر أدواتك",
-        "cachedLabel": "من الذاكرة المؤقتة",
-        "status": {
-          "completed": "مكتمل",
-          "failed": "فشل",
-          "processing": "قيد المعالجة"
-        },
-        "retranslate": {
-          "button": "إعادة الترجمة",
-          "tooltip": "مسح الذاكرة المؤقتة وإعادة ترجمة هذه الترجمة",
-          "loading": "جاري المسح...",
-          "done": "تم!",
-          "failed": "فشل",
-          "failedReason": "فشلت إعادة الترجمة",
-          "successHint": "تم مسح الذاكرة المؤقتة! أعد تحميل الترجمة في Stremio أو انقر على تحميل للحصول على الترجمة المحدثة.",
-          "missingParams": "المعلمات المطلوبة مفقودة.",
-          "errorGeneric": "فشلت إعادة الترجمة. يرجى المحاولة مرة أخرى."
-        }
-      },
-      "config": {
+      "retranslate": {
+        "button": "إعادة الترجمة",
+        "tooltip": "مسح الذاكرة المؤقتة وإعادة ترجمة هذه الترجمة",
+        "loading": "جاري المسح...",
+        "done": "تم!",
+        "failed": "فشل",
+        "failedReason": "فشلت إعادة الترجمة",
+        "successHint": "تم مسح الذاكرة المؤقتة! أعد تحميل الترجمة في Stremio أو انقر على تحميل للحصول على الترجمة المحدثة.",
+        "missingParams": "المعلمات المطلوبة مفقودة.",
+        "errorGeneric": "فشلت إعادة الترجمة. يرجى المحاولة مرة أخرى."
+      }
+    },
+    "config": {
       "uiLanguageLabel": "الواجهة",
       "uiLanguageAria": "لغة واجهة المستخدم",
       "uiLanguages": {
@@ -894,6 +895,7 @@
         "secondaryProvidersCount": "يتطلب المزود الثانوي تكوين اثنين من مزودي الذكاء الاصطناعي (رئيسي واحتياطي)",
         "subdlKeyRequired": "SubDL ممكّن لكن مفتاح API مفقود",
         "subsourceKeyRequired": "SubSource ممكّن لكن مفتاح API مفقود",
+        "subsroKeyRequired": "Subs.ro ممكّن لكن مفتاح API مفقود",
         "subtitleProviderRequired": "يرجى تمكين مزود ترجمة واحد على الأقل",
         "geminiKeysRequired": "مطلوب مفتاح API واحد على الأقل للتدوير",
         "geminiKeysFillEmpty": "يُرجى ملء جميع حقول مفاتيح API قبل إضافة مفتاح جديد",
@@ -946,6 +948,31 @@
           "validateTitle": "التحقق من مفتاح API",
           "validateCta": "اختبار",
           "toggleLabel": "تمكين SubDL"
+        },
+        "subsro": {
+          "title": "Subs.ro",
+          "description": "ترجمات باللغة الرومانية فقط. احصل على مفتاح API من",
+          "linkLabel": "subs.ro",
+          "placeholder": "أدخل مفتاح Subs.ro API",
+          "validateTitle": "التحقق من مفتاح API",
+          "validateCta": "اختبار",
+          "toggleLabel": "تمكين Subs.ro"
+        },
+        "wyzie": {
+          "title": "Wyzie Subs",
+          "description": "مجمّع ترجمات مجاني. لا يتطلب مفتاح API.",
+          "toggleLabel": "تمكين Wyzie Subs",
+          "note": "يجمع Wyzie الترجمات من مصادر متعددة. قد تتداخل النتائج مع مزودين آخرين ممكّنين."
+        },
+        "scs": {
+          "title": "Stremio Community Subtitles",
+          "description": "ترجمات منسقة من المجتمع. لا يتطلب مفتاح API.",
+          "toggleLabel": "تمكين SCS",
+          "note": "يوفر SCS ترجمات مرفوعة من المجتمع. تعتمد النتائج على مساهمات المجتمع لملف الفيديو الخاص بك."
+        },
+        "moreProviders": {
+          "title": "مزودين إضافيين (تجريبي)",
+          "description": "مصادر ترجمات إضافية تشمل مزودين من المجتمع ومجمّعين."
         }
       },
       "providersUi": {

@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.29
+
+**New Subtitle Providers:**
+
+- **Stremio Community Subtitles (SCS) integration:** Added support for the community-driven subtitle database at [stremio-community-subtitles.top](https://stremio-community-subtitles.top/). When enabled, SubMaker searches SCS alongside other providers (OpenSubtitles, SubDL, SubSource) and can translate community-uploaded subtitles. Includes full language code normalization (ISO 639-2/T to B conversion), Kitsu anime ID support, and automatic fallback token for zero-config usage.
+
+- **Wyzie Subs integration:** Added support for [Wyzie Subs](https://sub.wyzie.ru), a free, open-source subtitle aggregator that searches OpenSubtitles and SubDL simultaneously. No API key required. Supports both IMDB and TMDB IDs, hearing impaired filtering, and automatic ZIP extraction (handled server-side by Wyzie). Includes comprehensive language code normalization and per-language result limiting to prevent overwhelming results.
+
+- **Subs.ro integration:** Added support for [Subs.ro](https://subs.ro), a Romanian subtitle database. Requires an API key from subs.ro. Provides access to Romanian-language subtitles with full download support and API key validation.
+
+**Bug Fixes:**
+
+- **Fixed SubSource anime season pack false detection:** Fixed a bug where anime episode filtering incorrectly classified single-episode subtitles as season packs. The issue was that the episode exclusion regex used `/regex/` syntax where `${targetEpisode}` was not interpolated (interpreted as literal characters instead of the variable value). Now uses `new RegExp()` so episode numbers are properly matched, preventing incorrect season pack classification and "episode not found in season pack" errors.
+
+- **Fixed OpenSubtitles Auth warning log spam:** Resolved an issue where the warning "OpenSubtitles Auth selected without credentials; switching to V3" was logged 20+ times in 3 seconds on every request. The root cause was that saved sessions with `implementationType: 'auth'` but without credentials would trigger the warning on every config load, but the corrected config was never persisted back to the session. Now, when the addon auto-corrects the implementation type from 'auth' to 'v3', it persists this fix to the session storage asynchronously, so the warning only appears once and subsequent requests use the already-corrected config.
+
+**Other Changes:**
+
+- Session manager now gracefully skips fingerprint validation when decryption warnings are detected, preserving the session
+- Config normalization detects OpenSubtitles Auth credentials that still appear encrypted (decryption failed) and silently falls back to OpenSubtitles V3
+- Gemini API keys that failed to decrypt are also detected and cleared with a warning log
+
 ## SubMaker v1.4.28
 
 **Logging & Monitoring:**

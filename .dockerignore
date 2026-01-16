@@ -54,6 +54,7 @@ nSync
 nSync/
 .claude/
 .agent/
+agent/
 dist/
 build/
 .sidedocs/

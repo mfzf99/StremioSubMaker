@@ -6,6 +6,9 @@ const TranslationEngine = require('../services/translationEngine');
 const { createTranslationProvider } = require('../services/translationProviderFactory');
 const AniDBService = require('../services/anidb');
 const KitsuService = require('../services/kitsu');
+const StremioCommunitySubtitlesService = require('../services/stremioCommunitySubtitles');
+const WyzieSubsService = require('../services/wyzieSubs');
+const SubsRoService = require('../services/subsRo');
 const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote, normalizeImdbId } = require('../utils/subtitle');
 const { getLanguageName, getDisplayName, toISO6391, toISO6392, canonicalSyncLanguageCode } = require('../utils/languages');
 const { getTranslator } = require('../utils/i18n');
@@ -512,6 +515,23 @@ function createOpenSubtitlesAuthErrorSubtitle(uiLanguage = 'en') {
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.osAuthFailTitle', {}, 'OpenSubtitles login failed')}
 ${t('subtitle.osAuthFailBody', {}, 'Please fix your username/password in addon config')}`, null, uiLanguage);
+}
+
+/**
+ * Create an error subtitle when credentials failed to decrypt (encryption key mismatch)
+ * This happens when the server's encryption key changed or on multi-pod deployments
+ * Single cue from 0 to 4h with helpful guidance
+ * @param {string[]} failedFields - List of fields that failed to decrypt
+ * @param {string} uiLanguage - UI language
+ * @returns {string}
+ */
+function createCredentialDecryptionErrorSubtitle(failedFields = [], uiLanguage = 'en') {
+  const t = getTranslator(uiLanguage);
+  const fieldsList = failedFields.length > 0 ? failedFields.join(', ') : 'credentials';
+  return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.credDecryptFailTitle', {}, 'Configuration Issue Detected')}
+${t('subtitle.credDecryptFailBody', { fields: fieldsList }, `Your ${fieldsList} could not be loaded properly.\\nThis can happen after server updates.\\nPlease re-enter your credentials in the addon config page.`)}`, null, uiLanguage);
 }
 
 /**
@@ -1752,9 +1772,19 @@ function rankSubtitlesByFilename(subtitles, streamFilename, videoInfo = null) {
     let matchTier = 'none';
     let matchDetails = '';
 
+    // TIER 0: SCS Hash Match (200,000+ points)
+    // Highest priority - SCS returned this subtitle as a hash match for the exact video file
+    // This means the subtitle is specifically linked to this exact video release
+    if (sub.provider === 'stremio-community-subtitles' && sub.hashMatch === true) {
+      finalScore = 200000 - (sub.hashMatchPriority || 0); // Higher priority = higher score within tier
+      matchTier = 'tier0-scs-hash';
+      matchDetails = 'SCS hash match - exact video file match';
+      log.debug(() => `[Tier 0 Match] ${sub.name}: ${matchDetails}`);
+    }
+
     // TIER 1: SubDL Releases Array Exact Match (100,000+ points)
     // Highest priority - exact string match in SubDL's releases array
-    if (sub.provider === 'subdl' && Array.isArray(sub.releases) && sub.releases.length > 0) {
+    if (finalScore === 0 && sub.provider === 'subdl' && Array.isArray(sub.releases) && sub.releases.length > 0) {
       if (checkSubDLExactMatch(streamFilename, sub.releases)) {
         finalScore = 100000;
         matchTier = 'tier1-subdl-exact';
@@ -1920,7 +1950,10 @@ function rankSubtitlesByFilename(subtitles, streamFilename, videoInfo = null) {
   const providerReputation = {
     'opensubtitles-v3': 3, // Highest reputation (largest database, most reliable)
     'subdl': 2,            // Good reputation
-    'subsource': 2         // Good reputation - API provides rating-sorted results with rich metadata
+    'subsource': 2,        // Good reputation - API provides rating-sorted results with rich metadata
+    'stremio-community-subtitles': 2, // Good reputation - community-curated subtitles
+    'subsro': 2,           // Good reputation - Romanian subtitle database
+    'wyzie': 2             // Good reputation - aggregator service
   };
 
   // Four-tier ranking system:
@@ -2105,6 +2138,30 @@ function createSubtitleHandler(config) {
         };
       }
 
+      // Check if credential decryption failed (encryption key mismatch on multi-pod deployment)
+      // This happens when the server's encryption key changed or on multi-pod deployments
+      // where pods don't share the same encryption key. We add an informational entry to
+      // the subtitle list so users are aware they need to re-enter their credentials.
+      if (config.__credentialDecryptionFailed === true) {
+        const failedFields = config.__credentialDecryptionFailedFields || [];
+        log.warn(() => `[Subtitles] Credential decryption failed for fields: ${failedFields.join(', ')}. ` +
+          'This often indicates an encryption key mismatch between server instances. ' +
+          'User will see V3 mode behavior until they re-enter their credentials.');
+
+        // Add a warning entry to the top of the subtitle list
+        // We continue with the search (fallback to V3 mode) but notify the user
+        const warningEntry = {
+          id: 'config_warning_credential_decryption',
+          // Use "⚠" prefix to sort near the top and indicate warning (not error)
+          lang: '⚠ SubMaker Notice',
+          url: `{{ADDON_URL}}/error-subtitle/credential-decryption-failed.srt`
+        };
+
+        // Store the warning entry to prepend to results later
+        // We'll add it to the response after completing the search
+        config.__credentialWarningEntry = warningEntry;
+      }
+
       // Reject requests without a valid config hash before doing any provider work or cache access
       if (!config || typeof config.__configHash !== 'string' || !config.__configHash.length) {
         log.warn(() => '[Subtitles] Missing/invalid config hash - returning session token error entry');
@@ -2149,13 +2206,30 @@ function createSubtitleHandler(config) {
         : [...new Set([...config.sourceLanguages, ...config.targetLanguages])];
 
       // Build search parameters for all providers
+      // Check if we have a real videoHash from Stremio (OpenSubtitles format from streaming addon)
+      // Real hashes come from streaming addons like Torrentio via behaviorHints.videoHash
+      const hasRealStremioHash = !!(extra?.videoHash && typeof extra.videoHash === 'string' && extra.videoHash.length > 0);
+
+      if (hasRealStremioHash) {
+        log.debug(() => `[Subtitles] Real Stremio videoHash available: ${extra.videoHash.substring(0, 8)}... (SCS hash matching enabled)`);
+      } else {
+        log.debug(() => `[Subtitles] No Stremio videoHash from streaming addon - SCS will use filename matching only`);
+      }
+
       const searchParams = {
         imdb_id: videoInfo.imdbId,
         type: videoInfo.type,
         season: videoInfo.season,
         episode: videoInfo.episode,
         languages: allLanguages,
-        excludeHearingImpairedSubtitles: config.excludeHearingImpairedSubtitles === true
+        excludeHearingImpairedSubtitles: config.excludeHearingImpairedSubtitles === true,
+        // Only send real hash from Stremio - our derived MD5 is useless for external providers like SCS
+        // They store OpenSubtitles hashes, our MD5(filename+id) won't match anything
+        videoHash: hasRealStremioHash ? extra.videoHash : null,
+        videoSize: hasRealStremioHash ? extra?.videoSize : null,
+        filename: streamFilename,
+        // Flag for SCS to know if hash matching is possible
+        _isRealStremioHash: hasRealStremioHash
       };
 
       // Get user config hash for cache isolation
@@ -2231,6 +2305,47 @@ function createSubtitleHandler(config) {
           );
         } else {
           log.debug(() => '[Subtitles] SubSource provider is disabled');
+        }
+
+        // Check if Stremio Community Subtitles (SCS) is enabled (user toggle)
+        if (config.subtitleProviders?.scs?.enabled) {
+          log.debug(() => '[Subtitles] SCS provider is enabled');
+          const scs = new StremioCommunitySubtitlesService();
+          searchPromises.push(
+            scs.searchSubtitles(searchParams)
+              .then(results => ({ provider: 'StremioCommunitySubtitles', results }))
+              .catch(error => ({ provider: 'StremioCommunitySubtitles', results: [], error }))
+          );
+        } else {
+          log.debug(() => '[Subtitles] SCS provider is disabled');
+        }
+
+        // Check if Wyzie Subs is enabled (user toggle) - free aggregator, no API key needed
+        if (config.subtitleProviders?.wyzie?.enabled) {
+          log.debug(() => '[Subtitles] Wyzie Subs provider is enabled');
+          const wyzie = new WyzieSubsService();
+          // Pass sources config so Wyzie only queries user-selected sources
+          const wyzieParams = { ...searchParams, sources: config.subtitleProviders.wyzie.sources };
+          searchPromises.push(
+            wyzie.searchSubtitles(wyzieParams)
+              .then(results => ({ provider: 'WyzieSubs', results }))
+              .catch(error => ({ provider: 'WyzieSubs', results: [], error }))
+          );
+        } else {
+          log.debug(() => '[Subtitles] Wyzie Subs provider is disabled');
+        }
+
+        // Check if Subs.ro is enabled (user toggle) - Romanian subtitle database, requires API key
+        if (config.subtitleProviders?.subsro?.enabled) {
+          log.debug(() => '[Subtitles] Subs.ro provider is enabled');
+          const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+          searchPromises.push(
+            subsro.searchSubtitles(searchParams)
+              .then(results => ({ provider: 'SubsRo', results }))
+              .catch(error => ({ provider: 'SubsRo', results: [], error }))
+          );
+        } else {
+          log.debug(() => '[Subtitles] Subs.ro provider is disabled');
         }
 
         // Execute all searches in parallel with early timeout
@@ -2772,7 +2887,15 @@ function createSubtitleHandler(config) {
       // Put action buttons at the top
       allSubtitles = [...actionButtons, ...allSubtitles];
 
-      const totalResponseItems = stremioSubtitles.length + translationEntries.length + learnEntries.length + xSyncEntries.length + xEmbedOriginalEntries.length + xEmbedEntries.length + actionButtons.length;
+      // Prepend credential warning entry if decryption failed
+      // This goes at the very top so users notice the issue
+      if (config.__credentialWarningEntry) {
+        allSubtitles = [config.__credentialWarningEntry, ...allSubtitles];
+        log.debug(() => '[Subtitles] Prepended credential decryption warning entry');
+      }
+
+      // Calculate total items for logging (AFTER all entries added including credential warning)
+      const totalResponseItems = allSubtitles.length;
       log.debug(() => `[Subtitles] Returning ${totalResponseItems} items (${stremioSubtitles.length} subs + ${translationEntries.length} trans + ${learnEntries.length} learn + ${xSyncEntries.length} xSync + ${xEmbedOriginalEntries.length} xEmbed originals + ${xEmbedEntries.length} xEmbed + ${actionButtons.length} actions)`);
 
       return {
@@ -2850,6 +2973,34 @@ async function handleSubtitleDownload(fileId, language, config) {
         const opensubtitlesV3 = new OpenSubtitlesV3Service();
         log.debug(() => '[Download] Downloading subtitle via OpenSubtitles V3 API');
         return await opensubtitlesV3.downloadSubtitle(fileId);
+      } else if (fileId.startsWith('scs_')) {
+        // Stremio Community Subtitles
+        if (!config.subtitleProviders?.scs?.enabled) {
+          throw new Error('SCS provider is disabled');
+        }
+
+        const scs = new StremioCommunitySubtitlesService();
+        log.debug(() => '[Download] Downloading subtitle via SCS API');
+        // Remove scs_ prefix to get the actual comm_ ID
+        return await scs.downloadSubtitle(fileId.replace('scs_', ''));
+      } else if (fileId.startsWith('wyzie_')) {
+        // Wyzie Subs (free aggregator)
+        if (!config.subtitleProviders?.wyzie?.enabled) {
+          throw new Error('Wyzie Subs provider is disabled');
+        }
+
+        const wyzie = new WyzieSubsService();
+        log.debug(() => '[Download] Downloading subtitle via Wyzie Subs API');
+        return await wyzie.downloadSubtitle(fileId);
+      } else if (fileId.startsWith('subsro_')) {
+        // Subs.ro subtitle (Romanian subtitle database)
+        if (!config.subtitleProviders?.subsro?.enabled) {
+          throw new Error('Subs.ro provider is disabled');
+        }
+
+        const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+        log.debug(() => '[Download] Downloading subtitle via Subs.ro API');
+        return await subsro.downloadSubtitle(fileId);
       } else {
         const wantsAuth = openSubsImplementation === 'auth';
         const missingCreds = wantsAuth && !openSubsHasCreds;
@@ -2943,7 +3094,8 @@ async function handleSubtitleDownload(fileId, language, config) {
       log.warn(() => `[Download] Rate limit while fetching ${fileId} (${language || 'unknown language'})`);
 
       // Special-case OpenSubtitles Auth: surface guidance so users know how to fix it
-      const isOpenSubsAuth = !fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_');
+      // Must exclude all non-OpenSubtitles providers by prefix
+      const isOpenSubsAuth = !fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && !fileId.startsWith('wyzie_') && !fileId.startsWith('scs_') && !fileId.startsWith('subsro_');
       if (isOpenSubsAuth) {
         log.warn(() => `[Download] OpenSubtitles Auth rate limited (impl=${openSubsImplementation}, creds=${openSubsHasCreds ? 'set' : 'missing'}) for ${fileId}`);
         const hint = openSubsHasCreds
@@ -2968,6 +3120,9 @@ ${hint}`, null, uiLanguage);
       let serviceName = 'Subtitle Provider';
       if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
       else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      else if (fileId.startsWith('scs_')) serviceName = 'Stremio Community Subtitles';
+      else if (fileId.startsWith('wyzie_')) serviceName = 'Wyzie Subs';
+      else if (fileId.startsWith('subsro_')) serviceName = 'Subs.ro';
       else if (!fileId.startsWith('v3_')) serviceName = 'OpenSubtitles';
 
       return ensureInformationalSubtitleSize(`1
@@ -2998,6 +3153,15 @@ ${t('subtitle.providerRateLimitBody', {}, 'Too many requests in a short period.\
       } else if (fileId.startsWith('subsource_')) {
         serviceName = 'SubSource';
         apiKeyInstructions = 'SubSource API key error\nPlease update your addon configuration and reinstall.';
+      } else if (fileId.startsWith('scs_')) {
+        serviceName = 'Stremio Community Subtitles';
+        apiKeyInstructions = 'SCS download failed.\nThis may be a temporary issue with the community service.';
+      } else if (fileId.startsWith('wyzie_')) {
+        serviceName = 'Wyzie Subs';
+        apiKeyInstructions = 'Wyzie Subs download failed.\nThis may be a temporary issue with the aggregator service.';
+      } else if (fileId.startsWith('subsro_')) {
+        serviceName = 'Subs.ro';
+        apiKeyInstructions = 'Subs.ro API key error.\nPlease check your API key at subs.ro and update your addon configuration.';
       } else if (fileId.startsWith('v3_')) {
         serviceName = 'OpenSubtitles V3';
         apiKeyInstructions = 'OpenSubtitles v3 should not require an API key.\nPlease report this issue if it persists.';
@@ -3040,7 +3204,7 @@ ${t('subtitle.providerUnavailableBody', {}, 'Please try again in a few minutes o
 
     // Handle OpenSubtitles daily quota exceeded (HTTP 406 with specific message)
     // Only applies to OpenSubtitles Auth (v1) path where fileId has no provider prefix
-    if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_')) {
+    if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && !fileId.startsWith('wyzie_') && !fileId.startsWith('scs_') && !fileId.startsWith('subsro_')) {
       const isOsQuota = (errorStatus === 406) ||
         lowerMsg.includes('allowed 20 subtitles') ||
         (lowerMsg.includes('quota') && lowerMsg.includes('renew'));
@@ -3090,7 +3254,19 @@ ${t('subtitle.subsourceTimeoutBody', {}, 'SubSource API did not respond in time.
       return createProviderDownloadErrorSubtitle('OpenSubtitles V3', 'The download response was invalid. Please try another subtitle.', config.uiLanguage || 'en');
     }
 
-    if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && (looksLikeHtmlError || looksLikeBadZip)) {
+    if (fileId.startsWith('subsro_') && (looksLikeHtmlError || looksLikeBadZip)) {
+      return createProviderDownloadErrorSubtitle('Subs.ro', 'The download response was invalid. The subtitle may have been removed from subs.ro.', config.uiLanguage || 'en');
+    }
+
+    if (fileId.startsWith('wyzie_') && (looksLikeHtmlError || looksLikeBadZip)) {
+      return createProviderDownloadErrorSubtitle('Wyzie Subs', 'The download response was invalid. The subtitle may have been removed or the source is unavailable.', config.uiLanguage || 'en');
+    }
+
+    if (fileId.startsWith('scs_') && (looksLikeHtmlError || looksLikeBadZip)) {
+      return createProviderDownloadErrorSubtitle('Stremio Community Subtitles', 'The download response was invalid. The subtitle may have been removed from the community database.', config.uiLanguage || 'en');
+    }
+
+    if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && !fileId.startsWith('wyzie_') && !fileId.startsWith('scs_') && !fileId.startsWith('subsro_') && (looksLikeHtmlError || looksLikeBadZip)) {
       return createProviderDownloadErrorSubtitle('OpenSubtitles', 'The download response was invalid. Please try another subtitle.', config.uiLanguage || 'en');
     }
 
@@ -3502,7 +3678,29 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
             }
             const opensubtitlesV3 = new OpenSubtitlesV3Service();
             sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId);
+          } else if (sourceFileId.startsWith('scs_')) {
+            // Stremio Community Subtitles
+            if (!config.subtitleProviders?.scs?.enabled) {
+              throw new Error('SCS provider is disabled');
+            }
+            const scs = new StremioCommunitySubtitlesService();
+            sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''));
+          } else if (sourceFileId.startsWith('wyzie_')) {
+            // Wyzie Subs (free aggregator)
+            if (!config.subtitleProviders?.wyzie?.enabled) {
+              throw new Error('Wyzie Subs provider is disabled');
+            }
+            const wyzie = new WyzieSubsService();
+            sourceContent = await wyzie.downloadSubtitle(sourceFileId);
+          } else if (sourceFileId.startsWith('subsro_')) {
+            // Subs.ro subtitle (Romanian subtitle database)
+            if (!config.subtitleProviders?.subsro?.enabled) {
+              throw new Error('Subs.ro provider is disabled');
+            }
+            const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+            sourceContent = await subsro.downloadSubtitle(sourceFileId);
           } else {
+            // OpenSubtitles subtitle (Auth implementation - default fallback)
             if (!config.subtitleProviders?.opensubtitles?.enabled) {
               throw new Error('OpenSubtitles provider is disabled');
             }
@@ -3681,8 +3879,30 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
           const opensubtitlesV3 = new OpenSubtitlesV3Service();
           sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId);
+        } else if (sourceFileId.startsWith('scs_')) {
+          // Stremio Community Subtitles
+          if (!config.subtitleProviders?.scs?.enabled) {
+            throw new Error('SCS provider is disabled');
+          }
+          const scs = new StremioCommunitySubtitlesService();
+          // Remove scs_ prefix to get the actual comm_ ID
+          sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''));
+        } else if (sourceFileId.startsWith('wyzie_')) {
+          // Wyzie Subs (free aggregator)
+          if (!config.subtitleProviders?.wyzie?.enabled) {
+            throw new Error('Wyzie Subs provider is disabled');
+          }
+          const wyzie = new WyzieSubsService();
+          sourceContent = await wyzie.downloadSubtitle(sourceFileId);
+        } else if (sourceFileId.startsWith('subsro_')) {
+          // Subs.ro subtitle (Romanian subtitle database)
+          if (!config.subtitleProviders?.subsro?.enabled) {
+            throw new Error('Subs.ro provider is disabled');
+          }
+          const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+          sourceContent = await subsro.downloadSubtitle(sourceFileId);
         } else {
-          // OpenSubtitles subtitle (Auth implementation - default)
+          // OpenSubtitles subtitle (Auth implementation - default fallback)
           if (!config.subtitleProviders?.opensubtitles?.enabled) {
             throw new Error('OpenSubtitles provider is disabled');
           }
@@ -4184,6 +4404,38 @@ async function getAvailableSubtitlesForTranslation(videoId, config) {
         );
       }
 
+      // Check if SCS provider is enabled
+      if (config.subtitleProviders?.scs?.enabled) {
+        const scs = new StremioCommunitySubtitlesService();
+        searchPromises.push(
+          scs.searchSubtitles(searchParams)
+            .then(results => ({ provider: 'StremioCommunitySubtitles', results }))
+            .catch(error => ({ provider: 'StremioCommunitySubtitles', results: [], error }))
+        );
+      }
+
+      // Check if Wyzie Subs provider is enabled
+      if (config.subtitleProviders?.wyzie?.enabled) {
+        const wyzie = new WyzieSubsService();
+        // Pass sources config so Wyzie only queries user-selected sources
+        const wyzieParams = { ...searchParams, sources: config.subtitleProviders.wyzie.sources };
+        searchPromises.push(
+          wyzie.searchSubtitles(wyzieParams)
+            .then(results => ({ provider: 'WyzieSubs', results }))
+            .catch(error => ({ provider: 'WyzieSubs', results: [], error }))
+        );
+      }
+
+      // Check if Subs.ro provider is enabled
+      if (config.subtitleProviders?.subsro?.enabled) {
+        const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+        searchPromises.push(
+          subsro.searchSubtitles(searchParams)
+            .then(results => ({ provider: 'SubsRo', results }))
+            .catch(error => ({ provider: 'SubsRo', results: [], error }))
+        );
+      }
+
       // Execute all searches in parallel
       const providerResults = await Promise.all(searchPromises);
 
@@ -4276,6 +4528,7 @@ module.exports = {
   createOpenSubtitlesAuthErrorSubtitle, // Export for OpenSubtitles auth error subtitle
   createOpenSubtitlesAuthMissingSubtitle, // Export for OpenSubtitles missing credentials subtitle
   createOpenSubtitlesQuotaExceededSubtitle, // Export for OpenSubtitles daily quota exceeded subtitle
+  createCredentialDecryptionErrorSubtitle, // Export for credential decryption failure subtitle (encryption key mismatch)
   createProviderDownloadErrorSubtitle, // Export for provider-specific download failure subtitles
   createInvalidSubtitleMessage, // Export for corrupted/invalid subtitle error message
   readFromPartialCache, // Export for checking in-flight partial results during duplicate requests
@@ -4633,6 +4886,7 @@ module.exports = {
   getAvailableSubtitlesForTranslation,
   createLoadingSubtitle,
   createSessionTokenErrorSubtitle,
+  createCredentialDecryptionErrorSubtitle,
   createOpenSubtitlesAuthErrorSubtitle,
   createOpenSubtitlesAuthMissingSubtitle,
   createOpenSubtitlesQuotaExceededSubtitle,

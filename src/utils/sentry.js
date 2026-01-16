@@ -150,21 +150,8 @@ function init() {
                 return integrations.filter(integration => integration.name !== 'Console');
             },
 
-            // Pre-filter events before sending
+            // Send ALL errors to Sentry - no filtering
             beforeSend(event, hint) {
-                const error = hint?.originalException;
-
-                // Apply our ignore patterns
-                if (error && shouldIgnoreError(error, event.extra || {})) {
-                    return null; // Drop the event
-                }
-
-                // Check error message in the event itself
-                const eventMessage = event.message || event.exception?.values?.[0]?.value || '';
-                if (shouldIgnoreError(eventMessage, event.extra || {})) {
-                    return null; // Drop the event
-                }
-
                 return event;
             },
 
@@ -201,7 +188,7 @@ function captureError(error, extras = {}) {
         return null;
     }
 
-    // Apply ignore filters
+    // Filter out operational issues that shouldn't be reported to Sentry
     if (shouldIgnoreError(error, extras)) {
         return null;
     }
@@ -273,8 +260,8 @@ function captureMessage(message, level = 'info', extras = {}) {
         return null;
     }
 
-    // Still apply ignore filters for non-error levels
-    if (level !== 'fatal' && level !== 'error' && shouldIgnoreError(message, extras)) {
+    // Filter out operational messages at warning level or below
+    if (level !== 'error' && level !== 'fatal' && shouldIgnoreError(message, extras)) {
         return null;
     }
 

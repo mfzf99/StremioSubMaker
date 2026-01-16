@@ -455,16 +455,58 @@ function normalizeConfig(config) {
   // Normalize Gemini API key rotation fields
   mergedConfig.geminiKeyRotationEnabled = mergedConfig.geminiKeyRotationEnabled === true;
 
+  /**
+   * Detect if a value appears to still be encrypted (decryption failed due to key mismatch)
+   * Encrypted values have format: 1:base64:base64:base64 (version:iv:authTag:ciphertext)
+   * @param {any} value - The value to check
+   * @returns {boolean} - True if the value looks like it's still encrypted
+   */
+  const looksEncrypted = (value) => {
+    if (!value || typeof value !== 'string') return false;
+    const parts = value.split(':');
+    // Our encryption format: version:iv:authTag:ciphertext where version is "1"
+    return parts.length === 4 && parts[0] === '1';
+  };
+
   // Sanitize geminiApiKeys array: trim whitespace, remove empty strings, dedupe, enforce max limit
+  // Also detect and remove encrypted keys that failed to decrypt
   const rawKeys = Array.isArray(mergedConfig.geminiApiKeys) ? mergedConfig.geminiApiKeys : [];
   const seenKeys = new Set();
   const sanitizedKeys = [];
+  let encryptedGeminiKeysDetected = false;
   for (const key of rawKeys) {
     const trimmed = typeof key === 'string' ? key.trim() : '';
-    if (trimmed && !seenKeys.has(trimmed)) {
+    if (!trimmed) continue;
+
+    // Check if this key still looks encrypted (decryption failed)
+    if (looksEncrypted(trimmed)) {
+      encryptedGeminiKeysDetected = true;
+      log.warn(() => `[Config] Gemini API key appears to still be encrypted (decryption failed). Skipping this key.`);
+      continue; // Skip encrypted keys
+    }
+
+    if (!seenKeys.has(trimmed)) {
       seenKeys.add(trimmed);
       sanitizedKeys.push(trimmed);
       if (sanitizedKeys.length >= MAX_GEMINI_API_KEYS) break;
+    }
+  }
+
+  // Also check the single geminiApiKey
+  const rawSingleKey = typeof mergedConfig.geminiApiKey === 'string' ? mergedConfig.geminiApiKey.trim() : '';
+  if (rawSingleKey && looksEncrypted(rawSingleKey)) {
+    encryptedGeminiKeysDetected = true;
+    log.warn(() => `[Config] Gemini API key (single) appears to still be encrypted (decryption failed). Clearing it.`);
+    mergedConfig.geminiApiKey = ''; // Clear the unusable encrypted key
+  }
+
+  // Set a flag if any API keys failed to decrypt
+  if (encryptedGeminiKeysDetected) {
+    mergedConfig.__credentialDecryptionFailed = mergedConfig.__credentialDecryptionFailed || false;
+    mergedConfig.__credentialDecryptionFailed = true;
+    mergedConfig.__credentialDecryptionFailedFields = mergedConfig.__credentialDecryptionFailedFields || [];
+    if (!mergedConfig.__credentialDecryptionFailedFields.includes('geminiApiKey')) {
+      mergedConfig.__credentialDecryptionFailedFields.push('geminiApiKey');
     }
   }
 
@@ -651,6 +693,8 @@ function normalizeConfig(config) {
   // Guardrail: if OpenSubtitles Auth is selected without credentials, fall back to V3 to avoid runtime auth errors
   const openSubConfig = mergedConfig.subtitleProviders?.opensubtitles;
   if (openSubConfig) {
+    // Note: looksEncrypted() is already defined above for Gemini API key detection
+
     const normalizeCredential = (value) => {
       if (value === undefined || value === null) return '';
       // Accept non-string values but always coerce to string to prevent trim() type errors
@@ -669,10 +713,43 @@ function normalizeConfig(config) {
     openSubConfig.implementationType = impl || 'v3';
     openSubConfig.username = normalizeCredential(openSubConfig.username);
     openSubConfig.password = normalizeCredential(openSubConfig.password);
+
+    // Check if credentials appear to still be encrypted (decryption failed due to key mismatch between server instances)
+    // This can happen when:
+    // 1. User is on a multi-pod deployment (e.g., ElfHosted) with inconsistent encryption keys
+    // 2. The encryption key was rotated/lost
+    // 3. Session was created on a different server instance
+    const usernameStillEncrypted = looksEncrypted(openSubConfig.username);
+    const passwordStillEncrypted = looksEncrypted(openSubConfig.password);
+
+    if (usernameStillEncrypted || passwordStillEncrypted) {
+      log.warn(() => `[Config] OpenSubtitles credentials appear to still be encrypted (decryption failed). ` +
+        `This usually indicates an encryption key mismatch between server instances. ` +
+        `Falling back to V3 mode. User should re-enter their credentials.`);
+
+      // Clear the encrypted credentials since they're unusable
+      openSubConfig.username = '';
+      openSubConfig.password = '';
+
+      // Force V3 mode
+      openSubConfig.implementationType = 'v3';
+
+      // Set a flag so the UI can show a helpful message instead of the generic "session token error"
+      mergedConfig.__credentialDecryptionFailed = true;
+      mergedConfig.__credentialDecryptionFailedFields = [
+        ...(usernameStillEncrypted ? ['opensubtitles.username'] : []),
+        ...(passwordStillEncrypted ? ['opensubtitles.password'] : [])
+      ];
+
+      mergedConfig.subtitleProviders.opensubtitles = openSubConfig;
+    }
+
     const wantsAuth = openSubConfig.implementationType === 'auth';
     const missingCreds = !openSubConfig.username || !openSubConfig.password;
     if (wantsAuth && missingCreds) {
-      log.warn(() => '[Config] OpenSubtitles Auth selected without credentials; switching to V3 (no login required).');
+      // Only log once - set flag to persist this fix to the session
+      // The caller (resolveConfigAsync) will persist the corrected config and clear this flag
+      log.warn(() => '[Config] OpenSubtitles Auth selected without credentials; switching to V3 (no login required). This will be persisted to avoid future warnings.');
       // Preserve the username/password fields even when switching to V3 so they're not lost
       mergedConfig.subtitleProviders.opensubtitles = {
         ...openSubConfig,
@@ -681,6 +758,10 @@ function normalizeConfig(config) {
         username: openSubConfig.username,
         password: openSubConfig.password
       };
+      // Flag that this config was corrected and should be persisted back to the session
+      // This prevents repeated warnings on every request
+      mergedConfig.__needsSessionPersist = true;
+      mergedConfig.__persistReason = 'opensubtitles-auth-to-v3';
     }
   }
 
@@ -872,6 +953,16 @@ function getDefaultConfig(modelName = null) {
       subsource: {
         enabled: true,
         apiKey: DEFAULT_API_KEYS.SUBSOURCE
+      },
+      scs: {
+        enabled: false
+      },
+      wyzie: {
+        enabled: false
+      },
+      subsro: {
+        enabled: false,
+        apiKey: ''
       }
     },
     translationCache: {

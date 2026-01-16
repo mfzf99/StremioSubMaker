@@ -31,7 +31,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -2383,6 +2383,7 @@ app.use((req, res, next) => {
         '/api/validate-subsource',
         '/api/validate-subdl',
         '/api/validate-opensubtitles',
+        '/api/validate-subsro',
         // Stream change watcher for tool pages (SSE + polling)
         '/api/stream-activity',
         '/api/translate-file',
@@ -2739,6 +2740,40 @@ app.get('/configure/:config', (req, res) => {
     res.redirect(302, `/configure${qs ? `?${qs}` : ''}`);
 });
 
+// Sentry test endpoint - sends a test error to verify Sentry is working
+// Access: GET /api/sentry-test (only works from localhost)
+app.get('/api/sentry-test', (req, res) => {
+    // Only allow from localhost for security
+    if (!isLocalhost(req)) {
+        return res.status(403).json({ error: 'Only available from localhost' });
+    }
+
+    const testError = new Error('Sentry test error - this is a test to verify Sentry is working');
+    testError.name = 'SentryTestError';
+
+    // Force send to Sentry (bypass filters)
+    const eventId = sentry.captureErrorForced(testError, {
+        module: 'SentryTest',
+        type: 'test',
+        timestamp: new Date().toISOString()
+    });
+
+    if (eventId) {
+        res.json({
+            success: true,
+            message: 'Test error sent to Sentry',
+            eventId: eventId,
+            hint: 'Check your Sentry dashboard in a few seconds'
+        });
+    } else {
+        res.json({
+            success: false,
+            message: 'Sentry is not initialized',
+            hint: 'Check that SENTRY_DSN is set correctly and @sentry/node is installed'
+        });
+    }
+});
+
 // Health check endpoint for Kubernetes/Docker readiness and liveness probes
 app.get('/health', async (req, res) => {
     try {
@@ -2802,7 +2837,11 @@ app.get('/health', async (req, res) => {
                 caches: cacheSizes
             },
             memory,
-            sessions: await sessionManager.getStats()
+            sessions: await sessionManager.getStats(),
+            sentry: {
+                initialized: sentry.isInitialized(),
+                environment: process.env.SENTRY_ENVIRONMENT || 'production'
+            }
         });
     } catch (error) {
         log.error(() => `[Health] Error: ${error.message}`);
@@ -3422,6 +3461,103 @@ app.post('/api/validate-gemini', async (req, res) => {
             error: isAuthError
                 ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKey', {}, 'Invalid API key')
                 : (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)
+        });
+    }
+});
+
+// API endpoint to validate Subs.ro API key
+app.post('/api/validate-subsro', async (req, res) => {
+    // CRITICAL: Prevent caching to avoid cross-user config contamination (user credentials in request body)
+    setNoStore(res);
+
+    try {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { apiKey } = req.body || {};
+
+        if (!apiKey || !String(apiKey).trim()) {
+            return res.status(400).json({
+                valid: false,
+                error: t('server.errors.apiKeyRequired', {}, 'API key is required')
+            });
+        }
+
+        const axios = require('axios');
+        const { httpAgent, httpsAgent, dnsLookup } = require('./src/utils/httpAgents');
+        const { version } = require('./src/utils/version');
+
+        // Test API key by fetching quota information
+        const quotaUrl = 'https://subs.ro/api/v1.0/quota';
+
+        try {
+            const response = await axios.get(quotaUrl, {
+                headers: {
+                    'User-Agent': `SubMaker v${version}`,
+                    'Accept': 'application/json',
+                    'X-Subs-Api-Key': String(apiKey).trim()
+                },
+                timeout: 10000,
+                httpAgent,
+                httpsAgent,
+                lookup: dnsLookup
+            });
+
+            // Check if we got a valid response with quota info
+            if (response.data && response.data.status === 200 && response.data.quota) {
+                const quota = response.data.quota;
+                return res.json({
+                    valid: true,
+                    message: t('server.validation.apiKeyValid', {}, 'API key is valid'),
+                    // Include quota info in response
+                    quota: {
+                        remaining: quota.remaining_quota,
+                        total: quota.total_quota,
+                        type: quota.quota_type
+                    }
+                });
+            } else if (response.data && response.data.status !== 200) {
+                // API returned non-200 status in body
+                return res.json({
+                    valid: false,
+                    error: response.data.message || t('server.errors.invalidApiKey', {}, 'Invalid API key')
+                });
+            } else {
+                // Unexpected response format but no error - assume valid
+                return res.json({
+                    valid: true,
+                    message: t('server.validation.apiKeyAppearsValid', {}, 'API key appears valid')
+                });
+            }
+        } catch (apiError) {
+            const status = apiError.response?.status;
+            const msg = apiError.message || '';
+
+            // Handle authentication errors
+            if (status === 401 || status === 403) {
+                return res.json({
+                    valid: false,
+                    error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
+                });
+            }
+
+            // Handle timeout
+            if (apiError.code === 'ECONNABORTED' || /timeout/i.test(msg)) {
+                return res.json({
+                    valid: false,
+                    error: t('server.errors.requestTimedOut', {}, 'Request timed out')
+                });
+            }
+
+            // Surface upstream error if present
+            const upstream = apiError.response?.data?.message || apiError.response?.data?.error;
+            return res.json({
+                valid: false,
+                error: upstream || msg || t('server.errors.requestFailed', {}, 'Request failed')
+            });
+        }
+    } catch (error) {
+        res.json({
+            valid: false,
+            error: (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)
         });
     }
 });
@@ -4329,6 +4465,31 @@ async function resolveConfigAsync(configStr, req) {
             log.debug(() => `[Stremio Kai] Successfully resolved session token for config`);
         }
         const normalized = normalizeConfig(cfg);
+
+        // Check if normalizeConfig flagged that the config was auto-corrected and should be persisted
+        // This happens when e.g. OpenSubtitles Auth was selected without credentials and we switch to V3
+        // By persisting the fix, we prevent the warning from appearing on every single request
+        if (normalized.__needsSessionPersist === true) {
+            const persistReason = normalized.__persistReason || 'config-auto-correction';
+            // Remove the flags before persisting (they're internal markers, not part of user config)
+            delete normalized.__needsSessionPersist;
+            delete normalized.__persistReason;
+
+            // Persist the corrected config asynchronously (fire-and-forget, don't block the response)
+            // This updates the stored session so future requests won't trigger the same warning
+            sessionManager.updateSession(configStr, normalized)
+                .then(updated => {
+                    if (updated) {
+                        log.info(() => `[ConfigResolver] Persisted auto-corrected config to session: ${redactToken(configStr)} (reason: ${persistReason})`);
+                    } else {
+                        log.warn(() => `[ConfigResolver] Failed to persist auto-corrected config - session not found: ${redactToken(configStr)}`);
+                    }
+                })
+                .catch(err => {
+                    log.error(() => `[ConfigResolver] Error persisting auto-corrected config: ${err?.message || err}`);
+                });
+        }
+
         // CRITICAL: Deep clone to prevent shared references between concurrent requests
         ensureConfigHash(normalized, configStr);
         // SECURITY: NEVER cache configs retrieved via session tokens
@@ -4489,6 +4650,11 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
                 break;
             case 'opensubtitles-quota':
                 content = createOpenSubtitlesQuotaExceededSubtitle(config?.uiLanguage || 'en');
+                break;
+            case 'credential-decryption-failed':
+                // Credential decryption failed - this happens when encryption keys don't match across server instances
+                const failedFields = config?.__credentialDecryptionFailedFields || [];
+                content = createCredentialDecryptionErrorSubtitle(failedFields, config?.uiLanguage || 'en');
                 break;
             default:
                 content = createSessionTokenErrorSubtitle(regeneratedToken, baseUrl, config?.uiLanguage || 'en'); // Default to session token error

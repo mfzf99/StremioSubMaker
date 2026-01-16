@@ -641,7 +641,9 @@
       "providerUnavailableBody": "Please try again in a few minutes or try a different subtitle.",
       "subsourceTimeoutTitle": "SubSource download failed (timeout)",
       "subsourceTimeoutBody": "SubSource API did not respond in time. Try again in a few minutes or pick a different subtitle.",
-      "invalidSubtitleTooSmall": "The subtitle file is too small and seems corrupted."
+      "invalidSubtitleTooSmall": "The subtitle file is too small and seems corrupted.",
+      "credDecryptFailTitle": "Configuration Issue Detected",
+      "credDecryptFailBody": "Your {fields} could not be loaded properly.\\nThis can happen after server updates.\\nPlease re-enter your credentials in the addon config page."
     },
     "subtitleErrors": {
       "invalidGenericReason": "The subtitle file appears to be invalid or incomplete.",
@@ -893,6 +895,7 @@
         "secondaryProvidersCount": "Secondary Provider requires two configured AI providers (main and fallback)",
         "subdlKeyRequired": "SubDL is enabled but API key is missing",
         "subsourceKeyRequired": "SubSource is enabled but API key is missing",
+        "subsroKeyRequired": "Subs.ro is enabled but API key is missing",
         "subtitleProviderRequired": "Please enable at least one subtitle provider",
         "geminiKeysRequired": "At least one API key is required for rotation",
         "geminiKeysFillEmpty": "Please fill in all API key fields before adding a new one",
@@ -945,6 +948,31 @@
           "validateTitle": "Validate API key",
           "validateCta": "Test",
           "toggleLabel": "Enable SubDL"
+        },
+        "subsro": {
+          "title": "Subs.ro",
+          "description": "Romanian subtitles. Get your API key from",
+          "linkLabel": "subs.ro",
+          "placeholder": "Enter Subs.ro API key",
+          "validateTitle": "Validate API key",
+          "validateCta": "Test",
+          "toggleLabel": "Enable Subs.ro"
+        },
+        "wyzie": {
+          "title": "Wyzie Subs",
+          "description": "Free subtitle aggregator. No API key required.",
+          "toggleLabel": "Enable Wyzie Subs",
+          "note": "Wyzie aggregates subtitles from multiple sources. Results may overlap with other providers you have enabled."
+        },
+        "scs": {
+          "title": "Stremio Community Subtitles",
+          "description": "Community-curated subtitles. No API key required.",
+          "toggleLabel": "Enable SCS",
+          "note": "SCS provides community-uploaded subtitles. Results depend on community contributions for your specific video file."
+        },
+        "moreProviders": {
+          "title": "More Providers (beta)",
+          "description": "Additional subtitle sources including community and aggregator providers."
         }
       },
       "providersUi": {
