@@ -74,7 +74,7 @@ const {
     configStringSchema,
     validateInput
 } = require('./src/utils/validation');
-const { getSessionManager } = require('./src/utils/sessionManager');
+const { getSessionManager, stripInternalFlags } = require('./src/utils/sessionManager');
 const { runStartupValidation } = require('./src/utils/startupValidation');
 const { StorageUnavailableError } = require('./src/storage/errors');
 const { loadLocale, getTranslator, DEFAULT_LANG } = require('./src/utils/i18n');
@@ -1572,7 +1572,7 @@ async function deduplicate(key, fn) {
         log.debug(() => `[Dedup] Operation completed: ${shortKey}, result length: ${result ? result.length : 'undefined/null'}`);
         return result;
     } catch (error) {
-        log.error(() => `[Dedup] Operation failed: ${shortKey}`, error.message);
+        log.warn(() => `[Dedup] Operation failed: ${shortKey}`, error.message);
         throw error;
     } finally {
         // Clean up immediately after completion
@@ -3687,6 +3687,8 @@ app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize
         // Base64 configs are deprecated; only allow when explicitly enabled.
         const shouldUseBase64 = allowBase64 && localhost && !forceSessions && storageType !== 'redis';
         if (shouldUseBase64) {
+            // Defensive: strip any internal flags that shouldn't come from client
+            stripInternalFlags(config);
             const configStr = toBase64Url(JSON.stringify(config));
             log.debug(() => '[Session API] Localhost detected and ALLOW_BASE64_CONFIG enabled - using base64 encoding');
             return res.json({
@@ -3695,6 +3697,9 @@ app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize
                 message: t('server.session.usingBase64Localhost', {}, 'Using base64 encoding for localhost')
             });
         }
+
+        // Defensive: strip any internal flags that shouldn't come from client
+        stripInternalFlags(config);
 
         // Production mode: create session
         const token = await sessionManager.createSession(config);
@@ -3758,6 +3763,9 @@ app.post('/api/update-session/:token', sessionCreationLimiter, enforceConfigPayl
         if (isBase64Token) {
             return res.status(400).json({ error: t('server.errors.sessionTokenFormat', {}, 'Invalid session token format') });
         }
+
+        // Defensive: strip any internal flags that shouldn't come from client
+        stripInternalFlags(config);
 
         // Try to update existing session (now checks Redis if not in cache)
         const updated = await sessionManager.updateSession(token, config);
@@ -4431,11 +4439,16 @@ function createAddonWithConfig(config, baseUrl = '') {
 async function regenerateDefaultConfig() {
     const defaultConfig = getDefaultConfig();
     // Tag with metadata so downstream handlers know this came from regeneration
+    // Note: These flags are stripped before session creation to avoid fingerprint pollution
     defaultConfig.__regenerated = true;
     defaultConfig.__regeneratedAt = new Date().toISOString();
 
+    // Strip internal flags before creating session to ensure clean fingerprint
+    const cleanConfig = { ...defaultConfig };
+    stripInternalFlags(cleanConfig);
+
     // Create a fresh session for this default config
-    const newToken = await sessionManager.createSession(defaultConfig);
+    const newToken = await sessionManager.createSession(cleanConfig);
 
     log.info(() => `[ConfigRegeneration] Created fresh default config session: ${redactToken(newToken)}`);
 
@@ -4528,13 +4541,16 @@ async function resolveConfigAsync(configStr, req) {
         // By persisting the fix, we prevent the warning from appearing on every single request
         if (normalized.__needsSessionPersist === true) {
             const persistReason = normalized.__persistReason || 'config-auto-correction';
-            // Remove the flags before persisting (they're internal markers, not part of user config)
-            delete normalized.__needsSessionPersist;
-            delete normalized.__persistReason;
+
+            // CRITICAL FIX: Create a clean copy for persistence to avoid fingerprint pollution.
+            // We must NOT mutate `normalized` because downstream handlers need the flags
+            // (e.g., __credentialDecryptionFailed for showing error messages to users).
+            const configForPersistence = { ...normalized };
+            stripInternalFlags(configForPersistence);
 
             // Persist the corrected config asynchronously (fire-and-forget, don't block the response)
             // This updates the stored session so future requests won't trigger the same warning
-            sessionManager.updateSession(configStr, normalized)
+            sessionManager.updateSession(configStr, configForPersistence)
                 .then(updated => {
                     if (updated) {
                         log.info(() => `[ConfigResolver] Persisted auto-corrected config to session: ${redactToken(configStr)} (reason: ${persistReason})`);

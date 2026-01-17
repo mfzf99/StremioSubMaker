@@ -86,14 +86,21 @@ function isAuthenticationFailure(error) {
   }
 
   const status = error.response?.status;
+
+  // 401 Unauthorized and 403 Forbidden are clear auth failures
   if (status === 401 || status === 403) {
     return true;
   }
 
+  // Check error message for auth-related keywords
+  // This handles 400 errors that might be auth-related, as well as other edge cases
   const message = String(error.response?.data?.message || error.message || '').toLowerCase();
-  if (message.includes('invalid username') || message.includes('invalid credentials') || message.includes('usernamepassword')) {
+  if (message.includes('invalid username') || message.includes('invalid credentials') || message.includes('usernamepassword') || message.includes('unauthorized') || message.includes('wrong password')) {
     return true;
   }
+
+  // 400 Bad Request is NOT automatically an auth failure - it could be many things
+  // (malformed request, missing fields, etc.) - only the message content tells us
 
   return false;
 }

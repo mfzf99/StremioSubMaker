@@ -3200,7 +3200,7 @@ async function handleSubtitleDownload(fileId, language, config) {
     const uiLanguage = config.uiLanguage || 'en';
     const t = getTranslator(uiLanguage);
     if (!error || !error._alreadyLogged) {
-      log.error(() => ['[Download] Error:', error?.message || String(error)]);
+      log.warn(() => ['[Download] Error:', error?.message || String(error)]);
     }
 
     // Return error message as subtitle so user knows what happened

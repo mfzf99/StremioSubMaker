@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -38,14 +38,11 @@ All notable changes to this project will be documented in this file.
 
 **Bug Fixes:**
 
+- **Fixed "Configuration Error" on re-entry with OpenSubtitles Auth:** Fixed a critical bug where users with OpenSubtitles Auth credentials would see "Configuration Error: Session token not found or expired" when re-entering content after the first access. The root cause was internal flags (`_encrypted`, `__decryptionWarning`, `__credentialDecryptionFailed`, etc.) polluting the session fingerprint computation. These transient flags were added during the encrypt/decrypt/normalize cycle but weren't present when the original fingerprint was computed at session creation, causing fingerprint mismatches and session deletion. The fix strips all internal flags before fingerprint computation during session load.
 - **Fixed SubDL subtitle fetching for TV shows:** Fixed an issue where SubDL returned 0 results for some TV show episodes. The fix ensures correct handling of season packs and episode-specific subtitles, properly filtering by season and episode numbers when searching for TV content.
 - **Fixed SubSource API key authentication:** Fixed 401 Unauthorized errors when using the SubSource API. API keys are now correctly included in all SubSource requests, including movieId lookups and subtitle searches.
-- **Fixed OpenSubtitles timeout errors misreported as invalid credentials:** When the OpenSubtitles API times out during authentication (e.g., `timeout of 12000ms exceeded`), the addon was incorrectly reporting "authentication failed: invalid username/password" even when credentials were valid. The root cause was that `loginWithCredentials()` called `handleAuthError()` for ALL errors (including timeouts/network issues), which returned `null`, and then `searchSubtitles()` interpreted any `null` return as "bad credentials". Now timeout, network, and DNS errors are properly thrown and logged as connection issues, while only actual authentication failures (cached 401/403 responses) trigger the "invalid credentials" message.
+- **Fixed OpenSubtitles timeout errors misreported as invalid credentials:** When the OpenSubtitles API times out during authentication (e.g., `timeout of 12000ms exceeded`), the addon was incorrectly reporting "authentication failed: invalid username/password" even when credentials were valid. The root cause was that `loginWithCredentials()` called `handleAuthError()` for ALL errors (including timeouts/network issues), which returned `null`, and then `searchSubtitles()` interpreted any `null` return as "bad credentials". Now timeout, network, and DNS errors are properly thrown and logged as connection issues, while only actual authentication failures (401/403 responses) trigger the "invalid credentials" message. Additionally, 400 "Bad Request" errors are no longer automatically treated as auth failures - they now require an explicit credential-related message to be classified as such.
 - **LOTS of subtitles providers' improvements.**
-
-**Other Changes:**
-
-- Graceful shutdown now properly stops keep-alive pings to prevent lingering timers.
 
 ## SubMaker v1.4.31
 

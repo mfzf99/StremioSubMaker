@@ -27,6 +27,51 @@ const META_KEYS = {
     SESSION_FINGERPRINT: '__sessionFingerprint'
 };
 
+// List of all internal flags that should be stripped before fingerprint computation
+// or before persisting a config to storage. These are transient flags added during
+// the encrypt/decrypt/normalize cycle and should NEVER affect fingerprint calculation.
+const INTERNAL_FLAGS = [
+    '_encrypted',           // Added by encryptUserConfig()
+    '__decryptionWarning',  // Added by decryptUserConfig() on partial decrypt failure
+    '__decryptionWarningFields',
+    '__credentialDecryptionFailed',  // Added by normalizeConfig() when credentials look encrypted
+    '__credentialDecryptionFailedFields',
+    '__credentialWarningEntry',      // Added by subtitles handler for UI warning
+    '__sessionTokenError',  // Added by resolveConfigAsync() when session not found
+    '__originalToken',
+    '__configHash',         // Added by ensureConfigHash()
+    '__configHashScope',
+    '__configBaseHash',
+    '__needsSessionPersist', // Added by normalizeConfig() for auto-correction
+    '__persistReason',
+    '__regenerated',        // Added by regenerateDefaultConfig()
+    '__regeneratedAt',
+    '__fetchedAt',          // Added during config resolution
+    '__invalidSession'      // Added when session is invalid
+];
+
+/**
+ * Strip all internal transient flags from a config object.
+ * This should be called before computing fingerprints or persisting configs
+ * to ensure consistency between save and load operations.
+ *
+ * @param {Object} config - The config object to clean (modified in place)
+ * @returns {Object} The same config object with flags removed
+ */
+function stripInternalFlags(config) {
+    if (!config || typeof config !== 'object') {
+        return config;
+    }
+    try {
+        for (const flag of INTERNAL_FLAGS) {
+            delete config[flag];
+        }
+    } catch (_) {
+        // Non-critical: continue with best-effort cleanup
+    }
+    return config;
+}
+
 // Lightweight integrity fingerprint stored alongside each session
 // Helps detect cross-session contamination when storage returns an unexpected payload
 function computeConfigFingerprint(config) {
@@ -101,6 +146,11 @@ function embedSessionMetadata(config, token, fingerprint) {
 // Remove internal metadata fields from decrypted configs before returning them
 // to callers or caching the decrypted version. Returns both the cleaned config
 // and any extracted metadata for validation.
+//
+// CRITICAL: This function must strip ALL internal flags that are added during
+// the encrypt/decrypt/normalize cycle but were NOT present in the original user
+// config when the fingerprint was first computed. Any flags left behind will
+// cause fingerprint mismatches and session deletion ("Configuration Error").
 function stripSessionMetadata(config) {
     if (!config || typeof config !== 'object') {
         return { config, metadata: {} };
@@ -112,8 +162,12 @@ function stripSessionMetadata(config) {
     };
 
     try {
+        // Remove session-specific metadata
         delete config[META_KEYS.SESSION_TOKEN];
         delete config[META_KEYS.SESSION_FINGERPRINT];
+
+        // Use the centralized helper to remove all internal flags
+        stripInternalFlags(config);
     } catch (_) {
         // Non-critical: continue with best-effort cleanup
     }
@@ -2087,5 +2141,6 @@ function getSessionManager(options = {}) {
 
 module.exports = {
     SessionManager,
-    getSessionManager
+    getSessionManager,
+    stripInternalFlags
 };
