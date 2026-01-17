@@ -882,6 +882,19 @@ class SessionManager extends EventEmitter {
             throw err;
         }
 
+        // DEBUG: Verify session was actually written by reading it back
+        try {
+            const adapter = await getStorageAdapter();
+            const verification = await adapter.get(token, StorageAdapter.CACHE_TYPES.SESSION);
+            if (!verification) {
+                log.error(() => `[SessionManager] CRITICAL: Session ${redactToken(token)} was NOT found in Redis immediately after creation!`);
+            } else {
+                log.debug(() => `[SessionManager] Session ${redactToken(token)} verified in Redis after creation`);
+            }
+        } catch (verifyErr) {
+            log.error(() => `[SessionManager] Verification read failed for ${redactToken(token)}: ${verifyErr?.message}`);
+        }
+
         this.emit('sessionCreated', { token, source: 'local' });
         log.debug(() => `[SessionManager] Session created: ${redactToken(token)} (in-memory: ${this.cache.size})`);
         return token;
@@ -1392,7 +1405,7 @@ class SessionManager extends EventEmitter {
 
                 // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
                 if (!hasDecryptionWarnings && metadata?.fingerprint && metadata.fingerprint !== fingerprint) {
-                    log.warn(() => `[SessionManager] Session fingerprint metadata mismatch on storage load for ${redactToken(token)} - deleting session`);
+                    log.warn(() => `[SessionManager] Session fingerprint metadata mismatch on storage load for ${redactToken(token)} - stored=${metadata.fingerprint}, computed=${fingerprint} - deleting session`);
                     await deleteFromStorage();
                     this.cache.delete(token);
                     this.decryptedCache.delete(token);
@@ -1401,7 +1414,7 @@ class SessionManager extends EventEmitter {
 
                 // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
                 if (!hasDecryptionWarnings && stored.fingerprint && fingerprint !== stored.fingerprint) {
-                    log.warn(() => `[SessionManager] Fingerprint mismatch on storage load for ${redactToken(token)} - removing corrupted session`);
+                    log.warn(() => `[SessionManager] Fingerprint mismatch on storage load for ${redactToken(token)} - stored=${stored.fingerprint}, computed=${fingerprint} - removing corrupted session`);
                     await deleteFromStorage();
                     this.cache.delete(token);
                     this.decryptedCache.delete(token);
@@ -1451,6 +1464,7 @@ class SessionManager extends EventEmitter {
                 }
 
                 this.decryptedCache.set(token, cloneConfig(decryptedConfig));
+                log.debug(() => `[SessionManager] loadSessionFromStorage: successfully loaded session ${redactToken(token)} from Redis`);
                 return cloneConfig(decryptedConfig);
             } catch (decryptErr) {
                 log.error(() => ['[SessionManager] loadSessionFromStorage: failed to decrypt config, keeping session for retry:', decryptErr?.message || String(decryptErr)]);

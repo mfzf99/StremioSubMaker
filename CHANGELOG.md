@@ -20,6 +20,10 @@ All notable changes to this project will be documented in this file.
   - `DOWNLOAD_BURST_THRESHOLD` (default: 5 requests)
   - `DISABLE_DOWNLOAD_BURST_DETECTION=true` to disable
 
+- **Stremio Community Prefetch Cooldown:** Added targeted blocking for Stremio Community's aggressive libmpv prefetching behavior. When the addon serves a subtitle list to a Stremio Community client (detected via `origin=zarg` or `user-agent=StremioShell`), a 2.5 second cooldown is set for that user's config hash. During the cooldown, libmpv prefetch requests to `/subtitle/` and `/translate/` routes are blocked with a "Click again to load" message. Non-libmpv requests (user actually selecting a subtitle) are allowed through. Official Stremio apps are unaffected since the cooldown is only set for Stremio Community requests. Configurable via:
+  - `STREMIO_COMMUNITY_COOLDOWN_MS` (default: 2500ms)
+  - `DISABLE_STREMIO_COMMUNITY_COOLDOWN=true` to disable
+
 - **Disable Download Cache Option:** Added `DISABLE_DOWNLOAD_CACHE=true` environment variable to completely disable the in-memory download cache if needed.
 
 ## SubMaker v1.4.32

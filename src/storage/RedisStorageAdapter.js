@@ -589,6 +589,10 @@ class RedisStorageAdapter extends StorageAdapter {
         const content = await this.client.get(redisKey);
 
         if (!content) {
+          // Debug: log when session not found
+          if (cacheType === StorageAdapter.CACHE_TYPES.SESSION) {
+            log.debug(() => `[RedisStorage] Session NOT found in Redis: ${key.substring(0, 8)}...${key.substring(key.length - 4)} (tried key: ${redisKey})`);
+          }
           // If the key isn't found under the canonical prefix, try to self-heal
           // across alternate prefixes (colon/no-colon, fallback/default) so
           // sessions/configs don't "disappear" after restarts when the prefix
@@ -785,7 +789,24 @@ class RedisStorageAdapter extends StorageAdapter {
           }
         }
 
-        await pipeline.exec();
+        const results = await pipeline.exec();
+
+        // Check for pipeline errors - results is array of [err, result] pairs
+        if (results) {
+          for (let i = 0; i < results.length; i++) {
+            const [err, result] = results[i];
+            if (err) {
+              log.error(() => `[RedisStorage] Pipeline command ${i} failed for key ${key}: ${err.message}`);
+              return false;
+            }
+          }
+        }
+
+        // Debug: confirm session was written
+        if (cacheType === StorageAdapter.CACHE_TYPES.SESSION) {
+          log.debug(() => `[RedisStorage] Session persisted to Redis: ${key.substring(0, 8)}...${key.substring(key.length - 4)} (ttl=${ttl || 'none'})`);
+        }
+
         return true;
       });
     } catch (error) {
