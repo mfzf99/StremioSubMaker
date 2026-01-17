@@ -1012,17 +1012,17 @@ class SessionManager extends EventEmitter {
             delete decryptedConfig.__decryptionWarningFields;
         }
 
-        // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+        // DISABLED: Fingerprint validation causes false positives when config schema changes
+        // (e.g., new fields added, encrypted values differ after decrypt cycle). Token validation
+        // is sufficient to detect cross-session contamination. Fingerprint mismatches are now
+        // logged at debug level for diagnostics only - sessions are NOT deleted.
         if (!hasDecryptionWarnings && metadata.fingerprint && metadata.fingerprint !== fingerprint) {
-            log.warn(() => `[SessionManager] Session fingerprint metadata mismatch for ${redactToken(token)} - deleting session`);
-            this.deleteSession(token);
-            return null;
+            log.debug(() => `[SessionManager] Fingerprint mismatch (metadata) for ${redactToken(token)} - stored=${metadata.fingerprint}, computed=${fingerprint}. Session preserved (fingerprint validation disabled).`);
+            // Don't delete - continue with session
         }
-        // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
         if (!hasDecryptionWarnings && sessionData.fingerprint && fingerprint !== sessionData.fingerprint) {
-            log.warn(() => `[SessionManager] Fingerprint mismatch for ${redactToken(token)} - discarding contaminated session`);
-            this.deleteSession(token);
-            return null;
+            log.debug(() => `[SessionManager] Fingerprint mismatch (stored) for ${redactToken(token)} - stored=${sessionData.fingerprint}, computed=${fingerprint}. Session preserved (fingerprint validation disabled).`);
+            // Don't delete - continue with session
         }
         if (!sessionData.fingerprint) {
             sessionData.fingerprint = fingerprint;
@@ -1048,24 +1048,29 @@ class SessionManager extends EventEmitter {
             }
         }
 
-        // Defense-in-depth: ensure the stored integrity tag matches the token + fingerprint
-        const expectedIntegrity = computeIntegrityHash(token, sessionData.fingerprint || fingerprint);
-        if (sessionData.integrity && sessionData.integrity !== expectedIntegrity) {
-            log.warn(() => `[SessionManager] Integrity mismatch for ${redactToken(token)} - discarding contaminated session`);
-            this.deleteSession(token);
-            return null;
-        }
-        if (!sessionData.integrity) {
-            sessionData.integrity = expectedIntegrity;
-            this.cache.set(token, sessionData);
-            this.dirty = true;
-            this._trackPersistence(Promise.resolve().then(async () => {
-                const adapter = await getStorageAdapter();
-                const ttlSeconds = this._calculateTtlSeconds();
-                await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
-            }).catch(err => {
-                log.error(() => ['[SessionManager] Failed to persist integrity backfill:', err?.message || String(err)]);
-            }));
+        // Defense-in-depth: ensure the stored integrity tag matches the token + stored fingerprint.
+        // IMPORTANT: Use stored fingerprint only (not recomputed) because recomputed fingerprint
+        // may differ due to schema changes. Integrity check still validates token binding.
+        if (sessionData.fingerprint) {
+            const expectedIntegrity = computeIntegrityHash(token, sessionData.fingerprint);
+            if (sessionData.integrity && sessionData.integrity !== expectedIntegrity) {
+                log.warn(() => `[SessionManager] Integrity mismatch for ${redactToken(token)} - discarding contaminated session`);
+                this.deleteSession(token);
+                return null;
+            }
+            // Backfill missing integrity using stored fingerprint
+            if (!sessionData.integrity) {
+                sessionData.integrity = expectedIntegrity;
+                this.cache.set(token, sessionData);
+                this.dirty = true;
+                this._trackPersistence(Promise.resolve().then(async () => {
+                    const adapter = await getStorageAdapter();
+                    const ttlSeconds = this._calculateTtlSeconds();
+                    await adapter.set(token, sessionData, StorageAdapter.CACHE_TYPES.SESSION, ttlSeconds);
+                }).catch(err => {
+                    log.error(() => ['[SessionManager] Failed to persist integrity backfill:', err?.message || String(err)]);
+                }));
+            }
         }
 
         // Backfill missing fingerprint for legacy sessions
@@ -1403,30 +1408,28 @@ class SessionManager extends EventEmitter {
                     return null;
                 }
 
-                // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
+                // DISABLED: Fingerprint validation causes false positives when config schema changes
+                // (e.g., new fields added, encrypted values differ after decrypt cycle). Token validation
+                // is sufficient to detect cross-session contamination. Fingerprint mismatches are now
+                // logged at debug level for diagnostics only - sessions are NOT deleted.
                 if (!hasDecryptionWarnings && metadata?.fingerprint && metadata.fingerprint !== fingerprint) {
-                    log.warn(() => `[SessionManager] Session fingerprint metadata mismatch on storage load for ${redactToken(token)} - stored=${metadata.fingerprint}, computed=${fingerprint} - deleting session`);
-                    await deleteFromStorage();
-                    this.cache.delete(token);
-                    this.decryptedCache.delete(token);
-                    return null;
+                    log.debug(() => `[SessionManager] Fingerprint mismatch (metadata) on storage load for ${redactToken(token)} - stored=${metadata.fingerprint}, computed=${fingerprint}. Session preserved (fingerprint validation disabled).`);
+                    // Don't delete - continue with session
                 }
-
-                // Skip fingerprint validation if decryption had warnings (encryption key mismatch)
                 if (!hasDecryptionWarnings && stored.fingerprint && fingerprint !== stored.fingerprint) {
-                    log.warn(() => `[SessionManager] Fingerprint mismatch on storage load for ${redactToken(token)} - stored=${stored.fingerprint}, computed=${fingerprint} - removing corrupted session`);
-                    await deleteFromStorage();
-                    this.cache.delete(token);
-                    this.decryptedCache.delete(token);
-                    return null;
+                    log.debug(() => `[SessionManager] Fingerprint mismatch (stored) on storage load for ${redactToken(token)} - stored=${stored.fingerprint}, computed=${fingerprint}. Session preserved (fingerprint validation disabled).`);
+                    // Don't delete - continue with session
                 }
-                const expectedIntegrity = computeIntegrityHash(token, stored.fingerprint || fingerprint);
-                if (stored.integrity && stored.integrity !== expectedIntegrity) {
-                    log.warn(() => `[SessionManager] Integrity mismatch on storage load for ${redactToken(token)} - removing contaminated session`);
-                    await deleteFromStorage();
-                    this.cache.delete(token);
-                    this.decryptedCache.delete(token);
-                    return null;
+                // Integrity check uses stored fingerprint only (not recomputed) for backwards compatibility
+                if (stored.fingerprint && stored.integrity) {
+                    const expectedIntegrity = computeIntegrityHash(token, stored.fingerprint);
+                    if (stored.integrity !== expectedIntegrity) {
+                        log.warn(() => `[SessionManager] Integrity mismatch on storage load for ${redactToken(token)} - removing contaminated session`);
+                        await deleteFromStorage();
+                        this.cache.delete(token);
+                        this.decryptedCache.delete(token);
+                        return null;
+                    }
                 }
 
                 if (!stored.fingerprint) {

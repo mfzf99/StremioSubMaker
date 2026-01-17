@@ -1667,7 +1667,7 @@ const stremioCommunityPrefetchTracker = new LRUCache({
 });
 
 /**
- * Detect if a request is from Stremio Community
+ * Detect if a request is from Stremio Community or its player (libmpv)
  * @param {Object} req - Express request object
  * @returns {boolean} - True if request is from Stremio Community
  */
@@ -1677,11 +1677,15 @@ function isStremioCommunityRequest(req) {
     const origin = (req.get('origin') || req.get('referer') || '').toLowerCase();
     const userAgent = (req.get('user-agent') || '').toLowerCase();
 
-    // Detect Stremio Community by origin (web version) or user-agent (desktop wrapper)
+    // Detect Stremio Community by:
+    // - Origin containing "zarg" (web version: https://stremio.zarg.me)
+    // - User-agent containing "stremioshell" (desktop app wrapper)
+    // - User-agent containing "libmpv" (the player that does prefetching, no origin)
     const isZargOrigin = origin.includes('zarg');
     const isStremioShell = userAgent.includes('stremioshell');
+    const isLibmpv = userAgent.includes('libmpv') && (!origin || origin === 'null' || origin === 'none');
 
-    return isZargOrigin || isStremioShell;
+    return isZargOrigin || isStremioShell || isLibmpv;
 }
 
 /**
@@ -1744,6 +1748,7 @@ function checkStremioCommunityPrefetchCooldown(configHash, req) {
         return { blocked: false, reason: 'non-libmpv request allowed', remainingMs };
     }
 
+    // libmpv prefetch during cooldown - block it
     return {
         blocked: true,
         reason: `prefetch cooldown (${remainingMs}ms remaining)`,
@@ -7524,13 +7529,13 @@ function generateTranslationSelectorPage(subtitles, videoId, targetLang, configS
 // Middleware to replace {{ADDON_URL}} placeholder in responses
 // This is CRITICAL because Stremio SDK uses res.end() not res.json()
 app.use('/addon/:config', (req, res, next) => {
-    // REQUEST TRACE: Log all incoming addon requests (helps diagnose "Stremio not sending requests" issues)
-    // This runs BEFORE any processing, so if this doesn't log, the request never reached the server
     const requestPath = req.path || req.url || 'unknown';
     const isSubtitlesRequest = requestPath.includes('/subtitles/');
     const isManifestRequest = requestPath.includes('/manifest.json');
     const isDownloadRequest = requestPath.includes('/subtitle/') || requestPath.includes('/translate/');
 
+    // REQUEST TRACE: Log all incoming addon requests (helps diagnose "Stremio not sending requests" issues)
+    // This runs BEFORE any processing, so if this doesn't log, the request never reached the server
     if (isSubtitlesRequest || isManifestRequest) {
         // Log subtitle and manifest requests at INFO level for visibility
         log.info(() => `[Addon Request] ${req.method} ${requestPath.substring(0, 100)} (UA: ${(req.get('user-agent') || 'none').substring(0, 50)})`);
