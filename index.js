@@ -4885,7 +4885,9 @@ app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validate
 
         // STEP 2: Cache miss - check for Stremio Community prefetch cooldown
         // This blocks libmpv prefetch requests during cooldown window after subtitle list is served
-        const prefetchCooldown = checkStremioCommunityPrefetchCooldown(configKey, req);
+        // NOTE: Use configStr (session token) here, NOT configKey (computed hash) - the cooldown is set
+        // using the session token from req.params.config in the subtitle list response middleware
+        const prefetchCooldown = checkStremioCommunityPrefetchCooldown(configStr, req);
         if (prefetchCooldown.blocked) {
             log.debug(() => `[Download] Blocked by prefetch cooldown: ${prefetchCooldown.reason} for ${fileId}`);
             const { createInvalidSubtitleMessage } = require('./src/handlers/subtitles');
@@ -5141,7 +5143,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
 
         // Prefetch Cooldown: Block libmpv prefetch requests during cooldown window after subtitle list is served
         // This is more targeted than burst detection - specifically for Stremio Community clients
-        const prefetchCooldown = checkStremioCommunityPrefetchCooldown(configKey, req);
+        // NOTE: Use configStr (session token) here, NOT configKey (computed hash) - the cooldown is set
+        // using the session token from req.params.config in the subtitle list response middleware
+        const prefetchCooldown = checkStremioCommunityPrefetchCooldown(configStr, req);
         if (prefetchCooldown.blocked) {
             log.debug(() => `[Translation] Blocked by prefetch cooldown: ${prefetchCooldown.reason} for ${sourceFileId}`);
             const cooldownMsg = createLoadingSubtitle(config?.uiLanguage || 'en');

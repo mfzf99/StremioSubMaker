@@ -44,7 +44,7 @@ function detectArchiveType(buffer) {
         return 'rar';
     }
 
-    log.debug(() => `[ArchiveExtractor] Unknown archive format - not ZIP or RAR`);
+    log.debug(() => `[ArchiveExtractor] Content is not an archive (plain subtitle file)`);
     return null;
 }
 

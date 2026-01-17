@@ -14,6 +14,12 @@ All notable changes to this project will be documented in this file.
 
 - **Disabled session fingerprint validation:** Fingerprint validation was causing false positives and incorrectly deleting valid sessions when the config schema changed (e.g., new fields added, encrypted values differing after decrypt cycle). Token validation is sufficient to detect cross-session contamination. Fingerprint mismatches are now logged at debug level for diagnostics only - sessions are no longer deleted on mismatch.
 
+- **Fixed prefetch cooldown not working:** The prefetch cooldown mechanism for Stremio Community V5 clients was not blocking libmpv prefetch requests as intended. The root cause was a key mismatch: the cooldown was being set using the session token (e.g., `d20c...6e87`) from `req.params.config`, but was being checked using a computed config hash (e.g., `0f966b7b17ad091e`) from `ensureConfigHash()`. Since these keys never matched, the cooldown check always returned "not blocked." Fixed by using the session token consistently for both setting and checking the cooldown.
+
+**Performance:**
+
+- **Debounced session TTL refresh writes to Redis:** Previously, every single request (manifest, subtitle search, download, etc.) would trigger a Redis SET to refresh the session TTL. With thousands of users, this created massive Redis write overhead. Now TTL refreshes are debounced to once per hour per session, reducing Redis writes by ~99% while maintaining sliding window session expiry.
+
 **Improvements:**
 
 - **Improved Stremio Community detection:** Enhanced detection to also identify libmpv requests (the player that does prefetching) when they have no origin header. This improves the accuracy of the prefetch cooldown system for Stremio Community clients.
