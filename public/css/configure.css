@@ -3474,3 +3474,67 @@ label:has(#subToolboxEnabled:disabled) {
     padding: 0.45rem 0.65rem;
     font-size: 0.875rem;
 }
+
+/* Slow Providers Warning Styles */
+.slow-providers-warning {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(185, 28, 28, 0.08) 100%);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    border-radius: 8px;
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+}
+
+.slow-providers-warning span[style*="color: #fff"] {
+    color: #7f1d1d !important;
+    text-shadow: none !important;
+}
+
+.slow-providers-warning:hover {
+    border-color: rgba(220, 38, 38, 0.45);
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 2px 6px rgba(220, 38, 38, 0.15);
+}
+
+/* Dark mode warning */
+[data-theme="dark"] .slow-providers-warning {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.18) 0%, rgba(185, 28, 28, 0.14) 100%);
+    border-color: rgba(220, 38, 38, 0.45);
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .slow-providers-warning span[style*="color: #fff"] {
+    color: #fecaca !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .slow-providers-warning:hover {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(185, 28, 28, 0.18) 100%);
+    border-color: rgba(220, 38, 38, 0.55);
+}
+
+/* True Dark mode warning */
+[data-theme="true-dark"] .slow-providers-warning {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(185, 28, 28, 0.16) 100%);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="true-dark"] .slow-providers-warning span[style*="color: #fff"] {
+    color: #fca5a5 !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="true-dark"] .slow-providers-warning:hover {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.28) 0%, rgba(185, 28, 28, 0.22) 100%);
+    border-color: rgba(239, 68, 68, 0.65);
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 3px 8px rgba(220, 38, 38, 0.25);
+}

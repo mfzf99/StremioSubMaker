@@ -973,6 +973,13 @@
         "moreProviders": {
           "title": "Más proveedores (beta)",
           "description": "Fuentes de subtítulos adicionales, incluyendo proveedores comunitarios y agregadores."
+        },
+        "timeout": {
+          "title": "Tiempo de espera del proveedor",
+          "description": "Tiempo máximo de espera para cada proveedor de subtítulos (en segundos).",
+          "note": "Menor = respuestas más rápidas pero puede perder proveedores lentos. Mayor = más fiable pero más lento. Por defecto: 12s",
+          "ariaLabel": "Tiempo de espera del proveedor de subtítulos",
+          "slowWarning": "SCS, Wyzie y SubSource pueden ser lentos. Si no obtienes resultados de subtítulos, recomendamos valores de tiempo de espera más altos."
         }
       },
       "providersUi": {
@@ -1025,6 +1032,7 @@
           "label": "Modelo de traducción",
           "helper": "Modelo IA para traducciones",
           "options": {
+            "gemma27b": "Gemma 27b (beta) (Recomendado para límites de uso)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
             "flash3": "Gemini 3.0 Flash (Preview)",

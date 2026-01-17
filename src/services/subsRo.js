@@ -209,7 +209,7 @@ class SubsRoService {
             httpAgent,
             httpsAgent,
             lookup: dnsLookup,
-            timeout: 15000 // 15 second timeout
+            timeout: 12000 // 12 second timeout (must fit within global provider timeout)
         });
 
         if (!SubsRoService.initLogged) {
@@ -232,7 +232,7 @@ class SubsRoService {
      */
     async searchSubtitles(params) {
         try {
-            const { imdb_id, tmdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles } = params;
+            const { imdb_id, tmdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles, providerTimeout } = params;
 
             // Determine search field and value
             // Priority: IMDB ID > TMDB ID
@@ -277,7 +277,9 @@ class SubsRoService {
 
             log.debug(() => `[SubsRo] Searching: ${url}`);
 
-            const response = await this.client.get(url);
+            // Use providerTimeout from config if provided, otherwise use client default
+            const requestConfig = providerTimeout ? { timeout: providerTimeout } : {};
+            const response = await this.client.get(url, requestConfig);
 
             // Check for valid response
             if (!response.data) {
@@ -528,7 +530,19 @@ class SubsRoService {
      * @param {number} maxRetries - Maximum number of retries (default: 3)
      * @returns {Promise<string>} - Subtitle content as text
      */
-    async downloadSubtitle(fileId, maxRetries = 3) {
+    async downloadSubtitle(fileId, options = {}) {
+        // Support legacy call pattern: downloadSubtitle(fileId, maxRetries)
+        // New pattern: downloadSubtitle(fileId, { timeout, maxRetries })
+        let maxRetries = 3;
+        let timeout = 20000; // Default 20s for downloads (larger files)
+
+        if (typeof options === 'number') {
+            // Legacy: second arg was maxRetries
+            maxRetries = options;
+        } else if (options) {
+            timeout = options.timeout || 20000;
+            maxRetries = options.maxRetries || 3;
+        }
         // Validate fileId format
         if (!fileId || !fileId.startsWith('subsro_')) {
             throw new Error('Invalid Subs.ro file ID format');
@@ -566,7 +580,7 @@ class SubsRoService {
 
                 const response = await this.client.get(downloadUrl, {
                     responseType: 'arraybuffer',
-                    timeout: 20000 // 20 second timeout for downloads
+                    timeout: timeout // Use configurable timeout
                 });
 
                 const buffer = Buffer.from(response.data);

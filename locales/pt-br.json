@@ -973,6 +973,13 @@
         "moreProviders": {
           "title": "Mais provedores (beta)",
           "description": "Fontes de legendas adicionais, incluindo provedores comunitários e agregadores."
+        },
+        "timeout": {
+          "title": "Tempo de espera do provedor",
+          "description": "Tempo máximo de espera para cada provedor de legendas (em segundos).",
+          "note": "Menor = respostas mais rápidas mas pode perder provedores lentos. Maior = mais confiável mas mais lento. Padrão: 12s",
+          "ariaLabel": "Tempo de espera do provedor de legendas",
+          "slowWarning": "SCS, Wyzie e SubSource podem ser lentos. Se você não obtiver resultados de legendas, recomendamos valores de tempo de espera mais altos."
         }
       },
       "providersUi": {
@@ -1025,6 +1032,7 @@
           "label": "Modelo de Tradução",
           "helper": "Modelo de IA para traduções",
           "options": {
+            "gemma27b": "Gemma 27b (beta) (Recomendado para Limites de Taxa)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
             "flash3": "Gemini 3.0 Flash (Preview)",

@@ -556,6 +556,10 @@ Translate to {target_language}.`;
      * Each model has its own optimal settings for thinking and temperature
      */
     const MODEL_SPECIFIC_DEFAULTS = {
+        'gemma-3-27b-it': {
+            thinkingBudget: 0,  // Gemma doesn't support thinking
+            temperature: 0.7
+        },
         'gemini-flash-lite-latest': {
             thinkingBudget: 0,
             temperature: 0.7
@@ -654,7 +658,7 @@ Translate to {target_language}.`;
         return merged;
     }
 
-    function getDefaultConfig(modelName = 'gemini-3-flash-preview') {
+    function getDefaultConfig(modelName = 'gemma-3-27b-it') {
         const modelDefaults = getModelSpecificDefaults(modelName);
 
         return {
@@ -722,6 +726,8 @@ Translate to {target_language}.`;
                     enabled: false // Wyzie Subs - free aggregator, no API key needed
                 }
             },
+            // Subtitle provider timeout in seconds (min: 8, max: 30, default: 12)
+            subtitleProviderTimeout: 12,
             translationCache: {
                 enabled: true,
                 duration: 0, // hours, 0 = permanent
@@ -4659,6 +4665,7 @@ Translate to {target_language}.`;
 
         // Define hardcoded multi-model options
         const hardcodedModels = [
+            { name: 'gemma-3-27b-it', displayName: 'Gemma 27b (beta) (Recommended for Rate Limits)' },
             { name: 'gemini-flash-lite-latest', displayName: 'Gemini 2.5 Flash-Lite' },
             { name: 'gemini-2.5-flash-preview-09-2025', displayName: 'Gemini 2.5 Flash' },
             { name: 'gemini-3-flash-preview', displayName: 'Gemini 3.0 Flash (beta)' },
@@ -4932,7 +4939,7 @@ Translate to {target_language}.`;
      * Build a migrated config for a new version, preserving only whitelisted fields.
      * - Resets selected model and ALL advanced settings to defaults
      * - Preserves: Gemini API key, subtitle sources enabled/disabled, provider API keys/credentials (if provider still exists),
-     *   source/target languages, and Other Settings checkboxes (Sub Toolbox, cacheEnabled, bypassCache)
+     *   source/target languages, Other Settings checkboxes (Sub Toolbox, cacheEnabled, bypassCache), and subtitleProviderTimeout
      */
     function migrateConfigForNewVersion(oldConfig) {
         const defaults = getDefaultConfig();
@@ -4998,6 +5005,13 @@ Translate to {target_language}.`;
                     // Preserve sources config if it exists
                     if (oldWyzie.sources && typeof oldWyzie.sources === 'object') {
                         newConfig.subtitleProviders.wyzie.sources = { ...oldWyzie.sources };
+                    } else if (oldWyzie.enabled === true) {
+                        // BACKWARDS COMPAT: If user had Wyzie enabled but no sources saved,
+                        // default to ALL sources enabled (preserves their previous behavior)
+                        newConfig.subtitleProviders.wyzie.sources = {
+                            opensubtitles: true, subf2m: true, subdl: true,
+                            podnapisi: true, gestdown: true, animetosho: true
+                        };
                     }
                 }
 
@@ -5056,6 +5070,9 @@ Translate to {target_language}.`;
             newConfig.singleBatchMode = oldConfig.singleBatchMode === true;
             // - exclude HI/SDH subtitles
             newConfig.excludeHearingImpairedSubtitles = oldConfig.excludeHearingImpairedSubtitles === true;
+            // - subtitle provider timeout (preserve user's setting, fallback to default 12 if not set)
+            const oldTimeout = parseInt(oldConfig.subtitleProviderTimeout, 10);
+            newConfig.subtitleProviderTimeout = Number.isFinite(oldTimeout) ? Math.max(8, Math.min(30, oldTimeout)) : 12;
 
             // Reset selected model to default (do NOT preserve old) and reset advanced settings to defaults
             newConfig.geminiModel = defaults.geminiModel;
@@ -5298,14 +5315,14 @@ Translate to {target_language}.`;
         if (wyzieSources) {
             wyzieSources.style.display = wyzieEnabled ? 'block' : 'none';
         }
-        // Default all sources to enabled if not specified
+        // Default all sources to DISABLED if not specified (user must opt-in)
         const wyzieSourceConfig = currentConfig.subtitleProviders?.wyzie?.sources || {
-            opensubtitles: true, subf2m: true, subdl: true, podnapisi: true, gestdown: true, animetosho: true
+            opensubtitles: false, subf2m: false, subdl: false, podnapisi: false, gestdown: false, animetosho: false
         };
         const sourceIds = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho'];
         sourceIds.forEach(src => {
             const el = document.getElementById('wyzieSource' + src.charAt(0).toUpperCase() + src.slice(1));
-            if (el) el.checked = wyzieSourceConfig[src] !== false; // Default to true
+            if (el) el.checked = wyzieSourceConfig[src] === true; // Default to false for new users
         });
         // Add toggle listener to show/hide sources
         if (wyzieToggle) {
@@ -5323,6 +5340,24 @@ Translate to {target_language}.`;
             subsroApiKeyEl.value = currentConfig.subtitleProviders?.subsro?.apiKey || '';
         }
         toggleProviderConfig('subsroConfig', subsroEnabled);
+
+        // Load subtitle provider timeout setting (min: 8, max: 30, default: 12)
+        const timeoutSlider = document.getElementById('subtitleProviderTimeout');
+        const timeoutValueEl = document.getElementById('subtitleProviderTimeoutValue');
+        if (timeoutSlider) {
+            const savedTimeout = currentConfig.subtitleProviderTimeout || 12;
+            // Clamp to valid range
+            const clampedTimeout = Math.max(8, Math.min(30, savedTimeout));
+            timeoutSlider.value = clampedTimeout;
+            if (timeoutValueEl) timeoutValueEl.textContent = clampedTimeout + 's';
+
+            // Update display and config on change
+            timeoutSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value, 10);
+                if (timeoutValueEl) timeoutValueEl.textContent = value + 's';
+                currentConfig.subtitleProviderTimeout = value;
+            });
+        }
 
         // Load Sub Toolbox setting (unifies file translation and sync actions)
         const toolboxEnabled = currentConfig.subToolboxEnabled === true
@@ -5554,12 +5589,12 @@ Translate to {target_language}.`;
                 wyzie: {
                     enabled: document.getElementById('enableWyzie')?.checked || false,
                     sources: {
-                        opensubtitles: document.getElementById('wyzieSourceOpensubtitles')?.checked !== false,
-                        subf2m: document.getElementById('wyzieSourceSubf2m')?.checked !== false,
-                        subdl: document.getElementById('wyzieSourceSubdl')?.checked !== false,
-                        podnapisi: document.getElementById('wyzieSourcePodnapisi')?.checked !== false,
-                        gestdown: document.getElementById('wyzieSourceGestdown')?.checked !== false,
-                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked !== false
+                        opensubtitles: document.getElementById('wyzieSourceOpensubtitles')?.checked === true,
+                        subf2m: document.getElementById('wyzieSourceSubf2m')?.checked === true,
+                        subdl: document.getElementById('wyzieSourceSubdl')?.checked === true,
+                        podnapisi: document.getElementById('wyzieSourcePodnapisi')?.checked === true,
+                        gestdown: document.getElementById('wyzieSourceGestdown')?.checked === true,
+                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked === true
                     }
                 },
                 subsro: {
@@ -5567,6 +5602,8 @@ Translate to {target_language}.`;
                     apiKey: document.getElementById('subsroApiKey')?.value?.trim() || ''
                 }
             },
+            // Subtitle provider timeout (clamp to 8-30 range)
+            subtitleProviderTimeout: Math.max(8, Math.min(30, parseInt(document.getElementById('subtitleProviderTimeout')?.value, 10) || 12)),
             translationCache: {
                 enabled: !isBypassRequested(), // Enabled when NOT in bypass mode
                 duration: 0,

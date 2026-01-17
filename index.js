@@ -58,6 +58,7 @@ const { quickNavScript } = require('./src/utils/quickNav');
 const streamActivity = require('./src/utils/streamActivity');
 const { translateInParallel } = require('./src/utils/parallelTranslation');
 const syncCache = require('./src/utils/syncCache');
+const { warmUpConnections, startKeepAlivePings, stopKeepAlivePings, getPoolStats } = require('./src/utils/httpAgents');
 const embeddedCache = require('./src/utils/embeddedCache');
 const { generateSubtitleSyncPage } = require('./src/utils/syncPageGenerator');
 const { generateSubToolboxPage, generateEmbeddedSubtitlePage, generateAutoSubtitlePage } = require('./src/utils/toolboxPageGenerator');
@@ -7218,6 +7219,21 @@ function generateTranslationSelectorPage(subtitles, videoId, targetLang, configS
 // Middleware to replace {{ADDON_URL}} placeholder in responses
 // This is CRITICAL because Stremio SDK uses res.end() not res.json()
 app.use('/addon/:config', (req, res, next) => {
+    // REQUEST TRACE: Log all incoming addon requests (helps diagnose "Stremio not sending requests" issues)
+    // This runs BEFORE any processing, so if this doesn't log, the request never reached the server
+    const requestPath = req.path || req.url || 'unknown';
+    const isSubtitlesRequest = requestPath.includes('/subtitles/');
+    const isManifestRequest = requestPath.includes('/manifest.json');
+    const isDownloadRequest = requestPath.includes('/subtitle/') || requestPath.includes('/translate/');
+
+    if (isSubtitlesRequest || isManifestRequest) {
+        // Log subtitle and manifest requests at INFO level for visibility
+        log.info(() => `[Addon Request] ${req.method} ${requestPath.substring(0, 100)} (UA: ${(req.get('user-agent') || 'none').substring(0, 50)})`);
+    } else if (isDownloadRequest) {
+        // Log download requests at DEBUG level (these are frequent)
+        log.debug(() => `[Addon Request] ${req.method} ${requestPath.substring(0, 100)}`);
+    }
+
     // CRITICAL: Prevent caching to avoid cross-user config contamination
     setNoStore(res);
 
@@ -7568,6 +7584,28 @@ app.use((error, req, res, next) => {
         log.error(() => '[Startup] Failed to initialize sync cache:', error.message);
     }
 
+    // Warm up connections to subtitle providers in background
+    // This establishes TLS connections before users need them (saves 150-500ms per provider)
+    try {
+        log.info(() => '[Startup] Pre-warming connections to subtitle providers...');
+        // Run warmup in background, don't block startup
+        warmUpConnections().then(results => {
+            const successCount = results.filter(r => r.success).length;
+            log.info(() => `[Startup] Connection warm-up finished: ${successCount}/${results.length} providers ready`);
+        }).catch(error => {
+            log.warn(() => `[Startup] Connection warm-up encountered errors: ${error.message}`);
+        });
+    } catch (error) {
+        log.warn(() => '[Startup] Failed to start connection warm-up:', error.message);
+    }
+
+    // Start keep-alive pings to maintain warm connections during idle periods
+    try {
+        startKeepAlivePings();
+    } catch (error) {
+        log.error(() => '[Startup] Failed to initialize sync cache:', error.message);
+    }
+
     // CRITICAL FIX: Wait for session manager to be ready before accepting requests
     // This prevents "session not found" errors during server startup
     try {
@@ -7640,6 +7678,10 @@ app.use((error, req, res, next) => {
 
         // Setup graceful shutdown handlers now that server is running
         sessionManager.setupShutdownHandlers(server);
+
+        // Stop keep-alive pings on graceful shutdown
+        process.on('SIGTERM', () => stopKeepAlivePings());
+        process.on('SIGINT', () => stopKeepAlivePings());
     });
 })();
 

@@ -75,25 +75,28 @@ Please pick another subtitle or provider.`;
 }
 
 class SubDLService {
+  // Static/singleton axios client - shared across all instances for connection reuse
+  static client = axios.create({
+    baseURL: SUBDL_API_URL,
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate, br'
+    },
+    httpAgent,
+    httpsAgent,
+    lookup: dnsLookup,
+    timeout: 12000,
+    maxRedirects: 5,
+    decompress: true
+  });
+
   constructor(apiKey = null) {
     this.apiKey = apiKey;
 
-    // Create axios instance with default configuration
-    this.client = axios.create({
-      baseURL: SUBDL_API_URL,
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br'
-      },
-      httpAgent,
-      httpsAgent,
-      lookup: dnsLookup,
-      timeout: 10000,
-      maxRedirects: 5,
-      decompress: true
-    });
+    // Use static client for all instances (connection pooling optimization)
+    this.client = SubDLService.client;
 
     if (this.apiKey && this.apiKey.trim() !== '') {
       log.debug(() => '[SubDL] Using API key for requests');
@@ -121,7 +124,7 @@ class SubDLService {
         return [];
       }
 
-      const { imdb_id, type, season, episode, languages } = params;
+      const { imdb_id, type, season, episode, languages, providerTimeout } = params;
 
       // SubDL requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
       if (!imdb_id || imdb_id === 'undefined') {
@@ -170,13 +173,15 @@ class SubDLService {
       log.debug(() => `[SubDL] Converted languages: ${languages.join(',')} -> ${convertedLanguages.join(',')}`);
 
       // Build query parameters for SubDL API
+      // NOTE: Do NOT add releases=1 or hi=1 here!
+      // Although the API docs say they should just add extra fields, in practice
+      // they cause the API to return significantly fewer results (filters to only
+      // entries with these fields populated). Tested: 5 results with vs 30 without.
       const queryParams = {
         api_key: this.apiKey,
         imdb_id: imdb_id, // SubDL accepts 'tt' prefix
         type: type, // 'movie' or 'tv'
-        subs_per_page: 30, // Get maximum results for better ranking (max is 30)
-        releases: 1, // Get releases list for better matching with user's files
-        hi: 1 // Get hearing impaired flag for filtering
+        subs_per_page: 30 // Get maximum results for better ranking (max is 30)
       };
 
       // Only add languages parameter if languages are specified (for "just fetch" mode)
@@ -190,15 +195,18 @@ class SubDLService {
         // Default to season 1 if not specified (common for anime)
         queryParams.season_number = season || 1;
         queryParams.episode_number = episode;
-        // Add full_season=1 to get season pack subtitles in addition to episode-specific ones
-        queryParams.full_season = 1;
+        // NOTE: Do NOT add full_season=1 here! 
+        // According to SubDL API docs, full_season=1 means "only return full season subtitles" (filters to season packs only).
+        // Without it, the API returns episode-specific subtitles which is what we want.
+        // Season packs are still detected via filename pattern matching in the post-processing step below.
       }
 
       log.debug(() => ['[SubDL] Searching with params:', JSON.stringify(redactSensitiveData(queryParams))]);
 
-      const response = await this.client.get('/subtitles', {
-        params: queryParams
-      });
+      // Use providerTimeout from config if provided, otherwise use client default
+      const requestConfig = { params: queryParams };
+      if (providerTimeout) requestConfig.timeout = providerTimeout;
+      const response = await this.client.get('/subtitles', requestConfig);
 
       if (!response.data || response.data.status !== true || !response.data.subtitles || response.data.subtitles.length === 0) {
         log.debug(() => '[SubDL] No subtitles found in response');
@@ -337,21 +345,23 @@ class SubDLService {
           }
 
           // Check if subtitle has a DIFFERENT episode number (wrong episode)
-          for (const name of namesToCheck) {
-            if (!name) continue;
+          // IMPORTANT: Only check the PRIMARY subtitle name here, NOT the releases array!
+          // The 'releases' array from SubDL contains episode-specific release names that
+          // the season pack is compatible with (e.g., S01E06, S01E07 filenames), which
+          // doesn't mean the subtitle itself is only for that episode. Using releases
+          // for negative filtering causes false positives with season packs.
+          const primaryName = sub.name || '';
+          const primaryNameLower = primaryName.toLowerCase();
 
-            const nameLower = name.toLowerCase();
+          // Extract season/episode from the PRIMARY subtitle name only
+          const episodeMatch = primaryNameLower.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
+          if (episodeMatch) {
+            const subSeason = parseInt(episodeMatch[1] || episodeMatch[3]);
+            const subEpisode = parseInt(episodeMatch[2] || episodeMatch[4]);
 
-            // Extract season/episode from subtitle name
-            const episodeMatch = nameLower.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
-            if (episodeMatch) {
-              const subSeason = parseInt(episodeMatch[1] || episodeMatch[3]);
-              const subEpisode = parseInt(episodeMatch[2] || episodeMatch[4]);
-
-              // If it explicitly mentions a different episode, filter it out
-              if (subSeason === season && subEpisode !== episode) {
-                return false; // Wrong episode - exclude
-              }
+            // If the primary name explicitly mentions a different episode, filter it out
+            if (subSeason === season && subEpisode !== episode) {
+              return false; // Wrong episode - exclude
             }
           }
 
@@ -399,7 +409,19 @@ class SubDLService {
    * @param {string} subtitles_id - SubDL subtitle file ID
    * @returns {Promise<string>} - Subtitle content as text
    */
-  async downloadSubtitle(fileId, subdl_id = null, subtitles_id = null) {
+  async downloadSubtitle(fileId, options = {}) {
+    // Support legacy call pattern: downloadSubtitle(fileId, subdl_id, subtitles_id)
+    // New pattern: downloadSubtitle(fileId, { timeout })
+    let subdl_id = null;
+    let subtitles_id = null;
+    let timeout = options?.timeout || 12000; // Default 12s
+
+    // Handle legacy call pattern where second arg is subdl_id string
+    if (typeof options === 'string') {
+      subdl_id = options;
+      subtitles_id = arguments[2] || null;
+      timeout = 12000;
+    }
     try {
       log.debug(() => ['[SubDL] Downloading subtitle:', fileId]);
 
@@ -444,7 +466,7 @@ class SubDLService {
         headers: {
           'User-Agent': USER_AGENT
         },
-        timeout: 12000 // 12 second timeout
+        timeout: timeout // Use configurable timeout
       });
 
       log.debug(() => ['[SubDL] Response status:', subtitleResponse.status]);

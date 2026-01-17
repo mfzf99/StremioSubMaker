@@ -15,6 +15,7 @@ const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
 const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { appendHiddenInformationalNote } = require('../utils/subtitle');
 const { sanitizeApiKeyForHeader } = require('../utils/security');
+const providerMetadataCache = require('../utils/providerMetadataCache');
 const zlib = require('zlib');
 const log = require('../utils/logger');
 const { isTrueishFlag } = require('../utils/subtitleFlags');
@@ -194,16 +195,12 @@ ${retryHint}`;
 }
 
 class SubSourceService {
-  constructor(apiKey = null) {
-    this.apiKey = apiKey;
-    this.baseURL = SUBSOURCE_API_URL;
-    this._linkCache = new Map(); // subsource_id -> direct download URL
-
-    // Configure axios with default headers
-    // Include Client Hints headers for better compatibility
-    this.defaultHeaders = {
+  // Static/singleton axios client - shared across all instances for connection reuse
+  // Note: API key headers are added per-request via { headers: this.defaultHeaders } in each request
+  static client = axios.create({
+    baseURL: SUBSOURCE_API_URL,
+    headers: {
       'User-Agent': USER_AGENT,
-      // Broaden Accept to cover JSON and common subtitle/binary types
       'Accept': 'application/json, application/*+json, application/zip, application/octet-stream, application/x-subrip, text/plain, text/srt, */*',
       'Accept-Encoding': 'gzip, deflate, br',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -215,7 +212,6 @@ class SubSourceService {
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-site',
-      // Normalize Client Hints header casing to typical browser style
       'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"',
@@ -224,7 +220,48 @@ class SubSourceService {
       'sec-ch-ua-bitness': '"64"',
       'sec-ch-ua-full-version': '"131.0.6778.86"',
       'sec-ch-ua-full-version-list': '"Chromium";v="131.0.6778.86", "Not_A Brand";v="24.0.0.0"',
-      // Common XHR indicator header seen from browsers/frameworks
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    httpAgent,
+    httpsAgent,
+    lookup: dnsLookup,
+    timeout: 12000,
+    maxRedirects: 5,
+    decompress: true
+  });
+
+  static initLogged = false;
+
+  constructor(apiKey = null) {
+    this.apiKey = apiKey;
+    this.baseURL = SUBSOURCE_API_URL;
+    this._linkCache = new Map(); // subsource_id -> direct download URL
+
+    // Use static client for all instances (connection pooling optimization)
+    this.client = SubSourceService.client;
+
+    // Configure default headers (stored for per-request use)
+    this.defaultHeaders = {
+      'User-Agent': USER_AGENT,
+      'Accept': 'application/json, application/*+json, application/zip, application/octet-stream, application/x-subrip, text/plain, text/srt, */*',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': 'https://subsource.net/',
+      'Origin': 'https://subsource.net',
+      'DNT': '1',
+      'Sec-GPC': '1',
+      'Connection': 'keep-alive',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-site',
+      'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-ch-ua-platform-version': '"15.0.0"',
+      'sec-ch-ua-arch': '"x86"',
+      'sec-ch-ua-bitness': '"64"',
+      'sec-ch-ua-full-version': '"131.0.6778.86"',
+      'sec-ch-ua-full-version-list': '"Chromium";v="131.0.6778.86", "Not_A Brand";v="24.0.0.0"',
       'X-Requested-With': 'XMLHttpRequest'
     };
 
@@ -233,23 +270,17 @@ class SubSourceService {
     if (sanitizedApiKey) {
       this.defaultHeaders['X-API-Key'] = sanitizedApiKey;
       this.defaultHeaders['api-key'] = sanitizedApiKey;
-      log.debug(() => '[SubSource] Initializing with API key in headers');
+      if (!SubSourceService.initLogged) {
+        log.debug(() => '[SubSource] Initializing with API key in headers');
+      }
     } else if (this.apiKey && this.apiKey.trim() !== '') {
       // API key was provided but contained too many invalid characters (likely corrupted)
       log.warn(() => '[SubSource] API key appears corrupted (contains invalid characters) - please re-enter your SubSource API key');
     }
 
-    // Reusable axios client with pooling + DNS cache
-    this.client = axios.create({
-      baseURL: this.baseURL,
-      headers: this.defaultHeaders,
-      httpAgent,
-      httpsAgent,
-      lookup: dnsLookup,
-      timeout: 7000,
-      maxRedirects: 5,
-      decompress: true
-    });
+    if (!SubSourceService.initLogged) {
+      SubSourceService.initLogged = true;
+    }
   }
 
   rememberDownloadLink(id, url) {
@@ -332,114 +363,81 @@ class SubSourceService {
 
   /**
    * Search for movie/show by IMDB ID to get SubSource movieId
+   * 
+   * Uses Redis-backed cache to avoid repeated API calls.
+   * IMPORTANT: Makes only ONE API call with the user's timeout - no fallback chains.
+   * This ensures SubSource respects the user's timeout setting exactly.
+   * 
    * @param {string} imdb_id - IMDB ID (with 'tt' prefix)
    * @param {number} season - Season number (for TV shows)
+   * @param {number} providerTimeout - Timeout in ms from user config
    * @returns {Promise<string|null>} - SubSource movie ID or null
    */
-  async getMovieId(imdb_id, season = null) {
+  async getMovieId(imdb_id, season = null, providerTimeout = null) {
+    const timeoutMs = providerTimeout || 10000;
+
+    // Check Redis-backed cache first (includes in-memory L1 cache)
+    try {
+      const cached = await providerMetadataCache.get('subsource', 'movieId', imdb_id, season);
+      if (cached) {
+        log.debug(() => `[SubSource] movieId cache HIT: ${imdb_id}${season ? `:S${season}` : ''} → ${cached}`);
+        return cached;
+      }
+    } catch (err) {
+      log.warn(() => `[SubSource] Cache read error: ${err.message}`);
+    }
+
+    // Cache miss - make a SINGLE API call with the user's exact timeout
+    // NO fallback chains - if this fails, we return null immediately
     try {
       let searchUrl = `${this.baseURL}/movies/search?searchType=imdb&imdb=${imdb_id}`;
-
-      // For TV shows, include season to get season-specific movieId
       if (season) {
         searchUrl += `&season=${season}`;
       }
 
-      log.debug(() => ['[SubSource] Searching for movie:', searchUrl]);
+      log.debug(() => `[SubSource] Fetching movieId: ${imdb_id}${season ? ` S${season}` : ''} (timeout: ${timeoutMs}ms)`);
 
       const response = await this.client.get(searchUrl, {
-        responseType: 'json'
+        headers: this.defaultHeaders,
+        responseType: 'json',
+        timeout: timeoutMs
       });
 
-      // Response could be an array of movies or a single movie
-      let movies = Array.isArray(response.data) ? response.data : (response.data.data || []);
+      // Parse response
+      const movies = Array.isArray(response.data) ? response.data : (response.data?.data || []);
 
       if (movies.length > 0) {
         const movieId = movies[0].id || movies[0].movieId;
         const movieTitle = movies[0].title || 'Unknown';
-        const movieSeason = movies[0].season || 'N/A';
-        log.debug(() => `[SubSource] Found movieId=${movieId} for "${movieTitle}" (Season: ${movieSeason}, Total matches: ${movies.length})`);
-        return movieId;
+
+        if (movieId) {
+          // Cache to Redis (async, non-blocking)
+          providerMetadataCache.set('subsource', 'movieId', imdb_id, movieId, season)
+            .catch(err => log.warn(() => `[SubSource] Cache write error: ${err.message}`));
+
+          log.debug(() => `[SubSource] Found movieId=${movieId} for "${movieTitle}"${season ? ` S${season}` : ''}`);
+          return movieId;
+        }
       }
 
-      // Primary search returned no results – try deriving from subtitles/search endpoints
-      try {
-        const derived = await this._deriveMovieIdFromImdb(imdb_id, season);
-        if (derived) return derived;
-      } catch (_) { /* ignore and fall through */ }
-
-      log.debug(() => ['[SubSource] No movie found for IMDB ID:', imdb_id, season ? `Season ${season}` : '']);
+      log.debug(() => `[SubSource] No movie found for: ${imdb_id}${season ? ` S${season}` : ''}`);
       return null;
     } catch (error) {
-      logApiError(error, 'SubSource', 'Get movie ID', { skipResponseData: true, skipUserMessage: true });
-
-      // If timeout/network – attempt a lightweight fallback using endpoints that accept imdb directly
+      // Log the error but don't retry - respect the user's timeout
       const code = error?.code || '';
-      const msg = String(error?.message || '').toLowerCase();
-      const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || msg.includes('timeout');
-      const isNetwork = code === 'ECONNRESET' || code === 'ECONNREFUSED';
-      if (isTimeout || isNetwork) {
-        try {
-          const derived = await this._deriveMovieIdFromImdb(imdb_id, season);
-          if (derived) return derived;
-        } catch (_) { /* ignore */ }
+      const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout/i.test(error?.message || '');
+
+      if (isTimeout) {
+        log.warn(() => `[SubSource] movieId lookup timed out after ${timeoutMs}ms for ${imdb_id}`);
+      } else {
+        logApiError(error, 'SubSource', 'Get movie ID', { skipResponseData: true, skipUserMessage: true });
       }
 
       return null;
     }
   }
 
-  /**
-   * Attempt to derive movieId by querying endpoints that accept imdb directly
-   * Tries /subtitles?imdb=… then /search?imdb=…
-   * @param {string} imdb_id
-   * @param {number|null} season
-   * @returns {Promise<string|null>}
-   */
-  async _deriveMovieIdFromImdb(imdb_id, season = null) {
-    try {
-      const params = new URLSearchParams();
-      params.set('imdb', imdb_id);
-      if (season) params.set('season', String(season));
-      params.set('limit', '5');
 
-      const endpoints = ['/subtitles', '/search'];
-      for (const endpoint of endpoints) {
-        const url = `${this.baseURL}${endpoint}?${params.toString()}`;
-        log.debug(() => `[SubSource] Deriving movieId via ${endpoint} for ${imdb_id}${season ? ` S${season}` : ''}`);
-        try {
-          const { data } = await this.client.get(url, { responseType: 'json', timeout: 5000 });
-
-          let list = null;
-          if (Array.isArray(data)) list = data;
-          else if (data?.subtitles) list = data.subtitles;
-          else if (Array.isArray(data?.data)) list = data.data;
-          else if (Array.isArray(data?.results)) list = data.results;
-
-          if (Array.isArray(list) && list.length > 0) {
-            for (const item of list) {
-              const id = item?.movieId || item?.movie_id || item?.movie?.id || item?.movie?.movieId || item?.movie?.movie_id || null;
-              if (id) {
-                log.debug(() => `[SubSource] Derived movieId=${id} from ${endpoint} imdb=${imdb_id}${season ? ` S${season}` : ''}`);
-                return id;
-              }
-            }
-          }
-        } catch (innerErr) {
-          const status = innerErr?.response?.status;
-          const code = innerErr?.code || '';
-          const msg = String(innerErr?.message || '').toLowerCase();
-          const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT' || msg.includes('timeout');
-          const isNetwork = code === 'ECONNRESET' || code === 'ECONNREFUSED';
-          if (status === 404 || isTimeout || isNetwork) {
-            continue;
-          }
-          break;
-        }
-      }
-    } catch (_) { /* ignore */ }
-    return null;
-  }
 
   /**
    * Search for subtitles using SubSource API
@@ -460,7 +458,7 @@ class SubSourceService {
         return [];
       }
 
-      const { imdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles } = params;
+      const { imdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles, providerTimeout } = params;
 
       // SubSource requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
       if (!imdb_id || imdb_id === 'undefined') {
@@ -468,11 +466,42 @@ class SubSourceService {
         return [];
       }
 
+      // PERFORMANCE: SubSource uses a two-step process:
+      // 1. getMovieId: lookup IMDB -> SubSource movieId (cached in Redis)
+      // 2. searchSubtitles: fetch subtitles using movieId
+      //
+      // To grow the cache and ensure reliable results, we give SubSource EXTRA time:
+      // - movieId lookup gets the FULL user timeout (helps populate cache on slow lookups)
+      // - Subtitle search gets the FULL user timeout (not remaining time after movieId)
+      // However, we cap the TOTAL time to 30s to prevent runaway requests.
+      const SUBSOURCE_TOTAL_CAP_MS = 30000;
+      const userTimeoutMs = providerTimeout || 10000;
+      const totalStartTime = Date.now();
+
       // First, get SubSource's internal movie ID
-      // For TV shows, pass season to get season-specific movieId
-      const movieId = await this.getMovieId(imdb_id, season);
+      // Pass full user timeout since getMovieId checks cache first (usually instant)
+      const movieId = await this.getMovieId(imdb_id, season, userTimeoutMs);
+      const movieIdDurationMs = Date.now() - totalStartTime;
+
       if (!movieId) {
-        log.debug(() => ['[SubSource] Could not find movie ID for:', imdb_id]);
+        log.debug(() => `[SubSource] Could not find movie ID for: ${imdb_id}${season ? ` S${season}` : ''} (took ${movieIdDurationMs}ms)`);
+        return [];
+      }
+
+      // Calculate remaining time within our 30s total cap
+      const elapsedMs = Date.now() - totalStartTime;
+      const remainingInCap = Math.max(0, SUBSOURCE_TOTAL_CAP_MS - elapsedMs);
+      // Subtitle search gets the smaller of: user timeout OR remaining time in cap
+      const searchTimeoutMs = Math.min(userTimeoutMs, remainingInCap);
+
+      // Log if movieId took significant time (cache miss)
+      if (movieIdDurationMs > 1000) {
+        log.debug(() => `[SubSource] movieId lookup took ${movieIdDurationMs}ms - subtitle search gets ${searchTimeoutMs}ms (capped at 30s total)`);
+      }
+
+      // Check if we have enough time left for a meaningful search
+      if (searchTimeoutMs < 2000) {
+        log.warn(() => `[SubSource] Insufficient time remaining for search after movieId lookup (${searchTimeoutMs}ms left of 30s cap)`);
         return [];
       }
 
@@ -596,10 +625,11 @@ class SubSourceService {
       const queryString = new URLSearchParams(queryParams).toString();
       const url = `${this.baseURL}${endpoint}?${queryString}`;
 
+      // searchTimeoutMs already calculated above with 30s total cap
+
       try {
-        const rawResponse = await this.client.get(url, {
-          responseType: 'json'
-        });
+        const requestConfig = { headers: this.defaultHeaders, responseType: 'json', timeout: searchTimeoutMs };
+        const rawResponse = await this.client.get(url, requestConfig);
 
         response = rawResponse.data;
       } catch (error) {
@@ -608,9 +638,10 @@ class SubSourceService {
           endpoint = '/search';
           const searchUrl = `${this.baseURL}${endpoint}?${queryString}`;
 
-          const rawResponse = await this.client.get(searchUrl, {
-            responseType: 'json'
-          });
+          // Fallback also gets full timeout
+          const searchConfig = { headers: this.defaultHeaders, responseType: 'json', timeout: searchTimeoutMs };
+          const rawResponse = await this.client.get(searchUrl, searchConfig);
+
 
           response = rawResponse.data;
         } else {
@@ -938,7 +969,17 @@ class SubSourceService {
    * @param {string} subsource_id - SubSource subtitle ID
    * @returns {Promise<string>} - Subtitle content as text
    */
-  async downloadSubtitle(fileId, subsource_id = null) {
+  async downloadSubtitle(fileId, options = {}) {
+    // Support legacy call pattern: downloadSubtitle(fileId, subsource_id)
+    // New pattern: downloadSubtitle(fileId, { timeout })
+    let subsource_id = null;
+    const timeout = options?.timeout || 12000; // Default 12s
+
+    // Handle legacy call pattern where second arg is subsource_id string
+    if (typeof options === 'string') {
+      subsource_id = options;
+    }
+
     try {
       log.debug(() => ['[SubSource] Downloading subtitle:', fileId]);
 
@@ -1034,6 +1075,7 @@ class SubSourceService {
 
           // Try to fetch subtitle details to obtain a direct download URL (often served via CDN)
           const detailResp = await this.client.get(`/subtitles/${subsource_id}`, {
+            headers: this.defaultHeaders,
             responseType: 'json',
             timeout: 5000
           }).catch(() => null);
@@ -1082,7 +1124,7 @@ class SubSourceService {
             const isRetryableStatus = status === 429 || status === 503 || (status >= 500 && status <= 599);
             if (isTimeout || isNetwork || isRetryableStatus) triggerFallback();
             throw err;
-          }), { totalTimeoutMs: 7000, maxRetries: 2, baseDelay: 800, minAttemptTimeoutMs: 2500 });
+          }), { totalTimeoutMs: timeout, maxRetries: 2, baseDelay: 800, minAttemptTimeoutMs: 2500 });
         })();
 
         // Resolve with the first successful response (ignore the first rejection)

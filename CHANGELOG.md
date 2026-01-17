@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.32
+
+**New Features:**
+
+- **Gemma 27b Translation Model:** Added "Gemma 27b (beta) (Recommended for Rate Limits)" to the Gemini model selection dropdown. Gemma 27b is now the default model for new users, offering better rate limit handling for free-tier API users.
+
+**Performance Improvements:**
+
+- **Connection pre-warming at startup:** The addon warms up TLS connections to all subtitle providers (OpenSubtitles V3, SubDL, SubSource, Wyzie Subs, SCS, Subs.ro) during server startup. This is a one-time optimization for the very first user after a deploy.
+- **Keep-alive pings every 45 seconds:** A background task continuously pings all major providers (OpenSubtitles V3, SubDL, SubSource, Wyzie Subs, SCS) to maintain warm connections and detect outages. This is the **main mechanism** that keeps connections ready over time. When a provider starts failing (timeouts, connection errors), the circuit breaker immediately knows.
+- **Proactive provider skipping:** When a user requests subtitles, the addon **immediately skips unhealthy providers** instead of waiting 12-20 seconds for a timeout. If provider pings have failed 3 times in a row, that provider is skipped for 60 seconds. This prevents one slow/dead provider from delaying the entire subtitle response. Applied to both the main subtitle search AND the translation selector endpoints.
+- **Circuit breaker integration in all subtitle searches:** Both the main subtitle handler and the translation selector now record success/failure to the circuit breaker. Connection errors (timeout, reset, abort, EPROTO) trigger failures. Successful requests help close the circuit after provider recovery.
+- **Static/singleton axios clients for subtitle services:** `WyzieSubsService`, `SubDLService`, `OpenSubtitlesV3Service`, `StremioCommunitySubtitlesService`, and `SubSourceService` now use static axios clients shared across all instances. This maximizes connection reuse and reduces memory allocation.
+- **Connection pool statistics:** Added `getPoolStats()` and `isProviderHealthy()` functions for monitoring and debugging.
+- **SubSource MovieID Cache:** Implemented Redis-backed persistent cache for SubSource `movieId` lookups with 30-day TTL. This eliminates redundant API calls for repeated lookups of the same title, significantly improving SubSource response times for frequently accessed content. Cache is shared across instances via Redis with Pub/Sub invalidation support.
+
+**Configurable Provider Timeouts:**
+
+- **Configurable subtitle provider timeout:** New slider in the "Other Settings" section on the config page allows adjusting the timeout for subtitle provider searches (8-30 seconds, default 17s). Lower values provide faster responses but may miss slow providers; higher values are more reliable but slower.
+- **Default timeout increased to 17 seconds:** The default provider timeout has been increased from 12s to 17s to accommodate slower providers like SCS, Wyzie, and SubSource. Existing user sessions without a saved timeout will automatically use the new default.
+- **Slow provider warning:** Added a red warning message on the config page informing users that "SCS, Wyzie and SubSource might be slow. If you get no subtitle results, we recommend higher timeout values."
+- **Timeout setting moved to Other Settings:** The provider timeout configuration has been moved from the "More Providers (beta)" section to the "Other Settings" section, making it accessible to all users regardless of beta mode.
+- **Unified timeout architecture:** The configurable timeout now controls three layers:
+  - **Individual provider request timeout:** Each subtitle service's search request uses `(configTimeout - 2s)` to allow buffer for orchestration.
+  - **Orchestration timeout:** The main search races all providers and returns available results after `configTimeout` seconds.
+  - **Download timeout:** Subtitle file downloads use `max(12s, configTimeout)` to ensure adequate time for larger files.
+- **Per-provider timeout handling:** All 7 subtitle services (OpenSubtitles V3, OpenSubtitles Auth, SubDL, SubSource, SCS, WyzieSubs, SubsRo) now use the configurable timeout for both search and download operations. SCS maintains a minimum 25s timeout due to known slow server responses.
+- **Backend normalization:** The timeout value is clamped to 8-30 seconds in `normalizeConfig()` to prevent extreme values.
+- **Environment variable override preserved:** The `PROVIDER_SEARCH_TIMEOUT_MS` environment variable still works as an override for the orchestration timeout when needed.
+
+**Gemini Improvements:**
+
+- **Gemini retry logic for Gemma models:** Gemma models now automatically retry on `finishReason: OTHER` errors which can occur during normal operation. Additionally, Gemma models retry on rate limit errors (429s) up to 2 times with exponential backoff (8s → 24s) to handle free-tier rate limits gracefully.
+
+**Bug Fixes:**
+
+- **Fixed SubDL subtitle fetching for TV shows:** Fixed an issue where SubDL returned 0 results for some TV show episodes. The fix ensures correct handling of season packs and episode-specific subtitles, properly filtering by season and episode numbers when searching for TV content.
+- **Fixed SubSource API key authentication:** Fixed 401 Unauthorized errors when using the SubSource API. API keys are now correctly included in all SubSource requests, including movieId lookups and subtitle searches.
+- **Fixed OpenSubtitles timeout errors misreported as invalid credentials:** When the OpenSubtitles API times out during authentication (e.g., `timeout of 12000ms exceeded`), the addon was incorrectly reporting "authentication failed: invalid username/password" even when credentials were valid. The root cause was that `loginWithCredentials()` called `handleAuthError()` for ALL errors (including timeouts/network issues), which returned `null`, and then `searchSubtitles()` interpreted any `null` return as "bad credentials". Now timeout, network, and DNS errors are properly thrown and logged as connection issues, while only actual authentication failures (cached 401/403 responses) trigger the "invalid credentials" message.
+- **LOTS of subtitles providers' improvements.**
+
+**Other Changes:**
+
+- Graceful shutdown now properly stops keep-alive pings to prevent lingering timers.
+
 ## SubMaker v1.4.31
 
 **Improvements:**

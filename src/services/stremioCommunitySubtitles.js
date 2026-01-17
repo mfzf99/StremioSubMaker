@@ -1,12 +1,273 @@
 const axios = require('axios');
+const https = require('https');
+const tls = require('tls');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
 const log = require('../utils/logger');
 const { version } = require('../utils/version');
+
+// Chrome-like cipher suite ordering for TLS fingerprint compatibility
+// Cloudflare uses JA3 fingerprinting to detect automated clients
+// Node.js has a different default cipher order than browsers, causing blocks
+// This cipher list matches Chrome's ordering to bypass JA3 detection
+const CHROME_CIPHERS = [
+    // TLS 1.3 ciphers (highest priority, same order as Chrome)
+    'TLS_AES_128_GCM_SHA256',
+    'TLS_AES_256_GCM_SHA384',
+    'TLS_CHACHA20_POLY1305_SHA256',
+    // TLS 1.2 ECDHE ciphers (Chrome order)
+    'ECDHE-ECDSA-AES128-GCM-SHA256',
+    'ECDHE-RSA-AES128-GCM-SHA256',
+    'ECDHE-ECDSA-AES256-GCM-SHA384',
+    'ECDHE-RSA-AES256-GCM-SHA384',
+    'ECDHE-ECDSA-CHACHA20-POLY1305',
+    'ECDHE-RSA-CHACHA20-POLY1305',
+    // Fallback ciphers
+    'ECDHE-RSA-AES128-SHA',
+    'ECDHE-RSA-AES256-SHA',
+    'AES128-GCM-SHA256',
+    'AES256-GCM-SHA384',
+    'AES128-SHA',
+    'AES256-SHA'
+].join(':');
+
+// Custom HTTPS agent for SCS with Chrome-like TLS fingerprint
+// SSL alert 49 (access denied) occurs when Cloudflare's JA3 fingerprinting detects Node.js
+// NOTE: keepAlive ENABLED with short freeSocketTimeout to prevent stale connections
+// This saves ~150-300ms per request by reusing TLS sessions while still cleaning up
+// idle sockets before they can cause HPE_INVALID_CONSTANT parser errors
+const scsHttpsAgent = new https.Agent({
+    keepAlive: true,           // ENABLED: Reuse connections for performance
+    timeout: 30000,            // 30 second socket timeout (server can take 16+ seconds)
+    freeSocketTimeout: 15000,  // Close idle sockets after 15s to prevent stale connection issues
+    maxSockets: 10,            // Limit concurrent connections per host
+    maxFreeSockets: 2,         // Keep only 2 idle sockets
+    // TLS configuration to mimic Chrome's TLS fingerprint
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.3',
+    ciphers: CHROME_CIPHERS,
+    // Force HTTP/1.1 ONLY - prevents HPE_INVALID_CONSTANT from HTTP/2 frame confusion
+    ALPNProtocols: ['http/1.1'],
+    // Curve preferences like Chrome
+    ecdhCurve: 'X25519:P-256:P-384',
+    rejectUnauthorized: true,
+    honorCipherOrder: false, // Let server choose (matches browser behavior)
+});
+
+/**
+ * Check if error is an HTTP parser error (malformed/incomplete response)
+ * HPE_INVALID_CONSTANT occurs when the server sends corrupt data or
+ * the connection is cut mid-response (e.g., due to timeout)
+ * @param {Error} error - The error to check
+ * @returns {boolean} - True if this is an HTTP parser error
+ */
+function isHttpParserError(error) {
+    const code = error.code || '';
+    const message = error.message || '';
+    // HPE_* errors are from llhttp (Node's HTTP parser)
+    // These occur when response is malformed or truncated
+    return code.startsWith('HPE_') ||
+        message.includes('Parse Error') ||
+        message.includes('Expected HTTP');
+}
+
+/**
+ * Check if error is an SSL/TLS related error
+ * @param {Error} error - The error to check
+ * @returns {boolean} - True if this is an SSL error
+ */
+function isSSLError(error) {
+    const code = error.code || '';
+    const message = error.message || '';
+    // EPROTO: SSL protocol error (includes alert 49)
+    // ECONNRESET: Connection reset during SSL handshake
+    // ETIMEDOUT: Can occur during SSL negotiation 
+    // ERR_SSL_*: OpenSSL specific errors
+    return code === 'EPROTO' ||
+        code === 'ECONNRESET' ||
+        message.includes('SSL') ||
+        message.includes('TLS') ||
+        message.includes('ssl3_') ||
+        message.includes('alert');
+}
+
+/**
+ * Make request with automatic retry on SSL errors and circuit breaker integration
+ * SSL errors can occur when pooled connections go stale
+ * @param {Function} requestFn - Function that returns a promise for the request
+ * @param {string} context - Context for logging
+ * @returns {Promise} - Response from the request
+ */
+async function makeRequestWithRetry(requestFn, context) {
+    try {
+        const result = await requestFn();
+        recordSuccess(); // Record success for circuit breaker
+        return result;
+    } catch (error) {
+        // Check if this is an HTTP parser error (truncated/corrupt response)
+        // This usually means the server is slow and our timeout cut off the response
+        if (isHttpParserError(error)) {
+            log.debug(() => `[SCS] HTTP parser error in ${context} (likely slow server response): ${error.code || error.message}`);
+            // Don't retry parser errors - they indicate server-side slowness
+            // Just record for circuit breaker and throw
+            recordFailure(error);
+            throw error;
+        }
+
+        if (isSSLError(error)) {
+            log.debug(() => `[SCS] SSL error detected in ${context}, retrying with fresh connection...`);
+            // Destroy any stale sockets in the agent
+            scsHttpsAgent.destroy();
+            // Small delay before retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // Retry once with fresh connection
+            try {
+                const result = await requestFn();
+                recordSuccess();
+                return result;
+            } catch (retryError) {
+                // Retry also failed - record failure for circuit breaker
+                if (isCircuitBreakerError(retryError)) {
+                    recordFailure(retryError);
+                }
+                throw retryError;
+            }
+        }
+        // Non-SSL error - still record if it's a connection error
+        if (isCircuitBreakerError(error)) {
+            recordFailure(error);
+        }
+        throw error;
+    }
+}
 
 const SCS_API_URL = 'https://stremio-community-subtitles.top';
 const SCS_FALLBACK_TOKEN = 'yNejf3661w9R1Agdh7ARxE8MzhSVpL2TzMn5jueHFzw'; // Default community token
 const USER_AGENT = `SubMaker v${version}`;
 
+// Circuit breaker pattern for SCS service resilience
+// Prevents repeated failed requests when service is down (SSL errors, Cloudflare blocks, etc.)
+const circuitBreaker = {
+    state: 'CLOSED',              // CLOSED (normal), OPEN (blocked), HALF_OPEN (testing)
+    failureCount: 0,              // Consecutive failure count
+    lastFailureTime: null,        // Timestamp of last failure
+    lastSuccessTime: null,        // Timestamp of last success
+    FAILURE_THRESHOLD: 3,         // Open circuit after this many failures
+    RESET_TIMEOUT_MS: 300000,     // 5 minutes before trying again (OPEN -> HALF_OPEN)
+    LOG_INTERVAL_MS: 300000,      // Only log circuit state changes every 5 minutes
+    lastLogTime: 0
+};
+
+/**
+ * Check if the circuit breaker allows a request
+ * @returns {{ allowed: boolean, reason?: string }} - Whether request is allowed
+ */
+function isRequestAllowed() {
+    const now = Date.now();
+
+    if (circuitBreaker.state === 'CLOSED') {
+        return { allowed: true };
+    }
+
+    if (circuitBreaker.state === 'OPEN') {
+        // Check if enough time has passed to try again
+        const timeSinceLastFailure = now - circuitBreaker.lastFailureTime;
+        if (timeSinceLastFailure >= circuitBreaker.RESET_TIMEOUT_MS) {
+            // Transition to HALF_OPEN - allow one request to test
+            circuitBreaker.state = 'HALF_OPEN';
+            log.info(() => '[SCS] Circuit breaker entering HALF_OPEN state - testing connection');
+            return { allowed: true };
+        }
+
+        // Still in cooldown period
+        const remainingSecs = Math.ceil((circuitBreaker.RESET_TIMEOUT_MS - timeSinceLastFailure) / 1000);
+        return {
+            allowed: false,
+            reason: `Circuit breaker OPEN - service unreachable. Retry in ${remainingSecs}s`
+        };
+    }
+
+    // HALF_OPEN - allow the test request
+    return { allowed: true };
+}
+
+/**
+ * Record a failed request (SSL error, connection error, etc.)
+ */
+function recordFailure(error) {
+    const now = Date.now();
+    circuitBreaker.failureCount++;
+    circuitBreaker.lastFailureTime = now;
+
+    // Detect specific SSL access denied error which indicates security software blocking
+    const errorMsg = error.message || '';
+    const isAccessDenied = errorMsg.includes('alert access denied') ||
+        errorMsg.includes('alert number 49') ||
+        error.code === 'ERR_SSL_TLSV1_ALERT_ACCESS_DENIED';
+
+    if (circuitBreaker.state === 'HALF_OPEN') {
+        // Test request failed - go back to OPEN
+        circuitBreaker.state = 'OPEN';
+        if (now - circuitBreaker.lastLogTime >= circuitBreaker.LOG_INTERVAL_MS) {
+            if (isAccessDenied) {
+                log.warn(() => `[SCS] TLS connection blocked - possibly by firewall/security software`);
+            } else {
+                log.warn(() => `[SCS] Circuit breaker OPEN - service still unreachable (${error.code || error.message})`);
+            }
+            circuitBreaker.lastLogTime = now;
+        }
+    } else if (circuitBreaker.failureCount >= circuitBreaker.FAILURE_THRESHOLD) {
+        // Too many failures - open the circuit
+        if (circuitBreaker.state !== 'OPEN') {
+            circuitBreaker.state = 'OPEN';
+            if (isAccessDenied) {
+                log.warn(() => `[SCS] Circuit OPEN - TLS blocked. This is likely caused by firewall/security software blocking connections to stremio-community-subtitles.top. Consider adding SubMaker to your firewall exclusions.`);
+            } else {
+                log.warn(() => `[SCS] Circuit breaker OPEN after ${circuitBreaker.failureCount} failures - pausing requests for 5 minutes`);
+            }
+            circuitBreaker.lastLogTime = now;
+        }
+    }
+}
+
+/**
+ * Record a successful request
+ */
+function recordSuccess() {
+    if (circuitBreaker.state !== 'CLOSED') {
+        log.info(() => `[SCS] Circuit breaker CLOSED - service recovered after ${circuitBreaker.failureCount} failure(s)`);
+    }
+    circuitBreaker.state = 'CLOSED';
+    circuitBreaker.failureCount = 0;
+    circuitBreaker.lastSuccessTime = Date.now();
+}
+
+/**
+ * Check if error is an SSL/TLS related error that should trigger circuit breaker
+ * @param {Error} error - The error to check
+ * @returns {boolean} - True if this is a connection/SSL error
+ */
+function isCircuitBreakerError(error) {
+    const code = error.code || '';
+    const message = error.message || '';
+    // EPROTO: SSL protocol error (includes alert 49 - access denied)
+    // ECONNRESET: Connection reset
+    // ECONNREFUSED: Connection refused  
+    // ETIMEDOUT: Connection timeout
+    // ENOTFOUND: DNS resolution failed
+    // HPE_*: HTTP parser errors (server sent malformed/truncated response)
+    return code === 'EPROTO' ||
+        code === 'ECONNRESET' ||
+        code === 'ECONNREFUSED' ||
+        code === 'ETIMEDOUT' ||
+        code === 'ENOTFOUND' ||
+        code.startsWith('HPE_') ||
+        message.includes('SSL') ||
+        message.includes('TLS') ||
+        message.includes('ssl3_') ||
+        message.includes('alert') ||
+        message.includes('Parse Error') ||
+        message.includes('LOGON_DENIED');
+}
 // Language code mapping
 // SCS uses ISO 639-2/T codes (fra, deu, zho) in their languages.py
 // SubMaker internally uses OpenSubtitles-style ISO 639-2/B codes (fre, ger, chi)
@@ -86,25 +347,34 @@ function normalizeLanguageCode(lang) {
 }
 
 class StremioCommunitySubtitlesService {
+    static initLogged = false;
+
+    // Static/singleton axios client - shared across all instances for connection reuse
+    static client = axios.create({
+        baseURL: SCS_API_URL,
+        headers: {
+            'User-Agent': USER_AGENT
+        },
+        httpAgent,
+        httpsAgent: scsHttpsAgent, // Use custom SCS agent with TLS config for SSL compatibility
+        lookup: dnsLookup,
+        timeout: 25000 // SCS server can be slow (16+ seconds observed)
+    });
+
     constructor() {
         // Use env var if set, otherwise use fallback community token
         this.manifestToken = process.env.SCS_MANIFEST_TOKEN || SCS_FALLBACK_TOKEN;
 
-        this.client = axios.create({
-            baseURL: SCS_API_URL,
-            headers: {
-                'User-Agent': USER_AGENT
-            },
-            httpAgent,
-            httpsAgent,
-            lookup: dnsLookup,
-            timeout: 10000
-        });
+        // Use static client for all instances (connection pooling optimization)
+        this.client = StremioCommunitySubtitlesService.client;
 
-        if (process.env.SCS_MANIFEST_TOKEN) {
-            log.debug(() => '[SCS] Initialized with custom manifest token from env');
-        } else {
-            log.debug(() => '[SCS] Initialized with default community token');
+        if (!StremioCommunitySubtitlesService.initLogged) {
+            if (process.env.SCS_MANIFEST_TOKEN) {
+                log.debug(() => '[SCS] Initialized with custom manifest token from env');
+            } else {
+                log.debug(() => '[SCS] Initialized with default community token');
+            }
+            StremioCommunitySubtitlesService.initLogged = true;
         }
     }
 
@@ -113,9 +383,16 @@ class StremioCommunitySubtitlesService {
      * @param {Object} params - Search parameters
      */
     async searchSubtitles(params) {
+        // Check circuit breaker first - don't make requests if service is known to be down
+        const circuitCheck = isRequestAllowed();
+        if (!circuitCheck.allowed) {
+            log.debug(() => `[SCS] ${circuitCheck.reason}`);
+            return [];
+        }
+
         // Token is always available (env or fallback)
         try {
-            const { type, imdb_id, videoHash, videoSize, filename } = params;
+            const { type, imdb_id, videoHash, videoSize, filename, providerTimeout } = params;
             // videoHash is now only set when Stremio provides a real OpenSubtitles hash
             // (our derived MD5 hashes are no longer passed - they're useless for SCS matching)
             const hasRealHash = !!videoHash;
@@ -170,7 +447,15 @@ class StremioCommunitySubtitlesService {
 
             log.debug(() => `[SCS] Search: type=${stremioType}, id=${contentId}, hash=${videoHash || 'none'}, filename=${filename ? filename.substring(0, 50) : 'none'}`);
 
-            const response = await this.client.get(url);
+            // SCS server can be slow (16+ seconds observed), use configured timeout from user settings
+            // Build request config with timeout if provided, otherwise use client default (25s)
+            const requestConfig = providerTimeout ? { timeout: providerTimeout } : {};
+
+            // Use retry wrapper for SSL error resilience
+            const response = await makeRequestWithRetry(
+                () => this.client.get(url, requestConfig),
+                'search'
+            );
 
             if (!response.data || !response.data.subtitles) {
                 log.debug(() => `[SCS] No subtitles in response`);
@@ -251,7 +536,15 @@ class StremioCommunitySubtitlesService {
      * Download subtitle content
      * @param {string} fileId - The file ID (e.g. comm_XXXX)
      */
-    async downloadSubtitle(fileId) {
+    async downloadSubtitle(fileId, options = {}) {
+        // Use configured timeout from user settings, fallback to 25s default (SCS server can be slow)
+        const timeout = options?.timeout || 25000;
+        // Check circuit breaker first
+        const circuitCheck = isRequestAllowed();
+        if (!circuitCheck.allowed) {
+            throw new Error(`SCS service temporarily unavailable: ${circuitCheck.reason}`);
+        }
+
         try {
             // fileId should be "comm_XXXX" (scs_ prefix removed by handler)
             if (!fileId.startsWith('comm_')) {
@@ -265,10 +558,14 @@ class StremioCommunitySubtitlesService {
             const url = `/${this.manifestToken}/download/${identifier}.vtt`;
 
             log.debug(() => `[SCS] Downloading from: ${url}`);
-            const response = await this.client.get(url, {
-                responseType: 'arraybuffer',
-                timeout: 15000
-            });
+            // Use retry wrapper for SSL error resilience
+            const response = await makeRequestWithRetry(
+                () => this.client.get(url, {
+                    responseType: 'arraybuffer',
+                    timeout: timeout // Use configurable timeout (minimum 25s for slow server)
+                }),
+                'download'
+            );
 
             const buffer = Buffer.from(response.data);
             const text = buffer.toString('utf-8');

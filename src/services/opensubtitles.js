@@ -257,7 +257,7 @@ class OpenSubtitlesService {
       httpAgent,
       httpsAgent,
       lookup: dnsLookup,
-      timeout: 10000,
+      timeout: 12000,
       maxRedirects: 5,
       decompress: true
     };
@@ -331,16 +331,19 @@ class OpenSubtitlesService {
    * Login with username and password to get JWT token
    * @param {string} username - OpenSubtitles username
    * @param {string} password - OpenSubtitles password
+   * @param {number} timeout - Optional timeout in ms
    * @returns {Promise<string>} - JWT token
    */
-  async loginWithCredentials(username, password) {
+  async loginWithCredentials(username, password, timeout) {
     try {
       log.debug(() => ['[OpenSubtitles] Authenticating user:', username]);
 
+      // Use provided timeout or fall back to client default
+      const requestConfig = timeout ? { timeout } : {};
       const response = await this.client.post('/login', {
         username: username,
         password: password
-      });
+      }, requestConfig);
 
       if (!response.data?.token) {
         throw new Error('No token received from authentication');
@@ -375,6 +378,15 @@ class OpenSubtitlesService {
         throw e;
       }
 
+      // For timeout and network errors, also bubble up so they don't get misinterpreted as invalid credentials
+      if (parsed.type === 'timeout' || parsed.type === 'network' || parsed.type === 'dns') {
+        const e = new Error(parsed.userMessage || parsed.message || 'Network error during authentication');
+        e.statusCode = parsed.statusCode || 0;
+        e.type = parsed.type;
+        e.isRetryable = parsed.type !== 'dns'; // DNS errors are not retryable
+        throw e;
+      }
+
       // For genuine auth failures and other client errors, log via auth handler and return null
       return handleAuthError(error, 'OpenSubtitles');
     }
@@ -383,9 +395,10 @@ class OpenSubtitlesService {
   /**
    * Login to OpenSubtitles REST API (optional, for higher download limits)
    * Uses mutex to serialize concurrent login attempts for the same credentials.
+   * @param {number} timeout - Optional timeout in ms for the login request
    * @returns {Promise<string|null>} - JWT token if credentials provided, null otherwise
    */
-  async login() {
+  async login(timeout) {
     if (!this.config.username || !this.config.password) {
       // No credentials provided, use basic API access
       return null;
@@ -426,11 +439,16 @@ class OpenSubtitlesService {
         if (hasCachedAuthFailure(this.credentialsCacheKey)) {
           return null;
         }
-        // For rate limits or retryable errors, return null to degrade gracefully
+        // For rate limits (429/503), return null to degrade gracefully
         // The login will be retried on the next request after the rate limit window
-        if (err && (err.type === 'rate_limit' || err.isRetryable === true || err.statusCode === 429 || err.statusCode === 503)) {
-          log.warn(() => `[OpenSubtitles] Login mutex caught retryable error: ${err.message}`);
+        if (err && (err.type === 'rate_limit' || err.statusCode === 429 || err.statusCode === 503)) {
+          log.warn(() => `[OpenSubtitles] Login mutex caught rate limit error: ${err.message}`);
           return null;
+        }
+        // For timeout/network errors, re-throw so they propagate with proper error type
+        // instead of being misinterpreted as invalid credentials
+        if (err && (err.type === 'timeout' || err.type === 'network' || err.type === 'dns')) {
+          throw err;
         }
         // For unexpected errors, throw to let the caller handle
         throw err;
@@ -450,7 +468,7 @@ class OpenSubtitlesService {
     loginMutex.set(this.credentialsCacheKey, mutexPromise);
 
     try {
-      const result = await this.loginWithCredentials(this.config.username, this.config.password);
+      const result = await this.loginWithCredentials(this.config.username, this.config.password, timeout);
       resolveMutex(result);
       return result;
     } catch (err) {
@@ -478,12 +496,16 @@ class OpenSubtitlesService {
    */
   async searchSubtitles(params) {
     try {
+      // Extract providerTimeout early so it can be used for login as well as search
+      const { providerTimeout } = params;
+
       // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
         log.warn(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
         return [];
       }
 
+      // Check for cached authentication failure (known bad credentials)
       if (hasCachedAuthFailure(this.credentialsCacheKey)) {
         const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
         authErr.statusCode = 401;
@@ -492,13 +514,23 @@ class OpenSubtitlesService {
       }
 
       if (this.isTokenExpired()) {
-        const loginResult = await this.login();
+        // login() throws for timeout/network/dns errors
+        // login() returns null for rate limits (graceful degradation) or if credentials just failed
+        const loginResult = await this.login(providerTimeout);
+
         if (!loginResult) {
-          // Authentication failed; surface this so callers can react (e.g., append UX hint entries)
-          const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
-          authErr.statusCode = 400;
-          authErr.authError = true;
-          throw authErr;
+          // If we got here with null, check WHY:
+          // - If credentials are now cached as failed, it's a real auth failure
+          // - Otherwise, it was likely a rate limit - return empty for now
+          if (hasCachedAuthFailure(this.credentialsCacheKey)) {
+            const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
+            authErr.statusCode = 401;
+            authErr.authError = true;
+            throw authErr;
+          }
+          // Rate limit or other transient issue - return empty, user can try again
+          log.warn(() => '[OpenSubtitles] Authentication temporarily unavailable (rate limited). Try again later.');
+          return [];
         }
       }
 
@@ -558,9 +590,10 @@ class OpenSubtitlesService {
         log.debug(() => '[OpenSubtitles] Using basic API access');
       }
 
-      const response = await this.client.get('/subtitles', {
-        params: queryParams
-      });
+      // Use providerTimeout from config if provided, otherwise use client default
+      const requestConfig = { params: queryParams };
+      if (providerTimeout) requestConfig.timeout = providerTimeout;
+      const response = await this.client.get('/subtitles', requestConfig);
 
       if (!response.data || !response.data.data || response.data.data.length === 0) {
         log.debug(() => '[OpenSubtitles] No subtitles found in response');
@@ -699,7 +732,8 @@ class OpenSubtitlesService {
    * @param {string} fileId - File ID from search results
    * @returns {Promise<string>} - Subtitle content as text
    */
-  async downloadSubtitle(fileId) {
+  async downloadSubtitle(fileId, options = {}) {
+    const timeout = options?.timeout || 12000; // Default 12s
     try {
       log.debug(() => ['[OpenSubtitles] Downloading subtitle via REST API:', fileId]);
 
@@ -732,8 +766,12 @@ class OpenSubtitlesService {
       if (this.isTokenExpired()) {
         const loginResult = await this.login();
         if (!loginResult) {
-          // Authentication failed, handleAuthError already logged it
-          throw new Error('OpenSubtitles authentication failed');
+          // Check if credentials are now cached as failed
+          if (hasCachedAuthFailure(this.credentialsCacheKey)) {
+            throw new Error('OpenSubtitles authentication failed: invalid username/password');
+          }
+          // Rate limit or other transient issue
+          throw new Error('OpenSubtitles authentication temporarily unavailable. Try again later.');
         }
       }
 
@@ -754,7 +792,7 @@ class OpenSubtitlesService {
       const subtitleResponse = await this.downloadClient.get(downloadLink, {
         responseType: 'arraybuffer',
         headers: { 'User-Agent': USER_AGENT },
-        timeout: 12000
+        timeout: timeout // Use configurable timeout
       });
 
       const buf = Buffer.isBuffer(subtitleResponse.data)

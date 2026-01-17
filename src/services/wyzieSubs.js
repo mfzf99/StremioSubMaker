@@ -197,10 +197,11 @@ class WyzieSubsService {
 
             // IMPORTANT: By default, Wyzie only queries OpenSubtitles!
             // We must explicitly request sources to search multiple providers.
-            // Build source list from user config (all enabled by default)
+            // Build source list from user config (UI now defaults to all disabled for new users)
             const allSources = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho'];
             const enabledSources = allSources.filter(src => {
-                // Default to true if sources config not provided or source not specified
+                // Source is enabled if: no sources config provided (edge case), OR source is explicitly true
+                // Note: UI sends false for unchecked sources, so sources[src] !== false correctly handles this
                 return !sources || sources[src] !== false;
             });
             if (enabledSources.length > 0) {
@@ -224,7 +225,11 @@ class WyzieSubsService {
             const url = `/search?${queryParams.toString()}`;
             log.debug(() => `[WyzieSubs] Searching: ${url}`);
 
-            const response = await this.client.get(url);
+            // Use configured timeout from user settings if provided, otherwise use client default (15s)
+            const { providerTimeout } = params;
+            const requestConfig = providerTimeout ? { timeout: providerTimeout } : {};
+
+            const response = await this.client.get(url, requestConfig);
 
             if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
                 log.debug(() => '[WyzieSubs] No subtitles found');

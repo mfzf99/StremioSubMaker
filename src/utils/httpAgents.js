@@ -9,10 +9,18 @@
  * - Reduces latency by 150-500ms per API call (TCP + TLS handshake savings)
  * - Prevents socket exhaustion under high load
  * - Improves scalability for 100+ concurrent users
+ * - Pre-warms connections at startup for instant first requests
+ * - Periodic keep-alive pings maintain warm connections during idle periods
+ * - Circuit breaker tracks provider health to skip failing endpoints
  *
  * Usage:
- *   const { httpAgent, httpsAgent } = require('./utils/httpAgents');
+ *   const { httpAgent, httpsAgent, warmUpConnections, startKeepAlivePings } = require('./utils/httpAgents');
  *
+ *   // At server startup:
+ *   warmUpConnections();           // Prime TLS connections
+ *   startKeepAlivePings();         // Keep them warm periodically
+ *
+ *   // In service classes:
  *   axios.create({
  *     httpAgent,
  *     httpsAgent,
@@ -22,6 +30,7 @@
 
 const http = require('http');
 const https = require('https');
+const axios = require('axios');
 // Handle ESM (v7+) and CJS (v6) exports of cacheable-lookup
 let CacheableLookup = require('cacheable-lookup');
 CacheableLookup = (CacheableLookup && (CacheableLookup.default || CacheableLookup.CacheableLookup)) || CacheableLookup;
@@ -48,7 +57,10 @@ const httpsAgent = new https.Agent({
   maxSockets: 100,       // Max 100 concurrent connections per host
   maxFreeSockets: 20,    // Keep 20 idle connections ready for reuse
   timeout: 60000,        // 60 second socket timeout
-  keepAliveMsecs: 30000  // Send keepalive probes every 30s (TLS over TCP)
+  keepAliveMsecs: 30000, // Send keepalive probes every 30s (TLS over TCP)
+  // TLS settings for compatibility with servers that have strict requirements
+  minVersion: 'TLSv1.2', // Minimum TLS 1.2 (widely supported, fixes some handshake issues)
+  rejectUnauthorized: true // Verify server certificates (security)
 });
 
 // DNS cache to reduce lookup latency and flakiness
@@ -60,9 +72,399 @@ const dnsCache = new CacheableLookup({
 
 log.debug(() => '[HTTP Agents] Connection pooling initialized: maxSockets=100, maxFreeSockets=20, keepAlive=true');
 
+// ============================================================================
+// PROVIDER ENDPOINTS - URLs to warm up and keep alive
+// ============================================================================
+const PROVIDER_ENDPOINTS = {
+  // Subtitle providers - warm these up at startup for instant first requests
+  opensubtitlesV3: {
+    url: 'https://opensubtitles-v3.strem.io/',
+    name: 'OpenSubtitles V3',
+    warmUpPath: 'subtitles/series/tt0944947:1:1.json', // GoT S1E1 - always exists
+    pingPath: null, // HEAD to base URL
+    critical: true // Core provider - always ping
+  },
+  subdl: {
+    url: 'https://api.subdl.com/',
+    name: 'SubDL',
+    warmUpPath: null, // API requires key, just warm TLS
+    pingPath: null, // HEAD to base URL
+    critical: true // Ping to detect outages
+  },
+  subsource: {
+    url: 'https://api.subsource.net/',
+    name: 'SubSource',
+    warmUpPath: null, // API requires key, just warm TLS
+    pingPath: null, // HEAD to base URL
+    critical: true // Ping to detect outages
+  },
+  wyzie: {
+    url: 'https://sub.wyzie.ru/',
+    name: 'Wyzie Subs',
+    warmUpPath: 'status', // Free status endpoint
+    pingPath: 'status',
+    critical: true // Ping to detect outages
+  },
+  scs: {
+    url: 'https://stremio-community-subtitles.top/',
+    name: 'Stremio Community Subtitles',
+    warmUpPath: null, // Just warm TLS
+    pingPath: null, // HEAD to base URL
+    critical: true // Ping to detect outages (this provider is often down)
+  },
+  subsro: {
+    url: 'https://api.subs.ro/',
+    name: 'Subs.ro',
+    warmUpPath: null, // API requires key
+    pingPath: null, // HEAD to base URL
+    critical: false // Less common provider, don't need aggressive pinging
+  },
+  // Download domains - also warm these up
+  subdlDownload: {
+    url: 'https://dl.subdl.com/',
+    name: 'SubDL Download',
+    warmUpPath: null,
+    pingPath: null,
+    critical: false // Download domain, no aggressive pinging needed
+  }
+};
+
+// ============================================================================
+// CIRCUIT BREAKER - Track provider health to skip failing endpoints
+// ============================================================================
+const circuitBreaker = {
+  // Track failures per provider: { providerKey: { failures: number, lastFailure: timestamp, openUntil: timestamp } }
+  providers: new Map(),
+
+  // Configuration
+  failureThreshold: 3,           // Number of failures before opening circuit
+  resetTimeoutMs: 60000,         // Time to wait before trying again (1 minute)
+  halfOpenSuccessThreshold: 2,   // Successes needed in half-open to close circuit
+
+  /**
+   * Check if provider circuit is open (failing, should skip)
+   */
+  isOpen(providerKey) {
+    const state = this.providers.get(providerKey);
+    if (!state) return false;
+
+    const now = Date.now();
+    if (state.openUntil && now < state.openUntil) {
+      return true; // Circuit is open, skip this provider
+    }
+
+    // Circuit timeout expired, move to half-open
+    if (state.openUntil && now >= state.openUntil) {
+      state.halfOpen = true;
+      state.halfOpenSuccesses = 0;
+    }
+
+    return false;
+  },
+
+  /**
+   * Record a successful request - helps close half-open circuits
+   */
+  recordSuccess(providerKey) {
+    const state = this.providers.get(providerKey);
+    if (!state) return;
+
+    if (state.halfOpen) {
+      state.halfOpenSuccesses = (state.halfOpenSuccesses || 0) + 1;
+      if (state.halfOpenSuccesses >= this.halfOpenSuccessThreshold) {
+        // Circuit fully closed
+        this.providers.delete(providerKey);
+        log.info(() => `[CircuitBreaker] Circuit CLOSED for ${providerKey} after successful requests`);
+      }
+    } else {
+      // Reset failure count on success
+      this.providers.delete(providerKey);
+    }
+  },
+
+  /**
+   * Record a failed request - may open the circuit
+   */
+  recordFailure(providerKey, error) {
+    const now = Date.now();
+    let state = this.providers.get(providerKey);
+
+    if (!state) {
+      state = { failures: 0, lastFailure: 0, openUntil: null, halfOpen: false };
+      this.providers.set(providerKey, state);
+    }
+
+    state.failures++;
+    state.lastFailure = now;
+
+    // If in half-open, immediately re-open
+    if (state.halfOpen) {
+      state.halfOpen = false;
+      state.openUntil = now + this.resetTimeoutMs;
+      log.warn(() => `[CircuitBreaker] Circuit RE-OPENED for ${providerKey} after half-open failure`);
+      return;
+    }
+
+    // Check if threshold reached
+    if (state.failures >= this.failureThreshold) {
+      state.openUntil = now + this.resetTimeoutMs;
+      log.warn(() => `[CircuitBreaker] Circuit OPENED for ${providerKey} after ${state.failures} failures. Will retry after ${this.resetTimeoutMs / 1000}s`);
+    }
+  },
+
+  /**
+   * Get status of all circuits for debugging
+   */
+  getStatus() {
+    const status = {};
+    const now = Date.now();
+    for (const [key, state] of this.providers.entries()) {
+      status[key] = {
+        failures: state.failures,
+        isOpen: state.openUntil && now < state.openUntil,
+        halfOpen: state.halfOpen || false,
+        reopensIn: state.openUntil ? Math.max(0, state.openUntil - now) : null
+      };
+    }
+    return status;
+  },
+
+  /**
+   * Get time remaining until circuit reopens (for user-facing messages)
+   * @returns {number|null} milliseconds until circuit closes, or null if not open
+   */
+  getTimeUntilRetry(providerKey) {
+    const state = this.providers.get(providerKey);
+    if (!state || !state.openUntil) return null;
+    const remaining = state.openUntil - Date.now();
+    return remaining > 0 ? remaining : null;
+  }
+};
+
+// ============================================================================
+// PROVIDER HEALTH CHECK - For subtitle handler to skip dead providers
+// ============================================================================
+
+/**
+ * Map from subtitle handler provider names to circuit breaker keys
+ * These must match the keys used in PROVIDER_ENDPOINTS
+ */
+const PROVIDER_KEY_MAP = {
+  'opensubtitles_v3': 'opensubtitlesV3',
+  'opensubtitles_auth': 'opensubtitlesV3', // Auth uses same API
+  'subdl': 'subdl',
+  'subsource': 'subsource',
+  'wyzie': 'wyzie',
+  'scs': 'scs',
+  'subsro': 'subsro'
+};
+
+/**
+ * Check if a provider is healthy enough to make a request
+ * Returns false if the circuit breaker is open (provider is failing)
+ * 
+ * @param {string} providerName - Provider name (e.g., 'subdl', 'opensubtitles_v3', 'scs')
+ * @returns {{ healthy: boolean, reason?: string, retryInMs?: number }}
+ */
+function isProviderHealthy(providerName) {
+  const key = PROVIDER_KEY_MAP[providerName.toLowerCase()];
+
+  // Unknown provider or no circuit tracking - allow request
+  if (!key) {
+    return { healthy: true };
+  }
+
+  if (circuitBreaker.isOpen(key)) {
+    const retryInMs = circuitBreaker.getTimeUntilRetry(key);
+    const retryInSec = retryInMs ? Math.ceil(retryInMs / 1000) : null;
+    const providerInfo = PROVIDER_ENDPOINTS[key];
+    const name = providerInfo?.name || providerName;
+
+    return {
+      healthy: false,
+      reason: `${name} circuit breaker open (provider failing)`,
+      retryInMs,
+      retryInSec
+    };
+  }
+
+  return { healthy: true };
+}
+
+// ============================================================================
+// CONNECTION WARMING - Establish TLS connections at startup
+// ============================================================================
+
+/**
+ * Warm up connections to subtitle providers
+ * Makes lightweight requests to establish TLS handshakes before users need them
+ * This saves 150-500ms on the first request to each provider
+ */
+async function warmUpConnections() {
+  log.info(() => '[HTTP Agents] Warming up connections to subtitle providers...');
+
+  const warmUpStart = Date.now();
+  const results = [];
+
+  // Warm up all providers in parallel
+  const warmUpPromises = Object.entries(PROVIDER_ENDPOINTS).map(async ([key, provider]) => {
+    const startTime = Date.now();
+    try {
+      const url = provider.warmUpPath
+        ? `${provider.url}${provider.warmUpPath}`
+        : provider.url;
+
+      // Use HEAD request for minimal overhead, fall back to GET for endpoints that require it
+      const method = provider.warmUpPath ? 'get' : 'head';
+
+      await axios({
+        method,
+        url,
+        httpAgent,
+        httpsAgent,
+        timeout: 8000, // 8 second timeout for warm-up
+        validateStatus: () => true, // Accept any status (we just want the TLS handshake)
+        maxRedirects: 3
+      });
+
+      const elapsed = Date.now() - startTime;
+      results.push({ provider: provider.name, success: true, elapsed });
+      log.debug(() => `[HTTP Agents] Warmed ${provider.name} in ${elapsed}ms`);
+
+      // Record success for circuit breaker
+      circuitBreaker.recordSuccess(key);
+
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+      results.push({ provider: provider.name, success: false, elapsed, error: error.message });
+      log.warn(() => `[HTTP Agents] Failed to warm ${provider.name}: ${error.message} (${elapsed}ms)`);
+
+      // Record failure for circuit breaker (but don't open circuit on warm-up failures)
+      // We don't call recordFailure here since warm-up failures shouldn't penalize the provider
+    }
+  });
+
+  await Promise.allSettled(warmUpPromises);
+
+  const totalElapsed = Date.now() - warmUpStart;
+  const successCount = results.filter(r => r.success).length;
+  const totalCount = results.length;
+
+  log.info(() => `[HTTP Agents] Connection warm-up complete: ${successCount}/${totalCount} providers in ${totalElapsed}ms`);
+
+  return results;
+}
+
+// ============================================================================
+// KEEP-ALIVE PINGS - Periodically ping providers to keep connections warm
+// ============================================================================
+
+let keepAliveInterval = null;
+const KEEP_ALIVE_INTERVAL_MS = 45000; // Every 45 seconds
+
+/**
+ * Start periodic keep-alive pings to maintain warm connections
+ * These lightweight HEAD requests prevent idle connection closure
+ */
+function startKeepAlivePings() {
+  if (keepAliveInterval) {
+    log.debug(() => '[HTTP Agents] Keep-alive pings already running');
+    return;
+  }
+
+  log.info(() => `[HTTP Agents] Starting keep-alive pings every ${KEEP_ALIVE_INTERVAL_MS / 1000}s`);
+
+  keepAliveInterval = setInterval(async () => {
+    // Only ping critical providers and providers without open circuits
+    const providersToPing = Object.entries(PROVIDER_ENDPOINTS)
+      .filter(([key, provider]) => provider.critical || provider.pingPath)
+      .filter(([key]) => !circuitBreaker.isOpen(key));
+
+    if (providersToPing.length === 0) {
+      log.debug(() => '[HTTP Agents] No providers to ping (all circuits open or no critical providers)');
+      return;
+    }
+
+    const pingPromises = providersToPing.map(async ([key, provider]) => {
+      try {
+        const url = provider.pingPath
+          ? `${provider.url}${provider.pingPath}`
+          : provider.url;
+
+        await axios.head(url, {
+          httpAgent,
+          httpsAgent,
+          timeout: 5000,
+          validateStatus: () => true
+        });
+
+        log.debug(() => `[HTTP Agents] Keep-alive ping to ${provider.name} OK`);
+        circuitBreaker.recordSuccess(key);
+
+      } catch (error) {
+        log.debug(() => `[HTTP Agents] Keep-alive ping to ${provider.name} failed: ${error.message}`);
+        circuitBreaker.recordFailure(key, error);
+      }
+    });
+
+    await Promise.allSettled(pingPromises);
+
+  }, KEEP_ALIVE_INTERVAL_MS);
+
+  // Don't prevent Node from exiting
+  if (keepAliveInterval.unref) {
+    keepAliveInterval.unref();
+  }
+}
+
+/**
+ * Stop periodic keep-alive pings (for graceful shutdown)
+ */
+function stopKeepAlivePings() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+    log.debug(() => '[HTTP Agents] Keep-alive pings stopped');
+  }
+}
+
+/**
+ * Get connection pool statistics for monitoring
+ */
+function getPoolStats() {
+  const httpStats = {
+    totalSockets: Object.values(httpAgent.sockets || {}).reduce((sum, arr) => sum + arr.length, 0),
+    freeSockets: Object.values(httpAgent.freeSockets || {}).reduce((sum, arr) => sum + arr.length, 0),
+    pendingRequests: Object.values(httpAgent.requests || {}).reduce((sum, arr) => sum + arr.length, 0)
+  };
+
+  const httpsStats = {
+    totalSockets: Object.values(httpsAgent.sockets || {}).reduce((sum, arr) => sum + arr.length, 0),
+    freeSockets: Object.values(httpsAgent.freeSockets || {}).reduce((sum, arr) => sum + arr.length, 0),
+    pendingRequests: Object.values(httpsAgent.requests || {}).reduce((sum, arr) => sum + arr.length, 0)
+  };
+
+  return {
+    http: httpStats,
+    https: httpsStats,
+    circuitBreaker: circuitBreaker.getStatus()
+  };
+}
+
 module.exports = {
   httpAgent,
   httpsAgent,
   // Expose lookup so callers can pass it in request options
-  dnsLookup: dnsCache.lookup.bind(dnsCache)
+  dnsLookup: dnsCache.lookup.bind(dnsCache),
+  // Connection warming and keep-alive
+  warmUpConnections,
+  startKeepAlivePings,
+  stopKeepAlivePings,
+  // Circuit breaker access
+  circuitBreaker,
+  isProviderHealthy, // Check if provider is healthy before making requests
+  // Pool statistics
+  getPoolStats,
+  // Provider list (for external use)
+  PROVIDER_ENDPOINTS
 };

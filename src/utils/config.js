@@ -441,6 +441,14 @@ function normalizeConfig(config) {
   mergedConfig.singleBatchMode = mergedConfig.singleBatchMode === true;
   mergedConfig.multiProviderEnabled = mergedConfig.multiProviderEnabled === true;
   mergedConfig.excludeHearingImpairedSubtitles = mergedConfig.excludeHearingImpairedSubtitles === true;
+
+  // Normalize subtitle provider timeout (min: 8s, max: 30s, default: 12s)
+  // Use 12s as fallback for backwards compatibility with old sessions without this setting
+  const rawTimeout = parseInt(mergedConfig.subtitleProviderTimeout, 10);
+  mergedConfig.subtitleProviderTimeout = Number.isFinite(rawTimeout)
+    ? Math.max(8, Math.min(30, rawTimeout))
+    : 12;
+
   const advSettings = mergedConfig.advancedSettings || {};
   mergedConfig.advancedSettings = {
     ...advSettings,
@@ -817,6 +825,10 @@ function encodeConfig(config) {
  * Each model has its own optimal settings for thinking and temperature
  */
 const MODEL_SPECIFIC_DEFAULTS = {
+  'gemma-3-27b-it': {
+    thinkingBudget: 0,      // Gemma models don't support thinking
+    temperature: 0.7        // Balanced temperature for Gemma
+  },
   'gemini-flash-lite-latest': {
     thinkingBudget: 0,      // No thinking for lite model
     temperature: 0.8        // Higher temperature for creativity
@@ -862,7 +874,8 @@ function getModelSpecificDefaults(modelName) {
  */
 function getDefaultConfig(modelName = null) {
   // Determine the model to use for defaults
-  const effectiveModel = modelName || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  // Default to gemma-3-27b-it which has better rate limits for free tier users
+  const effectiveModel = modelName || process.env.GEMINI_MODEL || 'gemma-3-27b-it';
   const modelDefaults = getModelSpecificDefaults(effectiveModel);
 
   // Read advanced settings from environment variables with fallback to model-specific defaults
@@ -965,6 +978,10 @@ function getDefaultConfig(modelName = null) {
         apiKey: ''
       }
     },
+    // Subtitle provider timeout in seconds (min: 8, max: 30, default: 12)
+    // Controls the maximum time for search/download operations per provider
+    // Individual request timeouts are set 2s below this to allow for orchestration overhead
+    subtitleProviderTimeout: parseInt(process.env.SUBTITLE_PROVIDER_TIMEOUT) || 12,
     translationCache: {
       enabled: true,
       duration: 0, // hours, 0 = permanent

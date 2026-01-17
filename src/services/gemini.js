@@ -86,6 +86,12 @@ class GeminiService {
     if (this.isGemmaModel) {
       // Gemma models don't support thinkingConfig and have lower output limits.
       this.maxOutputTokens = 8192;
+      // Gemma free tier has aggressive rate limits - use longer backoff
+      // 2 retries with 8s→24s exponential backoff
+      this.gemmaRetryConfig = {
+        maxRetries: 2,
+        baseDelay: 8000  // 8 seconds base, doubles to 24s on 2nd retry
+      };
     }
   }
 
@@ -200,32 +206,44 @@ class GeminiService {
 
   /**
    * Retry a function with exponential backoff
+   * For Gemma models, uses more aggressive retry settings for rate limits
    */
   async retryWithBackoff(fn, maxRetries = null, baseDelay = 3000) {
-    maxRetries = maxRetries !== null ? maxRetries : this.maxRetries;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Use Gemma-specific retry config if available and not overridden
+    const useGemmaConfig = this.isGemmaModel && this.gemmaRetryConfig;
+    const effectiveMaxRetries = maxRetries !== null ? maxRetries :
+      (useGemmaConfig ? this.gemmaRetryConfig.maxRetries : this.maxRetries);
+    const effectiveBaseDelay = useGemmaConfig ? this.gemmaRetryConfig.baseDelay : baseDelay;
+
+    for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       try {
         return await fn();
       } catch (error) {
-        const isLastAttempt = attempt === maxRetries;
+        const isLastAttempt = attempt === effectiveMaxRetries;
         const isTimeout = error.message.includes('timeout') || error.code === 'ECONNABORTED';
         const isNetworkError = error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND';
         const isSocketHangup = error.message.includes('socket hang up') || error.code === 'ECONNRESET';
         const isRateLimit = error.response?.status === 429;
         const isServiceUnavailable = error.response?.status === 503;
+        // Check for explicitly marked retryable errors (e.g., finishReason: OTHER)
+        const isMarkedRetryable = error.isRetryable === true;
 
-        // Retry for: timeouts, network errors, rate limits (429), and service unavailable (503)
-        const isRetryable = isTimeout || isNetworkError || isSocketHangup || isRateLimit || isServiceUnavailable;
+        // Retry for: timeouts, network errors, rate limits (429), service unavailable (503), and marked retryable errors
+        const isRetryable = isTimeout || isNetworkError || isSocketHangup || isRateLimit || isServiceUnavailable || isMarkedRetryable;
 
         if (isLastAttempt || !isRetryable) {
           throw error;
         }
 
-        const delay = baseDelay * Math.pow(2, attempt);
+        // Calculate delay - Gemma uses 8s→24s (8*3), others use 3s→6s→12s (3*2^n)
+        const delay = useGemmaConfig
+          ? effectiveBaseDelay * Math.pow(3, attempt)  // 8s → 24s (2 retries max)
+          : effectiveBaseDelay * Math.pow(2, attempt); // 3s → 6s → 12s (3 retries max)
         const errorType = isRateLimit ? '429 rate limit' :
           isServiceUnavailable ? '503 service unavailable' :
             isSocketHangup ? 'socket hang up' :
-              isTimeout ? 'timeout' : 'network error';
+              isTimeout ? 'timeout' :
+                isMarkedRetryable ? 'transient error (OTHER)' : 'network error';
         log.debug(() => `[Gemini] Attempt ${attempt + 1} failed (${errorType}), retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -452,7 +470,10 @@ class GeminiService {
             // Continue with partial output
             log.warn(() => '[Gemini] Continuing with partial translation due to MAX_TOKENS');
           } else {
-            throw new Error(`Translation stopped with reason: ${candidate.finishReason}`);
+            // OTHER and unknown finish reasons are likely transient - mark as retryable
+            const err = new Error(`Translation stopped with reason: ${candidate.finishReason}`);
+            err.isRetryable = true;
+            throw err;
           }
         }
 
@@ -658,7 +679,9 @@ class GeminiService {
                   }
                   log.warn(() => '[Gemini] MAX_TOKENS reached in stream - continuing with partial translation');
                 } else {
+                  // OTHER and unknown finish reasons are likely transient - mark as retryable
                   const err = new Error(`Translation stopped with reason: ${finishReason}`);
+                  err.isRetryable = true;
                   reject(err);
                   return;
                 }

@@ -41,22 +41,25 @@ Please pick another subtitle or provider.`;
 class OpenSubtitlesV3Service {
   static initLogged = false;
 
+  // Static/singleton axios client - shared across all instances for connection reuse
+  static client = axios.create({
+    baseURL: OPENSUBTITLES_V3_BASE_URL,
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate, br'
+    },
+    timeout: 12000, // 12 second timeout (must fit within global provider timeout)
+    httpAgent,
+    httpsAgent,
+    lookup: dnsLookup,
+    maxRedirects: 5,
+    decompress: true
+  });
+
   constructor() {
-    // Create axios instance with default configuration
-    this.client = axios.create({
-      baseURL: OPENSUBTITLES_V3_BASE_URL,
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br'
-      },
-      timeout: 10000, // 10 second timeout
-      httpAgent,
-      httpsAgent,
-      lookup: dnsLookup,
-      maxRedirects: 5,
-      decompress: true
-    });
+    // Use static client for all instances (connection pooling optimization)
+    this.client = OpenSubtitlesV3Service.client;
 
     // Only log initialization once at startup
     if (!OpenSubtitlesV3Service.initLogged) {
@@ -77,7 +80,7 @@ class OpenSubtitlesV3Service {
    */
   async searchSubtitles(params) {
     try {
-      const { imdb_id, type, season, episode, languages } = params;
+      const { imdb_id, type, season, episode, languages, providerTimeout } = params;
 
       // OpenSubtitles V3 requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
       if (!imdb_id || imdb_id === 'undefined') {
@@ -105,7 +108,9 @@ class OpenSubtitlesV3Service {
 
       log.debug(() => ['[OpenSubtitles V3] Searching:', url]);
 
-      const response = await this.client.get(url);
+      // Use providerTimeout from config if provided, otherwise use client default
+      const requestConfig = providerTimeout ? { timeout: providerTimeout } : {};
+      const response = await this.client.get(url, requestConfig);
 
       if (!response.data || !response.data.subtitles || response.data.subtitles.length === 0) {
         log.debug(() => '[OpenSubtitles V3] No subtitles found');
@@ -352,7 +357,19 @@ class OpenSubtitlesV3Service {
    * @param {number} maxRetries - Maximum number of retries (default: 3)
    * @returns {Promise<string>} - Subtitle content as text
    */
-  async downloadSubtitle(fileId, maxRetries = 3) {
+  async downloadSubtitle(fileId, options = {}) {
+    // Support legacy call pattern: downloadSubtitle(fileId, maxRetries)
+    // New pattern: downloadSubtitle(fileId, { timeout, maxRetries })
+    let maxRetries = 3;
+    let timeout = 12000; // Default 12s
+
+    if (typeof options === 'number') {
+      // Legacy: second arg was maxRetries
+      maxRetries = options;
+    } else if (options) {
+      timeout = options.timeout || 12000;
+      maxRetries = options.maxRetries || 3;
+    }
     // Extract encoded URL from fileId
     // Format: v3_{base64url_encoded_url}
     if (!fileId.startsWith('v3_')) {
@@ -375,7 +392,7 @@ class OpenSubtitlesV3Service {
         const response = await this.client.get(downloadUrl, {
           responseType: 'arraybuffer',
           headers: { 'User-Agent': USER_AGENT },
-          timeout: 12000
+          timeout: timeout
         });
 
         const buf = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data);

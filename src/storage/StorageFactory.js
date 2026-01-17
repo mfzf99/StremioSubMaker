@@ -151,6 +151,15 @@ class StorageFactory {
       }
     }, 60 * 60 * 1000);
 
+    // Cleanup provider metadata cache every 6 hours (7-day TTL, low churn)
+    setInterval(async () => {
+      try {
+        await adapter.cleanup(StorageAdapter.CACHE_TYPES.PROVIDER_METADATA);
+      } catch (error) {
+        log.error(() => '[Cleanup] Failed to cleanup provider metadata cache:', error);
+      }
+    }, 6 * 60 * 60 * 1000);
+
     log.debug(() => 'Scheduled periodic cache cleanup tasks');
   }
 
