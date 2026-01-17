@@ -340,10 +340,14 @@ class WyzieSubsService {
      * Download subtitle content from Wyzie
      * Wyzie provides direct download URLs that handle ZIP extraction server-side
      * @param {string} fileId - File ID from search results (format: wyzie_{base64url_encoded_url})
-     * @param {number} maxRetries - Maximum number of retries (default: 3)
+     * @param {Object} options - Download options
+     * @param {number} options.timeout - Request timeout in ms (default: 15000)
+     * @param {number} options.maxRetries - Maximum number of retries (default: 3)
      * @returns {Promise<string>} - Subtitle content as text
      */
-    async downloadSubtitle(fileId, maxRetries = 3) {
+    async downloadSubtitle(fileId, options = {}) {
+        const maxRetries = options?.maxRetries || 3;
+        const timeout = options?.timeout || 15000;
         // Extract encoded URL from fileId
         // Format: wyzie_{base64url_encoded_url}
         if (!fileId.startsWith('wyzie_')) {
@@ -374,7 +378,7 @@ class WyzieSubsService {
                 // Use axios directly for full URL (not relative to baseURL)
                 const response = await axios.get(downloadUrl, {
                     responseType: 'arraybuffer',
-                    timeout: 15000,
+                    timeout,
                     headers: {
                         'User-Agent': USER_AGENT,
                         'Accept': 'text/plain, text/vtt, application/x-subrip, */*'

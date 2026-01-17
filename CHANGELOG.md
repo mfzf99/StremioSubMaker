@@ -6,7 +6,21 @@ All notable changes to this project will be documented in this file.
 
 **Bug Fixes:**
 
+- **Fixed Wyzie Subs downloads not working:** The `downloadSubtitle` function had an incorrect signature that expected a number but received an options object. This caused the download loop to never execute, resulting in "failed to load external subtitle" errors for all Wyzie Subs. Fixed by updating the function signature to match other providers.
+
 - **Fixed Stremio Community/libmpv request spam:** Resolved an issue where Stremio Community clients using libmpv would generate excessive requests when opening the subtitle menu. The root cause was the addon returning `202 Accepted` with a `Retry-After: 3` header for duplicate translation requests, which caused libmpv to poll every 3 seconds indefinitely. The fix removes the retry header and returns a normal response, stopping the polling loop.
+
+- **Fixed SubSource API key validation endpoint:** The `/api/validate-subsource` endpoint was not passing API key headers when making requests, causing 401/403 authentication failures even with valid keys. Added the required headers to the validation request.
+
+- **Disabled session fingerprint validation:** Fingerprint validation was causing false positives and incorrectly deleting valid sessions when the config schema changed (e.g., new fields added, encrypted values differing after decrypt cycle). Token validation is sufficient to detect cross-session contamination. Fingerprint mismatches are now logged at debug level for diagnostics only - sessions are no longer deleted on mismatch.
+
+**Improvements:**
+
+- **Improved Stremio Community detection:** Enhanced detection to also identify libmpv requests (the player that does prefetching) when they have no origin header. This improves the accuracy of the prefetch cooldown system for Stremio Community clients.
+
+- **Enhanced session persistence diagnostics:** Added debug logging throughout the session lifecycle to help diagnose disappearing sessions. This includes verification that sessions are written to Redis, logging of fingerprint values on mismatch, and tracing of successful session loads.
+
+- **Removed automatic Android mobile mode:** Mobile mode is now only enabled when explicitly configured via `mobileMode=true` in the config or forced via query string. Automatic detection based on Android user-agent has been removed for consistency across all devices.
 
 **New Features:**
 
