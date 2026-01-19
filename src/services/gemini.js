@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { sanitizeApiKeyForHeader } = require('../utils/security');
 const { handleTranslationError, logApiError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 const log = require('../utils/logger');
@@ -107,7 +108,7 @@ class GeminiService {
     try {
       const response = await axios.get(`${this.baseUrl}/models`, {
         // Use header form for API key to avoid query parsing/proxy quirks
-        headers: { 'x-goog-api-key': String(this.apiKey || '').trim() },
+        headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
         timeout: 10000,
         httpAgent,
         httpsAgent
@@ -147,7 +148,7 @@ class GeminiService {
 
     try {
       const response = await axios.get(`${this.baseUrl}/models/${this.model}`, {
-        headers: { 'x-goog-api-key': String(this.apiKey || '').trim() },
+        headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
         timeout: 10000,
         httpAgent,
         httpsAgent
@@ -306,7 +307,7 @@ class GeminiService {
           }]
         },
         {
-          headers: { 'x-goog-api-key': String(this.apiKey || '').trim() },
+          headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
           timeout: 10000,
           httpAgent,
           httpsAgent
@@ -401,7 +402,7 @@ class GeminiService {
             generationConfig
           },
           {
-            headers: { 'x-goog-api-key': String(this.apiKey || '').trim() },
+            headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
             timeout: this.timeout,
             httpAgent,
             httpsAgent
@@ -552,7 +553,7 @@ class GeminiService {
           },
           {
             headers: {
-              'x-goog-api-key': String(this.apiKey || '').trim(),
+              'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
               'Accept': 'text/event-stream'
             },
             params: { alt: 'sse' },

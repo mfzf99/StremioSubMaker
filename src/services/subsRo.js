@@ -26,6 +26,7 @@ const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { appendHiddenInformationalNote } = require('../utils/subtitle');
 const log = require('../utils/logger');
 const { version } = require('../utils/version');
+const { sanitizeApiKeyForHeader } = require('../utils/security');
 const { detectArchiveType, extractSubtitleFromArchive, isArchive } = require('../utils/archiveExtractor');
 
 const SUBS_RO_API_URL = 'https://subs.ro/api/v1.0';
@@ -198,9 +199,10 @@ class SubsRoService {
             'Accept': 'application/json'
         };
 
-        // Add API key to headers if provided
-        if (apiKey && apiKey.trim()) {
-            headers['X-Subs-Api-Key'] = apiKey.trim();
+        // Add API key to headers if provided (sanitize to prevent header injection)
+        const sanitizedApiKey = sanitizeApiKeyForHeader(apiKey);
+        if (sanitizedApiKey) {
+            headers['X-Subs-Api-Key'] = sanitizedApiKey;
         }
 
         this.client = axios.create({

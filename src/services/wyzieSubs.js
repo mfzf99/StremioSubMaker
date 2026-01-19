@@ -19,6 +19,30 @@
  * - Automatic ZIP extraction (handled server-side)
  * - Episode filtering for TV shows (done by Wyzie)
  * - Returns isHearingImpaired flag for client-side filtering
+ * 
+ * ============================================================================
+ * PERFORMANCE NOTES (Why wyzie-lib NPM package won't help):
+ * ============================================================================
+ * 
+ * The `wyzie-lib` NPM package (https://www.npmjs.com/package/wyzie-lib) is just
+ * a thin client wrapper that makes HTTP requests to the same sub.wyzie.ru API.
+ * It does NOT bundle any scraping logic locally. See the source:
+ * https://unpkg.com/wyzie-lib@2.2.6/lib/main.js
+ * 
+ * The slowness comes from Wyzie's server architecture:
+ *   1. Our addon → Wyzie API (network hop to Cloudflare Workers)
+ *   2. Wyzie API → i6.shark proxy (internal IPv6 rotation proxy)
+ *   3. i6.shark → Actual sources (SubDL/OpenSubtitles/Subf2m/etc.)
+ *   4. Response back through the chain
+ * 
+ * Each source is scraped ON-THE-FLY with no caching on Wyzie's end.
+ * 
+ * To improve performance, we:
+ *   1. Use keep-alive connections (via httpAgents.js)
+ *   2. Track response times for debugging
+ *   3. For fastest results, users should prefer direct providers (SubDL, OpenSubtitles)
+ *      which bypass the aggregation layer entirely.
+ * ============================================================================
  */
 
 const axios = require('axios');
@@ -112,7 +136,7 @@ class WyzieSubsService {
             httpAgent,
             httpsAgent,
             lookup: dnsLookup,
-            timeout: 15000 // 15 second timeout (aggregator may be slower)
+            timeout: 15000 // Default 15s fallback, overridden by user's providerTimeout setting
         });
 
         if (!WyzieSubsService.initLogged) {
@@ -135,6 +159,7 @@ class WyzieSubsService {
      * @returns {Promise<Array>} - Array of subtitle objects
      */
     async searchSubtitles(params) {
+        const searchStartTime = Date.now();
         try {
             const { imdb_id, tmdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles, filename, sources } = params;
 
@@ -229,14 +254,19 @@ class WyzieSubsService {
             const { providerTimeout } = params;
             const requestConfig = providerTimeout ? { timeout: providerTimeout } : {};
 
+            const fetchStartTime = Date.now();
             const response = await this.client.get(url, requestConfig);
+            const fetchDuration = Date.now() - fetchStartTime;
+
+            // Log timing for performance debugging
+            log.debug(() => `[WyzieSubs] API response received in ${fetchDuration}ms`);
 
             if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
-                log.debug(() => '[WyzieSubs] No subtitles found');
+                log.debug(() => `[WyzieSubs] No subtitles found (total: ${Date.now() - searchStartTime}ms)`);
                 return [];
             }
 
-            log.debug(() => `[WyzieSubs] Found ${response.data.length} subtitle(s)`);
+            log.debug(() => `[WyzieSubs] Found ${response.data.length} subtitle(s) in ${fetchDuration}ms`);
 
             // Track language stats for debugging
             const langStats = new Map();
@@ -321,6 +351,9 @@ class WyzieSubsService {
                 log.debug(() => `[WyzieSubs] Limited results from ${results.length} to ${limitedResults.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
             }
 
+            const totalDuration = Date.now() - searchStartTime;
+            log.debug(() => `[WyzieSubs] Search complete: ${limitedResults.length} results in ${totalDuration}ms`);
+
             return limitedResults;
 
         } catch (error) {
@@ -346,6 +379,7 @@ class WyzieSubsService {
      * @returns {Promise<string>} - Subtitle content as text
      */
     async downloadSubtitle(fileId, options = {}) {
+        const downloadStartTime = Date.now();
         const maxRetries = options?.maxRetries || 3;
         const timeout = options?.timeout || 15000;
         // Extract encoded URL from fileId
@@ -407,7 +441,8 @@ class WyzieSubsService {
                     log.debug(() => '[WyzieSubs] Received SRT format subtitle');
                 }
 
-                log.debug(() => `[WyzieSubs] Downloaded subtitle: ${text.length} bytes`);
+                const downloadDuration = Date.now() - downloadStartTime;
+                log.debug(() => `[WyzieSubs] Downloaded subtitle: ${text.length} bytes in ${downloadDuration}ms`);
                 return text;
 
             } catch (error) {

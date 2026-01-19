@@ -115,7 +115,7 @@
                     </div>
                     <div class="card-content">
                         <!-- OpenSubtitles -->
-                        <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                        <div class="form-group" style="padding: 1.5rem 0; border-bottom: 1px solid var(--border);">
                             <div
                                 style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
                                 <label style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
@@ -636,11 +636,12 @@
                                     </span>
                                 </label>
                                 <select id="geminiKeyRotationMode">
+                                    <option value="per-batch" data-i18n="config.gemini.keyRotation.modePerBatch"
+                                        selected>Per
+                                        Batch (each translation batch)</option>
                                     <option value="per-request" data-i18n="config.gemini.keyRotation.modePerRequest">Per
                                         Request (once per
                                         file)</option>
-                                    <option value="per-batch" data-i18n="config.gemini.keyRotation.modePerBatch">Per
-                                        Batch (each translation batch)</option>
                                 </select>
                             </div>
                         </div>
@@ -661,8 +662,7 @@
                                     data-i18n="config.gemini.model.options.flash">Gemini 2.5 Flash</option>
                                 <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3">
                                     Gemini 3.0 Flash (beta)</option>
-                                <option value="gemini-2.5-pro" data-i18n="config.gemini.model.options.pro">Gemini 2.5
-                                    Pro (beta)</option>
+
                                 <option value="gemini-3-pro-preview" data-i18n="config.gemini.model.options.pro3">
                                     Gemini 3.0 Pro (beta)</option>
                             </select>

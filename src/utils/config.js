@@ -540,7 +540,7 @@ function normalizeConfig(config) {
   // Normalize rotation mode - only allow valid values
   const validRotationModes = ['per-request', 'per-batch'];
   if (!validRotationModes.includes(mergedConfig.geminiKeyRotationMode)) {
-    mergedConfig.geminiKeyRotationMode = 'per-request';
+    mergedConfig.geminiKeyRotationMode = 'per-batch';
   }
 
   // If geminiModel is empty/null, use defaults (respects .env)
@@ -926,7 +926,7 @@ function getDefaultConfig(modelName = null) {
     // Gemini API key rotation: allows multiple keys to be cycled for load distribution
     geminiKeyRotationEnabled: false,
     geminiApiKeys: [], // Array of API keys to rotate through
-    geminiKeyRotationMode: 'per-request', // 'per-request' = rotate once per file, 'per-batch' = rotate for each batch
+    geminiKeyRotationMode: 'per-batch', // 'per-batch' = rotate for each batch , 'per-request' = rotate once per file
     assemblyAiApiKey: DEFAULT_API_KEYS.ASSEMBLYAI || '',
     cloudflareWorkersApiKey: DEFAULT_API_KEYS.CF_WORKERS_AUTOSUBS || '',
     otherApiKeysEnabled: true,

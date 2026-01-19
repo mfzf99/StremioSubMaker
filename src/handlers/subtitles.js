@@ -4088,7 +4088,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     // Pass keyRotationConfig for per-batch key rotation when enabled
     const keyRotationConfig = (config.geminiKeyRotationEnabled === true && providerName === 'gemini') ? {
       enabled: true,
-      mode: config.geminiKeyRotationMode || 'per-request',
+      mode: config.geminiKeyRotationMode || 'per-batch',
       keys: Array.isArray(config.geminiApiKeys) ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [],
       advancedSettings: config.advancedSettings || {}
     } : null;

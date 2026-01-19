@@ -2,6 +2,7 @@ const axios = require('axios');
 const { handleTranslationError, logApiError } = require('../../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const log = require('../../utils/logger');
+const { sanitizeApiKeyForHeader } = require('../../utils/security');
 const { DEFAULT_TRANSLATION_PROMPT } = require('../gemini');
 const { normalizeTargetLanguageForPrompt } = require('../utils/normalizeTargetLanguageForPrompt');
 
@@ -126,8 +127,9 @@ class AnthropicProvider {
   }
 
   getHeaders() {
+    // Sanitize API key to prevent header injection vulnerabilities
     return {
-      'x-api-key': String(this.apiKey || '').trim(),
+      'x-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
       'anthropic-version': ANTHROPIC_VERSION
     };
   }
@@ -258,7 +260,7 @@ class AnthropicProvider {
               aggregated += delta.text;
               const cleanedAgg = this.cleanTranslatedSubtitle(aggregated);
               if (typeof onPartial === 'function') {
-                try { onPartial(cleanedAgg); } catch (_) {}
+                try { onPartial(cleanedAgg); } catch (_) { }
               }
             }
             return;
@@ -367,7 +369,7 @@ class AnthropicProvider {
           log.warn(() => [`[${this.providerName}] Streaming not supported for this model/base, falling back to non-stream`]);
           const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
           if (typeof onPartial === 'function') {
-            try { await onPartial(full); } catch (_) {}
+            try { await onPartial(full); } catch (_) { }
           }
           return full;
         }

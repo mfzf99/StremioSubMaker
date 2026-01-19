@@ -155,7 +155,7 @@ class TranslationEngine {
     if (options.keyRotationConfig && Array.isArray(options.keyRotationConfig.keys)) {
       const sanitizedConfig = {
         enabled: options.keyRotationConfig.enabled === true,
-        mode: options.keyRotationConfig.mode || 'per-request',
+        mode: options.keyRotationConfig.mode || 'per-batch',
         advancedSettings: options.keyRotationConfig.advancedSettings || {}
       };
       // Make keys non-enumerable so they won't appear in JSON.stringify or Object.keys

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.35
+
+**Improvements:**
+
+- **Changed default API key rotation frequency to "Per Batch":** When enabling Gemini API key rotation, the default rotation frequency is now "Per Batch" (rotates key for each translation batch) instead of "Per Request" (once per file). This provides better rate limit distribution across multiple API keys. "Per Batch" is now also listed first in the dropdown as the recommended option.
+
+**Cleanup:**
+
+- **Removed Sentry debug endpoints:** Removed `/debug-sentry` and `/api/sentry-test` endpoints that were only used for verifying Sentry integration during initial setup. Core Sentry error tracking remains active for production error monitoring.
+
+- **Removed Gemini 2.5 Pro from model selection:** Removed `gemini-2.5-pro` from the Translation Model dropdown. Gemini 3.0 Pro remains available for users who need a Pro-tier model.
+
+**Bug Fixes:**
+
+- **Fixed OpenSubtitles config section padding asymmetry:** The OpenSubtitles provider section had asymmetric padding (only bottom padding), causing it to appear closer to the section above compared to other provider entries. Changed to symmetric padding matching other providers.
+
 ## SubMaker v1.4.34
 
 **Bug Fixes:**
@@ -120,8 +136,6 @@ All notable changes to this project will be documented in this file.
 - **Enhanced archive debugging:** Added comprehensive debug logging throughout the archive extraction pipeline, including first bytes hex dump, RAR version detection (RAR4/RAR5), file count and entry listing, per-file extraction progress, subtitle format conversion attempts and fallback chains, and stack traces for all errors.
 
 - **Sentry error capture in Express error handlers:** All Express error handlers (subtitle, translation, translate-selector, file-translate, sub-toolbox, and general) now capture errors to Sentry with module context, path, and method information for improved production debugging.
-
-- **Sentry debug endpoint:** Added `/debug-sentry` endpoint to verify Sentry integration is working correctly in production environments.
 
 **Bug Fixes:**
 

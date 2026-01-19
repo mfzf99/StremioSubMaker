@@ -5,6 +5,7 @@ const { handleTranslationError, logApiError } = require('../../utils/apiErrorHan
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const { findISO6391ByName, toISO6391 } = require('../../utils/languages');
 const log = require('../../utils/logger');
+const { sanitizeApiKeyForHeader } = require('../../utils/security');
 
 const SUPPORTED_SOURCE_LANGS = new Set([
   'AR', 'BG', 'CS', 'DA', 'DE', 'EL', 'EN', 'ES', 'ET', 'FI', 'FR', 'HE', 'HU',
@@ -255,7 +256,7 @@ class DeepLProvider {
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `DeepL-Auth-Key ${this.apiKey}`
+              Authorization: `DeepL-Auth-Key ${sanitizeApiKeyForHeader(this.apiKey) || ''}`
             },
             timeout: this.translationTimeout,
             httpAgent,
@@ -291,7 +292,7 @@ class DeepLProvider {
     if (typeof onPartial === 'function') {
       try {
         await onPartial(full);
-      } catch (_) {}
+      } catch (_) { }
     }
     return full;
   }

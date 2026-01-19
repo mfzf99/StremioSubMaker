@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { sanitizeApiKeyForHeader } = require('../utils/security');
 const crypto = require('crypto');
 const { toISO6391, toISO6392 } = require('../utils/languages');
 const { handleSearchError, handleDownloadError, handleAuthError, parseApiError } = require('../utils/apiErrorHandler');
@@ -250,8 +251,9 @@ class OpenSubtitlesService {
     };
 
     // Add API key if configured (only for search/auth flows)
-    if (apiKey) {
-      defaultHeaders['Api-Key'] = apiKey;
+    const sanitizedApiKey = sanitizeApiKeyForHeader(apiKey);
+    if (sanitizedApiKey) {
+      defaultHeaders['Api-Key'] = sanitizedApiKey;
       // Only log once at startup
       if (!OpenSubtitlesService.initLogged) {
         log.debug(() => '[OpenSubtitles] API key loaded successfully from environment');

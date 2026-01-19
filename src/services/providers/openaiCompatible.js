@@ -2,6 +2,7 @@ const axios = require('axios');
 const { handleTranslationError, logApiError } = require('../../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const log = require('../../utils/logger');
+const { sanitizeApiKeyForHeader } = require('../../utils/security');
 const { DEFAULT_TRANSLATION_PROMPT } = require('../gemini');
 const {
   findISO6391ByName,
@@ -199,19 +200,19 @@ class OpenAICompatibleProvider {
 
     const body = isCfRun
       ? {
-          prompt: userPrompt,
-          stream
-        }
+        prompt: userPrompt,
+        stream
+      }
       : {
-          model: this.model,
-          messages: [
-            { role: 'system', content: 'You are a subtitle translation engine.' },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: this.temperature,
-          max_tokens: this.maxOutputTokens,
-          stream
-        };
+        model: this.model,
+        messages: [
+          { role: 'system', content: 'You are a subtitle translation engine.' },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: this.temperature,
+        max_tokens: this.maxOutputTokens,
+        stream
+      };
 
     if (!isCfRun && this.providerName === 'openai') {
       const effort = this.normalizeReasoningEffort(this.reasoningEffort);
@@ -255,8 +256,10 @@ class OpenAICompatibleProvider {
   }
 
   getAuthHeaders() {
+    // Sanitize API key to prevent header injection vulnerabilities
+    const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
     return {
-      Authorization: `Bearer ${String(this.apiKey || '').trim()}`,
+      Authorization: `Bearer ${sanitizedKey}`,
       ...this.headers
     };
   }
@@ -368,24 +371,24 @@ class OpenAICompatibleProvider {
 
       const models = Array.isArray(modelsRaw)
         ? modelsRaw.map(m => {
-            const isCf = this.providerName === 'cfWorkers';
-            // Cloudflare returns a UUID in `id` and the human slug in `name`/`slug`
-            const name = isCf
-              ? (m.name || m.slug || m.id || m.model)
-              : (m.id || m.name || m.model);
-            const displayName = m.display_name
-              || m.displayName
-              || m.name
-              || m.slug
-              || m.id
-              || m.model;
-            return {
-              name,
-              displayName,
-              description: m.description || '',
-              maxTokens: m.max_tokens || m.maxTokens || undefined
-            };
-          }).filter(m => !!m.name)
+          const isCf = this.providerName === 'cfWorkers';
+          // Cloudflare returns a UUID in `id` and the human slug in `name`/`slug`
+          const name = isCf
+            ? (m.name || m.slug || m.id || m.model)
+            : (m.id || m.name || m.model);
+          const displayName = m.display_name
+            || m.displayName
+            || m.name
+            || m.slug
+            || m.id
+            || m.model;
+          return {
+            name,
+            displayName,
+            description: m.description || '',
+            maxTokens: m.max_tokens || m.maxTokens || undefined
+          };
+        }).filter(m => !!m.name)
         : [];
 
       if (this.providerName === 'cfWorkers' && models.length === 0) {
@@ -487,7 +490,7 @@ class OpenAICompatibleProvider {
     if (request.isCfTranslation) {
       const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
       if (typeof onPartial === 'function') {
-        try { await onPartial(full); } catch (_) {}
+        try { await onPartial(full); } catch (_) { }
       }
       return full;
     }
@@ -545,7 +548,7 @@ class OpenAICompatibleProvider {
             aggregated += chunkText;
             const cleanedAgg = this.cleanTranslatedSubtitle(aggregated);
             if (typeof onPartial === 'function') {
-              try { onPartial(cleanedAgg); } catch (_) {}
+              try { onPartial(cleanedAgg); } catch (_) { }
             }
           }
         };
@@ -631,7 +634,7 @@ class OpenAICompatibleProvider {
           log.warn(() => [`[${this.providerName}] Streaming not supported for this model/base, falling back to non-stream`]);
           const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
           if (typeof onPartial === 'function') {
-            try { await onPartial(full); } catch (_) {}
+            try { await onPartial(full); } catch (_) { }
           }
           return full;
         }

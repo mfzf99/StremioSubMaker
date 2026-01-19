@@ -2895,42 +2895,6 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 
-// Sentry debug endpoint - comprehensive diagnostics
-// Visit /debug-sentry to check Sentry status and trigger a test error
-app.get('/debug-sentry', (req, res) => {
-    const diagnostics = {
-        timestamp: new Date().toISOString(),
-        sentry: {
-            dsnPresent: !!process.env.SENTRY_DSN,
-            dsnPrefix: process.env.SENTRY_DSN ? process.env.SENTRY_DSN.slice(0, 20) + '...' : null,
-            environment: process.env.SENTRY_ENVIRONMENT || 'not set',
-            enabled: process.env.SENTRY_ENABLED !== 'false',
-            initialized: sentry.isInitialized(),
-        },
-        test: {
-            errorThrown: false,
-            eventId: null,
-            error: null
-        }
-    };
-
-    // Try to capture a test error
-    try {
-        const testError = new Error('SubMaker Sentry test error - triggered via /debug-sentry');
-        const eventId = sentry.captureErrorForced(testError, {
-            module: 'DebugEndpoint',
-            test: true
-        });
-        diagnostics.test.errorThrown = true;
-        diagnostics.test.eventId = eventId;
-        diagnostics.test.success = !!eventId;
-    } catch (e) {
-        diagnostics.test.error = e.message;
-    }
-
-    // Return diagnostics as JSON
-    res.json(diagnostics);
-});
 
 // Serve static files with caching enabled
 // CSS and JS files get 1 year cache (bust with version in filename if needed)
@@ -3036,39 +3000,6 @@ app.get('/configure/:config', (req, res) => {
     res.redirect(302, `/configure${qs ? `?${qs}` : ''}`);
 });
 
-// Sentry test endpoint - sends a test error to verify Sentry is working
-// Access: GET /api/sentry-test (only works from localhost)
-app.get('/api/sentry-test', (req, res) => {
-    // Only allow from localhost for security
-    if (!isLocalhost(req)) {
-        return res.status(403).json({ error: 'Only available from localhost' });
-    }
-
-    const testError = new Error('Sentry test error - this is a test to verify Sentry is working');
-    testError.name = 'SentryTestError';
-
-    // Force send to Sentry (bypass filters)
-    const eventId = sentry.captureErrorForced(testError, {
-        module: 'SentryTest',
-        type: 'test',
-        timestamp: new Date().toISOString()
-    });
-
-    if (eventId) {
-        res.json({
-            success: true,
-            message: 'Test error sent to Sentry',
-            eventId: eventId,
-            hint: 'Check your Sentry dashboard in a few seconds'
-        });
-    } else {
-        res.json({
-            success: false,
-            message: 'Sentry is not initialized',
-            hint: 'Check that SENTRY_DSN is set correctly and @sentry/node is installed'
-        });
-    }
-});
 
 // Health check endpoint for Kubernetes/Docker readiness and liveness probes
 app.get('/health', async (req, res) => {

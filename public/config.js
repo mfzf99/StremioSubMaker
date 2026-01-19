@@ -675,7 +675,7 @@ Translate to {target_language}.`;
             geminiApiKey: DEFAULT_API_KEYS.GEMINI,
             geminiKeyRotationEnabled: false,
             geminiApiKeys: [],
-            geminiKeyRotationMode: 'per-request', // 'per-request' or 'per-batch'
+            geminiKeyRotationMode: 'per-batch', // 'per-batch' or 'per-request'
             assemblyAiApiKey: DEFAULT_API_KEYS.ASSEMBLYAI,
             cloudflareWorkersApiKey: DEFAULT_API_KEYS.CF_WORKERS_AUTOSUBS,
             otherApiKeysEnabled: true,
@@ -4959,7 +4959,7 @@ Translate to {target_language}.`;
             newConfig.geminiApiKeys = Array.isArray(oldConfig.geminiApiKeys)
                 ? oldConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
                 : [];
-            newConfig.geminiKeyRotationMode = oldConfig.geminiKeyRotationMode || 'per-request';
+            newConfig.geminiKeyRotationMode = oldConfig.geminiKeyRotationMode || 'per-batch';
 
             // Preserve subtitle sources enabled/disabled + API keys if provider still exists
             newConfig.subtitleProviders = { ...defaults.subtitleProviders };
@@ -5192,7 +5192,7 @@ Translate to {target_language}.`;
         // Load rotation mode
         const rotationModeSelect = document.getElementById('geminiKeyRotationMode');
         if (rotationModeSelect) {
-            rotationModeSelect.value = currentConfig.geminiKeyRotationMode || 'per-request';
+            rotationModeSelect.value = currentConfig.geminiKeyRotationMode || 'per-batch';
         }
 
         const assemblyKeyInput = document.getElementById('assemblyAiApiKey');
@@ -5540,7 +5540,7 @@ Translate to {target_language}.`;
             geminiApiKey: document.getElementById('geminiApiKey').value.trim(),
             geminiKeyRotationEnabled: document.getElementById('geminiKeyRotationEnabled')?.checked === true,
             geminiApiKeys: getGeminiApiKeys(),
-            geminiKeyRotationMode: document.getElementById('geminiKeyRotationMode')?.value || 'per-request',
+            geminiKeyRotationMode: document.getElementById('geminiKeyRotationMode')?.value || 'per-batch',
             assemblyAiApiKey: (function () { const el = document.getElementById('assemblyAiApiKey'); return el ? el.value.trim() : ''; })(),
             cloudflareWorkersApiKey: (function () { const el = document.getElementById('cloudflareWorkersApiKey'); return el ? el.value.trim() : ''; })(),
             otherApiKeysEnabled: isDevModeEnabled(),
