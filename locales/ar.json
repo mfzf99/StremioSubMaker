@@ -1010,7 +1010,7 @@
           "mistral": "مفتاح Mistral API",
           "cfworkers": "ACCOUNT_ID|TOKEN",
           "openrouter": "مفتاح OpenRouter API",
-          "customBaseUrl": "http://localhost:11434/v1",
+          "customBaseUrl": "https://your-api-endpoint/v1",
           "customKey": "مفتاح API (اختياري)",
           "customModel": "مثال: llama3:8b, mistral:7b"
         },
@@ -1021,7 +1021,7 @@
         "googleWeb": "ويب (ثابت)",
         "googleHint": "يستخدم نقطة نهاية الويب العامة لترجمة Google (قد تكون غير مستقرة).",
         "testConnection": "اختبار الاتصال",
-        "customHint": "لـ Ollama أو LM Studio أو LocalAI أو أي واجهة برمجة تطبيقات متوافقة مع OpenAI. اترك المفتاح فارغاً إذا لم يكن مطلوباً. يعمل فقط في وضع الاستضافة الذاتية."
+        "customHint": "لـ Ollama أو LM Studio أو LocalAI أو أي واجهة برمجة تطبيقات متوافقة مع OpenAI. اترك المفتاح فارغاً إذا لم يكن مطلوباً."
       },
       "gemini": {
         "title": "مفاتيح API للترجمة بالذكاء الاصطناعي",

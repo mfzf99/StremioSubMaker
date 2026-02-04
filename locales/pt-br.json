@@ -1010,7 +1010,7 @@
           "mistral": "Chave da API Mistral",
           "cfworkers": "ACCOUNT_ID|TOKEN",
           "openrouter": "Chave da API OpenRouter",
-          "customBaseUrl": "http://localhost:11434/v1",
+          "customBaseUrl": "https://your-api-endpoint/v1",
           "customKey": "Chave de API (opcional)",
           "customModel": "ex. llama3:8b, mistral:7b"
         },
@@ -1021,7 +1021,7 @@
         "googleWeb": "web (fixo)",
         "googleHint": "Usa o endpoint público da web do Google Translate (pode ser instável).",
         "testConnection": "Testar conexão",
-        "customHint": "Para Ollama, LM Studio, LocalAI ou qualquer API compatível com OpenAI. Deixe a chave vazia se não for necessária. Funciona apenas em modo auto-hospedado."
+        "customHint": "Para Ollama, LM Studio, LocalAI ou qualquer API compatível com OpenAI. Deixe a chave vazia se não for necessária."
       },
       "gemini": {
         "title": "Chaves de API de Tradução por IA",

@@ -4,6 +4,7 @@ const AnthropicProvider = require('./providers/anthropic');
 const DeepLProvider = require('./providers/deepl');
 const GoogleTranslateProvider = require('./providers/googleTranslate');
 const log = require('../utils/logger');
+const { validateCustomBaseUrl, areInternalEndpointsAllowed } = require('../utils/ssrfProtection');
 const { getDefaultProviderParameters, mergeProviderParameters, selectGeminiApiKey } = require('../utils/config');
 
 const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate']);
@@ -295,18 +296,32 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         translationTimeout: providerParams.translationTimeout,
         maxRetries: providerParams.maxRetries
       });
-    case 'custom':
+    case 'custom': {
+      const baseUrl = providerConfig.baseUrl;
+      if (!baseUrl) {
+        log.warn(() => '[Providers] Custom provider requires a baseUrl');
+        return null;
+      }
+
+      // SSRF protection: validate baseUrl is not internal/private (unless allowed)
+      const validation = validateCustomBaseUrl(baseUrl);
+      if (!validation.valid) {
+        log.warn(() => `[Providers] Custom provider baseUrl blocked: ${validation.error}`);
+        return null;
+      }
+
       return new OpenAICompatibleProvider({
         apiKey: providerConfig.apiKey || '',
         model: providerConfig.model,
         providerName: 'custom',
-        baseUrl: providerConfig.baseUrl || 'http://localhost:11434/v1',
+        baseUrl: validation.sanitized,
         temperature: providerParams.temperature,
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
         maxRetries: providerParams.maxRetries
       });
+    }
     default:
       return null;
   }

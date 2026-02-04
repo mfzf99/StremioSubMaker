@@ -6,11 +6,11 @@ All notable changes to this project will be documented in this file.
 
 **New Features:**
 
-- **Local LLM support (Custom provider):** Added a "Custom (Local LLM)" provider option to connect to any OpenAI-compatible endpoint such as Ollama, LM Studio, LocalAI, or custom API servers. Configurable base URL (default: `http://localhost:11434/v1`), optional API key, and custom model input. Includes higher default timeout (120s) for slower endpoints.
+- **Custom Providers LLM support:** Added a "Custom Provider" option to connect to any OpenAI-compatible endpoint such as Ollama, LM Studio, LocalAI, or custom API servers. Configurable base URL, optional API key, and custom model input. Includes higher default timeout (120s) for slower endpoints. **Security:** Internal/private IPs are blocked by default to prevent SSRF attacks on public deployments. Self-hosters can enable local endpoints with `ALLOW_INTERNAL_CUSTOM_ENDPOINTS=true` in `.env`.
 
 - **Force SRT output option:** Added a new "Force SRT output" checkbox in Other Settings that automatically converts all downloaded subtitles to SRT format for maximum player compatibility. When enabled, VTT, ASS, and SSA subtitles are converted to SRT before being served to Stremio. Uses the existing `subsrt-ts` library for VTT→SRT conversion and `assConverter` for ASS/SSA→VTT→SRT conversion. Gracefully falls back to the original content if conversion fails.
 
-- **Subtitle deduplication across providers:** Added automatic deduplication of subtitle results when multiple providers return the same subtitle. When providers like SubDL and OpenSubtitles return identical subtitles (same release name), only the first occurrence is kept. This reduces clutter in the subtitle list while preserving: different languages, HI vs non-HI variants, different formats (SRT vs ASS), and season packs vs episode-specific subtitles. Enabled by default, can be disabled with `deduplicateSubtitles: false` in config.
+- **Subtitle deduplication across providers:** Added automatic deduplication of subtitle results when multiple providers return the same subtitle. When providers like SubDL and OpenSubtitles return identical subtitles (same release name), only the first occurrence is kept.
 
 **Bug Fixes:**
 

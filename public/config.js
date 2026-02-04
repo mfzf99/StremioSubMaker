@@ -453,7 +453,7 @@
         openrouter: { label: 'OpenRouter' },
         googletranslate: { label: 'Google Translate (unofficial)' },
         gemini: { label: 'Gemini' },
-        custom: { label: 'Custom (Local LLM)' }
+        custom: { label: 'Custom Provider' }
     };
 
     const PROVIDER_PARAMETER_DEFAULTS = {
@@ -708,7 +708,7 @@ Translate to {target_language}.`;
                 cfworkers: { enabled: false, apiKey: '', model: '' },
                 openrouter: { enabled: false, apiKey: '', model: '' },
                 googletranslate: { enabled: false, apiKey: '', model: 'web' },
-                custom: { enabled: false, apiKey: '', model: '', baseUrl: 'http://localhost:11434/v1' }
+                custom: { enabled: false, apiKey: '', model: '', baseUrl: '' }
             },
             providerParameters: getDefaultProviderParameters(),
             promptStyle: 'strict', // 'natural' or 'strict'
@@ -3320,7 +3320,7 @@ Translate to {target_language}.`;
             // Populate baseUrl for custom provider
             if (key === 'custom') {
                 const baseUrlInput = document.getElementById('provider-custom-baseUrl');
-                if (baseUrlInput) baseUrlInput.value = cfg?.baseUrl || 'http://localhost:11434/v1';
+                if (baseUrlInput) baseUrlInput.value = cfg?.baseUrl || '';
                 // Custom provider uses a text input for model, not a select dropdown
                 const modelInput = document.getElementById('provider-custom-model');
                 if (modelInput) modelInput.value = cfg?.model || '';
@@ -3364,7 +3364,7 @@ Translate to {target_language}.`;
             // Include baseUrl for custom provider
             if (key === 'custom') {
                 const baseUrlInput = document.getElementById('provider-custom-baseUrl');
-                providers[key].baseUrl = baseUrlInput ? baseUrlInput.value.trim() : 'http://localhost:11434/v1';
+                providers[key].baseUrl = baseUrlInput ? baseUrlInput.value.trim() : '';
             }
         });
         return providers;
@@ -3433,7 +3433,7 @@ Translate to {target_language}.`;
             // For custom provider, include the baseUrl for model fetching
             if (providerKey === 'custom') {
                 const baseUrlInput = document.getElementById('provider-custom-baseUrl');
-                requestBody.baseUrl = baseUrlInput ? baseUrlInput.value.trim() : 'http://localhost:11434/v1';
+                requestBody.baseUrl = baseUrlInput ? baseUrlInput.value.trim() : '';
             }
             const response = await fetch(`/api/models/${providerKey}`, {
                 method: 'POST',

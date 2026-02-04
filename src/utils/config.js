@@ -959,7 +959,8 @@ function getDefaultConfig(modelName = null) {
       mistral: { enabled: false, apiKey: '', model: '' },
       cfworkers: { enabled: false, apiKey: '', model: '' },
       openrouter: { enabled: false, apiKey: '', model: '' },
-      googletranslate: { enabled: false, apiKey: '', model: 'web' }
+      googletranslate: { enabled: false, apiKey: '', model: 'web' },
+      custom: { enabled: false, apiKey: '', model: '', baseUrl: '' }
     },
     providerParameters: getDefaultProviderParameters(),
     translationPrompt: DEFAULT_TRANSLATION_PROMPT,

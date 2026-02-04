@@ -3318,18 +3318,26 @@ app.post('/api/models/:provider', async (req, res) => {
         }
 
         // For custom provider, API key is optional (local LLMs don't require it)
-        // but baseUrl is required
+        // but baseUrl is required and must be validated for SSRF
         if (providerKey === 'custom') {
-            const baseUrl = req.body.baseUrl || sessionProvider?.baseUrl || 'http://localhost:11434/v1';
+            const baseUrl = req.body.baseUrl || sessionProvider?.baseUrl || '';
             if (!baseUrl) {
                 return res.status(400).json({ error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider') });
             }
+
+            // SSRF protection: validate baseUrl before making external requests
+            const { validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
+            const validation = validateCustomBaseUrl(baseUrl);
+            if (!validation.valid) {
+                return res.status(400).json({ error: validation.error });
+            }
+
             const provider = createProviderInstance(
                 providerKey,
                 {
                     apiKey: providerApiKey || '',
                     model: providerModel,
-                    baseUrl: baseUrl
+                    baseUrl: validation.sanitized
                 },
                 providerParams
             );

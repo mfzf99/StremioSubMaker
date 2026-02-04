@@ -982,22 +982,13 @@
                                 <div class="provider-block" data-provider="custom">
                                     <div
                                         style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
-                                        <label
-                                            style="font-weight:600; margin:0; display:flex; align-items:center; gap:0.35rem;">
-                                            <input type="checkbox" id="provider-custom-enabled"> Custom (Local LLM)
+                                        <label><input type="checkbox" id="provider-custom-enabled"> Custom Provider
                                         </label>
-                                        <button type="button" class="validate-api-btn" data-provider="custom"
-                                            title="Test connection" data-i18n="config.providersUi.testConnection"
-                                            data-i18n-attr="title">
-                                            <span class="validate-icon">&#8635;</span>
-                                            <span class="validate-text" data-i18n="config.providersUi.loadModels">Load
-                                                Models</span>
-                                        </button>
                                     </div>
                                     <div id="provider-custom-fields" class="provider-fields"
                                         style="display:none; margin-top:0.5rem; display: grid; gap: 0.5rem;">
                                         <input type="text" id="provider-custom-baseUrl"
-                                            placeholder="http://localhost:11434/v1"
+                                            placeholder="https://your-api-endpoint/v1"
                                             data-i18n="config.providersUi.placeholders.customBaseUrl"
                                             data-i18n-attr="placeholder">
                                         <input type="text" id="provider-custom-key" placeholder="API key (optional)"
@@ -1009,7 +1000,7 @@
                                             data-i18n-attr="placeholder">
                                         <span class="label-description" data-i18n="config.providersUi.customHint">
                                             For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API.
-                                            Leave API key empty if not required. Only works when self-hosting.
+                                            Leave API key empty if not required.
                                         </span>
                                     </div>
                                 </div>
