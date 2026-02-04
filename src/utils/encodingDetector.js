@@ -71,16 +71,31 @@ function detectAndConvertEncoding(content, source = 'Unknown') {
         'UTF-16BE': 'utf-16be',
         'ISO-8859-1': 'iso-8859-1',
         'ISO-8859-2': 'iso-8859-2',
+        'ISO-8859-6': 'iso-8859-6',      // Arabic
+        'ISO-8859-7': 'iso-8859-7',      // Greek
+        'ISO-8859-8': 'iso-8859-8',      // Hebrew
+        'ISO-8859-9': 'iso-8859-9',      // Turkish
         'ISO-8859-15': 'iso-8859-15',
-        'windows-1252': 'windows-1252',
-        'windows-1250': 'windows-1250',
-        'windows-1251': 'windows-1251',
-        'windows-1256': 'windows-1256',
+        'windows-1250': 'windows-1250',  // Central European
+        'windows-1251': 'windows-1251',  // Cyrillic
+        'windows-1252': 'windows-1252',  // Western European
+        'windows-1253': 'windows-1253',  // Greek
+        'windows-1254': 'windows-1254',  // Turkish
+        'windows-1255': 'windows-1255',  // Hebrew
+        'windows-1256': 'windows-1256',  // Arabic
+        'windows-1257': 'windows-1257',  // Baltic
+        'windows-1258': 'windows-1258',  // Vietnamese
+        'windows-874': 'windows-874',    // Thai
+        'TIS-620': 'tis-620',            // Thai (ISO)
         'GB2312': 'gb2312',
+        'GBK': 'gbk',
+        'GB18030': 'gb18030',
         'Big5': 'big5',
         'EUC-KR': 'euc-kr',
         'Shift_JIS': 'shift_jis',
-        'EUC-JP': 'euc-jp'
+        'EUC-JP': 'euc-jp',
+        'KOI8-R': 'koi8-r',              // Russian (alternative)
+        'KOI8-U': 'koi8-u'               // Ukrainian (alternative)
       };
 
       const encoding = encodingMap[detected] || detected.toLowerCase();
@@ -126,13 +141,27 @@ function detectAndConvertEncoding(content, source = 'Unknown') {
  */
 function tryFallbackEncodings(buffer, source) {
   // Common encodings to try, in order of likelihood
+  // UTF-8 first as most modern content uses it
+  // Then regional Windows codepages grouped by script family
   const fallbackEncodings = [
     'utf-8',           // Most common modern encoding
     'windows-1252',    // Very common for Western European languages (Portuguese, Spanish, etc.)
     'iso-8859-1',      // Latin-1, common for older Western European content
     'iso-8859-15',     // Latin-9, includes Euro sign
-    'windows-1250',    // Central European
-    'windows-1251',    // Cyrillic
+    'windows-1250',    // Central European (Polish, Czech, Hungarian, etc.)
+    'windows-1251',    // Cyrillic (Russian, Ukrainian, Bulgarian, etc.)
+    'koi8-r',          // Russian (alternative Cyrillic)
+    'windows-1256',    // Arabic
+    'iso-8859-6',      // Arabic (ISO standard)
+    'windows-1255',    // Hebrew
+    'iso-8859-8',      // Hebrew (ISO standard)
+    'windows-1253',    // Greek
+    'iso-8859-7',      // Greek (ISO standard)
+    'windows-1254',    // Turkish
+    'iso-8859-9',      // Turkish (ISO standard)
+    'windows-1258',    // Vietnamese
+    'windows-874',     // Thai
+    'windows-1257',    // Baltic (Lithuanian, Latvian, Estonian)
   ];
 
   let bestResult = null;

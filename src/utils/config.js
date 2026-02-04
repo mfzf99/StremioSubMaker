@@ -10,7 +10,7 @@ const { redactApiKey } = require('./security');
 const DEFAULT_SOURCE_LANGUAGE_LIMIT = 3;
 const DEFAULT_TARGET_LANGUAGE_LIMIT = 6;
 const DEFAULT_NO_TRANSLATION_LANGUAGE_LIMIT = 9;
-const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate']);
+const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate', 'custom']);
 const GEMINI_LOG_INTERVAL_MS = parseInt(process.env.GEMINI_CONFIG_LOG_INTERVAL_MS || `${5 * 60 * 1000}`, 10);
 let lastGeminiConfigLog = 0;
 let suppressedGeminiConfigLogs = 0;
@@ -101,6 +101,13 @@ const PROVIDER_PARAMETER_DEFAULTS = {
     topP: 1,
     maxOutputTokens: 32768,
     translationTimeout: 60,
+    maxRetries: 2
+  },
+  custom: {
+    temperature: 0.4,
+    topP: 0.95,
+    maxOutputTokens: 32768,
+    translationTimeout: 120,  // Higher for local models
     maxRetries: 2
   }
 };
@@ -441,6 +448,9 @@ function normalizeConfig(config) {
   mergedConfig.singleBatchMode = mergedConfig.singleBatchMode === true;
   mergedConfig.multiProviderEnabled = mergedConfig.multiProviderEnabled === true;
   mergedConfig.excludeHearingImpairedSubtitles = mergedConfig.excludeHearingImpairedSubtitles === true;
+  mergedConfig.forceSRTOutput = mergedConfig.forceSRTOutput === true;
+  // Deduplication is enabled by default (only disabled if explicitly set to false)
+  mergedConfig.deduplicateSubtitles = mergedConfig.deduplicateSubtitles !== false;
 
   // Normalize subtitle provider timeout (min: 8s, max: 30s, default: 12s)
   // Use 12s as fallback for backwards compatibility with old sessions without this setting
@@ -1001,6 +1011,8 @@ function getDefaultConfig(modelName = null) {
     syncSubtitlesEnabled: false, // legacy flag (mirrors subToolboxEnabled)
     // If true, filter out SDH/HI (hearing impaired) subtitles from provider results
     excludeHearingImpairedSubtitles: false,
+    // If true, convert all subtitle outputs (VTT, ASS, etc.) to SRT format for maximum player compatibility
+    forceSRTOutput: false,
     mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
     singleBatchMode: false, // Translate whole file at once (streaming partials)
     // Minimum size for a subtitle file to be considered valid (bytes)

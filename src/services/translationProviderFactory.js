@@ -295,6 +295,18 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         translationTimeout: providerParams.translationTimeout,
         maxRetries: providerParams.maxRetries
       });
+    case 'custom':
+      return new OpenAICompatibleProvider({
+        apiKey: providerConfig.apiKey || '',
+        model: providerConfig.model,
+        providerName: 'custom',
+        baseUrl: providerConfig.baseUrl || 'http://localhost:11434/v1',
+        temperature: providerParams.temperature,
+        topP: providerParams.topP,
+        maxOutputTokens: providerParams.maxOutputTokens,
+        translationTimeout: providerParams.translationTimeout,
+        maxRetries: providerParams.maxRetries
+      });
     default:
       return null;
   }

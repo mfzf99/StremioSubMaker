@@ -2,6 +2,7 @@ const axios = require('axios');
 const https = require('https');
 const tls = require('tls');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
+const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const log = require('../utils/logger');
 const { version } = require('../utils/version');
 
@@ -147,28 +148,11 @@ const USER_AGENT = `SubMaker v${version}`;
 // ============================================================================
 // SCS TIMEOUT CONFIGURATION
 // ============================================================================
-// Empirical testing shows SCS server response times vary significantly based on query type:
-//   - Base request (no hash/filename): ~10s
-//   - With hash only: ~15s
-//   - With filename only: ~16s
-//   - With hash + filename: ~21-22s
-//
-// The slowness is server-side (time-to-first-byte), NOT network latency.
-// TLS handshake is fast (~115ms), but the server takes 10-22s to process.
-// This is expected behavior for SCS as it does hash matching against a large database.
+// NOTE: SCS server is slow (~10-22s for queries) but we respect user's choice.
+// If user sets a low timeout, SCS will likely timeout - that's their decision.
+// Default timeout used when none specified.
 // ============================================================================
-
-// Minimum timeout for SCS requests - MUST be at least 25s to handle basic queries
-// This overrides any lower user-configured timeout because SCS simply won't work with less
-const SCS_MIN_TIMEOUT_MS = 28000;
-
-// Extended timeout for hash/filename matching queries - these take longer on the server
-// When videoHash or filename is provided, SCS does additional database matching
-// Capped at 30s to match user max setting (hash queries may timeout but basic queries work)
-const SCS_HASH_MATCH_TIMEOUT_MS = 30000;
-
-// Maximum timeout - matches user's max allowed setting
-const SCS_MAX_TIMEOUT_MS = 30000;
+const SCS_DEFAULT_TIMEOUT_MS = 15000;
 
 // Circuit breaker pattern for SCS service resilience
 // Prevents repeated failed requests when service is down (SSL errors, Cloudflare blocks, etc.)
@@ -384,7 +368,7 @@ class StremioCommunitySubtitlesService {
         httpAgent,
         httpsAgent: scsHttpsAgent, // Use custom SCS agent with TLS config for SSL compatibility
         lookup: dnsLookup,
-        timeout: SCS_HASH_MATCH_TIMEOUT_MS // Default to extended timeout (SCS server takes 10-22s)
+        timeout: SCS_DEFAULT_TIMEOUT_MS // Default timeout, will be overridden by user config
     });
 
     constructor() {
@@ -432,26 +416,8 @@ class StremioCommunitySubtitlesService {
                 return [];
             }
 
-            // ============================================================================
-            // INTELLIGENT TIMEOUT CALCULATION
-            // ============================================================================
-            // SCS server response times vary by query type:
-            //   - No matching params: ~10s (use SCS_MIN_TIMEOUT_MS)
-            //   - With hash/filename: ~15-22s (use SCS_HASH_MATCH_TIMEOUT_MS)
-            //
-            // We OVERRIDE user's configured timeout if it's too low, because SCS simply
-            // cannot respond faster than 10s even for basic queries.
-            // ============================================================================
-            let effectiveTimeout;
-            if (usesMatchingParams) {
-                // Hash/filename matching takes 15-22s, use extended timeout
-                effectiveTimeout = Math.max(SCS_HASH_MATCH_TIMEOUT_MS, providerTimeout || 0);
-            } else {
-                // Basic content search takes ~10s, use minimum timeout
-                effectiveTimeout = Math.max(SCS_MIN_TIMEOUT_MS, providerTimeout || 0);
-            }
-            // Cap at maximum
-            effectiveTimeout = Math.min(effectiveTimeout, SCS_MAX_TIMEOUT_MS);
+            // Use user's configured timeout directly - respect their choice
+            const effectiveTimeout = providerTimeout || SCS_DEFAULT_TIMEOUT_MS;
 
             // Log what matching mode SCS will use
             if (hasRealHash) {
@@ -597,9 +563,8 @@ class StremioCommunitySubtitlesService {
      * @param {string} fileId - The file ID (e.g. comm_XXXX)
      */
     async downloadSubtitle(fileId, options = {}) {
-        // Downloads are typically faster than searches (~5-10s vs 10-22s)
-        // Use SCS_MIN_TIMEOUT_MS as baseline, but allow user override if higher
-        const timeout = Math.max(SCS_MIN_TIMEOUT_MS, options?.timeout || 0);
+        // Use user's configured timeout directly - respect their choice
+        const timeout = options?.timeout || SCS_DEFAULT_TIMEOUT_MS;
 
         // Check circuit breaker first
         const circuitCheck = isRequestAllowed();
@@ -639,7 +604,8 @@ class StremioCommunitySubtitlesService {
 
 
             const buffer = Buffer.from(response.data);
-            const text = buffer.toString('utf-8');
+            // Use centralized encoding detector for proper Arabic/Hebrew/RTL support
+            const text = detectAndConvertEncoding(buffer, 'SCS');
 
             // Basic validation
             if (text.trim().length === 0) {

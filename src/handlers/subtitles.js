@@ -22,6 +22,7 @@ const { getCached: getDownloadCached, saveCached: saveDownloadCached } = require
 const log = require('../utils/logger');
 const { isHearingImpairedSubtitle } = require('../utils/subtitleFlags');
 const { generateCacheKeys } = require('../utils/cacheKeys');
+const { deduplicateSubtitles, logDeduplicationStats } = require('../utils/subtitleDeduplication');
 const { version } = require('../../package.json');
 const { isProviderHealthy, circuitBreaker } = require('../utils/httpAgents');
 
@@ -53,7 +54,54 @@ function shortKey(v) {
   }
 }
 
-// Track per-user concurrent translations (limit enforcement)
+/**
+ * Convert subtitle content to SRT if forceSRTOutput is enabled
+ * @param {string} content - Subtitle content (SRT, VTT, ASS, etc.)
+ * @param {Object} config - User configuration
+ * @returns {string} - SRT content if conversion enabled, original otherwise
+ */
+function maybeConvertToSRT(content, config) {
+  if (!config?.forceSRTOutput || !content || typeof content !== 'string') {
+    return content;
+  }
+
+  const trimmed = content.trimStart();
+
+  // Already SRT - no conversion needed (SRT starts with a number index)
+  if (/^\d+\s*[\r\n]/.test(trimmed)) {
+    return content;
+  }
+
+  try {
+    const subsrt = require('subsrt-ts');
+
+    // VTT format
+    if (trimmed.startsWith('WEBVTT')) {
+      log.debug(() => '[SRT Conversion] Converting VTT to SRT');
+      return subsrt.convert(content, { to: 'srt', from: 'vtt' });
+    }
+
+    // ASS/SSA format
+    if (trimmed.includes('[Script Info]') || trimmed.includes('Dialogue:')) {
+      log.debug(() => '[SRT Conversion] Converting ASS/SSA to SRT via VTT intermediate');
+      const { convertASSToVTT } = require('../utils/assConverter');
+      const isSSA = trimmed.includes('[V4 Styles]');
+      const vttResult = convertASSToVTT(content, isSSA ? 'ssa' : 'ass');
+      if (vttResult.success) {
+        return subsrt.convert(vttResult.content, { to: 'srt', from: 'vtt' });
+      }
+      log.warn(() => ['[SRT Conversion] ASS->VTT failed, trying direct conversion:', vttResult.error]);
+    }
+
+    // Try generic conversion as fallback
+    log.debug(() => '[SRT Conversion] Attempting generic format conversion');
+    return subsrt.convert(content, { to: 'srt' });
+  } catch (e) {
+    log.warn(() => ['[SRT Conversion] Failed to convert, returning original:', e.message]);
+    return content;
+  }
+}
+
 // Use LRUCache with max 50k users and a 24h TTL so stale counts expire naturally
 const userTranslationCounts = new LRUCache({
   max: 50000, // Max 50k unique users tracked
@@ -2370,14 +2418,14 @@ function createSubtitleHandler(config) {
             skippedProviders.push({ provider: 'StremioCommunitySubtitles', reason: scsHealth.reason });
           } else {
             log.debug(() => '[Subtitles] SCS provider is enabled');
-            
+
             // Warn if user's timeout is too low for SCS (it takes 10-22s to respond)
             // SCS is inherently slow due to server-side hash matching against a large database
             const userTimeoutMs = (config.subtitleProviderTimeout || 12) * 1000;
             if (userTimeoutMs < 28000) {
               log.debug(() => `[Subtitles] Note: SCS may be cut off by ${userTimeoutMs}ms timeout (SCS needs 28-35s). Increase timeout in settings for reliable SCS results.`);
             }
-            
+
             const scs = new StremioCommunitySubtitlesService();
             searchPromises.push(
               scs.searchSubtitles(searchParams)
@@ -2597,6 +2645,22 @@ function createSubtitleHandler(config) {
         if (removed > 0) {
           log.debug(() => `[Subtitles] Excluded ${removed} hearing impaired subtitles (SDH/HI)`);
         }
+      }
+
+      // Deduplicate subtitles from multiple providers
+      // This removes exact duplicates (same release name) while preserving:
+      // - Different languages (never dedupe across languages)
+      // - HI vs non-HI variants (kept separate)
+      // - Different formats (SRT vs ASS kept separate)
+      // - Season packs vs episode-specific (kept separate)
+      if (config.deduplicateSubtitles !== false) {
+        const { deduplicated, stats } = deduplicateSubtitles(filteredFoundSubtitles, {
+          enabled: true,
+          respectHIVariants: true,
+          respectFormats: true
+        });
+        filteredFoundSubtitles = deduplicated;
+        logDeduplicationStats(stats);
       }
 
       // Rank subtitles by filename match + quality metrics before creating response lists
@@ -3202,7 +3266,7 @@ async function handleSubtitleDownload(fileId, language, config) {
       }
     } catch (_) { }
 
-    return content;
+    return maybeConvertToSRT(content, config);
 
   } catch (error) {
     const uiLanguage = config.uiLanguage || 'en';
@@ -5118,6 +5182,7 @@ module.exports = {
   createOpenSubtitlesQuotaExceededSubtitle,
   createProviderDownloadErrorSubtitle,
   createInvalidSubtitleMessage,
+  maybeConvertToSRT,
   createOpenSubtitlesV3RateLimitSubtitle,
   createOpenSubtitlesV3ServiceUnavailableSubtitle,
   createConcurrencyLimitSubtitle,

@@ -1903,6 +1903,132 @@ textarea {
     box-shadow: 0 0 0 4px var(--glow);
 }
 
+/* Subtitles Toolbox Inline Button - Compact, Subtle Design */
+.toolbox-inline-wrapper {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+}
+
+.toolbox-inline-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    overflow: visible;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px var(--shadow);
+}
+
+.toolbox-inline-btn::before {
+    display: none;
+}
+
+.toolbox-inline-btn::after {
+    display: none;
+}
+
+.toolbox-inline-btn:hover {
+    transform: translateY(-1px);
+    background: var(--surface);
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 4px 12px var(--glow);
+}
+
+.toolbox-inline-btn:active {
+    transform: translateY(0);
+}
+
+.toolbox-inline-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.toolbox-inline-btn:hover .toolbox-inline-icon {
+    opacity: 1;
+}
+
+.toolbox-inline-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.toolbox-inline-text {
+    position: relative;
+    z-index: 1;
+    line-height: 1.2;
+}
+
+.toolbox-inline-arrow {
+    font-size: 0.875rem;
+    opacity: 0.5;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.toolbox-inline-btn:hover .toolbox-inline-arrow {
+    transform: translateX(3px);
+    opacity: 0.9;
+}
+
+/* Dark mode */
+[data-theme="dark"] .toolbox-inline-btn {
+    background: var(--surface-light);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .toolbox-inline-btn:hover {
+    background: var(--surface);
+    border-color: var(--primary);
+    color: var(--primary-light);
+    box-shadow: 0 4px 12px var(--glow);
+}
+
+/* True dark mode */
+[data-theme="true-dark"] .toolbox-inline-btn {
+    background: var(--surface-light);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+[data-theme="true-dark"] .toolbox-inline-btn:hover {
+    background: var(--surface);
+    border-color: var(--primary);
+    color: var(--primary-light);
+    box-shadow: 0 4px 14px var(--glow);
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+    .toolbox-inline-btn {
+        padding: 0.4rem 0.875rem;
+        font-size: 0.8rem;
+        gap: 0.4rem;
+    }
+
+    .toolbox-inline-icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+
 /* Footer */
 .footer {
     text-align: center;
@@ -3480,7 +3606,7 @@ label:has(#subToolboxEnabled:disabled) {
     background: linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(185, 28, 28, 0.08) 100%);
     border: 1px solid rgba(220, 38, 38, 0.35);
     border-radius: 8px;
-    box-shadow: 
+    box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         0 1px 3px rgba(0, 0, 0, 0.08);
     transition: all 0.2s ease;
@@ -3493,7 +3619,7 @@ label:has(#subToolboxEnabled:disabled) {
 
 .slow-providers-warning:hover {
     border-color: rgba(220, 38, 38, 0.45);
-    box-shadow: 
+    box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
         0 2px 6px rgba(220, 38, 38, 0.15);
 }
@@ -3502,7 +3628,7 @@ label:has(#subToolboxEnabled:disabled) {
 [data-theme="dark"] .slow-providers-warning {
     background: linear-gradient(135deg, rgba(220, 38, 38, 0.18) 0%, rgba(185, 28, 28, 0.14) 100%);
     border-color: rgba(220, 38, 38, 0.45);
-    box-shadow: 
+    box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
         0 1px 4px rgba(0, 0, 0, 0.2);
 }
@@ -3521,7 +3647,7 @@ label:has(#subToolboxEnabled:disabled) {
 [data-theme="true-dark"] .slow-providers-warning {
     background: linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(185, 28, 28, 0.16) 100%);
     border-color: rgba(239, 68, 68, 0.5);
-    box-shadow: 
+    box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.04),
         0 2px 6px rgba(0, 0, 0, 0.35);
 }
@@ -3534,7 +3660,7 @@ label:has(#subToolboxEnabled:disabled) {
 [data-theme="true-dark"] .slow-providers-warning:hover {
     background: linear-gradient(135deg, rgba(220, 38, 38, 0.28) 0%, rgba(185, 28, 28, 0.22) 100%);
     border-color: rgba(239, 68, 68, 0.65);
-    box-shadow: 
+    box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.05),
         0 3px 8px rgba(220, 38, 38, 0.25);
 }

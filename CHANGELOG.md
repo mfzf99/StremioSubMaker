@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.37
+
+**New Features:**
+
+- **Local LLM support (Custom provider):** Added a "Custom (Local LLM)" provider option to connect to any OpenAI-compatible endpoint such as Ollama, LM Studio, LocalAI, or custom API servers. Configurable base URL (default: `http://localhost:11434/v1`), optional API key, and custom model input. Includes higher default timeout (120s) for slower endpoints.
+
+- **Force SRT output option:** Added a new "Force SRT output" checkbox in Other Settings that automatically converts all downloaded subtitles to SRT format for maximum player compatibility. When enabled, VTT, ASS, and SSA subtitles are converted to SRT before being served to Stremio. Uses the existing `subsrt-ts` library for VTT→SRT conversion and `assConverter` for ASS/SSA→VTT→SRT conversion. Gracefully falls back to the original content if conversion fails.
+
+- **Subtitle deduplication across providers:** Added automatic deduplication of subtitle results when multiple providers return the same subtitle. When providers like SubDL and OpenSubtitles return identical subtitles (same release name), only the first occurrence is kept. This reduces clutter in the subtitle list while preserving: different languages, HI vs non-HI variants, different formats (SRT vs ASS), and season packs vs episode-specific subtitles. Enabled by default, can be disabled with `deduplicateSubtitles: false` in config.
+
+**Bug Fixes:**
+
+- **Fixed multi-language subtitle encoding issues:** Subtitles in Arabic, Hebrew, Greek, Turkish, Vietnamese, Thai, and Baltic languages were displaying garbled characters (mojibake) when source files used legacy Windows codepage encodings instead of UTF-8. Added comprehensive encoding support including: Arabic (`windows-1256`, `ISO-8859-6`), Hebrew (`windows-1255`, `ISO-8859-8`), Greek (`windows-1253`, `ISO-8859-7`), Turkish (`windows-1254`, `ISO-8859-9`), Vietnamese (`windows-1258`), Thai (`windows-874`, `TIS-620`), Baltic (`windows-1257`), and Russian/Ukrainian alternatives (`KOI8-R`, `KOI8-U`).
+
+**Improvements:**
+
+- **Provider timeout now fully respected:** Removed hardcoded 28-30 second minimum/maximum timeout overrides from SCS (Stremio Community Subtitles) and SubSource providers. Your configured provider timeout setting is now applied directly to all providers without being overridden. Previously, SCS enforced a 28s minimum and SubSource had a 30s total cap, which ignored user preferences for faster timeouts.
+
+- **Centralized encoding detection across all providers:** Updated OpenSubtitles, OpenSubtitles V3, Stremio Community Subtitles (SCS), and the archive extractor to use the centralized encoding detector instead of raw UTF-8 decoding. This ensures consistent handling of non-UTF-8 encoded subtitles across all subtitle sources.
+
+- **Improved encoding fallback order:** The encoding fallback list now includes 20+ encodings grouped by script family (Latin, Central European, Cyrillic, Arabic, Hebrew, Greek, Turkish, Vietnamese, Thai, Baltic) for more efficient detection when primary detection fails.
+
 ## SubMaker v1.4.36
 
 **New Features:**

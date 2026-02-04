@@ -411,16 +411,8 @@ class OpenSubtitlesV3Service {
           }
         }
 
-        // Non-ZIP path: decode with BOM awareness
-        let text;
-        if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) text = buf.slice(2).toString('utf16le');
-        else if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
-          const swapped = Buffer.allocUnsafe(Math.max(0, buf.length - 2));
-          for (let i = 2, j = 0; i + 1 < buf.length; i += 2, j += 2) { swapped[j] = buf[i + 1]; swapped[j + 1] = buf[i]; }
-          text = swapped.toString('utf16le');
-        } else text = buf.toString('utf8');
-        // Strip UTF-8 BOM if present (common in Arabic/RTL files)
-        if (text && typeof text === 'string') text = text.replace(/^\uFEFF/, '');
+        // Use centralized encoding detector for proper Arabic/Hebrew/RTL support
+        let text = detectAndConvertEncoding(buf, 'OpenSubtitles V3');
 
         const trimmed = (text || '').trimStart();
         if (trimmed.startsWith('WEBVTT')) {

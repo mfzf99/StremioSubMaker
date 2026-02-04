@@ -50,7 +50,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, maybeConvertToSRT } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -3317,6 +3317,31 @@ app.post('/api/models/:provider', async (req, res) => {
             return res.json(models);
         }
 
+        // For custom provider, API key is optional (local LLMs don't require it)
+        // but baseUrl is required
+        if (providerKey === 'custom') {
+            const baseUrl = req.body.baseUrl || sessionProvider?.baseUrl || 'http://localhost:11434/v1';
+            if (!baseUrl) {
+                return res.status(400).json({ error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider') });
+            }
+            const provider = createProviderInstance(
+                providerKey,
+                {
+                    apiKey: providerApiKey || '',
+                    model: providerModel,
+                    baseUrl: baseUrl
+                },
+                providerParams
+            );
+
+            if (!provider || typeof provider.getAvailableModels !== 'function') {
+                return res.status(400).json({ error: t('server.errors.unsupportedProvider', {}, 'Unsupported provider') });
+            }
+
+            const models = await provider.getAvailableModels();
+            return res.json(models);
+        }
+
         if (!providerApiKey) {
             return res.status(400).json({ error: t('server.errors.apiKeyRequired', {}, 'API key is required') });
         }
@@ -5180,7 +5205,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
             log.debug(() => `[Translation] Set private caching headers for final translation`);
         }
 
-        res.send(subtitleContent);
+        res.send(maybeConvertToSRT(subtitleContent, config));
         log.debug(() => `[Translation] Response sent successfully for ${sourceFileId}`);
 
     } catch (error) {
@@ -5299,9 +5324,11 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         const partial = await readFromPartialCache(cacheKey);
         if (partial && partial.content) {
             const vtt = srtPairToWebVTT(sourceContent, partial.content, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
-            res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
-            return res.send(vtt);
+            const output = maybeConvertToSRT(vtt, config);
+            const isSrt = config.forceSRTOutput;
+            res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.${isSrt ? 'srt' : 'vtt'}"`);
+            return res.send(output);
         }
 
         // If we already have cached full translation, fetch it quickly via translation handler
@@ -5314,9 +5341,11 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
                 from: 'learn'
             });
             const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
-            res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
-            return res.send(vtt);
+            const output = maybeConvertToSRT(vtt, config);
+            const isSrt = config.forceSRTOutput;
+            res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.${isSrt ? 'srt' : 'vtt'}"`);
+            return res.send(output);
         }
 
         // Start translation in background and serve a loading VTT (source on top, status on bottom)
@@ -5329,9 +5358,11 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
 
         const loadingSrt = createLoadingSubtitle(config?.uiLanguage || baseConfig?.uiLanguage || 'en');
         const vtt = srtPairToWebVTT(sourceContent, loadingSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
-        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.vtt"`);
-        return res.send(vtt);
+        const output = maybeConvertToSRT(vtt, config);
+        const isSrt = config.forceSRTOutput;
+        res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="learn_${targetLang}.${isSrt ? 'srt' : 'vtt'}"`);
+        return res.send(output);
 
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
@@ -6172,7 +6203,7 @@ app.get('/addon/:config/xsync/:videoHash/:lang/:sourceSubId', async (req, res) =
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${videoHash}_${lang}_synced.srt"`);
         setSubtitleCacheHeaders(res, 'final');
-        res.send(syncedSub.content);
+        res.send(maybeConvertToSRT(syncedSub.content, config));
 
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
@@ -6283,7 +6314,7 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId', async (req, res) =
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_xembed.srt"`);
         setSubtitleCacheHeaders(res, 'final');
-        res.send(match.content);
+        res.send(maybeConvertToSRT(match.content, config));
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         if (respondStorageUnavailable(res, error, '[xEmbed Download]', t)) return;
@@ -6330,7 +6361,7 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId/original', async (re
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_original.srt"`);
         setSubtitleCacheHeaders(res, 'final');
-        res.send(match.content);
+        res.send(maybeConvertToSRT(match.content, config));
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         if (respondStorageUnavailable(res, error, '[xEmbed Original]', t)) return;

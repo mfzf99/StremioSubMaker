@@ -299,15 +299,10 @@ class SubSourceService {
         return [];
       }
 
-      // PERFORMANCE: SubSource uses a two-step process:
+      // SubSource uses a two-step process:
       // 1. getMovieId: lookup IMDB -> SubSource movieId (cached in Redis)
       // 2. searchSubtitles: fetch subtitles using movieId
-      //
-      // To grow the cache and ensure reliable results, we give SubSource EXTRA time:
-      // - movieId lookup gets the FULL user timeout (helps populate cache on slow lookups)
-      // - Subtitle search gets the FULL user timeout (not remaining time after movieId)
-      // However, we cap the TOTAL time to 30s to prevent runaway requests.
-      const SUBSOURCE_TOTAL_CAP_MS = 30000;
+      // Respect user's configured timeout - no artificial caps
       const userTimeoutMs = providerTimeout || 10000;
       const totalStartTime = Date.now();
 
@@ -321,20 +316,18 @@ class SubSourceService {
         return [];
       }
 
-      // Calculate remaining time within our 30s total cap
+      // Calculate remaining time for subtitle search
       const elapsedMs = Date.now() - totalStartTime;
-      const remainingInCap = Math.max(0, SUBSOURCE_TOTAL_CAP_MS - elapsedMs);
-      // Subtitle search gets the smaller of: user timeout OR remaining time in cap
-      const searchTimeoutMs = Math.min(userTimeoutMs, remainingInCap);
+      const searchTimeoutMs = Math.max(0, userTimeoutMs - elapsedMs);
 
       // Log if movieId took significant time (cache miss)
       if (movieIdDurationMs > 1000) {
-        log.debug(() => `[SubSource] movieId lookup took ${movieIdDurationMs}ms - subtitle search gets ${searchTimeoutMs}ms (capped at 30s total)`);
+        log.debug(() => `[SubSource] movieId lookup took ${movieIdDurationMs}ms - subtitle search gets ${searchTimeoutMs}ms`);
       }
 
       // Check if we have enough time left for a meaningful search
       if (searchTimeoutMs < 2000) {
-        log.warn(() => `[SubSource] Insufficient time remaining for search after movieId lookup (${searchTimeoutMs}ms left of 30s cap)`);
+        log.warn(() => `[SubSource] Insufficient time remaining for search after movieId lookup (${searchTimeoutMs}ms left)`);
         return [];
       }
 

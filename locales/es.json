@@ -761,6 +761,8 @@
       },
       "actions": {
         "openToolbox": "Abrir Sub Toolbox",
+        "openToolboxInline": "Abrir Caja de Herramientas de Subtítulos",
+        "openToolboxBtn": "Abrir Caja de Herramientas de Subtítulos",
         "save": "Guardar configuración",
         "install": "Instalar en Stremio",
         "copy": "Copiar URL de instalación",
@@ -928,7 +930,8 @@
         "sessionNetworkError": "Error de red al actualizar la sesión. Creando una nueva...",
         "sessionUpdateFailed": "Error al actualizar la sesión. Creando una nueva...",
         "targetsTrimmed": "Solo se conservaron los primeros {limit} idiomas de destino (incluido Learn Mode).",
-        "maxKeysReached": "Máximo de {max} claves API permitidas"
+        "maxKeysReached": "Máximo de {max} claves API permitidas",
+        "missingCustomBaseUrl": "Introduce una URL base para el proveedor personalizado"
       },
       "providers": {
         "subsource": {
@@ -1006,14 +1009,19 @@
           "deepl": "Clave de autenticación de DeepL",
           "mistral": "API key de Mistral",
           "cfworkers": "ACCOUNT_ID|TOKEN",
-          "openrouter": "API key de OpenRouter"
+          "openrouter": "API key de OpenRouter",
+          "customBaseUrl": "http://localhost:11434/v1",
+          "customKey": "Clave API (opcional)",
+          "customModel": "ej. llama3:8b, mistral:7b"
         },
         "selectProvider": "Selecciona un proveedor",
         "deeplHint": "Las claves gratuitas usan api-free.deepl.com automáticamente. Los códigos de idioma se mapean desde tus selecciones.",
         "cfworkersHint": "Usa ACCOUNT|TOKEN para indicar la cuenta explícitamente.",
         "noKeyNeeded": "No se necesita clave API",
         "googleWeb": "web (fijo)",
-        "googleHint": "Usa el endpoint público de Google Translate (puede ser inestable)."
+        "googleHint": "Usa el endpoint público de Google Translate (puede ser inestable).",
+        "testConnection": "Probar conexión",
+        "customHint": "Para Ollama, LM Studio, LocalAI o cualquier API compatible con OpenAI. Deja la clave vacía si no es necesaria. Solo funciona en modo auto-hospedado."
       },
       "gemini": {
         "title": "API de traducción IA",

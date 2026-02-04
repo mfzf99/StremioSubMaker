@@ -356,7 +356,7 @@
             fallbackFlag: 'SA'
         }
     ];
-    const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate']);
+    const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate', 'custom']);
 
     function parseLimit(value, fallback, min = 1, max = 50) {
         const parsed = parseInt(value, 10);
@@ -452,7 +452,8 @@
         cfworkers: { label: 'Cloudflare Workers AI' },
         openrouter: { label: 'OpenRouter' },
         googletranslate: { label: 'Google Translate (unofficial)' },
-        gemini: { label: 'Gemini' }
+        gemini: { label: 'Gemini' },
+        custom: { label: 'Custom (Local LLM)' }
     };
 
     const PROVIDER_PARAMETER_DEFAULTS = {
@@ -522,6 +523,13 @@
             topP: 1,
             maxOutputTokens: 32768,
             translationTimeout: 60,
+            maxRetries: 2
+        },
+        custom: {
+            temperature: 0.4,
+            topP: 0.95,
+            maxOutputTokens: 32768,
+            translationTimeout: 120,  // Higher for local models
             maxRetries: 2
         }
     };
@@ -699,7 +707,8 @@ Translate to {target_language}.`;
                 mistral: { enabled: false, apiKey: '', model: '' },
                 cfworkers: { enabled: false, apiKey: '', model: '' },
                 openrouter: { enabled: false, apiKey: '', model: '' },
-                googletranslate: { enabled: false, apiKey: '', model: 'web' }
+                googletranslate: { enabled: false, apiKey: '', model: 'web' },
+                custom: { enabled: false, apiKey: '', model: '', baseUrl: 'http://localhost:11434/v1' }
             },
             providerParameters: getDefaultProviderParameters(),
             promptStyle: 'strict', // 'natural' or 'strict'
@@ -746,6 +755,7 @@ Translate to {target_language}.`;
             fileTranslationEnabled: false, // legacy flag (mirrors subToolboxEnabled)
             syncSubtitlesEnabled: false, // legacy flag (mirrors subToolboxEnabled)
             excludeHearingImpairedSubtitles: false, // If true, hide SDH/HI subtitles from results
+            forceSRTOutput: false, // If true, convert all subtitle outputs to SRT format
             mobileMode: false, // Opt-in: wait for full translation before responding (no automatic device detection)
             singleBatchMode: false, // Try translating whole file at once
             advancedSettings: {
@@ -2375,6 +2385,20 @@ Translate to {target_language}.`;
                 window.open(url, '_blank', 'noopener,noreferrer');
             });
         }
+        // Inline toolbox button (below Install URL)
+        const toolboxInlineBtn = document.getElementById('toolboxInlineBtn');
+        if (toolboxInlineBtn) {
+            toolboxInlineBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const configRef = getActiveConfigRef();
+                const url = buildToolboxUrl(configRef);
+                if (!url) {
+                    showAlert(tConfig('config.alerts.saveConfigFirst', {}, 'Save your config first to open Sub Toolbox.'), 'warning', 'config.alerts.saveConfigFirst', {});
+                    return;
+                }
+                window.open(url, '_blank', 'noopener,noreferrer');
+            });
+        }
         window.addEventListener('resize', debounce(() => updateToolboxLauncherVisibility(), 150));
 
         // Section collapse helpers (API keys, Languages, Settings)
@@ -3293,8 +3317,17 @@ Translate to {target_language}.`;
             const apiKeyInput = document.getElementById(`provider-${key}-key`);
             if (toggle) toggle.checked = enabled;
             if (apiKeyInput) apiKeyInput.value = cfg?.apiKey || '';
-            const cachedModels = providerModelCache[key] || [];
-            populateProviderModels(key, cachedModels, cfg?.model || '');
+            // Populate baseUrl for custom provider
+            if (key === 'custom') {
+                const baseUrlInput = document.getElementById('provider-custom-baseUrl');
+                if (baseUrlInput) baseUrlInput.value = cfg?.baseUrl || 'http://localhost:11434/v1';
+                // Custom provider uses a text input for model, not a select dropdown
+                const modelInput = document.getElementById('provider-custom-model');
+                if (modelInput) modelInput.value = cfg?.model || '';
+            } else {
+                const cachedModels = providerModelCache[key] || [];
+                populateProviderModels(key, cachedModels, cfg?.model || '');
+            }
             toggleProviderFields(key, enabled);
             currentConfig.providers[key] = {
                 ...currentConfig.providers[key],
@@ -3328,6 +3361,11 @@ Translate to {target_language}.`;
                 apiKey: apiKeyInput ? apiKeyInput.value.trim() : '',
                 model: modelSelect ? modelSelect.value : ''
             };
+            // Include baseUrl for custom provider
+            if (key === 'custom') {
+                const baseUrlInput = document.getElementById('provider-custom-baseUrl');
+                providers[key].baseUrl = baseUrlInput ? baseUrlInput.value.trim() : 'http://localhost:11434/v1';
+            }
         });
         return providers;
     }
@@ -3355,11 +3393,23 @@ Translate to {target_language}.`;
         const apiKeyInput = document.getElementById(`provider-${providerKey}-key`);
         if (!apiKeyInput) return;
         const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
+        // For custom provider, API key is optional (local LLMs don't require it)
+        // For other providers, API key is required unless in KEY_OPTIONAL_PROVIDERS
+        if (!apiKey && !KEY_OPTIONAL_PROVIDERS.has(providerKey)) {
             if (!options.silent) {
                 showAlert(tConfig('config.alerts.missingProviderKey', { provider: PROVIDERS[providerKey]?.label || providerKey }, `Add an API key for ${PROVIDERS[providerKey]?.label || providerKey} to load models`), 'warning', 'config.alerts.missingProviderKey', { provider: PROVIDERS[providerKey]?.label || providerKey });
             }
             return;
+        }
+        // For custom provider, require a baseUrl
+        if (providerKey === 'custom') {
+            const baseUrlInput = document.getElementById('provider-custom-baseUrl');
+            if (!baseUrlInput || !baseUrlInput.value.trim()) {
+                if (!options.silent) {
+                    showAlert(tConfig('config.alerts.missingCustomBaseUrl', {}, 'Enter a base URL for the custom provider'), 'warning', 'config.alerts.missingCustomBaseUrl', {});
+                }
+                return;
+            }
         }
         const modelSelect = document.getElementById(`provider-${providerKey}-model`);
         if (modelSelect) {
@@ -3379,10 +3429,16 @@ Translate to {target_language}.`;
             }
         }
         try {
+            const requestBody = { apiKey };
+            // For custom provider, include the baseUrl for model fetching
+            if (providerKey === 'custom') {
+                const baseUrlInput = document.getElementById('provider-custom-baseUrl');
+                requestBody.baseUrl = baseUrlInput ? baseUrlInput.value.trim() : 'http://localhost:11434/v1';
+            }
             const response = await fetch(`/api/models/${providerKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apiKey })
+                body: JSON.stringify(requestBody)
             });
             if (!response.ok) {
                 let errorMessage = response.statusText || 'Failed to fetch models';
@@ -5374,6 +5430,8 @@ Translate to {target_language}.`;
         if (mobileModeEl) mobileModeEl.checked = currentConfig.mobileMode === true;
         const singleBatchEl = document.getElementById('singleBatchMode');
         if (singleBatchEl) singleBatchEl.checked = currentConfig.singleBatchMode === true;
+        const forceSRTEl = document.getElementById('forceSRTOutput');
+        if (forceSRTEl) forceSRTEl.checked = currentConfig.forceSRTOutput === true;
 
         // Load translation cache settings
         if (!currentConfig.translationCache) {
@@ -5619,6 +5677,10 @@ Translate to {target_language}.`;
             excludeHearingImpairedSubtitles: (function () {
                 const el = document.getElementById('excludeHearingImpairedSubtitlesNoTranslation') || document.getElementById('excludeHearingImpairedSubtitles');
                 return el ? el.checked === true : (currentConfig?.excludeHearingImpairedSubtitles === true);
+            })(),
+            forceSRTOutput: (function () {
+                const el = document.getElementById('forceSRTOutput');
+                return el ? el.checked === true : (currentConfig?.forceSRTOutput === true);
             })(),
             subToolboxEnabled: (function () {
                 const el = document.getElementById('subToolboxEnabledNoTranslation') || document.getElementById('subToolboxEnabled');

@@ -654,14 +654,14 @@
                                     translations</span>
                             </label>
                             <select id="geminiModel" required>
-                                <option value="gemma-3-27b-it" data-i18n="config.gemini.model.options.gemma27b"
-                                    selected>
+                                <option value="gemma-3-27b-it" data-i18n="config.gemini.model.options.gemma27b">
                                     Gemma 27b (beta) (Recommended for Rate Limits)</option>
                                 <option value="gemini-flash-lite-latest"
                                     data-i18n="config.gemini.model.options.flashLite">Gemini 2.5 Flash-Lite</option>
                                 <option value="gemini-2.5-flash-preview-09-2025"
                                     data-i18n="config.gemini.model.options.flash">Gemini 2.5 Flash</option>
-                                <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3">
+                                <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3"
+                                    selected>
                                     Gemini 3.0 Flash (beta)</option>
 
                                 <option value="gemini-3-pro-preview" data-i18n="config.gemini.model.options.pro3">
@@ -976,6 +976,41 @@
                                         <div style="font-size:0.9rem; color: var(--text-secondary);"
                                             data-i18n="config.providersUi.googleHint">Uses the public Google
                                             Translate web endpoint (may be unstable).</div>
+                                    </div>
+                                </div>
+
+                                <div class="provider-block" data-provider="custom">
+                                    <div
+                                        style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
+                                        <label
+                                            style="font-weight:600; margin:0; display:flex; align-items:center; gap:0.35rem;">
+                                            <input type="checkbox" id="provider-custom-enabled"> Custom (Local LLM)
+                                        </label>
+                                        <button type="button" class="validate-api-btn" data-provider="custom"
+                                            title="Test connection" data-i18n="config.providersUi.testConnection"
+                                            data-i18n-attr="title">
+                                            <span class="validate-icon">&#8635;</span>
+                                            <span class="validate-text" data-i18n="config.providersUi.loadModels">Load
+                                                Models</span>
+                                        </button>
+                                    </div>
+                                    <div id="provider-custom-fields" class="provider-fields"
+                                        style="display:none; margin-top:0.5rem; display: grid; gap: 0.5rem;">
+                                        <input type="text" id="provider-custom-baseUrl"
+                                            placeholder="http://localhost:11434/v1"
+                                            data-i18n="config.providersUi.placeholders.customBaseUrl"
+                                            data-i18n-attr="placeholder">
+                                        <input type="text" id="provider-custom-key" placeholder="API key (optional)"
+                                            data-i18n="config.providersUi.placeholders.customKey"
+                                            data-i18n-attr="placeholder" class="sensitive-input masked">
+                                        <input type="text" id="provider-custom-model"
+                                            placeholder="e.g. llama3:8b, mistral:7b"
+                                            data-i18n="config.providersUi.placeholders.customModel"
+                                            data-i18n-attr="placeholder">
+                                        <span class="label-description" data-i18n="config.providersUi.customHint">
+                                            For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API.
+                                            Leave API key empty if not required. Only works when self-hosting.
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -1454,6 +1489,17 @@
                         </div>
 
                         <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="singleBatchMode">
+                                <span data-i18n="config.translationSettings.chunking.label">Enable Single Batch</span>
+                                <span class="label-description"
+                                    data-i18n="config.translationSettings.chunking.description">Translate the whole
+                                    subtitle in one go (still auto-splits at very large sizes). Improves contextual
+                                    coherence but can hit provider limits more easily.</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
                             <label for="databaseMode" class="form-label">
                                 <span class="label-title" data-i18n="config.translationSettings.database.label">SubMaker
                                     Database</span>
@@ -1617,6 +1663,16 @@
 
                         <div class="form-group">
                             <label>
+                                <input type="checkbox" id="forceSRTOutput">
+                                <span data-i18n="config.otherSettings.forceSRTOutput.label">Force SRT output</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.forceSRTOutput.description">Convert all subtitle
+                                    outputs to SRT format for maximum player compatibility.</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
                                 <input type="checkbox" id="betaMode">
                                 <span data-i18n="config.otherSettings.betaMode.label">Advanced Mode</span>
                                 <span class="label-description"
@@ -1696,16 +1752,6 @@
                             <input type="number" id="contextSize" min="1" max="10" step="1" value="3" placeholder="3">
                         </div>
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="singleBatchMode">
-                                <span data-i18n="config.translationSettings.chunking.label">Enable Single Batch</span>
-                                <span class="label-description"
-                                    data-i18n="config.translationSettings.chunking.description">Translate the whole
-                                    subtitle in one go (still auto-splits at very large sizes). Improves contextual
-                                    coherence but can hit provider limits more easily.</span>
-                            </label>
-                        </div>
 
                     </div>
                 </div>
@@ -2264,5 +2310,42 @@
     <div id="resetBarWrapper" class="reset-bar">
         <div class="reset-text" data-i18n="config.reset.hint">Any problems- Reset settings to default -></div>
         <button type="button" id="resetSettingsBtn" class="reset-btn" data-i18n="config.reset.cta">Reset</button>
+    </div>
+
+    <!-- Subtitles Toolbox Inline Button -->
+    <div class="toolbox-inline-wrapper" id="toolboxInlineWrapper">
+        <a href="#" class="toolbox-inline-btn" id="toolboxInlineBtn" data-i18n="config.actions.openToolboxInline"
+            data-i18n-attr="title" title="Open Subtitles Toolbox">
+            <span class="toolbox-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 64 64" role="img" focusable="false">
+                    <defs>
+                        <linearGradient id="tbBodyInline" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#ffb347" />
+                            <stop offset="45%" stop-color="#ff7a59" />
+                            <stop offset="100%" stop-color="#ff3d7f" />
+                        </linearGradient>
+                        <linearGradient id="tbLidInline" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#ffe9a3" />
+                            <stop offset="100%" stop-color="#ffc34a" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="10" y="22" width="44" height="28" rx="6" fill="url(#tbBodyInline)" stroke="#2b0f08"
+                        stroke-width="2.2" />
+                    <path d="M14 30h36" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round" />
+                    <rect x="16" y="18" width="32" height="10" rx="3" fill="url(#tbLidInline)" stroke="#2b0f08"
+                        stroke-width="2.2" />
+                    <rect x="28" y="34" width="8" height="8" rx="2" fill="#ffe9a3" stroke="#2b0f08"
+                        stroke-width="1.6" />
+                    <path d="M26 18v-2a6 6 0 0 1 12 0v2" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round"
+                        fill="none" />
+                    <circle cx="32" cy="38" r="1.4" fill="#2b0f08" />
+                    <circle cx="20" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
+                    <circle cx="44" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
+                </svg>
+            </span>
+            <span class="toolbox-inline-text" data-i18n="config.actions.openToolboxBtn">Open Subtitles
+                Toolbox</span>
+            <span class="toolbox-inline-arrow" aria-hidden="true">→</span>
+        </a>
     </div>
 </div>

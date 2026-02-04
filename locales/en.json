@@ -761,6 +761,8 @@
       },
       "actions": {
         "openToolbox": "Open Sub Toolbox",
+        "openToolboxInline": "Open Subtitles Toolbox",
+        "openToolboxBtn": "Open Subtitles Toolbox",
         "save": "Save Configuration",
         "install": "Install in Stremio",
         "copy": "Copy Install URL",
@@ -928,7 +930,8 @@
         "sessionNetworkError": "Network error updating session. Creating new session...",
         "sessionUpdateFailed": "Session update failed. Creating new session...",
         "targetsTrimmed": "Only the first {limit} target languages were kept (combined with Learn Mode).",
-        "maxKeysReached": "Maximum of {max} API keys allowed"
+        "maxKeysReached": "Maximum of {max} API keys allowed",
+        "missingCustomBaseUrl": "Enter a base URL for the custom provider"
       },
       "providers": {
         "subsource": {
@@ -1006,16 +1009,19 @@
           "deepl": "DeepL Auth Key",
           "mistral": "Mistral API key",
           "cfworkers": "ACCOUNT_ID|TOKEN",
-          "openrouter": "OpenRouter API key"
+          "openrouter": "OpenRouter API key",
+          "customBaseUrl": "http://localhost:11434/v1",
+          "customKey": "API key (optional)",
+          "customModel": "e.g. llama3:8b, mistral:7b"
         },
         "selectProvider": "Select provider",
         "deeplHint": "Free keys auto-use api-free.deepl.com. Language codes are auto-mapped from your selections.",
         "cfworkersHint": "Use ACCOUNT|TOKEN to set account ID explicitly.",
         "noKeyNeeded": "No API key needed",
         "googleWeb": "web (fixed)",
-        "googleHint": "Uses the public Google Translate web endpoint (may be unstable)."
-      },
-      "gemini": {
+        "googleHint": "Uses the public Google Translate web endpoint (may be unstable).",
+        "testConnection": "Test connection",
+        "customHint": "For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API. Leave API key empty if not required. Only works when self-hosting.",
         "title": "AI Translation API Keys",
         "apiKey": {
           "label": "Gemini API Key",
@@ -1135,7 +1141,7 @@
         },
         "chunking": {
           "label": "Enable Single Batch",
-          "description": "Translate the whole subtitle in one go (auto-splits only when extremely large). Improves contextual coherence but can hit provider limits more easily.",
+          "description": "Translate the whole subtitle in one go (auto-splits only when extremely large).",
           "multiple": "Multiple Batches (Default)",
           "single": "Single-Batch"
         }
@@ -1155,6 +1161,14 @@
         "mobileMode": {
           "label": "Mobile Mode (fix/workaround)",
           "description": "Stremio makes only 1 request for subtitles and caches it, so subtitles in Android can't be partially delivered. Mobile Mode holds translation requests and sends the final subtitle only when ready. Use this if you're watching on Android/iOS. No partial translations, no loading messages. Might freeze the stream until translation is ready. Flash-lite recommended. Wait 1-3 min, if it doesn't load automatically switch subtitles back and forth to load the translation."
+        },
+        "excludeHearingImpaired": {
+          "label": "Hide SDH/HI subtitles",
+          "description": "Exclude subtitles labeled \"Subtitles for hearing impaired\" (SDH/HI) from results."
+        },
+        "forceSRTOutput": {
+          "label": "Force SRT output",
+          "description": "Convert all subtitle outputs to SRT format for maximum player compatibility."
         },
         "betaMode": {
           "label": "Advanced Mode",

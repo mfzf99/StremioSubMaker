@@ -376,25 +376,15 @@ async function readFileFromArchive(archive, filename, archiveType) {
 }
 
 /**
- * Decode buffer with BOM awareness
+ * Decode buffer with proper encoding detection
+ * Uses centralized encoding detector for Arabic/Hebrew/RTL language support
  * @param {Buffer} buffer - Buffer to decode
  * @param {string} providerName - Provider name for logging
  * @returns {string}
  */
 function decodeWithBomAwareness(buffer, providerName) {
-    if (buffer.length >= 2 && buffer[0] === 0xFF && buffer[1] === 0xFE) {
-        log.debug(() => `[${providerName}] Detected UTF-16LE BOM`);
-        return buffer.slice(2).toString('utf16le');
-    } else if (buffer.length >= 2 && buffer[0] === 0xFE && buffer[1] === 0xFF) {
-        log.debug(() => `[${providerName}] Detected UTF-16BE BOM`);
-        const swapped = Buffer.allocUnsafe(Math.max(0, buffer.length - 2));
-        for (let i = 2, j = 0; i + 1 < buffer.length; i += 2, j += 2) {
-            swapped[j] = buffer[i + 1];
-            swapped[j + 1] = buffer[i];
-        }
-        return swapped.toString('utf16le');
-    }
-    return buffer.toString('utf8');
+    // Use centralized encoding detector for proper Arabic/Hebrew/RTL support
+    return detectAndConvertEncoding(buffer, providerName);
 }
 
 /**

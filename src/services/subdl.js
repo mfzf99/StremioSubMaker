@@ -511,7 +511,8 @@ class SubDLService {
       'bengali': 'ben',
       'catalan': 'cat',
       'basque': 'baq',
-      'galician': 'glg'
+      'galician': 'glg',
+      'albanian': 'alb'
     };
 
     // Check if it's a language name
