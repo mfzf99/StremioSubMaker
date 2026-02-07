@@ -2153,7 +2153,9 @@ const DEFAULT_STREMIO_WEB_ORIGINS = [
     'https://web.stremio.one',
     'https://www.stremio.com',
     'https://stremio.com',
-    'https://app.stremio.com'
+    'https://app.stremio.com',
+    // Third-party Stremio web frontends
+    'https://stremio-neo.aayushcodes.eu'
 ];
 const allowedOriginsNormalized = Array.from(new Set([
     ...allowedOrigins.map(normalizeOrigin),
@@ -2188,7 +2190,13 @@ function isStremioUserAgent(userAgent) {
 }
 function isLocalhostOrigin(origin) {
     const host = extractHostnameFromOrigin(origin);
-    return host === 'localhost' || host === '127.0.0.1';
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    // Private/LAN IPs (RFC 1918 + link-local)
+    if (/^10\./.test(host)) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+    if (/^192\.168\./.test(host)) return true;
+    if (/^169\.254\./.test(host)) return true;
+    return false;
 }
 function extractHostnameFromOrigin(origin) {
     if (!origin) return '';
@@ -2235,8 +2243,10 @@ function isOriginAllowed(origin, req) {
         return isStremioUserAgent(userAgent);
     }
     if (allowedOriginsNormalized.includes(normalizedOrigin)) return true;
-    if (isLocalhostOrigin(origin)) return true; // Stremio desktop local server (e.g. http://localhost:11470)
+    if (isLocalhostOrigin(origin)) return true; // Local/LAN origins (e.g. http://localhost:11470, http://192.168.1.15:8080)
     if (isStremioOrigin(origin)) return true; // Trust official Stremio app origins (capacitor/app/stremio schemes)
+    // Trust Stremio clients regardless of origin (e.g. StremioShell from self-hosted web instances)
+    if (isStremioUserAgent((req.headers['user-agent'] || ''))) return true;
     // Check extra wildcard domain suffixes (e.g. .elfhosted.com via ALLOWED_ORIGIN_WILDCARD_SUFFIXES env)
     if (extraWildcardSuffixes.length > 0) {
         const host = extractHostnameFromOrigin(origin);
@@ -2748,6 +2758,14 @@ app.use((req, res, next) => {
         if (isLocalhostOrigin(origin)) {
             log.debug(() => `[Security] Allowed addon API request (localhost origin): origin=${origin}, user-agent=${userAgent}`);
             return cors()(req, res, next);
+        }
+        // Allow extra wildcard domain suffixes (e.g. *.elfhosted.com, *.midnightignite.me)
+        if (extraWildcardSuffixes.length > 0) {
+            const originHost = extractHostnameFromOrigin(origin);
+            if (originHost && extraWildcardSuffixes.some(suffix => originHost === suffix.slice(1) || originHost.endsWith(suffix))) {
+                log.debug(() => `[Security] Allowed addon API request (wildcard suffix): origin=${origin}, user-agent=${userAgent}`);
+                return cors()(req, res, next);
+            }
         }
         // Allow if user-agent identifies as Stremio (mobile apps, etc.)
         if (stremioClient) {
