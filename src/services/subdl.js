@@ -56,291 +56,253 @@ class SubDLService {
    * @returns {Promise<Array>} - Array of subtitle objects
    */
   async searchSubtitles(params) {
-    try {
-      // Check if API key is provided
-      if (!this.apiKey || this.apiKey.trim() === '') {
-        log.error(() => '[SubDL] API key is required for SubDL API');
-        log.error(() => '[SubDL] Please get a free API key from https://subdl.com');
-        return [];
-      }
-
-      const { imdb_id, type, season, episode, languages, providerTimeout } = params;
-
-      // SubDL requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
-      if (!imdb_id || imdb_id === 'undefined') {
-        log.debug(() => '[SubDL] No IMDB ID available, skipping search');
-        return [];
-      }
-
-      // Convert ISO-639-2 codes to SubDL format (uppercase codes)
-      // SubDL uses uppercase 2-letter codes with special cases like BR_PT
-      const subdlLanguageMap = {
-        'eng': 'EN', 'spa': 'ES', 'spn': 'ES', 'fre': 'FR', 'fra': 'FR', 'ger': 'DE', 'deu': 'DE',
-        'por': 'PT', 'pob': 'BR_PT', 'pt-br': 'BR_PT', 'ptbr': 'BR_PT',
-        'ita': 'IT', 'rus': 'RU', 'jpn': 'JA', 'chi': 'ZH', 'zho': 'ZH',
-        'kor': 'KO', 'ara': 'AR', 'dut': 'NL', 'nld': 'NL', 'pol': 'PL',
-        'tur': 'TR', 'swe': 'SV', 'nor': 'NO', 'dan': 'DA', 'fin': 'FI',
-        'gre': 'EL', 'ell': 'EL', 'heb': 'HE', 'hin': 'HI', 'cze': 'CS',
-        'ces': 'CS', 'hun': 'HU', 'rum': 'RO', 'ron': 'RO', 'tha': 'TH',
-        'vie': 'VI', 'ind': 'ID', 'ukr': 'UK', 'bul': 'BG', 'hrv': 'HR',
-        'srp': 'SR', 'slo': 'SK', 'slk': 'SK', 'slv': 'SL', 'est': 'ET',
-        'lav': 'LV', 'lit': 'LT', 'per': 'FA', 'fas': 'FA', 'ben': 'BN',
-        'cat': 'CA', 'baq': 'EU', 'eus': 'EU', 'glg': 'GL', 'bos': 'BS',
-        'mac': 'MK', 'mkd': 'MK', 'alb': 'SQ', 'sqi': 'SQ', 'bel': 'BE',
-        'aze': 'AZ', 'geo': 'KA', 'kat': 'KA', 'mal': 'ML', 'tam': 'TA',
-        'tel': 'TE', 'urd': 'UR', 'may': 'MS', 'msa': 'MS', 'tgl': 'TL',
-        'ice': 'IS', 'isl': 'IS', 'kur': 'KU'
-      };
-
-      const convertedLanguages = [...new Set(languages.map(lang => {
-        const lower = lang.toLowerCase().trim();
-
-        // Check SubDL mapping first
-        if (subdlLanguageMap[lower]) {
-          return subdlLanguageMap[lower];
+      try {
+        // Check if API key is provided
+        if (!this.apiKey || this.apiKey.trim() === '') {
+          log.error(() => '[SubDL] API key is required for SubDL API');
+          log.error(() => '[SubDL] Please get a free API key from https://subdl.com');
+          return [];
         }
 
-        // Try ISO-639-1 conversion then uppercase
-        const iso1Code = toISO6391(lang);
-        if (iso1Code && iso1Code !== 'pb') {
-          return iso1Code.toUpperCase();
+        const { imdb_id, type, season, episode, languages, providerTimeout } = params;
+
+        // SubDL requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
+        if (!imdb_id || imdb_id === 'undefined') {
+          log.debug(() => '[SubDL] No IMDB ID available, skipping search');
+          return [];
         }
 
-        // Fallback: uppercase first 2 letters
-        return lang.substring(0, 2).toUpperCase();
-      }))];
-
-      log.debug(() => `[SubDL] Converted languages: ${languages.join(',')} -> ${convertedLanguages.join(',')}`);
-
-      // Build query parameters for SubDL API
-      // NOTE: Do NOT add releases=1 or hi=1 here!
-      // Although the API docs say they should just add extra fields, in practice
-      // they cause the API to return significantly fewer results (filters to only
-      // entries with these fields populated). Tested: 5 results with vs 30 without.
-      const queryParams = {
-        api_key: this.apiKey,
-        imdb_id: imdb_id, // SubDL accepts 'tt' prefix
-        type: type, // 'movie' or 'tv'
-        subs_per_page: 30 // Get maximum results for better ranking (max is 30)
-      };
-
-      // Only add languages parameter if languages are specified (for "just fetch" mode)
-      if (convertedLanguages.length > 0) {
-        queryParams.languages = convertedLanguages.join(',');
-      }
-
-      // For TV shows and anime episodes, add season and episode parameters
-      if ((type === 'episode' || type === 'anime-episode') && episode) {
-        queryParams.type = 'tv';
-        // Default to season 1 if not specified (common for anime)
-        queryParams.season_number = season || 1;
-        queryParams.episode_number = episode;
-        // NOTE: Do NOT add full_season=1 here! 
-        // According to SubDL API docs, full_season=1 means "only return full season subtitles" (filters to season packs only).
-        // Without it, the API returns episode-specific subtitles which is what we want.
-        // Season packs are still detected via filename pattern matching in the post-processing step below.
-      }
-
-      log.debug(() => ['[SubDL] Searching with params:', JSON.stringify(redactSensitiveData(queryParams))]);
-
-      // Use providerTimeout from config if provided, otherwise use client default
-      const requestConfig = { params: queryParams };
-      if (providerTimeout) requestConfig.timeout = providerTimeout;
-      const response = await this.client.get('/subtitles', requestConfig);
-
-      if (!response.data || response.data.status !== true || !response.data.subtitles || response.data.subtitles.length === 0) {
-        log.debug(() => '[SubDL] No subtitles found in response');
-        return [];
-      }
-
-      let subtitles = response.data.subtitles.map(sub => {
-
-        const originalLang = sub.lang || 'en';
-        const normalizedLang = this.normalizeLanguageCode(originalLang);
-
-        // SubDL provides IDs in the URL field: /subtitle/3028156-3032428.zip
-        // Extract sd_id and subtitle_id from the URL
-        let sdId = null;
-        let subtitleId = null;
-
-        if (sub.url) {
-          // Parse URL like "/subtitle/3028156-3032428.zip"
-          const urlMatch = sub.url.match(/\/subtitle\/(\d+)-(\d+)\.zip/);
-          if (urlMatch) {
-            sdId = urlMatch[1];
-            subtitleId = urlMatch[2];
-          }
-        }
-
-        const fileId = `subdl_${sdId}_${subtitleId}`;
-
-        // Use download count from API, or 0 if not provided
-        const downloadCount = parseInt(sub.download_count);
-        const downloads = (!isNaN(downloadCount) && downloadCount > 0) ? downloadCount : 0;
-
-        // Parse releases array from SubDL API (when releases=1 is set)
-        // This provides all compatible release names for better matching
-        const releases = Array.isArray(sub.releases) ? sub.releases : [];
-
-        return {
-          id: fileId,
-          language: originalLang,
-          languageCode: normalizedLang,
-          name: sub.release_name || sub.name || 'Unknown',
-          downloads: downloads,
-          rating: parseFloat(sub.rating) || 0,
-          uploadDate: sub.upload_date || sub.created_at,
-          format: 'srt',
-          fileId: fileId,
-          downloadLink: sub.url, // SubDL provides direct download link
-          hearing_impaired: sub.hi === 1 || false,
-          foreign_parts_only: false,
-          machine_translated: false,
-          uploader: sub.author || 'Unknown',
-          provider: 'subdl',
-          // Store SubDL-specific IDs for download
-          subdl_id: sdId,
-          subtitles_id: subtitleId,
-          // Store releases array for enhanced ranking
-          releases: releases
+        // Convert ISO-639-2 codes to SubDL format (uppercase codes)
+        // SubDL uses uppercase 2-letter codes with special cases like BR_PT
+        const subdlLanguageMap = {
+          'eng': 'EN', 'spa': 'ES', 'spn': 'ES', 'fre': 'FR', 'fra': 'FR', 'ger': 'DE', 'deu': 'DE',
+          'por': 'PT', 'pob': 'BR_PT', 'pt-br': 'BR_PT', 'ptbr': 'BR_PT',
+          'ita': 'IT', 'rus': 'RU', 'jpn': 'JA', 'chi': 'ZH', 'zho': 'ZH',
+          'kor': 'KO', 'ara': 'AR', 'dut': 'NL', 'nld': 'NL', 'pol': 'PL',
+          'tur': 'TR', 'swe': 'SV', 'nor': 'NO', 'dan': 'DA', 'fin': 'FI',
+          'gre': 'EL', 'ell': 'EL', 'heb': 'HE', 'hin': 'HI', 'cze': 'CS',
+          'ces': 'CS', 'hun': 'HU', 'rum': 'RO', 'ron': 'RO', 'tha': 'TH',
+          'vie': 'VI', 'ind': 'ID', 'ukr': 'UK', 'bul': 'BG', 'hrv': 'HR',
+          'srp': 'SR', 'slo': 'SK', 'slk': 'SK', 'slv': 'SL', 'est': 'ET',
+          'lav': 'LV', 'lit': 'LT', 'per': 'FA', 'fas': 'FA', 'ben': 'BN',
+          'cat': 'CA', 'baq': 'EU', 'eus': 'EU', 'glg': 'GL', 'bos': 'BS',
+          'mac': 'MK', 'mkd': 'MK', 'alb': 'SQ', 'sqi': 'SQ', 'bel': 'BE',
+          'aze': 'AZ', 'geo': 'KA', 'kat': 'KA', 'mal': 'ML', 'tam': 'TA',
+          'tel': 'TE', 'urd': 'UR', 'may': 'MS', 'msa': 'MS', 'tgl': 'TL',
+          'ice': 'IS', 'isl': 'IS', 'kur': 'KU'
         };
-      });
 
-      // CRITICAL: Filter out wrong episodes for TV shows and anime
-      // SubDL API may return other episodes despite episode_number parameter
-      if ((type === 'episode' || type === 'anime-episode') && season && episode) {
-        const beforeCount = subtitles.length;
+        const convertedLanguages = [...new Set(languages.map(lang => {
+          const lower = lang.toLowerCase().trim();
 
-        subtitles = subtitles.filter(sub => {
-          // Check all available names (primary + releases array)
-          const namesToCheck = [sub.name, ...(sub.releases || [])];
+          // Check SubDL mapping first
+          if (subdlLanguageMap[lower]) {
+            return subdlLanguageMap[lower];
+          }
 
-          // Check for season pack patterns (season without specific episode)
-          const seasonPackPatterns = [
-            new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${season}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\d)`, 'i'),
-            new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
-            new RegExp(`s0*${season}\\s*(?:complete|full|pack)`, 'i')
-          ];
+          // Try ISO-639-1 conversion then uppercase
+          const iso1Code = toISO6391(lang);
+          if (iso1Code && iso1Code !== 'pb') {
+            return iso1Code.toUpperCase();
+          }
 
-          // Anime-specific season pack patterns (often don't include season numbers)
-          const animeSeasonPackPatterns = [
-            /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
-            /\[(?:batch|complete|full)\]/i,
-            /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i  // 01-12, 001-024
-          ];
+          // Fallback: uppercase first 2 letters
+          return lang.substring(0, 2).toUpperCase();
+        }))];
 
-          // Check if any name matches season pack pattern
-          for (const name of namesToCheck) {
-            if (!name) continue;
-            const nameLower = name.toLowerCase();
+        log.debug(() => `[SubDL] Converted languages: ${languages.join(',')} -> ${convertedLanguages.join(',')}`);
 
-            let isSeasonPack = false;
+        // Build query parameters for SubDL API
+        // NOTE: Do NOT add releases=1 or hi=1 here!
+        // Although the API docs say they should just add extra fields, in practice
+        // they cause the API to return significantly fewer results (filters to only
+        // entries with these fields populated). Tested: 5 results with vs 30 without.
+        const queryParams = {
+          api_key: this.apiKey,
+          imdb_id: imdb_id,
+          type: type,
+          subs_per_page: 30
+        };
 
-            if (type === 'anime-episode') {
-              // For anime, use anime-specific patterns
-              isSeasonPack = animeSeasonPackPatterns.some(pattern => pattern.test(nameLower)) &&
-                !/(?:^|[^0-9])0*${episode}(?:v\d+)?(?:[^0-9]|$)/.test(nameLower);
-            } else {
-              // For regular TV shows, use season-based patterns
-              isSeasonPack = seasonPackPatterns.some(pattern => pattern.test(nameLower)) &&
-                !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(nameLower);
-            }
+        // Only add languages parameter if languages are specified (for "just fetch" mode)
+        if (convertedLanguages.length > 0) {
+          queryParams.languages = convertedLanguages.join(',');
+        }
 
-            if (isSeasonPack) {
-              // Mark as season pack and include it
-              sub.is_season_pack = true;
-              sub.season_pack_season = season;
-              sub.season_pack_episode = episode;
+        const isTvOrAnime = (type === 'episode' || type === 'anime-episode') && episode;
 
-              // Encode season/episode info in fileId for download extraction
-              const originalFileId = sub.fileId || sub.id;
-              sub.fileId = `${originalFileId}_seasonpack_s${season}e${episode}`;
-              sub.id = sub.fileId;
+        // For TV shows and anime episodes, add season and episode parameters
+        if (isTvOrAnime) {
+          queryParams.type = 'tv';
+          // Default to season 1 if not specified (common for anime)
+          queryParams.season_number = season || 1;
+          queryParams.episode_number = episode;
+        }
 
-              log.debug(() => `[SubDL] Detected season pack: ${sub.name}`);
-              return true;
+        log.debug(() => ['[SubDL] Searching with params:', JSON.stringify(redactSensitiveData(queryParams))]);
+
+        // Use providerTimeout from config if provided, otherwise use client default
+        const requestConfig = { params: queryParams };
+        if (providerTimeout) requestConfig.timeout = providerTimeout;
+        const response = await this.client.get('/subtitles', requestConfig);
+
+        if (!response.data || response.data.status !== true || !response.data.subtitles || response.data.subtitles.length === 0) {
+          log.debug(() => '[SubDL] No subtitles found in response');
+          return [];
+        }
+
+        const effectiveSeason = season || 1;
+
+        let subtitles = response.data.subtitles.map(sub => {
+          const originalLang = sub.lang || 'en';
+          const normalizedLang = this.normalizeLanguageCode(originalLang);
+
+          // SubDL provides IDs in the URL field: /subtitle/3028156-3032428.zip
+          // Extract sd_id and subtitle_id from the URL
+          let sdId = null;
+          let subtitleId = null;
+
+          if (sub.url) {
+            const urlMatch = sub.url.match(/\/subtitle\/(\d+)-(\d+)\.zip/);
+            if (urlMatch) {
+              sdId = urlMatch[1];
+              subtitleId = urlMatch[2];
             }
           }
 
-          for (const name of namesToCheck) {
-            if (!name) continue;
+          let fileId = `subdl_${sdId}_${subtitleId}`;
 
-            const nameLower = name.toLowerCase();
+          // Use download count from API, or 0 if not provided
+          const downloadCount = parseInt(sub.download_count);
+          const downloads = (!isNaN(downloadCount) && downloadCount > 0) ? downloadCount : 0;
 
-            // Season/Episode pattern matching
-            // Patterns: S02E03, s02e03, 2x03, S02.E03, Season 2 Episode 3
-            const seasonEpisodePatterns = [
-              new RegExp(`s0*${season}e0*${episode}\\b`, 'i'),              // S02E03, s02e03
-              new RegExp(`\\b${season}x0*${episode}\\b`, 'i'),              // 2x03
-              new RegExp(`s0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}\\b`, 'i'), // S02xE03, S02x3
-              new RegExp(`\\b0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}\\b`, 'i'), // 02xE03, 2xE03
-              new RegExp(`s0*${season}\\.e0*${episode}\\b`, 'i'),           // S02.E03
-              new RegExp(`season\\s*0*${season}.*episode\\s*0*${episode}\\b`, 'i')  // Season 2 Episode 3
-            ];
+          // Parse releases array from SubDL API (when releases=1 is set)
+          const releases = Array.isArray(sub.releases) ? sub.releases : [];
 
-            // If ANY name matches the correct episode, keep this subtitle
-            if (seasonEpisodePatterns.some(pattern => pattern.test(nameLower))) {
-              return true;
+          // Detect season packs from API metadata (episode_from/episode_end fields)
+          // - Single episode: episode_from === episode_end (e.g., from=1, end=1)
+          // - Multi-episode pack: episode_from !== episode_end (e.g., from=15, end=24)
+          // - Full season pack: episode=null, episode_from=null, episode_end=0
+          let isSeasonPack = false;
+          if (isTvOrAnime) {
+            const epFrom = sub.episode_from;
+            const epEnd = sub.episode_end;
+
+            if (epFrom != null && epEnd != null && epFrom !== epEnd) {
+              // Multi-episode pack (e.g., episodes 15-24 or 1-7)
+              isSeasonPack = true;
+            } else if (sub.episode == null && epFrom == null) {
+              // No episode info at all — full season pack
+              isSeasonPack = true;
             }
           }
 
-          // Check if subtitle has a DIFFERENT episode number (wrong episode)
-          // IMPORTANT: Only check the PRIMARY subtitle name here, NOT the releases array!
-          // The 'releases' array from SubDL contains episode-specific release names that
-          // the season pack is compatible with (e.g., S01E06, S01E07 filenames), which
-          // doesn't mean the subtitle itself is only for that episode. Using releases
-          // for negative filtering causes false positives with season packs.
-          const primaryName = sub.name || '';
-          const primaryNameLower = primaryName.toLowerCase();
+          const result = {
+            id: fileId,
+            language: originalLang,
+            languageCode: normalizedLang,
+            name: sub.release_name || sub.name || 'Unknown',
+            downloads: downloads,
+            rating: parseFloat(sub.rating) || 0,
+            uploadDate: sub.upload_date || sub.created_at,
+            format: 'srt',
+            fileId: fileId,
+            downloadLink: sub.url,
+            hearing_impaired: sub.hi === 1 || false,
+            foreign_parts_only: false,
+            machine_translated: false,
+            uploader: sub.author || 'Unknown',
+            provider: 'subdl',
+            subdl_id: sdId,
+            subtitles_id: subtitleId,
+            releases: releases
+          };
 
-          // Extract season/episode from the PRIMARY subtitle name only
-          const episodeMatch = primaryNameLower.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
-          if (episodeMatch) {
-            const subSeason = parseInt(episodeMatch[1] || episodeMatch[3]);
-            const subEpisode = parseInt(episodeMatch[2] || episodeMatch[4]);
-
-            // If the primary name explicitly mentions a different episode, filter it out
-            if (subSeason === season && subEpisode !== episode) {
-              return false; // Wrong episode - exclude
-            }
+          // Mark season packs from API metadata
+          if (isSeasonPack) {
+            result.is_season_pack = true;
+            result.season_pack_season = effectiveSeason;
+            result.season_pack_episode = episode;
+            result.fileId = `${fileId}_seasonpack_s${effectiveSeason}e${episode}`;
+            result.id = result.fileId;
+            log.debug(() => `[SubDL] Season pack (API metadata: ep_from=${sub.episode_from}, ep_end=${sub.episode_end}): ${result.name}`);
           }
 
-          // No episode info found in any name - keep it (might be generic subtitle)
-          // The ranking algorithm will handle these with lower scores
-          return true;
+          return result;
         });
 
-        const filteredCount = beforeCount - subtitles.length;
-        const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
-        if (filteredCount > 0) {
-          log.debug(() => `[SubDL] Filtered out ${filteredCount} wrong episode subtitles (requested: S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')})`);
+        // Filter out wrong episodes for TV shows and anime
+        // Season packs are already correctly identified from API metadata
+        if (isTvOrAnime && season) {
+          const beforeCount = subtitles.length;
+
+          subtitles = subtitles.filter(sub => {
+            // Always keep season packs (already marked from API metadata)
+            if (sub.is_season_pack) return true;
+
+            const primaryName = sub.name || '';
+            const primaryNameLower = primaryName.toLowerCase();
+
+            // Season/Episode pattern matching
+            const seasonEpisodePatterns = [
+              new RegExp(`s0*${season}e0*${episode}\\b`, 'i'),
+              new RegExp(`\\b${season}x0*${episode}\\b`, 'i'),
+              new RegExp(`s0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}\\b`, 'i'),
+              new RegExp(`\\b0*${season}[\\s._-]*x[\\s._-]*e?0*${episode}\\b`, 'i'),
+              new RegExp(`s0*${season}\\.e0*${episode}\\b`, 'i'),
+              new RegExp(`season\\s*0*${season}.*episode\\s*0*${episode}\\b`, 'i')
+            ];
+
+            if (seasonEpisodePatterns.some(pattern => pattern.test(primaryNameLower))) {
+              return true;
+            }
+
+            // Check if subtitle has a DIFFERENT episode number (wrong episode)
+            const episodeMatch = primaryNameLower.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
+            if (episodeMatch) {
+              const subSeason = parseInt(episodeMatch[1] || episodeMatch[3]);
+              const subEpisode = parseInt(episodeMatch[2] || episodeMatch[4]);
+
+              if (subSeason === season && subEpisode !== episode) {
+                return false;
+              }
+            }
+
+            // No episode info found — keep it, ranking will handle it
+            return true;
+          });
+
+          const filteredCount = beforeCount - subtitles.length;
+          const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
+          if (filteredCount > 0) {
+            log.debug(() => `[SubDL] Filtered out ${filteredCount} wrong episode subtitles (requested: S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')})`);
+          }
+          if (seasonPackCount > 0) {
+            log.debug(() => `[SubDL] Included ${seasonPackCount} season pack subtitles (API-confirmed)`);
+          }
         }
-        if (seasonPackCount > 0) {
-          log.debug(() => `[SubDL] Included ${seasonPackCount} season pack subtitles`);
+
+        // Limit to 14 results per language to control response size
+        const MAX_RESULTS_PER_LANGUAGE = 14;
+        const groupedByLanguage = {};
+
+        for (const sub of subtitles) {
+          const lang = sub.languageCode || 'unknown';
+          if (!groupedByLanguage[lang]) {
+            groupedByLanguage[lang] = [];
+          }
+          if (groupedByLanguage[lang].length < MAX_RESULTS_PER_LANGUAGE) {
+            groupedByLanguage[lang].push(sub);
+          }
         }
+
+        const limitedSubtitles = Object.values(groupedByLanguage).flat();
+        return limitedSubtitles;
+
+      } catch (error) {
+        return handleSearchError(error, 'SubDL');
       }
-
-      // Limit to 14 results per language to control response size
-      const MAX_RESULTS_PER_LANGUAGE = 14;
-      const groupedByLanguage = {};
-
-      for (const sub of subtitles) {
-        const lang = sub.languageCode || 'unknown';
-        if (!groupedByLanguage[lang]) {
-          groupedByLanguage[lang] = [];
-        }
-        if (groupedByLanguage[lang].length < MAX_RESULTS_PER_LANGUAGE) {
-          groupedByLanguage[lang].push(sub);
-        }
-      }
-
-      const limitedSubtitles = Object.values(groupedByLanguage).flat();
-      return limitedSubtitles;
-
-    } catch (error) {
-      return handleSearchError(error, 'SubDL');
     }
-  }
 
   /**
    * Download subtitle content
