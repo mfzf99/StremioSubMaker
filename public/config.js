@@ -680,6 +680,8 @@ Translate to {target_language}.`;
             learnTargetLanguages: [],
             learnOrder: 'source-top', // 'source-top' | 'target-top'
             learnPlacement: 'top',
+            learnItalic: true, // italicize the second language line
+            learnItalicTarget: 'target', // 'target' | 'source' — which language to italicize
             geminiApiKey: DEFAULT_API_KEYS.GEMINI,
             geminiKeyRotationEnabled: false,
             geminiApiKeys: [],
@@ -767,7 +769,10 @@ Translate to {target_language}.`;
                 topK: 40,
                 enableBatchContext: false, // Include original surrounding context and previous translations
                 contextSize: 3, // Number of surrounding entries to include as context
-                sendTimestampsToAI: false // Let AI handle timestamps directly
+                sendTimestampsToAI: false, // Let AI handle timestamps directly
+                translationWorkflow: 'original', // 'original', 'ai', or 'xml'
+                enableJsonOutput: false, // Request JSON structured output from AI
+                mismatchRetries: 1 // Retries when AI returns wrong entry count (0-3)
             }
         };
     }
@@ -1821,8 +1826,17 @@ Translate to {target_language}.`;
         // Batch context changes are also considered advanced modifications
         const batchCtxChanged = batchCtxEl ? (batchCtxEl.checked !== (defaults.enableBatchContext === true)) : false;
         const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 3)) : false;
+        // Mismatch retries change
+        const mismatchRetriesEl = document.getElementById('mismatchRetries');
+        const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 1)) : false;
+        // Translation workflow change
+        const workflowEl = document.getElementById('sendTimestampsToAI');
+        const workflowChanged = workflowEl ? (workflowEl.value !== (defaults.translationWorkflow || 'original')) : false;
+        // JSON output change
+        const jsonOutputEl = document.getElementById('enableJsonOutput');
+        const jsonOutputChanged = jsonOutputEl ? (jsonOutputEl.checked !== (defaults.enableJsonOutput === true)) : false;
 
-        return modelChanged || thinkingChanged || tempChanged || topPChanged || batchCtxChanged || ctxSizeChanged;
+        return modelChanged || thinkingChanged || tempChanged || topPChanged || batchCtxChanged || ctxSizeChanged || mismatchRetriesChanged || workflowChanged || jsonOutputChanged;
     }
 
     /**
@@ -2529,6 +2543,8 @@ Translate to {target_language}.`;
                 if (learnOrderGroup) learnOrderGroup.style.display = enabled ? '' : 'none';
                 if (learnPlacementGroup) learnPlacementGroup.style.display = enabled ? '' : 'none';
                 if (learnTargetsCard) learnTargetsCard.style.display = enabled ? '' : 'none';
+                const learnItalicGroup = document.getElementById('learnItalicGroup');
+                if (learnItalicGroup) learnItalicGroup.style.display = enabled ? '' : 'none';
                 validateLanguageSelection('learn');
             });
         }
@@ -2536,6 +2552,21 @@ Translate to {target_language}.`;
             r.addEventListener('change', (e) => {
                 if (e.target.checked) {
                     currentConfig.learnOrder = e.target.value;
+                }
+            });
+        });
+        const learnItalicToggle = document.getElementById('learnItalicEnabled');
+        if (learnItalicToggle) {
+            learnItalicToggle.addEventListener('change', (e) => {
+                currentConfig.learnItalic = !!e.target.checked;
+                const targetGroup = document.getElementById('learnItalicTargetGroup');
+                if (targetGroup) targetGroup.style.display = e.target.checked ? 'flex' : 'none';
+            });
+        }
+        document.querySelectorAll('input[name="learnItalicTarget"]').forEach(r => {
+            r.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentConfig.learnItalicTarget = e.target.value;
                 }
             });
         });
@@ -2808,6 +2839,15 @@ Translate to {target_language}.`;
         if (sendTimestampsEl) {
             sendTimestampsEl.addEventListener('change', updateBypassCacheForAdvancedSettings);
             sendTimestampsEl.addEventListener('input', updateBypassCacheForAdvancedSettings);
+        }
+        const enableJsonOutputEl = document.getElementById('enableJsonOutput');
+        if (enableJsonOutputEl) {
+            enableJsonOutputEl.addEventListener('change', updateBypassCacheForAdvancedSettings);
+        }
+        const mismatchRetriesEl = document.getElementById('mismatchRetries');
+        if (mismatchRetriesEl) {
+            mismatchRetriesEl.addEventListener('change', updateBypassCacheForAdvancedSettings);
+            mismatchRetriesEl.addEventListener('input', updateBypassCacheForAdvancedSettings);
         }
         if (contextSizeEl) {
             contextSizeEl.addEventListener('input', updateBypassCacheForAdvancedSettings);
@@ -4333,13 +4373,14 @@ Translate to {target_language}.`;
             document.getElementById('mainProviderGroup'),
             document.getElementById('secondaryProviderGroup'),
             document.getElementById('learnOrderGroup'),
-            document.getElementById('learnPlacementGroup')
+            document.getElementById('learnPlacementGroup'),
+            document.getElementById('learnItalicGroup')
         ];
         const otherSettingsCard = document.getElementById('otherSettingsCard');
         const subToolboxNoTranslationGroup = document.getElementById('subToolboxNoTranslationGroup');
         const excludeHearingImpairedNoTranslationGroup = document.getElementById('excludeHearingImpairedNoTranslationGroup');
 
-        ['sendTimestampsToAI', 'databaseMode', 'learnModeEnabled', 'mobileMode', 'singleBatchMode', 'betaMode'].forEach(id => {
+        ['sendTimestampsToAI', 'enableJsonOutput', 'databaseMode', 'learnModeEnabled', 'mobileMode', 'singleBatchMode', 'betaMode'].forEach(id => {
             const group = document.getElementById(id)?.closest('.form-group');
             if (group) groupsToHide.push(group);
         });
@@ -4418,7 +4459,9 @@ Translate to {target_language}.`;
                 targetLanguages: Array.isArray(currentConfig.targetLanguages) ? [...currentConfig.targetLanguages] : [],
                 learnTargetLanguages: Array.isArray(currentConfig.learnTargetLanguages) ? [...currentConfig.learnTargetLanguages] : [],
                 learnMode: currentConfig.learnMode === true,
-                learnOrder: currentConfig.learnOrder || 'source-top'
+                learnOrder: currentConfig.learnOrder || 'source-top',
+                learnItalic: currentConfig.learnItalic !== false,
+                learnItalicTarget: currentConfig.learnItalicTarget || 'target'
             };
             if ((!currentConfig.noTranslationLanguages || currentConfig.noTranslationLanguages.length === 0) && Array.isArray(noTranslationBackup) && noTranslationBackup.length > 0) {
                 currentConfig.noTranslationLanguages = [...noTranslationBackup];
@@ -4450,6 +4493,8 @@ Translate to {target_language}.`;
             }
             if (learnOrderGroup) learnOrderGroup.style.display = 'none';
             if (learnPlacementGroup) learnPlacementGroup.style.display = 'none';
+            const learnItalicGroupNoTrans = document.getElementById('learnItalicGroup');
+            if (learnItalicGroupNoTrans) learnItalicGroupNoTrans.style.display = 'none';
 
             // Clear validation errors for fields that aren't required in no-translation mode
             const geminiApiKeyInput = document.getElementById('geminiApiKey');
@@ -4577,6 +4622,8 @@ Translate to {target_language}.`;
                 if (learnPlacementGroup) {
                     learnPlacementGroup.style.display = isLearnModeEnabled ? '' : 'none';
                 }
+                const learnItalicGroupRestore = document.getElementById('learnItalicGroup');
+                if (learnItalicGroupRestore) learnItalicGroupRestore.style.display = isLearnModeEnabled ? '' : 'none';
             }
 
             // Clear no-translation languages when switching to translation mode
@@ -4600,6 +4647,8 @@ Translate to {target_language}.`;
             currentConfig.learnTargetLanguages = normalizeLanguageCodes(restored.learnTargetLanguages || currentConfig.learnTargetLanguages || []);
             currentConfig.learnMode = restored.learnMode === true && currentConfig.learnTargetLanguages.length > 0;
             currentConfig.learnOrder = restored.learnOrder || currentConfig.learnOrder || 'source-top';
+            currentConfig.learnItalic = restored.learnItalic !== false;
+            currentConfig.learnItalicTarget = restored.learnItalicTarget || currentConfig.learnItalicTarget || 'target';
             enforceLanguageLimits();
 
             syncGridSelection('sourceLanguages', currentConfig.sourceLanguages);
@@ -4622,6 +4671,8 @@ Translate to {target_language}.`;
             if (learnPlacementGroup) {
                 learnPlacementGroup.style.display = showLearn ? '' : 'none';
             }
+            const learnItalicGroupFinal = document.getElementById('learnItalicGroup');
+            if (learnItalicGroupFinal) learnItalicGroupFinal.style.display = showLearn ? '' : 'none';
         }
 
         validateNoTranslationSelection();
@@ -5486,7 +5537,22 @@ Translate to {target_language}.`;
         }
         if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 3;
         const sendTimestampsEl = document.getElementById('sendTimestampsToAI');
-        if (sendTimestampsEl) sendTimestampsEl.value = (currentConfig.advancedSettings?.sendTimestampsToAI === true) ? 'ai' : 'original';
+        if (sendTimestampsEl) {
+            const workflow = currentConfig.advancedSettings?.translationWorkflow || 
+                ((currentConfig.advancedSettings?.sendTimestampsToAI === true) ? 'ai' : 'original');
+            sendTimestampsEl.value = workflow;
+        }
+
+        // Load JSON output setting
+        const enableJsonOutputEl = document.getElementById('enableJsonOutput');
+        if (enableJsonOutputEl) enableJsonOutputEl.checked = currentConfig.advancedSettings?.enableJsonOutput === true;
+
+        // Load mismatch retries setting
+        const mismatchRetriesEl = document.getElementById('mismatchRetries');
+        if (mismatchRetriesEl) {
+            const val = parseInt(currentConfig.advancedSettings?.mismatchRetries);
+            mismatchRetriesEl.value = Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 1;
+        }
 
         // Check if advanced settings are modified and update bypass cache accordingly
         updateBypassCacheForAdvancedSettings();
@@ -5501,6 +5567,17 @@ Translate to {target_language}.`;
             if (learnOrderGroup) learnOrderGroup.style.display = currentConfig.learnMode ? '' : 'none';
             if (learnPlacementGroup) learnPlacementGroup.style.display = currentConfig.learnMode ? '' : 'none';
             if (learnTargetsCard) learnTargetsCard.style.display = currentConfig.learnMode ? '' : 'none';
+            const learnItalicGroup = document.getElementById('learnItalicGroup');
+            if (learnItalicGroup) learnItalicGroup.style.display = currentConfig.learnMode ? '' : 'none';
+            const learnItalicToggle = document.getElementById('learnItalicEnabled');
+            if (learnItalicToggle) {
+                learnItalicToggle.checked = currentConfig.learnItalic !== false;
+                const italicTargetGroup = document.getElementById('learnItalicTargetGroup');
+                if (italicTargetGroup) italicTargetGroup.style.display = learnItalicToggle.checked ? 'flex' : 'none';
+            }
+            const italicTarget = currentConfig.learnItalicTarget || 'target';
+            const italicTargetInput = document.querySelector(`input[name="learnItalicTarget"][value="${italicTarget}"]`);
+            if (italicTargetInput) italicTargetInput.checked = true;
             const order = currentConfig.learnOrder || 'source-top';
             const orderInput = document.querySelector(`input[name=\"learnOrder\"][value=\"${order}\"]`);
             if (orderInput) orderInput.checked = true;
@@ -5618,6 +5695,8 @@ Translate to {target_language}.`;
             learnTargetLanguages: currentConfig.learnTargetLanguages || [],
             learnOrder: currentConfig.learnOrder || 'source-top',
             learnPlacement: 'top', // Force top-of-screen placement
+            learnItalic: currentConfig.learnItalic !== false,
+            learnItalicTarget: currentConfig.learnItalicTarget || 'target',
             multiProviderEnabled: multiProviderToggleChecked,
             mainProvider: (document.getElementById('mainProviderSelect')?.value || 'gemini'),
             secondaryProviderEnabled: document.getElementById('enableSecondaryProvider')?.checked || false,
@@ -5709,7 +5788,10 @@ Translate to {target_language}.`;
                 topK: 40, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
                 contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 3; })(),
-                sendTimestampsToAI: (function () { const el = document.getElementById('sendTimestampsToAI'); return el ? el.value === 'ai' : false; })()
+                sendTimestampsToAI: (function () { const el = document.getElementById('sendTimestampsToAI'); return el ? el.value === 'ai' : false; })(),
+                translationWorkflow: (function () { const el = document.getElementById('sendTimestampsToAI'); return el ? el.value : 'original'; })(),
+                enableJsonOutput: (function () { const el = document.getElementById('enableJsonOutput'); return el ? el.checked : false; })(),
+                mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 1)) : 1; })()
             }
         };
         config.multiProviderEnabled = multiProviderToggleChecked;

@@ -155,6 +155,7 @@ class DeepLProvider {
 
   estimateTokenCount(text) {
     if (!text) return 0;
+    // DeepL doesn't use tokens — this is just a size proxy for the engine's batch sizing.
     const approx = Math.ceil(String(text).length / 3);
     return Math.ceil(approx * 1.1);
   }

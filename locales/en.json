@@ -1113,16 +1113,25 @@
         "orderLabel": "Learn Mode Subtitle Order",
         "orderDescription": "Choose which language appears at the top and bottom of the screen.",
         "sourceTop": "Source Top - Target Bottom",
-        "targetTop": "Target Top - Source Bottom"
+        "targetTop": "Target Top - Source Bottom",
+        "italicLabel": "Italicize one language",
+        "italicDescription": "Italicize one of the subtitle lines to visually distinguish the two languages.",
+        "italicTarget": "Italicize Target (learned language)",
+        "italicSource": "Italicize Source (original language)"
       },
       "translationSettings": {
         "title": "Translation Settings",
         "workflow": {
           "label": "Translation Workflow",
           "description": "Switching between modes is recommended if you have translation sync problems.",
-          "tooltip": "\"Original Timestamps\" mode removes timestamps and sends a numbered list of subtitle entries to the AI, then reconstructs the SRT with the original timestamps. \"Send Timestamps to AI\" sends the subtitles WITH timecodes and trusts the AI to return correct timestamps. Added for future-proofing the addon.",
+          "tooltip": "\"Original Timestamps\" sends a numbered list and reattaches original timecodes. \"Send Timestamps to AI\" sends full SRT and trusts the AI to preserve timecodes. \"XML Tags\" wraps each entry in <s id=\"N\"> tags for robust ID-based recovery — recommended if you have sync problems.",
           "original": "Original Timestamps (Default)",
-          "ai": "Send Timestamps to AI"
+          "ai": "Send Timestamps to AI",
+          "xml": "XML Tags (Robust)"
+        },
+        "jsonOutput": {
+          "label": "Enable JSON Structured Output (Beta)",
+          "description": "Request JSON array format from AI for unambiguous response parsing. May improve accuracy but not all providers support it. Disabled by default."
         },
         "promptStyle": {
           "label": "Prompt Style",
@@ -1210,6 +1219,10 @@
         "contextSize": {
           "label": "Context Size",
           "description": "Number of surrounding entries to include as context (1-10). Default: 3"
+        },
+        "mismatchRetries": {
+          "label": "Mismatch Retries",
+          "description": "When the AI returns a different number of subtitle entries than expected, retry the batch this many times before marking untranslated lines. (0-3, Default: 1)"
         }
       },
       "providerAdvanced": {

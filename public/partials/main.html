@@ -1462,11 +1462,10 @@
                                         <div class="tooltip-bubble" role="tooltip" aria-hidden="true"
                                             id="translationWorkflowTooltip"
                                             data-i18n="config.translationSettings.workflow.tooltip">
-                                            "Original Timestamps" mode removes timestamps and sends a numbered list of
-                                            subtitle entries to the AI, then reconstructs the SRT with the original
-                                            timestamps. "Send Timestamps to AI" sends the subtitles WITH timecodes and
-                                            trusts the AI to return correct timestamps. Added for future-proofing the
-                                            addon.
+                                            "Original Timestamps" sends a numbered list and reattaches original
+                                            timecodes. "Send Timestamps to AI" sends full SRT and trusts the AI to
+                                            preserve timecodes. "XML Tags" wraps each entry in &lt;s id="N"&gt; tags
+                                            for robust ID-based recovery — recommended if you have sync problems.
                                         </div>
                                     </div>
                                 </div>
@@ -1476,7 +1475,18 @@
                                     Original Timestamps (Default)</option>
                                 <option value="ai" data-i18n="config.translationSettings.workflow.ai">Send Timestamps to
                                     AI</option>
+                                <option value="xml" data-i18n="config.translationSettings.workflow.xml">XML Tags
+                                    (Robust)</option>
                             </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enableJsonOutput">
+                                <span data-i18n="config.translationSettings.jsonOutput.label">Enable JSON Structured Output (Beta)</span>
+                                <span class="label-description"
+                                    data-i18n="config.translationSettings.jsonOutput.description">Request JSON array format from AI for unambiguous response parsing. May improve accuracy but not all providers support it. Disabled by default.</span>
+                            </label>
                         </div>
 
                         <div class="form-group">
@@ -1621,6 +1631,27 @@
                             </div>
                         </div>
 
+                        <div class="form-group" id="learnItalicGroup" style="display: none;">
+                            <label>
+                                <input type="checkbox" id="learnItalicEnabled" checked>
+                                <span data-i18n="config.learnMode.italicLabel">Italicize one language</span>
+                                <span class="label-description"
+                                    data-i18n="config.learnMode.italicDescription">Italicize one of the subtitle lines to visually distinguish the two languages.</span>
+                            </label>
+                            <div class="option-group" id="learnItalicTargetGroup" style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
+                                <label
+                                    style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
+                                    <input type="radio" name="learnItalicTarget" value="target" checked>
+                                    <span data-i18n="config.learnMode.italicTarget">Italicize Target (learned language)</span>
+                                </label>
+                                <label
+                                    style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
+                                    <input type="radio" name="learnItalicTarget" value="source">
+                                    <span data-i18n="config.learnMode.italicSource">Italicize Source (original language)</span>
+                                </label>
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="mobileMode">
@@ -1741,6 +1772,15 @@
                                     Default: 3</span>
                             </label>
                             <input type="number" id="contextSize" min="1" max="10" step="1" value="3" placeholder="3">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mismatchRetries">
+                                <span data-i18n="config.advancedGemini.mismatchRetries.label">Mismatch Retries</span>
+                                <span class="label-description"
+                                    data-i18n="config.advancedGemini.mismatchRetries.description">When the AI returns a different number of subtitle entries than expected, retry the batch this many times before marking untranslated lines. (0-3, Default: 1)</span>
+                            </label>
+                            <input type="number" id="mismatchRetries" min="0" max="3" step="1" value="1" placeholder="1">
                         </div>
 
 

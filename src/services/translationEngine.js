@@ -106,6 +106,11 @@ function getBatchSizeForModel(model) {
   // Model-specific batch sizes (hardcoded, safe from client manipulation)
   const modelStr = String(model || '').toLowerCase();
 
+  // Gemini 3.0 Flash: Large context window, higher batch size for throughput
+  if (modelStr.includes('gemini-3-flash')) {
+    return 400;
+  }
+
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
     return 200;
@@ -127,60 +132,82 @@ function getBatchSizeForModel(model) {
 
 class TranslationEngine {
   constructor(geminiService, model = null, advancedSettings = {}, options = {}) {
-    this.gemini = geminiService?.primary || geminiService;
-    this.fallbackProvider = geminiService?.fallback || null;
-    this.providerName = options.providerName || 'gemini';
-    this.fallbackProviderName = options.fallbackProviderName || (this.fallbackProvider ? 'fallback' : '');
-    if (!this.fallbackProviderName && this.fallbackProvider?.providerName) {
-      this.fallbackProviderName = this.fallbackProvider.providerName;
+      this.gemini = geminiService?.primary || geminiService;
+      this.fallbackProvider = geminiService?.fallback || null;
+      this.providerName = options.providerName || 'gemini';
+      this.fallbackProviderName = options.fallbackProviderName || (this.fallbackProvider ? 'fallback' : '');
+      if (!this.fallbackProviderName && this.fallbackProvider?.providerName) {
+        this.fallbackProviderName = this.fallbackProvider.providerName;
+      }
+      this.model = model;
+      this.batchSize = getBatchSizeForModel(model);
+      this.singleBatchMode = options.singleBatchMode === true;
+      this.enableStreaming = options.enableStreaming !== false
+        && typeof (this.gemini?.streamTranslateSubtitle) === 'function';
+      this.maxTokensPerBatch = this.singleBatchMode ? SINGLE_BATCH_MAX_TOKENS_PER_CHUNK : MAX_TOKENS_PER_BATCH;
+      this.advancedSettings = advancedSettings || {};
+
+      // Context settings (disabled by default)
+      this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
+      this.contextSize = parseInt(this.advancedSettings.contextSize) || 3;
+
+      // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
+      const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
+      this.mismatchRetries = Number.isFinite(rawMismatchRetries) ? Math.max(0, Math.min(3, rawMismatchRetries)) : 1;
+
+      // Translation workflow mode: 'original' (numbered list), 'ai' (send timestamps), 'xml' (XML-tagged entries)
+      const rawWorkflow = String(this.advancedSettings.translationWorkflow || '').toLowerCase();
+      if (rawWorkflow === 'xml') {
+        this.translationWorkflow = 'xml';
+        this.sendTimestampsToAI = false;
+      } else if (rawWorkflow === 'ai' || this.advancedSettings.sendTimestampsToAI === true) {
+        this.translationWorkflow = 'ai';
+        this.sendTimestampsToAI = true;
+      } else {
+        this.translationWorkflow = 'original';
+        this.sendTimestampsToAI = false;
+      }
+
+      // JSON structured output mode (disabled by default, opt-in via config)
+      this.enableJsonOutput = this.advancedSettings.enableJsonOutput === true;
+
+      // Key rotation configuration for per-batch rotation
+      // keyRotationConfig: { enabled: boolean, mode: 'per-request' | 'per-batch', keys: string[], advancedSettings: {} }
+      // SECURITY: Store keys in a non-enumerable property to prevent accidental serialization
+      if (options.keyRotationConfig && Array.isArray(options.keyRotationConfig.keys)) {
+        const sanitizedConfig = {
+          enabled: options.keyRotationConfig.enabled === true,
+          mode: options.keyRotationConfig.mode || 'per-batch',
+          advancedSettings: options.keyRotationConfig.advancedSettings || {}
+        };
+        // Make keys non-enumerable so they won't appear in JSON.stringify or Object.keys
+        Object.defineProperty(sanitizedConfig, 'keys', {
+          value: options.keyRotationConfig.keys,
+          enumerable: false,
+          writable: false,
+          configurable: false
+        });
+        this.keyRotationConfig = sanitizedConfig;
+      } else {
+        this.keyRotationConfig = null;
+      }
+      this.perBatchRotationEnabled = this.keyRotationConfig?.enabled === true &&
+        this.keyRotationConfig?.mode === 'per-batch' &&
+        Array.isArray(this.keyRotationConfig?.keys) &&
+        this.keyRotationConfig.keys.length > 1 &&
+        this.providerName === 'gemini';
+
+      if (this.perBatchRotationEnabled) {
+        log.debug(() => `[TranslationEngine] Per-batch key rotation enabled with ${this.keyRotationConfig.keys.length} keys`);
+      }
+
+      // Non-LLM providers (DeepL, Google Translate) handle batching natively.
+      // Skip numbered-list prompt construction and send raw SRT directly.
+      const NON_LLM_PROVIDERS = new Set(['deepl', 'googletranslate']);
+      this.isNativeBatchProvider = NON_LLM_PROVIDERS.has(this.providerName);
+
+      log.debug(() => `[TranslationEngine] Initialized with model: ${model || 'unknown'}, batch size: ${this.batchSize}, batch context: ${this.enableBatchContext ? 'enabled' : 'disabled'}, workflow: ${this.translationWorkflow}, mode: ${this.singleBatchMode ? 'single-batch' : 'batched'}, mismatchRetries: ${this.mismatchRetries}, jsonOutput: ${this.enableJsonOutput}${this.perBatchRotationEnabled ? ', key-rotation: per-batch' : ''}${this.isNativeBatchProvider ? ', native-batch: true' : ''}`);
     }
-    this.model = model;
-    this.batchSize = getBatchSizeForModel(model);
-    this.singleBatchMode = options.singleBatchMode === true;
-    this.enableStreaming = options.enableStreaming !== false
-      && typeof (this.gemini?.streamTranslateSubtitle) === 'function';
-    this.maxTokensPerBatch = this.singleBatchMode ? SINGLE_BATCH_MAX_TOKENS_PER_CHUNK : MAX_TOKENS_PER_BATCH;
-    this.advancedSettings = advancedSettings || {};
-
-    // Context settings (disabled by default)
-    this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
-    this.contextSize = parseInt(this.advancedSettings.contextSize) || 3;
-
-    // Timestamp mode: when enabled, trust AI to return timestamps instead of reusing originals
-    this.sendTimestampsToAI = this.advancedSettings.sendTimestampsToAI === true;
-
-    // Key rotation configuration for per-batch rotation
-    // keyRotationConfig: { enabled: boolean, mode: 'per-request' | 'per-batch', keys: string[], advancedSettings: {} }
-    // SECURITY: Store keys in a non-enumerable property to prevent accidental serialization
-    if (options.keyRotationConfig && Array.isArray(options.keyRotationConfig.keys)) {
-      const sanitizedConfig = {
-        enabled: options.keyRotationConfig.enabled === true,
-        mode: options.keyRotationConfig.mode || 'per-batch',
-        advancedSettings: options.keyRotationConfig.advancedSettings || {}
-      };
-      // Make keys non-enumerable so they won't appear in JSON.stringify or Object.keys
-      Object.defineProperty(sanitizedConfig, 'keys', {
-        value: options.keyRotationConfig.keys,
-        enumerable: false,
-        writable: false,
-        configurable: false
-      });
-      this.keyRotationConfig = sanitizedConfig;
-    } else {
-      this.keyRotationConfig = null;
-    }
-    this.perBatchRotationEnabled = this.keyRotationConfig?.enabled === true &&
-      this.keyRotationConfig?.mode === 'per-batch' &&
-      Array.isArray(this.keyRotationConfig?.keys) &&
-      this.keyRotationConfig.keys.length > 1 &&
-      this.providerName === 'gemini';
-
-    if (this.perBatchRotationEnabled) {
-      log.debug(() => `[TranslationEngine] Per-batch key rotation enabled with ${this.keyRotationConfig.keys.length} keys`);
-    }
-
-    log.debug(() => `[TranslationEngine] Initialized with model: ${model || 'unknown'}, batch size: ${this.batchSize}, batch context: ${this.enableBatchContext ? 'enabled' : 'disabled'}, timestamps: ${this.sendTimestampsToAI ? 'ai-managed' : 'source-preserved'}, mode: ${this.singleBatchMode ? 'single-batch' : 'batched'}${this.perBatchRotationEnabled ? ', key-rotation: per-batch' : ''}`);
-  }
 
   /**
    * Rotate to a new API key before translating a batch (when per-batch rotation is enabled)
@@ -237,6 +264,10 @@ class TranslationEngine {
 
     // Step 3: Translate each batch with smart progress tracking
     const translatedEntries = [];
+    // Streaming optimization: keep a pre-built SRT string for completed batches
+    // so we only rebuild the current streaming batch on each progress callback.
+    let completedSRT = '';
+    let completedEntryCount = 0;
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
@@ -277,31 +308,27 @@ class TranslationEngine {
                 });
               }
 
-              const mergedMap = new Map();
-              for (const entry of translatedEntries) {
-                mergedMap.set(entry.id, entry);
-              }
-              for (const [id, entry] of streamingBatchEntries.entries()) {
-                if (!mergedMap.has(id)) {
-                  mergedMap.set(id, entry);
-                }
-              }
-
-              const merged = Array.from(mergedMap.values()).sort((a, b) => a.id - b.id);
-              const normalized = merged.map((entry, idx) => ({
-                id: idx + 1,
+              // Only rebuild SRT for the current streaming batch entries,
+              // then prepend the already-built completed SRT string.
+              const streamEntries = Array.from(streamingBatchEntries.values()).sort((a, b) => a.id - b.id);
+              const streamNormalized = streamEntries.map((entry, idx) => ({
+                id: completedEntryCount + idx + 1,
                 timecode: entry.timecode,
                 text: entry.text
               }));
+              const streamSRT = toSRT(streamNormalized);
+              const partialSRT = completedSRT
+                ? completedSRT + '\n\n' + streamSRT
+                : streamSRT;
 
               const seq = ++globalStreamSequence;
               try {
                 await onProgress({
                   totalEntries: entries.length,
-                  completedEntries: Math.min(entries.length, merged.length),
+                  completedEntries: Math.min(entries.length, completedEntryCount + streamingBatchEntries.size),
                   currentBatch: payload.currentBatch || (batchIndex + 1),
                   totalBatches: batches.length,
-                  partialSRT: toSRT(normalized),
+                  partialSRT,
                   streaming: true,
                   streamSequence: seq
                 });
@@ -329,6 +356,10 @@ class TranslationEngine {
           });
         }
 
+        // Update the completed SRT snapshot for streaming optimization
+        completedEntryCount = translatedEntries.length;
+        completedSRT = toSRT(translatedEntries);
+
         // Progress callback after each batch
         if (typeof onProgress === 'function') {
           try {
@@ -337,7 +368,7 @@ class TranslationEngine {
               completedEntries: translatedEntries.length,
               currentBatch: batchIndex + 1,
               totalBatches: batches.length,
-              partialSRT: toSRT(translatedEntries)
+              partialSRT: completedSRT
             });
           } catch (err) {
             log.warn(() => ['[TranslationEngine] Progress callback error:', err.message]);
@@ -391,13 +422,9 @@ class TranslationEngine {
   async translateSubtitleSingleBatch(entries, targetLanguage, customPrompt = null, onProgress = null) {
     log.info(() => `[TranslationEngine] Single-batch translation: ${entries.length} entries`);
 
-    const fullBatchText = this.sendTimestampsToAI
-      ? this.prepareBatchSrt(entries)
-      : this.prepareBatchText(entries, null);
+    const fullBatchText = this.prepareBatchContent(entries, null);
 
-    const promptForCache = this.sendTimestampsToAI
-      ? this.createTimestampPrompt(targetLanguage, 0, 1)
-      : this.createBatchPrompt(fullBatchText, targetLanguage, customPrompt, entries.length, null, 0, 1);
+    const promptForCache = this.createPromptForWorkflow(fullBatchText, targetLanguage, customPrompt, entries.length, null, 0, 1);
 
     let actualTokenCount = null;
     try {
@@ -588,6 +615,13 @@ class TranslationEngine {
    */
   async translateBatch(batch, targetLanguage, customPrompt, batchIndex, totalBatches, context = null, options = {}) {
     const opts = options || {};
+
+    // Native batch providers (DeepL, Google Translate): send raw SRT directly,
+    // skip numbered-list prompt construction and response parsing entirely.
+    if (this.isNativeBatchProvider) {
+      return this.translateBatchNative(batch, targetLanguage, batchIndex, totalBatches);
+    }
+
     const allowAutoChunking = opts.allowAutoChunking !== false;
     const streamingRequested = opts.streaming && typeof this.gemini.streamTranslateSubtitle === 'function';
     const tryFallback = async (primaryError) => {
@@ -614,13 +648,9 @@ class TranslationEngine {
       }
     };
     // Prepare batch text (with context if provided)
-    const batchText = this.sendTimestampsToAI
-      ? this.prepareBatchSrt(batch)
-      : this.prepareBatchText(batch, context);
+    const batchText = this.prepareBatchContent(batch, context);
 
-    const prompt = this.sendTimestampsToAI
-      ? this.createTimestampPrompt(targetLanguage, batchIndex, totalBatches)
-      : this.createBatchPrompt(batchText, targetLanguage, customPrompt, batch.length, context, batchIndex, totalBatches);
+    const prompt = this.createPromptForWorkflow(batchText, targetLanguage, customPrompt, batch.length, context, batchIndex, totalBatches);
 
     // Check cache first (includes prompt variant so AI-mode differences are respected)
     const cacheResults = this.checkBatchCache(batch, targetLanguage, prompt);
@@ -640,6 +670,9 @@ class TranslationEngine {
 
     const estimatedTokens = actualTokenCount || this.safeEstimateTokens(batchText + prompt);
 
+    // Sequence counter for streaming progress events (used by both auto-chunk and normal paths)
+    let streamSequence = 0;
+
     if (allowAutoChunking && estimatedTokens > this.maxTokensPerBatch && batch.length > 1) {
       // Auto-chunk: Split batch in half recursively (sequential for memory safety)
       log.debug(() => `[TranslationEngine] Batch too large (${estimatedTokens}${actualTokenCount ? ' actual' : ' est.'} tokens), auto-chunking into 2 parts`);
@@ -651,6 +684,33 @@ class TranslationEngine {
       // Translate sequentially to avoid memory spikes
       // Note: Don't pass context to recursive calls - context already included in original batch text
       const firstTranslated = await this.translateBatch(firstHalf, targetLanguage, customPrompt, batchIndex, totalBatches, null, opts);
+
+      // Emit streaming progress after first half completes so partial delivery picks it up
+      if (typeof opts.onStreamProgress === 'function' && firstTranslated.length > 0) {
+        const halfEntries = firstHalf.map((orig, i) => {
+          const translated = firstTranslated[i] || {};
+          return {
+            id: orig.id,
+            timecode: (this.sendTimestampsToAI && translated.timecode) ? translated.timecode : orig.timecode,
+            text: this.cleanTranslatedText(translated.text || orig.text)
+          };
+        });
+        const normalized = halfEntries.map((entry, idx) => ({ id: idx + 1, timecode: entry.timecode, text: entry.text }));
+        try {
+          await opts.onStreamProgress({
+            partialSRT: toSRT(normalized),
+            completedEntries: firstTranslated.length,
+            totalEntries: batch.length,
+            batchStartId: firstHalf[0]?.id || 1,
+            batchEndId: firstHalf[firstHalf.length - 1]?.id || 1,
+            currentBatch: batchIndex + 1,
+            totalBatches,
+            streaming: true,
+            streamSequence: ++streamSequence
+          });
+        } catch (_) { }
+      }
+
       const secondTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches, null, opts);
 
       return [...firstTranslated, ...secondTranslated];
@@ -660,7 +720,6 @@ class TranslationEngine {
     let translatedText;
     let prohibitedRetryAttempted = false;
     let maxTokensRetryAttempted = false;
-    let streamSequence = 0;
 
     try {
       if (streamingRequested) {
@@ -770,14 +829,86 @@ class TranslationEngine {
     }
 
     // Parse translated text back into entries
-    const translatedEntries = this.sendTimestampsToAI
-      ? this.parseBatchSrtResponse(translatedText, batch.length, batch)
-      : this.parseBatchResponse(translatedText, batch.length);
+    let translatedEntries = this.parseResponseForWorkflow(translatedText, batch.length, batch);
 
-    // Handle entry count mismatches gracefully
+    // Handle entry count mismatches with two-pass recovery
     if (translatedEntries.length !== batch.length) {
       log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${batch.length}, got ${translatedEntries.length}`);
-      this.fixEntryCountMismatch(translatedEntries, batch, this.sendTimestampsToAI);
+
+      // Pass 1: Align what we can by index, identify missing entries
+      const { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
+
+      if (missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
+        // Pass 2: Re-translate only the missing entries individually
+        log.info(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} missing entries, attempting targeted re-translation`);
+        try {
+          const missingBatch = missingIndices.map(i => batch[i]);
+          const missingText = this.prepareBatchContent(missingBatch, null);
+          const missingPrompt = this.createPromptForWorkflow(missingText, targetLanguage, customPrompt, missingBatch.length, null, batchIndex, totalBatches);
+          const retryText = await this.gemini.translateSubtitle(
+            missingText,
+            'detected',
+            targetLanguage,
+            missingPrompt
+          );
+          const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
+
+          // Merge recovered entries back into aligned result
+          for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
+            const targetIdx = missingIndices[i];
+            if (retryEntries[i] && retryEntries[i].text) {
+              aligned[targetIdx] = {
+                index: targetIdx,
+                text: retryEntries[i].text,
+                timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
+              };
+            }
+          }
+          const stillMissing = missingIndices.filter(i => !aligned[i] || aligned[i].text.startsWith('[⚠]'));
+          if (stillMissing.length > 0) {
+            log.warn(() => `[TranslationEngine] Two-pass recovery: ${stillMissing.length} entries still missing after targeted retry`);
+          } else {
+            log.info(() => `[TranslationEngine] Two-pass recovery succeeded: all ${missingIndices.length} missing entries recovered`);
+          }
+        } catch (retryErr) {
+          log.warn(() => `[TranslationEngine] Two-pass targeted retry failed: ${retryErr.message}`);
+        }
+        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
+      } else if (missingIndices.length > 0) {
+        // Too many missing entries for targeted retry, fall back to full batch retry
+        let retrySuccess = false;
+        for (let retryAttempt = 0; retryAttempt < this.mismatchRetries; retryAttempt++) {
+          log.info(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1}/${this.mismatchRetries} (${missingIndices.length} missing entries too many for targeted recovery)`);
+          try {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const retryText = await this.gemini.translateSubtitle(
+              batchText,
+              'detected',
+              targetLanguage,
+              prompt
+            );
+            const retryEntries = this.parseResponseForWorkflow(retryText, batch.length, batch);
+            if (retryEntries.length === batch.length) {
+              translatedEntries = retryEntries;
+              retrySuccess = true;
+              break;
+            }
+          } catch (retryErr) {
+            log.warn(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1} failed: ${retryErr.message}`);
+          }
+        }
+        if (!retrySuccess) {
+          // Use the aligned result with markers for missing entries
+          translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
+          const markedCount = translatedEntries.filter(e => e.text.startsWith('[⚠]')).length;
+          if (markedCount > 0) {
+            log.warn(() => `[TranslationEngine] Marked ${markedCount} entries as untranslated after all retries`);
+          }
+        }
+      } else {
+        // All entries aligned despite count mismatch (extras were trimmed)
+        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
+      }
     }
 
     // Cache individual entries
@@ -785,6 +916,60 @@ class TranslationEngine {
       for (let i = 0; i < batch.length && i < translatedEntries.length; i++) {
         this.cacheEntry(batch[i].text, targetLanguage, translatedEntries[i].text, prompt);
       }
+    }
+
+    return translatedEntries;
+  }
+
+  /**
+   * Translate a batch using a native (non-LLM) provider like DeepL or Google Translate.
+   * Sends raw SRT directly — no numbered-list prompt, no response parsing overhead.
+   */
+  async translateBatchNative(batch, targetLanguage, batchIndex, totalBatches) {
+    const srtContent = this.prepareBatchSrt(batch);
+
+    log.debug(() => `[TranslationEngine] Native batch ${batchIndex + 1}/${totalBatches}: ${batch.length} entries via ${this.providerName}`);
+
+    let translatedText;
+    try {
+      translatedText = await this.gemini.translateSubtitle(
+        srtContent,
+        'detected',
+        targetLanguage,
+        null
+      );
+    } catch (error) {
+      if (this.fallbackProvider) {
+        log.warn(() => `[TranslationEngine] Native provider ${this.providerName} failed, trying fallback: ${error.message}`);
+        try {
+          translatedText = await this.fallbackProvider.translateSubtitle(srtContent, 'detected', targetLanguage, null);
+        } catch (fallbackError) {
+          const combined = new Error(`Primary (${this.providerName}) failed: ${error.message}\nSecondary (${this.fallbackProviderName || 'fallback'}) failed: ${fallbackError.message}`);
+          combined.translationErrorType = 'MULTI_PROVIDER';
+          throw combined;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    // Parse the provider's response back into entries
+    // Native providers return either SRT or numbered-list format
+    let translatedEntries;
+    const trimmed = String(translatedText || '').trim();
+
+    if (trimmed.includes('-->')) {
+      // Provider returned SRT — parse it directly
+      translatedEntries = this.parseBatchSrtResponse(trimmed, batch.length, batch);
+    } else {
+      // Provider returned numbered list — parse that
+      translatedEntries = this.parseBatchResponse(trimmed, batch.length);
+    }
+
+    // Handle count mismatches (no retries for native providers — they're deterministic)
+    if (translatedEntries.length !== batch.length) {
+      log.warn(() => `[TranslationEngine] Native batch entry mismatch: expected ${batch.length}, got ${translatedEntries.length}`);
+      this.fixEntryCountMismatch(translatedEntries, batch, false);
     }
 
     return translatedEntries;
@@ -846,6 +1031,260 @@ class TranslationEngine {
       text: entry.text
     }));
     return toSRT(srtEntries).trim();
+  }
+
+  /**
+   * Prepare batch text using XML tags for robust entry identification
+   * Each entry is wrapped in <s id="N">...</s> tags
+   */
+  prepareBatchXml(batch, context = null) {
+    let result = '';
+
+    // Add context section if provided
+    if (context && (context.surroundingOriginal?.length > 0 || context.previousTranslations?.length > 0)) {
+      result += '=== CONTEXT (FOR REFERENCE ONLY - DO NOT TRANSLATE) ===\n\n';
+      if (context.surroundingOriginal && context.surroundingOriginal.length > 0) {
+        result += '--- Original Context (preceding entries) ---\n';
+        context.surroundingOriginal.forEach((entry, index) => {
+          const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+          result += `[Context ${index + 1}] ${cleanText}\n\n`;
+        });
+      }
+      if (context.previousTranslations && context.previousTranslations.length > 0) {
+        result += '--- Previous Translations (recently translated) ---\n';
+        context.previousTranslations.forEach((entry, index) => {
+          const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+          result += `[Translated ${index + 1}] ${cleanText}\n\n`;
+        });
+      }
+      result += '=== END OF CONTEXT ===\n\n';
+      result += '=== ENTRIES TO TRANSLATE ===\n\n';
+    }
+
+    const xmlEntries = batch.map((entry, index) => {
+      const num = index + 1;
+      const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+      return `<s id="${num}">${cleanText}</s>`;
+    }).join('\n');
+
+    result += xmlEntries;
+    return result;
+  }
+
+  /**
+   * Create translation prompt for XML-tagged batches
+   */
+  createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const customPromptText = customPrompt ? customPrompt.replace('{target_language}', targetLabel) : '';
+
+    let contextInstructions = '';
+    if (context && (context.surroundingOriginal?.length > 0 || context.previousTranslations?.length > 0)) {
+      contextInstructions = `
+CONTEXT PROVIDED:
+- Context entries are provided for reference to maintain coherence and consistency
+- DO NOT translate context entries - they are for reference only
+- ONLY translate entries inside <s id="N"> tags
+
+`;
+    }
+
+    const promptBody = `You are translating subtitle text to ${targetLabel}.
+${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use appropriate colloquialisms for ${targetLabel}${context ? '\n7. Use the provided context to ensure consistency' : ''}
+
+${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries.
+Do not include any timestamps/timecodes.
+
+YOUR RESPONSE MUST:
+- Start with <s id="1"> and end with </s> after entry ${expectedCount}
+- Contain ONLY the XML-tagged translated entries
+
+INPUT (${expectedCount} entries):
+
+${batchText}
+
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+  }
+
+  /**
+   * Parse XML-tagged translation response
+   * Matches <s id="N">text</s> patterns and recovers entries by ID
+   */
+  parseXmlBatchResponse(translatedText, expectedCount) {
+    let cleaned = String(translatedText || '').trim();
+    // Remove markdown code blocks
+    cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
+
+    const entries = [];
+    // Match <s id="N">...</s> with flexible whitespace and multiline content
+    const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
+    let match;
+    while ((match = xmlPattern.exec(cleaned)) !== null) {
+      const id = parseInt(match[1], 10);
+      const text = match[2].trim();
+      if (id > 0 && text) {
+        entries.push({
+          index: id - 1,
+          text: text
+        });
+      }
+    }
+
+    // Sort by index and deduplicate (keep first occurrence per ID)
+    const seen = new Set();
+    const deduped = [];
+    entries.sort((a, b) => a.index - b.index);
+    for (const entry of entries) {
+      if (!seen.has(entry.index)) {
+        seen.add(entry.index);
+        deduped.push(entry);
+      }
+    }
+
+    return deduped;
+  }
+
+  /**
+   * Route to the correct batch content preparation method based on workflow
+   */
+  prepareBatchContent(batch, context) {
+    if (this.translationWorkflow === 'ai') {
+      return this.prepareBatchSrt(batch);
+    }
+    if (this.translationWorkflow === 'xml') {
+      return this.prepareBatchXml(batch, context);
+    }
+    return this.prepareBatchText(batch, context);
+  }
+
+  /**
+   * Route to the correct prompt creation method based on workflow
+   * When JSON output is enabled, wraps the prompt with JSON format instructions
+   */
+  createPromptForWorkflow(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches) {
+    let basePrompt;
+    if (this.translationWorkflow === 'ai') {
+      basePrompt = this.createTimestampPrompt(targetLanguage, batchIndex, totalBatches);
+    } else if (this.translationWorkflow === 'xml') {
+      basePrompt = this.createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches);
+    } else {
+      basePrompt = this.createBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches);
+    }
+
+    // Wrap with JSON output instructions when enabled
+    if (this.enableJsonOutput && this.translationWorkflow !== 'ai') {
+      basePrompt += `\n\nIMPORTANT: Return your response as a JSON array of objects with "id" (number) and "text" (string) fields.
+Example format: [{"id":1,"text":"translated text"},{"id":2,"text":"translated text"}]
+Return ONLY the JSON array, no other text.`;
+    }
+
+    return basePrompt;
+  }
+
+  /**
+   * Route to the correct response parser based on workflow
+   * When JSON output is enabled, attempts JSON parsing first with fallback
+   */
+  parseResponseForWorkflow(translatedText, expectedCount, batch) {
+    // Try JSON parsing first when enabled
+    if (this.enableJsonOutput && this.translationWorkflow !== 'ai') {
+      const jsonEntries = this.parseJsonResponse(translatedText, expectedCount);
+      if (jsonEntries && jsonEntries.length > 0) {
+        return jsonEntries;
+      }
+      log.warn(() => `[TranslationEngine] JSON parsing failed, falling back to standard parser`);
+    }
+
+    if (this.translationWorkflow === 'ai') {
+      return this.parseBatchSrtResponse(translatedText, expectedCount, batch);
+    }
+    if (this.translationWorkflow === 'xml') {
+      return this.parseXmlBatchResponse(translatedText, expectedCount);
+    }
+    return this.parseBatchResponse(translatedText, expectedCount);
+  }
+
+  /**
+   * Parse JSON structured output response
+   * Expects: [{"id": 1, "text": "translated"}, ...]
+   */
+  parseJsonResponse(translatedText, expectedCount) {
+    try {
+      let cleaned = String(translatedText || '').trim();
+      // Remove markdown code blocks
+      cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+      // Find the JSON array in the response
+      const arrayStart = cleaned.indexOf('[');
+      const arrayEnd = cleaned.lastIndexOf(']');
+      if (arrayStart === -1 || arrayEnd === -1 || arrayEnd <= arrayStart) {
+        return null;
+      }
+      cleaned = cleaned.slice(arrayStart, arrayEnd + 1);
+      const parsed = JSON.parse(cleaned);
+      if (!Array.isArray(parsed)) return null;
+
+      const entries = [];
+      for (const item of parsed) {
+        if (item && typeof item.id === 'number' && typeof item.text === 'string') {
+          entries.push({
+            index: item.id - 1,
+            text: item.text.trim()
+          });
+        }
+      }
+
+      entries.sort((a, b) => a.index - b.index);
+      return entries.length > 0 ? entries : null;
+    } catch (err) {
+      log.debug(() => `[TranslationEngine] JSON response parse error: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Align translated entries to original batch by index, identifying missing entries
+   * Used by two-pass mismatch recovery
+   */
+  alignTranslatedEntries(translatedEntries, originalBatch) {
+    const aligned = {};
+    const translatedMap = new Map();
+
+    for (const entry of translatedEntries) {
+      if (typeof entry.index === 'number' && !translatedMap.has(entry.index)) {
+        translatedMap.set(entry.index, entry);
+      }
+    }
+
+    const missingIndices = [];
+    for (let i = 0; i < originalBatch.length; i++) {
+      const existing = translatedMap.get(i);
+      if (existing && existing.text) {
+        aligned[i] = {
+          index: i,
+          text: existing.text,
+          timecode: existing.timecode || undefined
+        };
+      } else {
+        missingIndices.push(i);
+        aligned[i] = {
+          index: i,
+          text: `[⚠] ${originalBatch[i].text}`,
+          timecode: originalBatch[i].timecode || undefined
+        };
+      }
+    }
+
+    return { aligned, missingIndices };
   }
 
   /**
@@ -928,13 +1367,24 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     const batchEndId = originalBatch?.[originalBatch.length - 1]?.id || batchStartId;
 
     let parsedEntries = [];
-    if (this.sendTimestampsToAI) {
+    if (this.translationWorkflow === 'ai') {
       const parsed = parseSRT(partialText) || [];
       parsedEntries = parsed.map((entry, idx) => ({
         index: (typeof entry.id === 'number') ? entry.id - 1 : idx,
         text: (entry.text || '').trim(),
         timecode: entry.timecode || ''
       }));
+    } else if (this.translationWorkflow === 'xml') {
+      // Parse partial XML tags from streaming output
+      const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
+      let match;
+      while ((match = xmlPattern.exec(partialText)) !== null) {
+        const id = parseInt(match[1], 10);
+        const text = match[2].trim();
+        if (id > 0 && text) {
+          parsedEntries.push({ index: id - 1, text });
+        }
+      }
     } else {
       let cleaned = partialText.trim();
       cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
@@ -1002,12 +1452,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       timecode: entry.timecode || ''
     }));
 
-    // If counts mismatch, attempt to realign with originals
-    if (entries.length !== expectedCount) {
-      this.fixEntryCountMismatch(entries, originalBatch, true);
-    }
-
-    // Fill missing timecodes with originals to avoid gaps
+    // Don't fix count mismatches here — let the outer translateBatch handle retries first.
+    // Only fill missing timecodes with originals to avoid gaps.
     for (let i = 0; i < entries.length; i++) {
       if (!entries[i].timecode && originalBatch[i]) {
         entries[i].timecode = originalBatch[i].timecode;
@@ -1057,37 +1503,50 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
    * Fix entry count mismatches by filling missing entries with original text
    */
   fixEntryCountMismatch(translatedEntries, originalBatch, preserveTimecodes = false) {
-    if (translatedEntries.length === originalBatch.length) {
-      return; // Already correct
-    }
-
-    if (translatedEntries.length < originalBatch.length) {
-      // Missing entries - fill with original text
-      const translatedMap = new Map();
-      for (const entry of translatedEntries) {
-        translatedMap.set(entry.index, entry);
+      if (translatedEntries.length === originalBatch.length) {
+        return { hadMismatch: false, untranslatedIndices: [] };
       }
 
-      translatedEntries.length = 0;
-      for (let i = 0; i < originalBatch.length; i++) {
-        const existing = translatedMap.get(i);
-        translatedEntries.push({
-          index: i,
-          text: existing?.text || originalBatch[i].text,
-          timecode: preserveTimecodes ? (existing?.timecode || originalBatch[i].timecode) : existing?.timecode
-        });
-      }
-    } else {
-      // Too many entries - keep only first N
-      translatedEntries.length = originalBatch.length;
-      for (let i = 0; i < translatedEntries.length; i++) {
-        translatedEntries[i].index = i;
-        if (preserveTimecodes && !translatedEntries[i].timecode && originalBatch[i]) {
-          translatedEntries[i].timecode = originalBatch[i].timecode;
+      const untranslatedIndices = [];
+
+      if (translatedEntries.length < originalBatch.length) {
+        // Missing entries - fill with original text marked as untranslated
+        const translatedMap = new Map();
+        for (const entry of translatedEntries) {
+          translatedMap.set(entry.index, entry);
+        }
+
+        translatedEntries.length = 0;
+        for (let i = 0; i < originalBatch.length; i++) {
+          const existing = translatedMap.get(i);
+          if (existing) {
+            translatedEntries.push({
+              index: i,
+              text: existing.text,
+              timecode: preserveTimecodes ? (existing.timecode || originalBatch[i].timecode) : existing.timecode
+            });
+          } else {
+            untranslatedIndices.push(i);
+            translatedEntries.push({
+              index: i,
+              text: `[⚠] ${originalBatch[i].text}`,
+              timecode: preserveTimecodes ? originalBatch[i].timecode : undefined
+            });
+          }
+        }
+      } else {
+        // Too many entries - keep only first N
+        translatedEntries.length = originalBatch.length;
+        for (let i = 0; i < translatedEntries.length; i++) {
+          translatedEntries[i].index = i;
+          if (preserveTimecodes && !translatedEntries[i].timecode && originalBatch[i]) {
+            translatedEntries[i].timecode = originalBatch[i].timecode;
+          }
         }
       }
+
+      return { hadMismatch: true, untranslatedIndices };
     }
-  }
 
   /**
    * Clean translated text (remove timecodes, normalize line endings)
@@ -1160,8 +1619,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       }
     }
     // Rough heuristic: ~4 characters per token
-    const fallbackEstimate = Math.max(1, Math.ceil(content.length / 4));
-    return fallbackEstimate;
+    return Math.max(1, Math.ceil(content.length / 4));
   }
 
   /**

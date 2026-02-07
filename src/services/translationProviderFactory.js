@@ -169,8 +169,9 @@ function resolveCfWorkersCredentials(rawKey) {
   };
 }
 
-function createProviderInstance(providerKey, providerConfig = {}, providerParams = {}) {
+function createProviderInstance(providerKey, providerConfig = {}, providerParams = {}, globalOptions = {}) {
   const key = String(providerKey || '').toLowerCase();
+  const enableJsonOutput = globalOptions.enableJsonOutput === true;
   switch (key) {
     case 'gemini':
       return new GeminiService(
@@ -184,7 +185,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
           maxRetries: providerParams.maxRetries,
           thinkingBudget: providerParams.thinkingBudget,
           temperature: providerParams.temperature,
-          topP: providerParams.topP
+          topP: providerParams.topP,
+          enableJsonOutput
         }
       );
     case 'openai':
@@ -198,7 +200,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
         maxRetries: providerParams.maxRetries,
-        reasoningEffort: providerParams.reasoningEffort
+        reasoningEffort: providerParams.reasoningEffort,
+        enableJsonOutput
       });
     case 'xai':
       return new OpenAICompatibleProvider({
@@ -210,7 +213,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     case 'deepseek':
       return new OpenAICompatibleProvider({
@@ -222,7 +226,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     case 'deepl':
       return new DeepLProvider({
@@ -251,7 +256,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     case 'openrouter':
       return new OpenAICompatibleProvider({
@@ -264,7 +270,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     case 'cfworkers': {
       const creds = buildCfWorkersBaseUrl(providerConfig.apiKey);
@@ -281,7 +288,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     }
     case 'anthropic':
@@ -319,7 +327,8 @@ function createProviderInstance(providerKey, providerConfig = {}, providerParams
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
         translationTimeout: providerParams.translationTimeout,
-        maxRetries: providerParams.maxRetries
+        maxRetries: providerParams.maxRetries,
+        enableJsonOutput
       });
     }
     default:
@@ -339,6 +348,10 @@ async function createTranslationProvider(config) {
   const secondaryProviderKey = secondaryEnabled
     ? String(config?.secondaryProvider || '').toLowerCase()
     : '';
+  // Build globalOptions for non-Gemini providers (Gemini gets it via advancedSettings)
+  const jsonOutputOptions = {
+    enableJsonOutput: config?.advancedSettings?.enableJsonOutput === true
+  };
   const defaultProviderParams = getDefaultProviderParameters();
   const mergedProviderParams = mergeProviderParameters(
     defaultProviderParams,
@@ -357,7 +370,12 @@ async function createTranslationProvider(config) {
   };
   const getGeminiAdvancedSettings = () => {
     const settings = config?.advancedSettings || {};
-    return settings.enabled === true ? settings : {};
+    const base = settings.enabled === true ? settings : {};
+    // Always pass enableJsonOutput regardless of advanced settings toggle
+    if (settings.enableJsonOutput === true) {
+      base.enableJsonOutput = true;
+    }
+    return base;
   };
   const findSecondaryConfig = async (key) => {
     if (!secondaryEnabled) return null;
@@ -405,7 +423,7 @@ async function createTranslationProvider(config) {
       const secondaryConfig = await findSecondaryConfig(secondaryProviderKey);
       if (isConfigured(secondaryConfig, secondaryProviderKey)) {
         const secondaryParams = findProviderParams(secondaryProviderKey);
-        fallbackProvider = createProviderInstance(secondaryProviderKey, secondaryConfig, secondaryParams);
+        fallbackProvider = createProviderInstance(secondaryProviderKey, secondaryConfig, secondaryParams, jsonOutputOptions);
         fallbackName = secondaryProviderKey;
         fallbackModel = secondaryConfig.model;
       } else {
@@ -446,7 +464,7 @@ async function createTranslationProvider(config) {
   }
 
   const providerParams = findProviderParams(mainProvider);
-  const provider = createProviderInstance(mainProvider, selectedConfig, providerParams);
+  const provider = createProviderInstance(mainProvider, selectedConfig, providerParams, jsonOutputOptions);
   if (!provider) {
     log.warn(() => `[Providers] Unsupported provider '${mainProvider}', falling back to Gemini`);
     return {
@@ -477,7 +495,7 @@ async function createTranslationProvider(config) {
         fallbackModel = secondaryConfig.model;
       } else {
         const secondaryParams = findProviderParams(secondaryProviderKey);
-        fallbackProvider = createProviderInstance(secondaryProviderKey, secondaryConfig, secondaryParams);
+        fallbackProvider = createProviderInstance(secondaryProviderKey, secondaryConfig, secondaryParams, jsonOutputOptions);
         fallbackName = secondaryProviderKey;
         fallbackModel = secondaryConfig.model;
       }

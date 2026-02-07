@@ -94,6 +94,9 @@ class GeminiService {
         baseDelay: 8000  // 8 seconds base, doubles to 24s on 2nd retry
       };
     }
+
+    // JSON structured output mode (set by TranslationEngine when enabled)
+    this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
   getEffectiveThinkingBudget() {
@@ -375,6 +378,11 @@ class GeminiService {
           maxOutputTokens: estimatedOutputTokens + thinkingReserve
         };
 
+        // JSON structured output mode
+        if (this.enableJsonOutput) {
+          generationConfig.responseMimeType = 'application/json';
+        }
+
         // Add thinking config based on thinking budget setting
         // -1 = dynamic thinking (null), 0 = disabled (omit), >0 = fixed budget
         if (thinkingBudget === -1) {
@@ -390,6 +398,16 @@ class GeminiService {
         }
         // If thinkingBudget is 0, don't add thinkingConfig at all (disabled)
 
+        // Safety settings: disable all content filters for subtitle translation
+        // Subtitles contain fictional dialogue that frequently triggers false positives
+        const safetySettings = [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
+        ];
+
         // Call Gemini API (use header auth for consistency and security)
         const response = await axios.post(
           `${this.baseUrl}/models/${this.model}:generateContent`,
@@ -399,7 +417,8 @@ class GeminiService {
                 text: userPrompt
               }]
             }],
-            generationConfig
+            generationConfig,
+            safetySettings
           },
           {
             headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
@@ -535,11 +554,25 @@ class GeminiService {
           maxOutputTokens: estimatedOutputTokens + thinkingReserve
         };
 
+        // JSON structured output mode
+        if (this.enableJsonOutput) {
+          generationConfig.responseMimeType = 'application/json';
+        }
+
         if (thinkingBudget === -1) {
           generationConfig.thinkingConfig = { thinkingBudget: null };
         } else if (thinkingBudget > 0) {
           generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
         }
+
+        // Safety settings: disable all content filters for subtitle translation
+        const safetySettings = [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
+        ];
 
         const response = await axios.post(
           `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
@@ -549,7 +582,8 @@ class GeminiService {
                 text: userPrompt
               }]
             }],
-            generationConfig
+            generationConfig,
+            safetySettings
           },
           {
             headers: {
@@ -731,7 +765,8 @@ class GeminiService {
    */
   estimateTokenCount(text) {
     if (!text) return 0;
-    // Conservative: ~3 characters per token + 10% overhead for structure/punctuation
+    // Gemini uses SentencePiece, not BPE — heuristic is more appropriate here
+    // than gpt-tokenizer. For exact counts, use countTokensForTranslation() API.
     const approx = Math.ceil(text.length / 3);
     return Math.ceil(approx * 1.1);
   }

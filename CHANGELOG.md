@@ -2,6 +2,72 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.38
+
+**New Features:**
+
+- **XML Tags translation workflow:** Added "XML Tags (Robust)" as a third Translation Workflow option alongside "Original Timestamps" and "Send Timestamps to AI". When selected, each subtitle entry is wrapped in `<s id="N">text</s>` tags before being sent to the AI, and the response is parsed by matching those same tags back. This provides robust ID-based entry recovery that is resistant to the AI merging, splitting, or reordering entries — the most common cause of translation sync problems. The XML parser deduplicates by ID and sorts by index, so even if the AI repeats or shuffles entries, the output stays aligned. Available in Translation Settings (beta mode).
+
+- **JSON Structured Output mode:** Added an opt-in "Enable JSON Structured Output" checkbox in Translation Settings (beta mode, disabled by default). When enabled, the translation engine requests the AI to return translations as a JSON array (`[{"id":1,"text":"..."},...]`) instead of plain text. This works at two levels:
+  - **API level:** Gemini uses `responseMimeType: 'application/json'` in `generationConfig`; OpenAI-compatible providers (OpenAI, XAI, DeepSeek, Mistral, OpenRouter, Cloudflare Workers, Custom) use `response_format: { type: 'json_object' }` in the request body. These enforce valid JSON at the model level.
+  - **Prompt level:** JSON format instructions are appended to the translation prompt for all LLM providers, including Anthropic (which has no native JSON mode API). DeepL and Google Translate are unaffected (non-LLM native batch providers).
+  - **Response parsing:** When JSON output is enabled, `parseResponseForWorkflow()` always attempts JSON parsing first regardless of the selected workflow mode, then falls back to the standard parser (numbered list, XML, or SRT) if JSON parsing fails. This makes it a safe override — worst case, it degrades gracefully.
+  - JSON output and XML workflow are complementary: XML controls how entries are *sent* to the AI, JSON controls how the AI *responds*.
+
+- **Two-pass mismatch recovery:** Replaced the old "retry the whole batch N times" approach with intelligent targeted recovery when the AI returns a different number of entries than expected:
+  - **Pass 1 — Alignment:** `alignTranslatedEntries()` maps each translated entry back to its original batch position by index. Entries that the AI returned correctly are kept; missing positions are identified and marked with `[⚠]` prefixes.
+  - **Pass 2 — Targeted re-translation:** If ≤30% of entries are missing, only those specific entries are re-sent to the AI in a small follow-up batch and merged back into the aligned result. This is much faster and cheaper than retrying the entire batch.
+  - **Fallback:** If >30% of entries are missing (indicating a more fundamental problem), the engine falls back to a full batch retry (configurable via Mismatch Retries setting, default 1).
+  - Works with all three workflow modes (Original Timestamps, Send Timestamps to AI, XML Tags).
+
+**Bug Fixes:**
+
+- **Fixed auto-chunk half-batch streaming progress missing `streamSequence`:** When a batch exceeds the token limit and is auto-split, the mid-chunk streaming progress emission was missing the `streamSequence` property. The `streamSequence` variable declaration was also moved before the auto-chunk block to prevent a potential `ReferenceError`.
+
+- **Fixed Learn Mode subtitles overlapping on Android/Android TV:** The previous implementation used two separate WebVTT cues with positioning tags (`line`, `region`) that Stremio's player (ExoPlayer) doesn't support properly and was breaking on Android. Both languages are now merged into a single cue separated by a line break, with the learned language italicized for visual distinction. Works consistently across all Stremio platforms.
+
+- **Fixed SRT-mode mismatch retry never triggering:** `parseBatchSrtResponse` was internally calling `fixEntryCountMismatch` which padded the entries array to the correct length before the outer retry logic could detect the mismatch. The inner alignment was removed so the raw parsed count is returned, allowing the retry logic to work correctly for both SRT-mode and text-mode translations.
+
+**Improvements:**
+
+- **Translation Workflow is now a 3-way selector:** The old "Send Timestamps to AI" checkbox has been replaced with a dropdown offering three modes: "Original Timestamps" (numbered list, reattach original timecodes), "Send Timestamps to AI" (full SRT, trust AI to preserve timecodes), and "XML Tags (Robust)" (XML-tagged entries for ID-based recovery). Backward compatible — existing configs with `sendTimestampsToAI: true` automatically map to the "ai" workflow.
+
+- **Streaming progress parsing for XML mode:** The `buildStreamingProgress()` method now handles partial XML tag parsing during streaming translation, so users see real-time progress when using the XML Tags workflow.
+
+- **JSON output wired to all OpenAI-compatible providers:** The `enableJsonOutput` flag is passed through `globalOptions` in `createProviderInstance()` and propagated to all 7 OpenAI-compatible provider instantiations (OpenAI, XAI, DeepSeek, Mistral, OpenRouter, Cloudflare Workers, Custom) plus Gemini. The factory's `createTranslationProvider()` extracts the setting from `config.advancedSettings.enableJsonOutput` and threads it to every provider creation call site, including secondary/fallback providers.
+
+- **Accurate token counting with gpt-tokenizer for BPE providers:** Replaced the rough character-based heuristic (`chars/3 * 1.1`) with actual BPE tokenization via `gpt-tokenizer` for OpenAI-compatible and Anthropic providers. This gives much more accurate batch sizing and auto-chunking decisions, especially for CJK languages where the old heuristic could be off by 2-3x. Falls back to the heuristic if the tokenizer fails.
+
+- **Gemini safety filters set to BLOCK_NONE:** Both `generateContent` and `streamGenerateContent` requests now include `safetySettings` with `BLOCK_NONE` for all five harm categories (HARASSMENT, HATE_SPEECH, SEXUALLY_EXPLICIT, DANGEROUS_CONTENT, CIVIC_INTEGRITY). This should dramatically reduce false-positive safety blocks on fictional dialogue in subtitles. The existing PROHIBITED_CONTENT retry with modified prompt is kept as a fallback.
+
+- **Optimized streaming reconstruction:** During streaming translation, the engine no longer rebuilds a full merged SRT from all entries on every chunk. Instead, it maintains a pre-built SRT snapshot for completed batches and only rebuilds the current streaming batch, then concatenates. This turns an O(totalEntries) operation per streaming chunk into O(currentBatchEntries), which is a significant improvement for large files (1000+ entries) in later batches.
+
+- **Native batch path for non-LLM providers (DeepL, Google Translate):** The translation engine now detects non-LLM providers and sends them raw SRT directly via a new `translateBatchNative()` method, bypassing numbered-list prompt construction, context injection, and numbered-list response parsing entirely. Previously, these providers received numbered-list-wrapped content and had to parse it back out via `extractEntries()`, which was wasted overhead.
+
+- **Faster partial delivery — save after every batch:** Partial translation results are now saved to cache after every completed batch instead of only at batches 1, 4, 9, and every 5th batch. Users clicking to reload will see progress from every batch, eliminating the "skipped batches" gap where 2-3 batches of translated content were invisible.
+
+- **Earlier first streaming partial (30 entries, was 95):** The first streaming partial is now emitted after ~30 translated entries instead of ~95, so users see initial progress roughly 3x faster when using streaming providers (Gemini, OpenAI, Anthropic). Configurable via `STREAM_FIRST_PARTIAL_MIN_ENTRIES` env var.
+
+- **More frequent streaming updates for large files:** The SRT rebuild interval for large files (600+ entries) was reduced from every 250 entries to every 200 entries (`SINGLE_BATCH_SRT_REBUILD_STEP_LARGE`), and the streaming save debounce was reduced from 4s to 3s. Both remain env-configurable.
+
+- **Faster mismatch retry recovery:** When the AI returns a mismatched entry count and a retry is triggered, the pause before retry was reduced from 1500ms to 500ms. The retry itself already takes seconds, so the extra wait was unnecessary latency.
+
+- **Auto-chunking now emits mid-chunk streaming progress:** When a batch exceeds the token limit and is auto-split into two halves, a streaming progress callback is now emitted after the first half completes. Previously, no progress was visible until both halves finished, leaving a gap during large auto-chunked batches.
+
+- **Security block events now reported to Sentry:** All three security middleware rejection points (addon API origin block, `applySafeCors` origin rejection, and browser CORS block) now log at `error` level and send detailed events to Sentry. Each event includes the blocked origin, user-agent, request path, method, IP, and a `blockReason` tag (`unknown_origin_addon_api`, `origin_not_allowed`, `browser_cors_blocked`).
+
+- **Increased batch size for Gemini 3.0 Flash:** The `gemini-3-flash-preview` model now uses 400 entries per batch (up from the default 250).
+
+- **Entry count mismatch retry with visual marker:** When the AI returns a different number of subtitle entries than expected, the batch is now retried (default: 1 retry, configurable 0-3 via "Mismatch Retries" in Advanced Settings or `MISMATCH_RETRIES` env var). If retries don't resolve the mismatch, untranslated entries are marked with a `[⚠]` prefix instead of being silently backfilled with the original language text. Users can now see exactly which lines the AI skipped.
+
+- **Partial cache cleanup with retry:** When a translation completes or fails, the partial cache cleanup now retries once after 2 seconds if the initial delete fails. This reduces orphaned partial cache entries that could serve stale data for up to 1 hour.
+
+- **Translation cache completeness metadata:** All cache writes (partial, bypass, and permanent) now include an `isComplete` flag (`false` for in-progress partials, `true` for finished translations). This enables downstream code to distinguish complete translations from in-progress partials at the metadata level.
+
+- **Progress callback failure tracking:** Partial cache save errors during translation are now tracked with a consecutive failure counter. The first 3 failures log individual warnings; after that, a single error-level message is logged indicating partial delivery is broken for that translation, and further warnings are suppressed to avoid log spam.
+
+- **Final streaming partial always saved:** Fixed a gap where the last streaming partial might not be persisted if the total entry count fell between rebuild checkpoints. The `shouldRebuildPartial` throttle now unconditionally allows saving when all entries are complete, closing the window where neither partial nor permanent cache had data.
+
 ## SubMaker v1.4.37
 
 **New Features:**

@@ -1115,7 +1115,11 @@
         "orderLabel": "Orden de subtítulos en Learn Mode",
         "orderDescription": "Elige qué idioma aparece arriba y abajo.",
         "sourceTop": "Origen arriba - Destino abajo",
-        "targetTop": "Destino arriba - Origen abajo"
+        "targetTop": "Destino arriba - Origen abajo",
+        "italicLabel": "Poner en cursiva un idioma",
+        "italicDescription": "Poner en cursiva una de las líneas de subtítulos para distinguir visualmente los dos idiomas.",
+        "italicTarget": "Cursiva en Destino (idioma aprendido)",
+        "italicSource": "Cursiva en Origen (idioma original)"
       },
       "translationSettings": {
         "title": "Ajustes de traducción",

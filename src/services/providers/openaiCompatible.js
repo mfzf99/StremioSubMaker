@@ -34,6 +34,8 @@ class OpenAICompatibleProvider {
     this.maxRetries = Number.isFinite(parseInt(options.maxRetries, 10))
       ? Math.max(0, parseInt(options.maxRetries, 10))
       : 2;
+    // JSON structured output mode
+    this.enableJsonOutput = options.enableJsonOutput === true;
   }
 
   normalizeReasoningEffort(value) {
@@ -214,6 +216,11 @@ class OpenAICompatibleProvider {
         stream
       };
 
+    // JSON structured output mode for OpenAI-compatible APIs
+    if (!isCfRun && this.enableJsonOutput) {
+      body.response_format = { type: 'json_object' };
+    }
+
     if (!isCfRun && this.providerName === 'openai') {
       const effort = this.normalizeReasoningEffort(this.reasoningEffort);
       if (effort) {
@@ -251,8 +258,15 @@ class OpenAICompatibleProvider {
 
   estimateTokenCount(text) {
     if (!text) return 0;
-    const approx = Math.ceil(String(text).length / 3);
-    return Math.ceil(approx * 1.1);
+    const str = String(text);
+    try {
+      const { countTokens } = require('gpt-tokenizer');
+      return countTokens(str);
+    } catch (_) {
+      // Fallback to heuristic if tokenizer fails
+      const approx = Math.ceil(str.length / 3);
+      return Math.ceil(approx * 1.1);
+    }
   }
 
   getAuthHeaders() {

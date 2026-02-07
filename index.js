@@ -2211,6 +2211,22 @@ function isOriginAllowed(origin, req) {
 function applySafeCors(req, res, next) {
     const origin = req.get('origin');
     if (origin && !isOriginAllowed(origin, req)) {
+        const userAgent = req.headers['user-agent'] || '';
+        log.error(() => `[Security] Blocked request (origin not allowed) - origin: ${origin}, user-agent: ${userAgent}, path: ${req.path}`);
+        sentry.captureMessage(
+            `[Security] Blocked request (origin not allowed) - origin: ${origin}, user-agent: ${userAgent}, path: ${req.path}`,
+            'error',
+            {
+                module: 'SecurityMiddleware',
+                blockReason: 'origin_not_allowed',
+                origin,
+                userAgent,
+                path: req.path,
+                method: req.method,
+                ip: req.ip,
+                tags: { security: 'blocked_origin' }
+            }
+        );
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         return res.status(403).json({ error: t('server.errors.originNotAllowed', {}, 'Origin not allowed') });
     }
@@ -2700,7 +2716,21 @@ app.use((req, res, next) => {
             return cors()(req, res, next);
         }
         // Block other origins to prevent browser-based abuse from arbitrary websites
-        log.warn(() => `[Security] Blocked addon API request - origin: ${origin}, user-agent: ${userAgent}`);
+        log.error(() => `[Security] Blocked addon API request - origin: ${origin}, user-agent: ${userAgent}, path: ${req.path}`);
+        sentry.captureMessage(
+            `[Security] Blocked addon API request - origin: ${origin}, user-agent: ${userAgent}, path: ${req.path}`,
+            'error',
+            {
+                module: 'SecurityMiddleware',
+                blockReason: 'unknown_origin_addon_api',
+                origin,
+                userAgent,
+                path: req.path,
+                method: req.method,
+                ip: req.ip,
+                tags: { security: 'blocked_origin' }
+            }
+        );
         return res.status(403).json({
             error: t('server.errors.stremioOnly', {}, 'Access denied. This addon must be accessed through Stremio.'),
             hint: t('server.errors.stremioHint', {}, 'If you are using Stremio and seeing this error, please report it as a bug.')
@@ -2719,6 +2749,22 @@ app.use((req, res, next) => {
 
     // Block browser-based requests to sensitive API routes (they send Origin header)
     // This prevents cross-site cost abuse attacks from malicious websites
+    const blockedUserAgent = req.headers['user-agent'] || '';
+    log.error(() => `[Security] Blocked browser CORS request - origin: ${origin}, user-agent: ${blockedUserAgent}, path: ${req.path}`);
+    sentry.captureMessage(
+        `[Security] Blocked browser CORS request - origin: ${origin}, user-agent: ${blockedUserAgent}, path: ${req.path}`,
+        'error',
+        {
+            module: 'SecurityMiddleware',
+            blockReason: 'browser_cors_blocked',
+            origin,
+            userAgent: blockedUserAgent,
+            path: req.path,
+            method: req.method,
+            ip: req.ip,
+            tags: { security: 'blocked_origin' }
+        }
+    );
     return res.status(403).json({
         error: t('server.errors.browserCorsBlocked', {}, 'Browser-based cross-origin requests to this API route are not allowed. Please use the Stremio client.')
     });
@@ -5331,7 +5377,7 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         // If we have partial translation, serve partial VTT immediately
         const partial = await readFromPartialCache(cacheKey);
         if (partial && partial.content) {
-            const vtt = srtPairToWebVTT(sourceContent, partial.content, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+            const vtt = srtPairToWebVTT(sourceContent, partial.content, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'), { learnItalic: config.learnItalic, learnItalicTarget: config.learnItalicTarget });
             const output = maybeConvertToSRT(vtt, config);
             const isSrt = config.forceSRTOutput;
             res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');
@@ -5348,7 +5394,7 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
                 sourceLanguage: 'und',
                 from: 'learn'
             });
-            const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+            const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'), { learnItalic: config.learnItalic, learnItalicTarget: config.learnItalicTarget });
             const output = maybeConvertToSRT(vtt, config);
             const isSrt = config.forceSRTOutput;
             res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');
@@ -5365,7 +5411,7 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         }).catch(() => { });
 
         const loadingSrt = createLoadingSubtitle(config?.uiLanguage || baseConfig?.uiLanguage || 'en');
-        const vtt = srtPairToWebVTT(sourceContent, loadingSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'));
+        const vtt = srtPairToWebVTT(sourceContent, loadingSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'), { learnItalic: config.learnItalic, learnItalicTarget: config.learnItalicTarget });
         const output = maybeConvertToSRT(vtt, config);
         const isSrt = config.forceSRTOutput;
         res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');

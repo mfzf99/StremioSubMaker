@@ -463,7 +463,19 @@ function normalizeConfig(config) {
   mergedConfig.advancedSettings = {
     ...advSettings,
     enabled: advSettings.enabled === true,
-    sendTimestampsToAI: advSettings.sendTimestampsToAI === true
+    sendTimestampsToAI: advSettings.sendTimestampsToAI === true,
+    translationWorkflow: (() => {
+      const val = String(advSettings.translationWorkflow || '').toLowerCase();
+      if (['original', 'ai', 'xml'].includes(val)) return val;
+      // Backward compat: if sendTimestampsToAI was true, map to 'ai'
+      if (advSettings.sendTimestampsToAI === true) return 'ai';
+      return 'original';
+    })(),
+    enableJsonOutput: advSettings.enableJsonOutput === true,
+    mismatchRetries: (() => {
+      const val = parseInt(advSettings.mismatchRetries);
+      return Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 1;
+    })()
   };
 
   if (mergedConfig.noTranslationLanguages.length > maxNoTranslationLanguages) {
@@ -896,6 +908,10 @@ function getDefaultConfig(modelName = null) {
     maxRetries: process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES) : 3,
     // When enabled, trust the AI to return timestamps for each batch instead of reusing originals
     sendTimestampsToAI: process.env.SEND_TIMESTAMPS_TO_AI === 'true',
+    // Translation workflow: 'original' (numbered list), 'ai' (send timestamps), 'xml' (XML-tagged entries)
+    translationWorkflow: process.env.TRANSLATION_WORKFLOW || 'original',
+    // JSON structured output: request JSON array from AI for unambiguous parsing (disabled by default)
+    enableJsonOutput: process.env.ENABLE_JSON_OUTPUT === 'true',
     // Extended thinking (priority: .env > model-specific > global default)
     thinkingBudget: process.env.GEMINI_THINKING_BUDGET !== undefined
       ? parseInt(process.env.GEMINI_THINKING_BUDGET)
@@ -909,7 +925,9 @@ function getDefaultConfig(modelName = null) {
     // Batch context: Include original surrounding context and previous translations for better coherence
     // Disabled by default for performance (can be enabled for improved translation quality)
     enableBatchContext: process.env.ENABLE_BATCH_CONTEXT === 'true' ? true : false,
-    contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE) || 3 // Number of surrounding entries to include as context
+    contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE) || 3, // Number of surrounding entries to include as context
+    // Mismatch retries: number of times to retry a batch when AI returns wrong entry count (0-3, default: 1)
+    mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES))) : 1
   };
 
   // UI/results limits
@@ -932,6 +950,8 @@ function getDefaultConfig(modelName = null) {
     learnTargetLanguages: [],
     learnOrder: 'source-top',
     learnPlacement: 'top', // default: pin top language at top of screen
+    learnItalic: true,
+    learnItalicTarget: 'target', // 'target' | 'source'
     geminiApiKey: '',
     // Gemini API key rotation: allows multiple keys to be cycled for load distribution
     geminiKeyRotationEnabled: false,

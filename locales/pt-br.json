@@ -1115,7 +1115,11 @@
         "orderLabel": "Ordem das Legendas do Learn Mode",
         "orderDescription": "Escolha qual idioma aparece no topo e na parte inferior da tela.",
         "sourceTop": "Origem no Topo - Destino na Base",
-        "targetTop": "Destino no Topo - Origem na Base"
+        "targetTop": "Destino no Topo - Origem na Base",
+        "italicLabel": "Italicizar um idioma",
+        "italicDescription": "Italicizar uma das linhas de legenda para distinguir visualmente os dois idiomas.",
+        "italicTarget": "Italicizar Destino (idioma aprendido)",
+        "italicSource": "Italicizar Origem (idioma original)"
       },
       "translationSettings": {
         "title": "Configurações de Tradução",

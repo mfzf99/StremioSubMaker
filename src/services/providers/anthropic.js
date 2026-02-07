@@ -46,8 +46,15 @@ class AnthropicProvider {
 
   estimateTokenCount(text) {
     if (!text) return 0;
-    const approx = Math.ceil(String(text).length / 3);
-    return Math.ceil(approx * 1.1);
+    const str = String(text);
+    try {
+      const { countTokens } = require('gpt-tokenizer');
+      return countTokens(str);
+    } catch (_) {
+      // Fallback to heuristic if tokenizer fails
+      const approx = Math.ceil(str.length / 3);
+      return Math.ceil(approx * 1.1);
+    }
   }
 
   buildRequestBody(subtitleContent, targetLanguage, customPrompt = null, stream = false) {

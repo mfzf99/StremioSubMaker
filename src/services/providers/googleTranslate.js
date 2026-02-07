@@ -211,9 +211,9 @@ class GoogleTranslateProvider {
   }
 
   estimateTokenCount(text) {
-    const content = String(text || '');
-    // Rough heuristic (~4 chars per token) to satisfy unified engine expectations
-    return Math.max(1, Math.ceil(content.length / 4));
+    if (!text) return 0;
+    // Google Translate doesn't use tokens — this is just a size proxy for the engine.
+    return Math.max(1, Math.ceil(String(text).length / 4));
   }
 
   buildUserPrompt(subtitleContent, targetLanguage) {

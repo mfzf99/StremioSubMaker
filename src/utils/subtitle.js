@@ -119,14 +119,17 @@ function srtDurationMs(tc) {
 
 /**
  * Convert two aligned SRT strings into a dual-language WebVTT output
- * - Emits two cues per entry with overlapping timecodes
- * - Positions based on order: 'source-top' (source at top) or 'target-top'
+ * - Merges both languages into a single cue per entry (line break separated)
+ *   for maximum cross-player compatibility (Android, Android TV, desktop)
+ * - Order controls which language appears on the first line
  */
-function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement = 'stacked') {
+function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement = 'stacked', options = {}) {
   try {
     const srcEntries = parseSRT(sourceSrt);
     const trgEntries = parseSRT(targetSrt);
     const srcTop = order === 'source-top';
+    const italic = options.learnItalic !== false; // default true
+    const italicTarget = options.learnItalicTarget || 'target'; // 'target' | 'source'
     const isStatusCue = (text) => /TRANSLATION IN PROGRESS|Reload this subtitle/i.test(String(text || ''));
 
     // When we only have a partial translation, limit cues to what the target has (including the status tail)
@@ -140,39 +143,11 @@ function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement =
 
     const lines = ['WEBVTT', ''];
 
-    const normalizedPlacement = placement === 'top' ? 'top' : 'stacked';
-
-    // Some Stremio players partially ignore raw cue line settings. When users request "Top",
-    // also emit a REGION anchored to the top of the viewport. Players that support regions will
-    // honor it; others still have the explicit line values below.
-    const useTopRegion = normalizedPlacement === 'top';
-    if (useTopRegion) {
-      lines.push('REGION');
-      lines.push('id:submaker-top');
-      lines.push('width:100%');
-      lines.push('lines:3');
-      lines.push('regionanchor:50% 0%');
-      lines.push('viewportanchor:50% 0%');
-      lines.push('scroll:up');
-      lines.push('');
-    }
-
-    // Stremio is more consistent with snap-to-lines integers; combine with a top region so
-    // compatible players pin the first cue to the true top instead of stacking near the bottom.
-    const positions = (place) => {
-      if (place === 'top') {
-        return { top: 'region:submaker-top line:0 align:center position:50%', bottom: 'line:-1 align:center position:50%' };
-      }
-      return { top: 'line:-5 align:center position:50%', bottom: 'line:-1 align:center position:50%' };
-    };
-    const pos = positions(normalizedPlacement);
-
     for (let i = 0; i < count; i++) {
       const s = srcEntries[i];
       const t = trgEntries[i];
       if (!s && !t) continue;
 
-      // Detect status cues so we keep their long durations intact
       // Choose timecode: prefer target when it exists and is a status cue or longer than source
       let chosenTimecode = (s && s.timecode) || '';
       if (t && t.timecode) {
@@ -189,51 +164,63 @@ function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement =
 
       const vttTime = srtTimeToVttTime(chosenTimecode);
 
-      // Status cues should render alone so they don't get paired with source text
+      // Status cues render alone so they don't get paired with source text
       if (isStatusCue(t && t.text)) {
-        lines.push(`${vttTime} ${pos.bottom}`);
+        lines.push(vttTime);
         lines.push(sanitizeSubtitleText(t.text));
         lines.push('');
         continue;
       }
 
-      let topCue = srcTop ? (s && s.text) : (t && t.text);
-      let bottomCue = srcTop ? (t && t.text) : (s && s.text);
+      let firstLine = srcTop ? (s && s.text) : (t && t.text);
+      let secondLine = srcTop ? (t && t.text) : (s && s.text);
 
-      // Fallbacks so status cues still render even if only one side exists
-      if (!topCue && bottomCue) {
-        topCue = bottomCue;
-        bottomCue = '';
+      // Fallback: if only one side exists, show it alone
+      if (!firstLine && secondLine) {
+        firstLine = secondLine;
+        secondLine = '';
       }
 
-      if (!topCue && !bottomCue) continue;
+      if (!firstLine && !secondLine) continue;
 
-      // Top cue
-      lines.push(`${vttTime} ${pos.top}`);
-      lines.push(sanitizeSubtitleText(topCue));
+      // Single cue with both languages separated by a line break.
+      // Optionally italicize one language for visual distinction.
+      lines.push(vttTime);
+      const sanitizedFirst = sanitizeSubtitleText(firstLine);
+      if (secondLine) {
+        const sanitizedSecond = sanitizeSubtitleText(secondLine);
+        if (italic) {
+          // Determine which line to italicize based on config
+          // firstLine is source when srcTop, target when !srcTop
+          const italicizeFirst = (srcTop && italicTarget === 'source') || (!srcTop && italicTarget === 'target');
+          if (italicizeFirst) {
+            lines.push(`<i>${sanitizedFirst}</i>\n${sanitizedSecond}`);
+          } else {
+            lines.push(`${sanitizedFirst}\n<i>${sanitizedSecond}</i>`);
+          }
+        } else {
+          lines.push(`${sanitizedFirst}\n${sanitizedSecond}`);
+        }
+      } else {
+        lines.push(sanitizedFirst);
+      }
       lines.push('');
-
-      // Bottom cue
-      if (bottomCue) {
-        lines.push(`${vttTime} ${pos.bottom}`);
-        lines.push(sanitizeSubtitleText(bottomCue));
-        lines.push('');
-      }
     }
+
     // If we had a status tail that wasn't consumed in the main loop (e.g., no translations yet),
     // render it here so users still see progress without extra source lines mixed in.
     if (hasStatusTail && (count === 0 || statusIndex >= count)) {
       const statusEntry = trgEntries[statusIndex];
       const fallbackTime = srcEntries[count - 1]?.timecode || '00:00:00,000 --> 04:00:00,000';
       const vttTime = srtTimeToVttTime(statusEntry.timecode || fallbackTime);
-      lines.push(`${vttTime} ${pos.bottom}`);
+      lines.push(vttTime);
       lines.push(sanitizeSubtitleText(statusEntry.text));
       lines.push('');
     }
 
     if (count === 0 && !hasStatusTail) {
       // Fallback minimal cue
-      lines.push('00:00:00.000 --> 04:00:00.000 line:95% align:center position:50%');
+      lines.push('00:00:00.000 --> 04:00:00.000');
       lines.push('No content available');
       lines.push('');
     }

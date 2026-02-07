@@ -56,7 +56,7 @@ function parseSubtitleEntries(srtContent) {
  */
 function estimateTokenCount(text) {
   if (!text) return 0;
-  // Conservative: ~3 characters per token + 10% overhead
+  // Provider-agnostic chunking heuristic — actual token counts come from the provider.
   const approx = Math.ceil(text.length / 3);
   return Math.ceil(approx * 1.1);
 }
