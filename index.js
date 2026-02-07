@@ -2155,7 +2155,8 @@ const DEFAULT_STREMIO_WEB_ORIGINS = [
     'https://stremio.com',
     'https://app.stremio.com',
     // Third-party Stremio web frontends
-    'https://stremio-neo.aayushcodes.eu'
+    'https://stremio-neo.aayushcodes.eu',
+    'https://peario.xyz'
 ];
 const allowedOriginsNormalized = Array.from(new Set([
     ...allowedOrigins.map(normalizeOrigin),
@@ -2723,11 +2724,22 @@ app.use((req, res, next) => {
     const isManifestRequest = req.path.includes('/manifest.json');
 
     // Allow static files and browser-accessible routes
+    const isStaticAsset =
+        req.path.endsWith('.png') ||
+        req.path.endsWith('.svg') ||
+        req.path.endsWith('.ico') ||
+        req.path.endsWith('.jpg') ||
+        req.path.endsWith('.jpeg') ||
+        req.path.endsWith('.webp') ||
+        req.path.endsWith('.woff') ||
+        req.path.endsWith('.woff2') ||
+        req.path.endsWith('.ttf');
     const isBrowserAllowed =
         req.path.startsWith('/public/') ||
         req.path.endsWith('.css') ||
         req.path.endsWith('.js') ||
         req.path.endsWith('.html') ||
+        isStaticAsset ||
         browserAllowedRoutes.some(route => req.path === route || req.path.startsWith(route)) ||
         isAddonBrowserPage;
 
@@ -2792,6 +2804,11 @@ app.use((req, res, next) => {
             error: t('server.errors.stremioOnly', {}, 'Access denied. This addon must be accessed through Stremio.'),
             hint: t('server.errors.stremioHint', {}, 'If you are using Stremio and seeing this error, please report it as a bug.')
         });
+    }
+
+    // Static assets (images, fonts) — allow from any origin, no CORS restriction
+    if (isStaticAsset) {
+        return cors()(req, res, next);
     }
 
     if (isBrowserAllowed || stremioClient) {

@@ -6,7 +6,15 @@ All notable changes to this project will be documented in this file.
 
 **Improvements:**
 
-- **Multiple new origins allowed for Stremio shells, forks and addon managers.**
+- **Multiple new origins allowed for Stremio shells, forks, self-hosted instances and addon managers.**
+
+- **Allow private/LAN IP origins:** Origins from RFC 1918 private addresses (`10.x.x.x`, `172.16-31.x.x`, `192.168.x.x`) and link-local (`169.254.x.x`) are now treated like localhost. Fixes blocks for users running Stremio server on their LAN (e.g. `https://192.168.1.15:8080`).
+
+- **Stremio user-agent now bypasses origin checks everywhere:** Requests with a known Stremio user-agent (e.g. `StremioShell`) are now allowed through both `isOriginAllowed` and the addon API middleware, regardless of origin. Fixes blocks for self-hosted Stremio web instances using StremioShell.
+
+- **Extra wildcard suffixes checked in addon API middleware:** The addon API security middleware now also checks `ALLOWED_ORIGIN_WILDCARD_SUFFIXES` (and the built-in `*.elfhosted.com` / `*.midnightignite.me`), so hosting platforms aren't blocked on addon routes.
+
+- **Static assets bypass CORS origin checks:** Image, font, and icon files (`png`, `svg`, `ico`, `jpg`, `woff2`, `ttf`, etc.) are now served to any origin without restriction. Fixes blocks from browser extensions (`chrome-extension://`) and other clients trying to load `/logo.png` or `/favicon.svg`.
 
 ## SubMaker v1.4.41
 
@@ -31,12 +39,6 @@ All notable changes to this project will be documented in this file.
 - **CORS wildcard domain allowlisting:** Added support for wildcard domain suffixes in origin checks. `*.elfhosted.com` and `*.midnightignite.me` are now always allowed. Additional suffixes can be added via the `ALLOWED_ORIGIN_WILDCARD_SUFFIXES` env var (comma-separated, e.g. `.example.com,.other.org`).
 
 - **Allow localhost origins through CORS:** Requests from `localhost` / `127.0.0.1` (e.g. Stremio desktop at `http://localhost:11470`) are now allowed regardless of user-agent. Previously these were blocked when the browser UA didn't contain a Stremio hint.
-
-- **Allow private/LAN IP origins:** Origins from RFC 1918 private addresses (`10.x.x.x`, `172.16-31.x.x`, `192.168.x.x`) and link-local (`169.254.x.x`) are now treated like localhost. Fixes blocks for users running Stremio server on their LAN (e.g. `https://192.168.1.15:8080`).
-
-- **Stremio user-agent now bypasses origin checks everywhere:** Requests with a known Stremio user-agent (e.g. `StremioShell`) are now allowed through both `isOriginAllowed` and the addon API middleware, regardless of origin. Fixes blocks for self-hosted Stremio web instances (e.g. `stremio.zarg.me`) using StremioShell.
-
-- **Extra wildcard suffixes checked in addon API middleware:** The addon API security middleware now also checks `ALLOWED_ORIGIN_WILDCARD_SUFFIXES` (and the built-in `*.elfhosted.com` / `*.midnightignite.me`), so hosting platforms aren't blocked on addon routes.
 
 - **MAL and AniList ID mapping services:** Added `src/services/mal.js` (uses Jikan API `/anime/{id}/external` to find IMDB links) and `src/services/anilist.js` (uses AniList GraphQL API to check `externalLinks` for IMDB, with a fallback to MAL ID → Jikan chain). MAL (`mal:`) and AniList (`anilist:`) prefixed IDs were previously recognized by `parseStremioId` but had no mapping implementation — the handler logged "No IMDB mapping available" and all IMDB-only providers (OpenSubtitles, SubDL, SubSource) silently returned zero results. Both services follow the same patterns as the existing AniDB/Kitsu services (24h cache, 10min negative cache, 2 retries with 2s/6s backoff, 429 rate-limit handling).
 
