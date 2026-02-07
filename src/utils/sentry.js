@@ -30,6 +30,30 @@ let sentryInitialized = false;
 // NOTE: All error filtering has been removed. All errors are now sent to Sentry.
 // (warn and below messages are still filtered out)
 
+// Deduplication: track how many times we've sent identical events to Sentry.
+// Key = fingerprint string, Value = count sent so far.
+const eventSendCounts = new Map();
+const MAX_IDENTICAL_EVENTS = 5;
+
+/**
+ * Build a deduplication fingerprint for a Sentry event.
+ * For security-blocked-origin messages, fingerprint by origin only.
+ * For everything else, fingerprint by the full message or exception value.
+ */
+function getEventFingerprint(event) {
+    const msg = event?.message || event?.exception?.values?.[0]?.value || '';
+    if (!msg) return null;
+
+    // Security blocked origin — deduplicate by origin alone
+    const originMatch = msg.match(/Blocked request \(origin not allowed\) - origin: ([^,]+)/);
+    if (originMatch) {
+        return `blocked_origin:${originMatch[1].trim()}`;
+    }
+
+    // General dedup: use the raw message
+    return `msg:${msg}`;
+}
+
 /**
  * Initialize Sentry
  * Call this once at application startup
@@ -65,8 +89,16 @@ function init() {
                 return integrations.filter(integration => integration.name !== 'Console');
             },
 
-            // Send ALL errors to Sentry - no filtering
+            // Deduplicate identical events — allow up to MAX_IDENTICAL_EVENTS then drop
             beforeSend(event, hint) {
+                const fingerprint = getEventFingerprint(event);
+                if (fingerprint) {
+                    const count = eventSendCounts.get(fingerprint) || 0;
+                    if (count >= MAX_IDENTICAL_EVENTS) {
+                        return null; // Drop — we've already sent enough of these
+                    }
+                    eventSendCounts.set(fingerprint, count + 1);
+                }
                 console.log('[Sentry] beforeSend triggered for event:', event?.event_id);
                 return event;
             },
