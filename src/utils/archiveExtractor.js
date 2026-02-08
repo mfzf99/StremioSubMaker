@@ -174,8 +174,10 @@ async function extractRar(buffer) {
             .map(h => h.name)
             .filter(name => {
                 // Reject entries with path traversal sequences or absolute paths
+                // Check for '..' as a path component, not just any '..' substring (avoids false positives for ellipses like "Cloudy...")
                 const normalized = name.replace(/\\/g, '/');
-                if (normalized.includes('..') || path.isAbsolute(normalized) || normalized.startsWith('/')) {
+                const hasPathTraversal = /(^|\/)\.\.(\/|$)/.test(normalized);
+                if (hasPathTraversal || path.isAbsolute(normalized) || normalized.startsWith('/')) {
                     log.warn(() => `[ArchiveExtractor] extractRar: skipping suspicious entry: ${name}`);
                     return false;
                 }
@@ -234,8 +236,10 @@ async function extractZip(buffer) {
         const entries = allEntries.filter(name => {
             if (zip.files[name].dir) return false;
             // Reject entries with path traversal sequences or absolute paths
+            // Check for '..' as a path component, not just any '..' substring (avoids false positives for ellipses like "Cloudy...")
             const normalized = name.replace(/\\/g, '/');
-            if (normalized.includes('..') || path.isAbsolute(normalized) || normalized.startsWith('/')) {
+            const hasPathTraversal = /(^|\/)\.\.(\/|$)/.test(normalized);
+            if (hasPathTraversal || path.isAbsolute(normalized) || normalized.startsWith('/')) {
                 log.warn(() => `[ArchiveExtractor] extractZip: skipping suspicious entry: ${name}`);
                 return false;
             }
