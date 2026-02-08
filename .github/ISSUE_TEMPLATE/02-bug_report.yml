@@ -37,13 +37,17 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: "---"
+
   - type: dropdown
     id: deployment
     attributes:
       label: Deployment Type
       options:
         - ElfHosted (submaker.elfhosted.com)
-        - Self-hosted (Docker)
+        - Self-hosted
     validations:
       required: true
 
