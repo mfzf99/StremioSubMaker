@@ -1646,11 +1646,13 @@ Translate to {target_language}.`;
 
     function updateToolboxLauncherVisibility(configOverride) {
         const btn = document.getElementById('subToolboxLauncher');
+        const inlineWrapper = document.getElementById('toolboxInlineWrapper');
         if (!btn) return;
         if (isMobileViewport()) {
             btn.style.display = 'none';
             btn.dataset.configRef = '';
             btn.classList.remove('show');
+            if (inlineWrapper) inlineWrapper.style.display = 'none';
             return;
         }
         const cfgRef = configOverride || getActiveConfigRef();
@@ -1659,10 +1661,12 @@ Translate to {target_language}.`;
             btn.style.display = 'flex';
             btn.dataset.configRef = cfgRef;
             btn.classList.add('show');
+            if (inlineWrapper) inlineWrapper.style.display = '';
         } else {
             btn.style.display = 'none';
             btn.dataset.configRef = '';
             btn.classList.remove('show');
+            if (inlineWrapper) inlineWrapper.style.display = 'none';
         }
 
         updateQuickStats();

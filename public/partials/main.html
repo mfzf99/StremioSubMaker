@@ -650,14 +650,20 @@
                         <div class="form-group">
                             <label for="geminiModel">
                                 <span data-i18n="config.gemini.model.label">Translation Model</span>
-                                <span class="label-description" data-i18n="config.gemini.model.helper">AI model for translations</span>
+                                <span class="label-description" data-i18n="config.gemini.model.helper">AI model for
+                                    translations</span>
                             </label>
                             <select id="geminiModel" required>
-                                <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3" selected>Gemini 3.0 Flash (beta)</option>
-                                <option value="gemini-3-pro-preview" data-i18n="config.gemini.model.options.pro3">Gemini 3.0 Pro (beta)</option>
-                                <option value="gemini-flash-lite-latest" data-i18n="config.gemini.model.options.flashLite">Gemini 2.5 Flash-Lite</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-i18n="config.gemini.model.options.flash">Gemini 2.5 Flash</option>
-                                <option value="gemma-3-27b-it" data-i18n="config.gemini.model.options.gemma27b">Gemma 27b (beta) (Recommended for Rate Limits)</option>
+                                <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3"
+                                    selected>Gemini 3.0 Flash (beta)</option>
+                                <option value="gemini-3-pro-preview" data-i18n="config.gemini.model.options.pro3">Gemini
+                                    3.0 Pro (beta)</option>
+                                <option value="gemini-flash-lite-latest"
+                                    data-i18n="config.gemini.model.options.flashLite">Gemini 2.5 Flash-Lite</option>
+                                <option value="gemini-2.5-flash-preview-09-2025"
+                                    data-i18n="config.gemini.model.options.flash">Gemini 2.5 Flash</option>
+                                <option value="gemma-3-27b-it" data-i18n="config.gemini.model.options.gemma27b">Gemma
+                                    27b (beta) (Recommended for Rate Limits)</option>
                             </select>
                             <div class="field-error" id="geminiModelError"
                                 data-i18n="config.validation.geminiModelRequired">Please select a model</div>
@@ -706,7 +712,8 @@
                                 <input type="checkbox" id="geminiKeyRotationEnabled">
                                 <span data-i18n="config.gemini.keyRotation.label">Enable Gemini API key rotation</span>
                             </label>
-                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute API calls across multiple keys to avoid rate limits.</span>
+                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute
+                                API calls across multiple keys to avoid rate limits.</span>
                         </div>
 
                         <!-- Advanced Settings removed by request -->
@@ -1462,10 +1469,12 @@
                                 </div>
                             </label>
                             <select id="sendTimestampsToAI" class="styled-select">
-                                <option value="xml" data-i18n="config.translationSettings.workflow.xml">XML Tags (Default)</option>
+                                <option value="xml" data-i18n="config.translationSettings.workflow.xml">XML Tags
+                                    (Default)</option>
                                 <option value="original" data-i18n="config.translationSettings.workflow.original">
                                     Original Timestamps (Legacy)</option>
-                                <option value="ai" data-i18n="config.translationSettings.workflow.ai">Send Timestamps to AI</option>
+                                <option value="ai" data-i18n="config.translationSettings.workflow.ai">Send Timestamps to
+                                    AI</option>
                             </select>
                         </div>
 
@@ -1615,19 +1624,22 @@
                             <label>
                                 <input type="checkbox" id="learnItalicEnabled" checked>
                                 <span data-i18n="config.learnMode.italicLabel">Italicize one language</span>
-                                <span class="label-description"
-                                    data-i18n="config.learnMode.italicDescription">Italicize one of the subtitle lines to visually distinguish the two languages.</span>
+                                <span class="label-description" data-i18n="config.learnMode.italicDescription">Italicize
+                                    one of the subtitle lines to visually distinguish the two languages.</span>
                             </label>
-                            <div class="option-group" id="learnItalicTargetGroup" style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
+                            <div class="option-group" id="learnItalicTargetGroup"
+                                style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
                                 <label
                                     style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
                                     <input type="radio" name="learnItalicTarget" value="target" checked>
-                                    <span data-i18n="config.learnMode.italicTarget">Italicize Target (learned language)</span>
+                                    <span data-i18n="config.learnMode.italicTarget">Italicize Target (learned
+                                        language)</span>
                                 </label>
                                 <label
                                     style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
                                     <input type="radio" name="learnItalicTarget" value="source">
-                                    <span data-i18n="config.learnMode.italicSource">Italicize Source (original language)</span>
+                                    <span data-i18n="config.learnMode.italicSource">Italicize Source (original
+                                        language)</span>
                                 </label>
                             </div>
                         </div>
@@ -1758,17 +1770,23 @@
                             <label for="mismatchRetries">
                                 <span data-i18n="config.advancedGemini.mismatchRetries.label">Mismatch Retries</span>
                                 <span class="label-description"
-                                    data-i18n="config.advancedGemini.mismatchRetries.description">When the AI returns a different number of subtitle entries than expected, retry the batch this many times before marking untranslated lines. (0-3, Default: 1)</span>
+                                    data-i18n="config.advancedGemini.mismatchRetries.description">When the AI returns a
+                                    different number of subtitle entries than expected, retry the batch this many times
+                                    before marking untranslated lines. (0-3, Default: 1)</span>
                             </label>
-                            <input type="number" id="mismatchRetries" min="0" max="3" step="1" value="1" placeholder="1">
+                            <input type="number" id="mismatchRetries" min="0" max="3" step="1" value="1"
+                                placeholder="1">
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="enableJsonOutput">
-                                <span data-i18n="config.translationSettings.jsonOutput.label">Enable JSON Structured Output (Beta)</span>
+                                <span data-i18n="config.translationSettings.jsonOutput.label">Enable JSON Structured
+                                    Output (Beta)</span>
                                 <span class="label-description"
-                                    data-i18n="config.translationSettings.jsonOutput.description">Request JSON array format from AI for unambiguous response parsing. May improve accuracy but not all providers support it. Disabled by default.</span>
+                                    data-i18n="config.translationSettings.jsonOutput.description">Request JSON array
+                                    format from AI for unambiguous response parsing. May improve accuracy but not all
+                                    providers support it. Disabled by default.</span>
                             </label>
                         </div>
 
@@ -2303,6 +2321,43 @@
             </div>
         </div>
 
+        <!-- Subtitles Toolbox Inline Button -->
+        <div class="toolbox-inline-wrapper" id="toolboxInlineWrapper" style="display:none; margin-bottom: 1.5rem;">
+            <a href="#" class="toolbox-inline-btn" id="toolboxInlineBtn" data-i18n="config.actions.openToolboxInline"
+                data-i18n-attr="title" title="Open Subtitles Toolbox">
+                <span class="toolbox-inline-icon" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" role="img" focusable="false">
+                        <defs>
+                            <linearGradient id="tbBodyInline" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#ffb347" />
+                                <stop offset="45%" stop-color="#ff7a59" />
+                                <stop offset="100%" stop-color="#ff3d7f" />
+                            </linearGradient>
+                            <linearGradient id="tbLidInline" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ffe9a3" />
+                                <stop offset="100%" stop-color="#ffc34a" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="10" y="22" width="44" height="28" rx="6" fill="url(#tbBodyInline)" stroke="#2b0f08"
+                            stroke-width="2.2" />
+                        <path d="M14 30h36" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round" />
+                        <rect x="16" y="18" width="32" height="10" rx="3" fill="url(#tbLidInline)" stroke="#2b0f08"
+                            stroke-width="2.2" />
+                        <rect x="28" y="34" width="8" height="8" rx="2" fill="#ffe9a3" stroke="#2b0f08"
+                            stroke-width="1.6" />
+                        <path d="M26 18v-2a6 6 0 0 1 12 0v2" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round"
+                            fill="none" />
+                        <circle cx="32" cy="38" r="1.4" fill="#2b0f08" />
+                        <circle cx="20" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
+                        <circle cx="44" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
+                    </svg>
+                </span>
+                <span class="toolbox-inline-text" data-i18n="config.actions.openToolboxBtn">Open Subtitles
+                    Toolbox</span>
+                <span class="toolbox-inline-arrow" aria-hidden="true">→</span>
+            </a>
+        </div>
+
         <!-- Actions -->
         <div class="btn-group">
             <button type="submit" class="btn btn-primary" accesskey="enter">
@@ -2333,43 +2388,7 @@
     </div>
     <div class="support-link-hint">
         <span data-i18n="config.support.hint">Still having issues?</span>
-        <a href="https://github.com/xtremexq/StremioSubMaker/issues" target="_blank" rel="noopener noreferrer" data-i18n="config.support.link">Open an issue on GitHub</a>
-    </div>
-
-    <!-- Subtitles Toolbox Inline Button -->
-    <div class="toolbox-inline-wrapper" id="toolboxInlineWrapper">
-        <a href="#" class="toolbox-inline-btn" id="toolboxInlineBtn" data-i18n="config.actions.openToolboxInline"
-            data-i18n-attr="title" title="Open Subtitles Toolbox">
-            <span class="toolbox-inline-icon" aria-hidden="true">
-                <svg viewBox="0 0 64 64" role="img" focusable="false">
-                    <defs>
-                        <linearGradient id="tbBodyInline" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#ffb347" />
-                            <stop offset="45%" stop-color="#ff7a59" />
-                            <stop offset="100%" stop-color="#ff3d7f" />
-                        </linearGradient>
-                        <linearGradient id="tbLidInline" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#ffe9a3" />
-                            <stop offset="100%" stop-color="#ffc34a" />
-                        </linearGradient>
-                    </defs>
-                    <rect x="10" y="22" width="44" height="28" rx="6" fill="url(#tbBodyInline)" stroke="#2b0f08"
-                        stroke-width="2.2" />
-                    <path d="M14 30h36" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round" />
-                    <rect x="16" y="18" width="32" height="10" rx="3" fill="url(#tbLidInline)" stroke="#2b0f08"
-                        stroke-width="2.2" />
-                    <rect x="28" y="34" width="8" height="8" rx="2" fill="#ffe9a3" stroke="#2b0f08"
-                        stroke-width="1.6" />
-                    <path d="M26 18v-2a6 6 0 0 1 12 0v2" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round"
-                        fill="none" />
-                    <circle cx="32" cy="38" r="1.4" fill="#2b0f08" />
-                    <circle cx="20" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
-                    <circle cx="44" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
-                </svg>
-            </span>
-            <span class="toolbox-inline-text" data-i18n="config.actions.openToolboxBtn">Open Subtitles
-                Toolbox</span>
-            <span class="toolbox-inline-arrow" aria-hidden="true">→</span>
-        </a>
+        <a href="https://github.com/xtremexq/StremioSubMaker/issues" target="_blank" rel="noopener noreferrer"
+            data-i18n="config.support.link">Open an issue on GitHub</a>
     </div>
 </div>
