@@ -128,7 +128,7 @@ Fetched languages and translation buttons (Make [Language]) will now appear in y
 - **Single source language recommended** — Keeps subtitle order consistent
 - **Test sync first** — Try the original subtitle before translating
 - **Triple-click** — Forces re-translation if result looks wrong
-- **Use Flash-Lite** — Fastest model, best for rate limits
+- **Use Flash-Lite** — Fastest model, check rate limits
 
 ---
 
