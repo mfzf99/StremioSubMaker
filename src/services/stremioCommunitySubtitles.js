@@ -3,6 +3,7 @@ const https = require('https');
 const tls = require('tls');
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
 const { detectAndConvertEncoding } = require('../utils/encodingDetector');
+const { convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const log = require('../utils/logger');
 const { version } = require('../utils/version');
 
@@ -631,8 +632,13 @@ class StremioCommunitySubtitlesService {
             const trimmed = text.trimStart();
             if (trimmed.startsWith('WEBVTT')) {
                 log.debug(() => '[SCS] Received VTT format subtitle');
-            } else if (trimmed.startsWith('[Script Info]') || trimmed.startsWith('[V4+ Styles]')) {
-                log.debug(() => '[SCS] Received ASS/SSA format subtitle');
+            } else if (trimmed.startsWith('[Script Info]') || trimmed.startsWith('[V4+ Styles]') || /\[events\]/i.test(trimmed)) {
+                log.debug(() => '[SCS] Received ASS/SSA format subtitle, converting to VTT');
+                // Convert ASS/SSA to VTT using centralized converter
+                const converted = await convertSubtitleToVtt(text, 'subtitle.ass', 'SCS', { skipAssConversion: options.skipAssConversion });
+                const convertedLen = typeof converted === 'string' ? converted.length : converted.content?.length || 0;
+                log.debug(() => `[SCS] Downloaded and converted subtitle: ${convertedLen} chars`);
+                return converted;
             } else if (/^\d+\s*\r?\n\d{2}:\d{2}:\d{2}/.test(trimmed)) {
                 log.debug(() => '[SCS] Received SRT format subtitle');
             }

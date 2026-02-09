@@ -82,14 +82,34 @@ function analyzeResponseContent(buffer) {
         return { type: 'json', hint: 'JSON content received', isRetryable: false };
     }
 
-    // Check for plain text error messages
-    if (textContent.includes('error') || textContent.includes('failed') || textContent.includes('denied') || textContent.includes('forbidden')) {
-        return { type: 'text_error', hint: 'Text error message received', isRetryable: true };
-    }
-
-    // Check if it looks like subtitle content (SRT/VTT)
+    // Check if it looks like subtitle content (SRT/VTT) BEFORE checking for error keywords,
+    // because valid subtitle dialogue can contain words like "error", "failed", "denied", etc.
     if (/^\d+\s*[\r\n]+\d{2}:\d{2}/.test(textContent) || textContent.startsWith('webvtt')) {
         return { type: 'subtitle', hint: 'Direct subtitle content (not ZIP)', isRetryable: false };
+    }
+
+    // Check for plain text error messages (only after ruling out valid subtitle content).
+    // Use word-boundary matching to avoid false positives on subtitle dialogue that
+    // happens to contain words like "terror", "mirror", etc.
+    // Also require either a short response (typical API error) or multiple error signals
+    // to avoid misclassifying longer subtitle-like content that slipped past the SRT regex.
+    const errorWordPattern = /\b(error|failed|denied|forbidden|unauthorized|not found|bad request|service unavailable|internal server)\b/;
+    const errorWordMatches = textContent.match(new RegExp(errorWordPattern.source, 'g'));
+    const errorWordCount = errorWordMatches ? errorWordMatches.length : 0;
+
+    if (errorWordCount > 0) {
+        // Short responses (<500 bytes) with any error keyword are almost certainly error messages.
+        // Longer responses need multiple error keywords to be classified as errors — a single
+        // "error" in a 2KB response is more likely subtitle dialogue than an API error.
+        const isShortResponse = buffer.length < 500;
+        const hasStrongSignal = errorWordCount >= 2
+            || /^\s*(error|fail|denied|forbidden)/i.test(textContent)
+            || /\b\d{3}\b/.test(textContent); // HTTP status code like 403, 500
+
+        if (isShortResponse || hasStrongSignal) {
+            const matchedWords = [...new Set(errorWordMatches)].join(', ');
+            return { type: 'text_error', hint: `Text error message received (matched: ${matchedWords})`, isRetryable: true };
+        }
     }
 
     // Very short response

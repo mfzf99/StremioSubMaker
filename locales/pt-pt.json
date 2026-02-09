@@ -1168,6 +1168,22 @@
           "label": "Modo Móvel (correção/solução)",
           "description": "O Stremio faz apenas 1 pedido de legendas e guarda-o em cache, por isso legendas no Android não podem ser entregues parcialmente. O Modo Móvel retém pedidos de tradução e envia a legenda final apenas quando pronta. Use isto se estiver a ver no Android/iOS. Sem traduções parciais, sem mensagens de carregamento. Pode congelar a transmissão até a tradução estar pronta. Flash-lite recomendado. Aguarde 1-3 min, se não carregar automaticamente mude legendas para trás e para a frente para carregar a tradução."
         },
+        "excludeHearingImpaired": {
+          "label": "Ocultar legendas SDH/HI",
+          "description": "Excluir legendas marcadas como \"Legendas para deficientes auditivos\" (SDH/HI) dos resultados."
+        },
+        "enableSeasonPacks": {
+          "label": "Incluir Legendas de Temporada Completa",
+          "description": "O SubMaker procura e tenta extrair legendas específicas de pacotes de temporada completa para maior cobertura. Útil para Animes. Desative para mostrar apenas legendas específicas de episódio."
+        },
+        "forceSRTOutput": {
+          "label": "Forçar saída SRT",
+          "description": "Converter todas as saídas de legenda para formato SRT para máxima compatibilidade com leitores."
+        },
+        "convertAssToVtt": {
+          "label": "Converter ASS/SSA para VTT",
+          "description": "Converter legendas ASS/SSA para formato VTT para compatibilidade. Desative para enviar legendas ASS/SSA tal como estão para o Stremio. (Traduções convertem sempre automaticamente)"
+        },
         "betaMode": {
           "label": "Modo Avançado",
           "description": "Desbloqueia Definições de Parâmetros Avançados para Gemini e outros fornecedores."

@@ -318,7 +318,7 @@ class SubDLService {
     if (typeof options === 'string') {
       subdl_id = options;
       subtitles_id = arguments[2] || null;
-      timeout = 12000;
+      timeout = 20000; // Match default timeout for new pattern
     }
     try {
       log.debug(() => ['[SubDL] Downloading subtitle:', fileId]);
@@ -432,7 +432,8 @@ class SubDLService {
         isSeasonPack: isSeasonPack,
         season: seasonPackSeason,
         episode: seasonPackEpisode,
-        languageHint: options.languageHint || null
+        languageHint: options.languageHint || null,
+        skipAssConversion: options.skipAssConversion
       });
 
     } catch (error) {

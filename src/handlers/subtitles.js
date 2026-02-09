@@ -11,7 +11,7 @@ const AniListService = require('../services/anilist');
 const StremioCommunitySubtitlesService = require('../services/stremioCommunitySubtitles');
 const WyzieSubsService = require('../services/wyzieSubs');
 const SubsRoService = require('../services/subsRo');
-const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote, normalizeImdbId } = require('../utils/subtitle');
+const { parseSRT, toSRT, parseStremioId, appendHiddenInformationalNote, normalizeImdbId, ensureSRTForTranslation, convertToSRT } = require('../utils/subtitle');
 const { getLanguageName, getDisplayName, toISO6391, toISO6392, canonicalSyncLanguageCode } = require('../utils/languages');
 const { getTranslator } = require('../utils/i18n');
 const { deriveVideoHash } = require('../utils/videoHash');
@@ -70,42 +70,7 @@ function maybeConvertToSRT(content, config) {
   if (!config?.forceSRTOutput || !content || typeof content !== 'string') {
     return content;
   }
-
-  const trimmed = content.trimStart();
-
-  // Already SRT - no conversion needed (SRT starts with a number index)
-  if (/^\d+\s*[\r\n]/.test(trimmed)) {
-    return content;
-  }
-
-  try {
-    const subsrt = require('subsrt-ts');
-
-    // VTT format
-    if (trimmed.startsWith('WEBVTT')) {
-      log.debug(() => '[SRT Conversion] Converting VTT to SRT');
-      return subsrt.convert(content, { to: 'srt', from: 'vtt' });
-    }
-
-    // ASS/SSA format
-    if (trimmed.includes('[Script Info]') || trimmed.includes('Dialogue:')) {
-      log.debug(() => '[SRT Conversion] Converting ASS/SSA to SRT via VTT intermediate');
-      const { convertASSToVTT } = require('../utils/assConverter');
-      const isSSA = trimmed.includes('[V4 Styles]');
-      const vttResult = convertASSToVTT(content, isSSA ? 'ssa' : 'ass');
-      if (vttResult.success) {
-        return subsrt.convert(vttResult.content, { to: 'srt', from: 'vtt' });
-      }
-      log.warn(() => ['[SRT Conversion] ASS->VTT failed, trying direct conversion:', vttResult.error]);
-    }
-
-    // Try generic conversion as fallback
-    log.debug(() => '[SRT Conversion] Attempting generic format conversion');
-    return subsrt.convert(content, { to: 'srt' });
-  } catch (e) {
-    log.warn(() => ['[SRT Conversion] Failed to convert, returning original:', e.message]);
-    return content;
-  }
+  return convertToSRT(content, '[SRT Conversion]');
 }
 
 // MULTI-INSTANCE: User concurrency tracking moved to Redis for cross-pod enforcement
@@ -2712,6 +2677,18 @@ function createSubtitleHandler(config) {
         }
       }
 
+      // Optional: exclude season pack subtitles from results
+      // Season packs contain multiple episodes and require extraction - some users prefer episode-specific subs
+      // Default: enabled (backwards compatible) - only filter when explicitly disabled
+      if (config.enableSeasonPacks === false) {
+        const beforeCount = filteredFoundSubtitles.length;
+        filteredFoundSubtitles = filteredFoundSubtitles.filter(sub => sub.is_season_pack !== true);
+        const removed = beforeCount - filteredFoundSubtitles.length;
+        if (removed > 0) {
+          log.debug(() => `[Subtitles] Excluded ${removed} season pack subtitles (user preference)`);
+        }
+      }
+
       // Deduplicate subtitles from multiple providers
       // This removes exact duplicates (same release name) while preserving:
       // - Different languages (never dedupe across languages)
@@ -3210,7 +3187,7 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
         log.debug(() => '[Download] Downloading subtitle via SubDL API');
-        return await subdl.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await subdl.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else if (fileId.startsWith('subsource_')) {
         // SubSource subtitle
         if (!config.subtitleProviders?.subsource?.enabled) {
@@ -3219,7 +3196,7 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
         log.debug(() => '[Download] Downloading subtitle via SubSource API');
-        return await subsource.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await subsource.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else if (fileId.startsWith('v3_')) {
         // OpenSubtitles V3 subtitle
         if (!config.subtitleProviders?.opensubtitles?.enabled) {
@@ -3228,7 +3205,7 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const opensubtitlesV3 = new OpenSubtitlesV3Service();
         log.debug(() => '[Download] Downloading subtitle via OpenSubtitles V3 API');
-        return await opensubtitlesV3.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await opensubtitlesV3.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else if (fileId.startsWith('scs_')) {
         // Stremio Community Subtitles
         if (!config.subtitleProviders?.scs?.enabled) {
@@ -3238,7 +3215,7 @@ async function handleSubtitleDownload(fileId, language, config) {
         const scs = new StremioCommunitySubtitlesService();
         log.debug(() => '[Download] Downloading subtitle via SCS API');
         // Remove scs_ prefix to get the actual comm_ ID
-        return await scs.downloadSubtitle(fileId.replace('scs_', ''), { timeout: downloadTimeoutMs, languageHint: language });
+        return await scs.downloadSubtitle(fileId.replace('scs_', ''), { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else if (fileId.startsWith('wyzie_')) {
         // Wyzie Subs (free aggregator)
         if (!config.subtitleProviders?.wyzie?.enabled) {
@@ -3247,7 +3224,7 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const wyzie = new WyzieSubsService();
         log.debug(() => '[Download] Downloading subtitle via Wyzie Subs API');
-        return await wyzie.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await wyzie.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else if (fileId.startsWith('subsro_')) {
         // Subs.ro subtitle (Romanian subtitle database)
         if (!config.subtitleProviders?.subsro?.enabled) {
@@ -3256,7 +3233,7 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
         log.debug(() => '[Download] Downloading subtitle via Subs.ro API');
-        return await subsro.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await subsro.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       } else {
         const wantsAuth = openSubsImplementation === 'auth';
         const missingCreds = wantsAuth && !openSubsHasCreds;
@@ -3272,12 +3249,21 @@ async function handleSubtitleDownload(fileId, language, config) {
 
         const opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
         log.debug(() => '[Download] Downloading subtitle via OpenSubtitles Auth API');
-        return await opensubtitles.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language });
+        return await opensubtitles.downloadSubtitle(fileId, { timeout: downloadTimeoutMs, languageHint: language, skipAssConversion: config.convertAssToVtt === false && config.forceSRTOutput !== true });
       }
     })();
 
     // Wait for download to complete
     content = await downloadPromise;
+
+    // Handle object returns from providers when skipAssConversion is enabled
+    // In this case, the provider returns { content, format } instead of a string
+    let subtitleFormat = null;
+    if (content && typeof content === 'object' && content.content) {
+      subtitleFormat = content.format; // 'ass' or 'ssa'
+      content = content.content;
+      log.debug(() => `[Download] Received original ${subtitleFormat?.toUpperCase() || 'ASS/SSA'} subtitle (conversion disabled)`);
+    }
 
     // Validate content
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
@@ -3333,6 +3319,13 @@ async function handleSubtitleDownload(fileId, language, config) {
         }
       }
     } catch (_) { }
+
+    // If we received original ASS/SSA (conversion disabled), return it directly
+    // Skip the SRT conversion as user wants to preserve original styling
+    if (subtitleFormat) {
+      log.debug(() => `[Download] Returning original ${subtitleFormat.toUpperCase()} subtitle without conversion`);
+      return content;
+    }
 
     return maybeConvertToSRT(content, config);
 
@@ -3454,11 +3447,40 @@ ${t('subtitle.notAvailableTitle', {}, 'Subtitle Not Available (Error 404)')}\n${
         return createOpenSubtitlesV3ServiceUnavailableSubtitle(config.uiLanguage || 'en');
       }
 
+      // Determine service name for provider-specific messaging
+      let serviceName = 'Subtitle Provider';
+      if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
+      else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      else if (fileId.startsWith('scs_')) serviceName = 'Stremio Community Subtitles';
+      else if (fileId.startsWith('wyzie_')) serviceName = 'Wyzie Subs';
+      else if (fileId.startsWith('subsro_')) serviceName = 'Subs.ro';
+      else serviceName = 'OpenSubtitles';
+
       return ensureInformationalSubtitleSize(`1
-00:00:00,000 --> 04:00:40,000
-${t('subtitle.providerUnavailableTitle', {}, 'Subtitle provider temporarily unavailable (Error 503)')}
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.providerUnavailableTitle', { service: serviceName }, `${serviceName} temporarily unavailable (Error 503)`)}
 ${t('subtitle.providerUnavailableBody', {}, 'Please try again in a few minutes or try a different subtitle.')}`, null, uiLanguage);
     }
+
+    // Handle 500/502/504 gateway/server errors
+    if (errorStatus === 500 || errorStatus === 502 || errorStatus === 504) {
+      // Determine service name for provider-specific messaging
+      let serviceName = 'Subtitle Provider';
+      if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
+      else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      else if (fileId.startsWith('v3_')) serviceName = 'OpenSubtitles V3';
+      else if (fileId.startsWith('scs_')) serviceName = 'Stremio Community Subtitles';
+      else if (fileId.startsWith('wyzie_')) serviceName = 'Wyzie Subs';
+      else if (fileId.startsWith('subsro_')) serviceName = 'Subs.ro';
+      else serviceName = 'OpenSubtitles';
+
+      const errorLabel = errorStatus === 500 ? 'Internal Server Error' : errorStatus === 502 ? 'Bad Gateway' : 'Gateway Timeout';
+      return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.providerServerErrorTitle', { service: serviceName, code: errorStatus }, `${serviceName} server error (${errorStatus} ${errorLabel})`)}
+${t('subtitle.providerServerErrorBody', {}, 'The subtitle server is experiencing issues.\nPlease try again in a few minutes or pick a different subtitle.')}`, null, uiLanguage);
+    }
+
 
     // Handle OpenSubtitles daily quota exceeded (HTTP 406 with specific message)
     // Only applies to OpenSubtitles Auth (v1) path where fileId has no provider prefix
@@ -3491,6 +3513,78 @@ ${t('subtitle.providerUnavailableBody', {}, 'Please try again in a few minutes o
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.subsourceTimeoutTitle', {}, 'SubSource download failed (timeout)')}
 ${t('subtitle.subsourceTimeoutBody', {}, 'SubSource API did not respond in time. Try again in a few minutes or pick a different subtitle.')}`, null, uiLanguage);
+    }
+
+    // SubDL timeout
+    if (fileId.startsWith('subdl_') && isTimeout) {
+      log.warn(() => '[SubDL] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('SubDL', 'SubDL API did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // Wyzie Subs timeout
+    if (fileId.startsWith('wyzie_') && isTimeout) {
+      log.warn(() => '[Wyzie] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('Wyzie Subs', 'Wyzie Subs did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // Stremio Community Subtitles (SCS) timeout
+    if (fileId.startsWith('scs_') && isTimeout) {
+      log.warn(() => '[SCS] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('Stremio Community Subtitles', 'The community subtitle server did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // OpenSubtitles V3 timeout
+    if (fileId.startsWith('v3_') && isTimeout) {
+      log.warn(() => '[OpenSubtitles V3] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('OpenSubtitles V3', 'OpenSubtitles V3 did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // Subs.ro timeout
+    if (fileId.startsWith('subsro_') && isTimeout) {
+      log.warn(() => '[Subs.ro] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('Subs.ro', 'Subs.ro did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // OpenSubtitles Auth timeout (no prefix = OS Auth)
+    const isOpenSubsAuth = !fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && !fileId.startsWith('wyzie_') && !fileId.startsWith('scs_') && !fileId.startsWith('subsro_');
+    if (isOpenSubsAuth && isTimeout) {
+      log.warn(() => '[OpenSubtitles Auth] Request timed out during download - informing user via subtitle');
+      return createProviderDownloadErrorSubtitle('OpenSubtitles', 'OpenSubtitles did not respond in time. Try again in a few minutes or pick a different subtitle.', config.uiLanguage || 'en');
+    }
+
+    // Handle network-level errors (connection refused, DNS failures, connection reset, SSL errors)
+    const errorCode = error.code || error.originalError?.code || '';
+    const isNetworkError = (
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'ENOTFOUND' ||
+      errorCode === 'ECONNRESET' ||
+      errorCode === 'EHOSTUNREACH' ||
+      errorCode === 'ENETUNREACH' ||
+      /ssl|tls|certificate|cert/i.test(msg) ||
+      /ssl|tls|certificate|cert/i.test(origMsg) ||
+      /EPROTO|ERR_SSL/i.test(errorCode)
+    );
+
+    if (isNetworkError) {
+      // Determine service name for provider-specific messaging
+      let serviceName = 'Subtitle Provider';
+      if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
+      else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      else if (fileId.startsWith('v3_')) serviceName = 'OpenSubtitles V3';
+      else if (fileId.startsWith('scs_')) serviceName = 'Stremio Community Subtitles';
+      else if (fileId.startsWith('wyzie_')) serviceName = 'Wyzie Subs';
+      else if (fileId.startsWith('subsro_')) serviceName = 'Subs.ro';
+      else serviceName = 'OpenSubtitles';
+
+      let networkErrorReason = 'Could not connect to the subtitle server.';
+      if (errorCode === 'ECONNREFUSED') networkErrorReason = 'Connection refused by the subtitle server.';
+      else if (errorCode === 'ENOTFOUND') networkErrorReason = 'Could not resolve the subtitle server address (DNS error).';
+      else if (errorCode === 'ECONNRESET') networkErrorReason = 'Connection was reset by the subtitle server.';
+      else if (errorCode === 'EHOSTUNREACH' || errorCode === 'ENETUNREACH') networkErrorReason = 'The subtitle server is unreachable.';
+      else if (/ssl|tls|certificate|cert|EPROTO|ERR_SSL/i.test(`${errorCode} ${msg} ${origMsg}`)) networkErrorReason = 'SSL/TLS connection error with the subtitle server.';
+
+      log.warn(() => `[Download] Network error for ${fileId}: ${errorCode} - ${networkErrorReason}`);
+      return createProviderDownloadErrorSubtitle(serviceName, `${networkErrorReason} Try again later or pick a different subtitle.`, config.uiLanguage || 'en');
     }
 
     // Handle corrupted/missing payloads (HTML/error pages, invalid ZIPs) across providers
@@ -3528,7 +3622,25 @@ ${t('subtitle.subsourceTimeoutBody', {}, 'SubSource API did not respond in time.
       return createProviderDownloadErrorSubtitle('OpenSubtitles', 'The download response was invalid. Please try another subtitle.', config.uiLanguage || 'en');
     }
 
-    throw error;
+    // Generic fallback for any unhandled errors - return informational subtitle instead of throwing
+    // This ensures users ALWAYS see a helpful message instead of a generic 404
+    log.warn(() => `[Download] Unhandled error for ${fileId}: ${error.message || error}`);
+
+    // Determine service name for fallback message
+    let fallbackServiceName = 'Subtitle Provider';
+    if (fileId.startsWith('subdl_')) fallbackServiceName = 'SubDL';
+    else if (fileId.startsWith('subsource_')) fallbackServiceName = 'SubSource';
+    else if (fileId.startsWith('v3_')) fallbackServiceName = 'OpenSubtitles V3';
+    else if (fileId.startsWith('scs_')) fallbackServiceName = 'Stremio Community Subtitles';
+    else if (fileId.startsWith('wyzie_')) fallbackServiceName = 'Wyzie Subs';
+    else if (fileId.startsWith('subsro_')) fallbackServiceName = 'Subs.ro';
+    else fallbackServiceName = 'OpenSubtitles';
+
+    return createProviderDownloadErrorSubtitle(
+      fallbackServiceName,
+      `Download failed unexpectedly. Please try a different subtitle or try again later.`,
+      config.uiLanguage || 'en'
+    );
   }
 }
 
@@ -4242,17 +4354,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       } catch (_) { }
     }
 
-    // Convert VTT originals to SRT for translation
-    try {
-      const trimmed = (sourceContent || '').trimStart();
-      if (trimmed.startsWith('WEBVTT')) {
-        const subsrt = require('subsrt-ts');
-        sourceContent = subsrt.convert(sourceContent, { to: 'srt' });
-        log.debug(() => '[Translation] Converted VTT source to SRT for translation');
-      }
-    } catch (e) {
-      log.warn(() => ['[Translation] VTT to SRT conversion failed; proceeding with original content:', e.message]);
-    }
+    // Convert non-SRT formats (VTT, ASS/SSA) to SRT for translation
+    // This handles all formats centrally: ASS/SSA → VTT → SRT, VTT → SRT, SRT passthrough
+    sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
 
     // Get language names for better translation context
     const targetLangName = getLanguageName(targetLanguage) || targetLanguage;

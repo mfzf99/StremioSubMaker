@@ -650,7 +650,8 @@
                         <div class="form-group">
                             <label for="geminiModel">
                                 <span data-i18n="config.gemini.model.label">Translation Model</span>
-                                <span class="label-description" data-i18n="config.gemini.model.helper">AI model for translations</span>
+                                <span class="label-description" data-i18n="config.gemini.model.helper">AI model for
+                                    translations</span>
                             </label>
                             <select id="geminiModel" required>
                                 <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3"
@@ -711,7 +712,8 @@
                                 <input type="checkbox" id="geminiKeyRotationEnabled">
                                 <span data-i18n="config.gemini.keyRotation.label">Enable Gemini API key rotation</span>
                             </label>
-                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute API calls across multiple keys to avoid rate limits.</span>
+                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute
+                                API calls across multiple keys to avoid rate limits.</span>
                         </div>
 
                         <!-- Advanced Settings removed by request -->
@@ -1542,6 +1544,18 @@
                     </label>
                 </div>
 
+                <div class="form-group" id="enableSeasonPacksNoTranslationGroup" style="display: none;">
+                    <label>
+                        <input type="checkbox" id="enableSeasonPacksNoTranslation" checked>
+                        <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack
+                            Subtitles</span>
+                        <span class="label-description"
+                            data-i18n="config.otherSettings.enableSeasonPacks.description">Include season pack subtitles
+                            (containing multiple episodes) in results. Disable to only show episode-specific
+                            subtitles.</span>
+                    </label>
+                </div>
+
                 <!-- Other Settings -->
                 <div class="card collapsed" data-card="cache" id="otherSettingsCard">
                     <div class="card-header">
@@ -1663,6 +1677,31 @@
 
                         <div class="form-group">
                             <label>
+                                <input type="checkbox" id="enableSeasonPacks" checked>
+                                <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack
+                                    Subtitles</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.enableSeasonPacks.description">SubMaker can fetch,
+                                    detect and extract subtitles from full season packs for bigger coverage. When
+                                    enabled, includes season pack subtitles (containing multiple episodes) in
+                                    results.</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="convertAssToVtt" checked>
+                                <span data-i18n="config.otherSettings.convertAssToVtt.label">Convert ASS/SSA to
+                                    VTT</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.convertAssToVtt.description">Converts ASS/SSA
+                                    subtitles to VTT format for compatibility. Disable to send ASS/SSA subtitles as-is
+                                    to Stremio. (Translations always convert automatically)</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
                                 <input type="checkbox" id="excludeHearingImpairedSubtitles">
                                 <span data-i18n="config.otherSettings.excludeHearingImpaired.label">Hide SDH/HI
                                     subtitles</span>
@@ -1671,7 +1710,6 @@
                                     subtitles labeled "Subtitles for hearing impaired" (SDH/HI) from results.</span>
                             </label>
                         </div>
-
 
                         <div class="form-group">
                             <label>

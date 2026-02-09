@@ -1175,9 +1175,17 @@
           "label": "Hide SDH/HI subtitles",
           "description": "Exclude subtitles labeled \"Subtitles for hearing impaired\" (SDH/HI) from results."
         },
+        "enableSeasonPacks": {
+          "label": "Include Season Pack Subtitles",
+          "description": "SubMaker fetches and tries to extract specific subtitles from full season packs for better coverage. Useful for Animes. Disable to only show episode-specific subtitles."
+        },
         "forceSRTOutput": {
           "label": "Force SRT output",
           "description": "Convert all subtitle outputs to SRT format for maximum player compatibility."
+        },
+        "convertAssToVtt": {
+          "label": "Convert ASS/SSA to VTT",
+          "description": "Convert ASS/SSA subtitles to VTT format for compatibility. Disable to send ASS/SSA subtitles as-is to Stremio. (Translations always convert automatically)"
         },
         "betaMode": {
           "label": "Advanced Mode",

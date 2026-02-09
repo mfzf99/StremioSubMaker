@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.46
+
+**New Features:**
+
+- **Season pack subtitle toggle:** Added an "Include Season Pack Subtitles" option in Other Settings that controls whether season pack subtitles (containing multiple episodes) appear in results. Enabled by default for backwards compatibility. When disabled, subtitles flagged as `is_season_pack` are filtered out, showing only episode-specific subtitles. Toggle is available in both translation and "Just Fetch" modes.
+
+- **ASS/SSA conversion toggle:** Added a "Convert ASS/SSA to VTT" option in Other Settings. Enabled by default for backwards compatibility. When disabled, ASS/SSA subtitles are passed directly to Stremio without conversion, preserving original styling (colors, fonts, positioning). Stremio natively supports ASS/SSA subtitles. The toggle is automatically disabled (grayed out) when "Force SRT output" is enabled, since Force SRT requires converting all formats to SRT.
+
+**Bug Fixes:**
+
+- **Added 500/502/504 gateway error handling:** When subtitle servers return gateway errors (Bad Gateway, Internal Server Error, Gateway Timeout), users now see a provider-specific informational subtitle instead of a generic 404. All 7 providers covered (SubDL, SubSource, OpenSubtitles Auth, OpenSubtitles V3, SCS, Wyzie Subs, Subs.ro).
+
+- **Added network-level error handling:** Connection failures now show helpful error messages instead of failing silently. Covers: `ECONNREFUSED` (connection refused), `ENOTFOUND` (DNS failures), `ECONNRESET` (connection reset), `EHOSTUNREACH`/`ENETUNREACH` (unreachable), and SSL/TLS errors. Each error type shows a specific, actionable message.
+
+- **Fixed unhandled errors returning generic 404:** Previously, any error not explicitly caught would propagate to the route handler and return "Subtitle not found (404)". Now, all unhandled errors fall through to a generic fallback that returns an informational subtitle with the provider name and a helpful message, ensuring users always understand what went wrong.
+
+- **Added handling for unsupported subtitle formats:** VobSub (.sub image-based), .idx (VobSub index), .sup (PGS/Blu-ray), and other binary/image-based subtitle formats now return a user-friendly informational subtitle explaining the format is unsupported, instead of displaying garbage content. Also added binary content detection (>10% non-printable characters) and a generic fallback for any format that fails all conversion attempts. OpenSubtitles V3 now uses the centralized converter to benefit from this handling.
+
+- **Unified ASS/SSA conversion across all providers:** WyzieSubs and SCS now convert ASS/SSA subtitles to VTT using the centralized `convertSubtitleToVtt()` function (previously only logged detection). OpenSubtitles Auth's redundant ~50-line inline ASS converter was replaced with a single call to the centralized converter. All providers now benefit from the same robust conversion chain: enhanced `assConverter` → `subsrt-ts` fallback → manual parser → informational subtitle for failures.
+
+- **Centralized ASS/SSA→SRT conversion for all translation paths:** Created `convertToSRT()` and `ensureSRTForTranslation()` in `src/utils/subtitle.js` — a centralized converter that handles any subtitle format (ASS/SSA/VTT/SRT) and converts to SRT for the translation engine. Uses a 3-strategy fallback chain for ASS/SSA: (1) enhanced `assConverter` ASS→VTT→SRT, (2) direct `subsrt-ts` ASS→SRT, (3) manual Dialogue-line parser as last resort. Previously, translation paths only handled VTT→SRT and would pass raw ASS/SSA content to the translation engine when the "Convert ASS/SSA to VTT" toggle was disabled. All 4 translation code paths updated: `performTranslation` (subtitle handler), `/api/translate-file` (file upload), learn mode endpoint, and embedded translate endpoint. Inline `require('subsrt-ts')` conversion blocks replaced with single `ensureSRTForTranslation()` calls. Also rewrote `maybeConvertToSRT()` to delegate to `convertToSRT()` for consistent behavior with the Force SRT output option.
+
+- **Updated ASS/SSA conversion toggle description:** Config page tooltip now clarifies that translations always convert automatically regardless of the toggle setting: "Converts ASS/SSA subtitles to VTT format for compatibility. Disable to send ASS/SSA subtitles as-is to Stremio. (Translations always convert automatically)".
+
 ## SubMaker v1.4.45
 
 **Bug Fixes:**

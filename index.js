@@ -44,7 +44,7 @@ const os = require('os');
 const { pipeline } = require('stream/promises');
 
 const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, getLanguageSelectionLimits, getDefaultProviderParameters, mergeProviderParameters, selectGeminiApiKey } = require('./src/utils/config');
-const { parseSRT, toSRT, sanitizeSubtitleText, srtPairToWebVTT } = require('./src/utils/subtitle');
+const { parseSRT, toSRT, sanitizeSubtitleText, srtPairToWebVTT, ensureSRTForTranslation } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
 const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
@@ -4482,43 +4482,8 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
         const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
         const sourceLangName = sourceLanguage ? (getLanguageName(sourceLanguage) || sourceLanguage) : 'detected source language';
 
-        // Detect and convert non-SRT uploads to SRT for translation
-        let workingContent = content;
-        try {
-            const trimmed = String(content || '').trimStart();
-            const looksLikeVTT = trimmed.startsWith('WEBVTT');
-            const looksLikeASS = /\[script info\]/i.test(content) || /\[v4\+? styles\]/i.test(content) || /\[events\]/i.test(content) || /^dialogue\s*:/im.test(content);
-            const looksLikeSSA = /\[v4 styles\]/i.test(content) || /\[events\]/i.test(content) || /^dialogue\s*:/im.test(content);
-
-            if (looksLikeVTT) {
-                const subsrt = require('subsrt-ts');
-                workingContent = subsrt.convert(content, { to: 'srt' });
-                log.debug(() => '[File Translation API] Detected VTT upload; converted to SRT');
-            } else if (looksLikeASS || looksLikeSSA) {
-                // Try enhanced ASS/SSA -> VTT first, then VTT -> SRT
-                const assConverter = require('./src/utils/assConverter');
-                const format = looksLikeASS ? 'ass' : 'ssa';
-                const result = assConverter.convertASSToVTT(content, format);
-                if (result && result.success) {
-                    const subsrt = require('subsrt-ts');
-                    workingContent = subsrt.convert(result.content, { to: 'srt' });
-                    log.debug(() => '[File Translation API] Detected ASS/SSA upload; converted to VTT then SRT');
-                } else {
-                    // Fallback: direct conversion via subsrt-ts if possible
-                    try {
-                        const subsrt = require('subsrt-ts');
-                        workingContent = subsrt.convert(content, { to: 'srt', from: looksLikeASS ? 'ass' : 'ssa' });
-                        log.debug(() => '[File Translation API] Fallback ASS/SSA direct conversion to SRT succeeded');
-                    } catch (convErr) {
-                        log.warn(() => ['[File Translation API] ASS/SSA conversion failed; proceeding with raw content:', (result && result.error) || convErr.message]);
-                        workingContent = content;
-                    }
-                }
-            }
-        } catch (convError) {
-            log.warn(() => ['[File Translation API] Format detection/conversion error; proceeding with original content:', convError.message]);
-            workingContent = content;
-        }
+        // Convert non-SRT uploads (VTT, ASS/SSA) to SRT for translation
+        let workingContent = ensureSRTForTranslation(content, '[File Translation API]');
 
         // Initialize translation provider (Gemini by default, alternative providers when enabled)
         const { provider: translationProvider, providerName, model, fallbackProviderName } = await createTranslationProvider(config);
@@ -4968,11 +4933,23 @@ app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validate
                 return;
             }
 
-            // Decide headers based on content (serve VTT originals when applicable)
-            const isVtt = (cachedContent || '').trimStart().startsWith('WEBVTT');
+            // Decide headers based on content (serve VTT, ASS/SSA, or SRT with appropriate MIME types)
+            const trimmedCached = (cachedContent || '').trimStart();
+            const isVtt = trimmedCached.startsWith('WEBVTT');
+            const isAss = trimmedCached.includes('[Script Info]') && (trimmedCached.includes('[V4+ Styles]') || trimmedCached.includes('[V4 Styles]'));
+            const isSsa = trimmedCached.includes('[Script Info]') && trimmedCached.includes('[V4 Styles]') && !trimmedCached.includes('[V4+ Styles]');
+            
             if (isVtt) {
                 res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="${fileId}.vtt"`);
+            } else if (isAss && !isSsa) {
+                // ASS format (Advanced SubStation Alpha)
+                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+            } else if (isSsa) {
+                // SSA format (SubStation Alpha v4)
+                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
             } else {
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
@@ -5028,11 +5005,23 @@ app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validate
         // STEP 6: Save to cache for future requests (shared with translation flow)
         saveDownloadCached(fileId, content);
 
-        // Decide headers based on content (serve VTT originals when applicable)
-        const isVtt = (content || '').trimStart().startsWith('WEBVTT');
+        // Decide headers based on content (serve VTT, ASS/SSA, or SRT with appropriate MIME types)
+        const trimmedContent = (content || '').trimStart();
+        const isVtt = trimmedContent.startsWith('WEBVTT');
+        const isAss = trimmedContent.includes('[Script Info]') && (trimmedContent.includes('[V4+ Styles]') || trimmedContent.includes('[V4 Styles]'));
+        const isSsa = trimmedContent.includes('[Script Info]') && trimmedContent.includes('[V4 Styles]') && !trimmedContent.includes('[V4+ Styles]');
+        
         if (isVtt) {
             res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${fileId}.vtt"`);
+        } else if (isAss && !isSsa) {
+            // ASS format (Advanced SubStation Alpha)
+            res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+        } else if (isSsa) {
+            // SSA format (SubStation Alpha v4)
+            res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
         } else {
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
@@ -5467,14 +5456,8 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
             saveDownloadCached(sourceFileId, sourceContent);
         }
 
-        // Normalize source to SRT for pairing
-        try {
-            const trimmed = (sourceContent || '').trimStart();
-            if (trimmed.startsWith('WEBVTT')) {
-                const subsrt = require('subsrt-ts');
-                sourceContent = subsrt.convert(sourceContent, { to: 'srt' });
-            }
-        } catch (_) { }
+        // Normalize source to SRT for pairing (handles VTT, ASS/SSA, and other formats)
+        sourceContent = ensureSRTForTranslation(sourceContent, '[Learn Mode]');
 
         // If we have partial translation, serve partial VTT immediately
         // Partials are saved under runtimeKey (see performTranslation), so read with the same key
@@ -6925,17 +6908,8 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             mergedMetadata.batchId = Date.now();
         }
 
-        // Convert VTT to SRT if needed
-        try {
-            const trimmed = (sourceContent || '').trimStart();
-            if (trimmed.startsWith('WEBVTT')) {
-                const subsrt = require('subsrt-ts');
-                sourceContent = subsrt.convert(sourceContent, { to: 'srt' });
-                log.debug(() => '[Embedded Translate] Converted VTT source to SRT for translation');
-            }
-        } catch (e) {
-            log.warn(() => ['[Embedded Translate] VTT to SRT conversion failed; proceeding with original content:', e.message]);
-        }
+        // Convert any subtitle format (VTT, ASS/SSA) to SRT for translation
+        sourceContent = ensureSRTForTranslation(sourceContent, '[Embedded Translate]');
 
         const targetLangName = getLanguageName(safeTargetLanguage) || safeTargetLanguage;
         const { provider, providerName, model, fallbackProviderName } = await createTranslationProvider(workingConfig);

@@ -2,6 +2,233 @@
  * Utility functions for subtitle handling
  */
 
+const log = require('./logger');
+
+/**
+ * Detect whether subtitle content is ASS/SSA format
+ * @param {string} content - Subtitle content
+ * @returns {{ isASS: boolean, format: string|null }} - Detection result with format ('ass' or 'ssa')
+ */
+function detectASSFormat(content) {
+  if (!content || typeof content !== 'string') {
+    return { isASS: false, format: null };
+  }
+  const trimmed = content.trimStart();
+  // ASS uses [V4+ Styles], SSA uses [V4 Styles]
+  const hasScriptInfo = /\[script info\]/i.test(trimmed);
+  const hasEvents = /\[events\]/i.test(trimmed);
+  const hasDialogue = /^dialogue\s*:/im.test(trimmed);
+  const hasV4Plus = /\[v4\+\s*styles\]/i.test(trimmed);
+  const hasV4 = /\[v4\s+styles\]/i.test(trimmed);
+
+  if (hasScriptInfo || hasEvents || hasDialogue) {
+    // SSA uses [V4 Styles] (no plus), ASS uses [V4+ Styles]
+    const format = (hasV4 && !hasV4Plus) ? 'ssa' : 'ass';
+    return { isASS: true, format };
+  }
+  return { isASS: false, format: null };
+}
+
+/**
+ * Convert subtitle content from any supported format to SRT.
+ * Handles ASS/SSA → VTT → SRT, VTT → SRT, and SRT passthrough.
+ * Uses a multi-strategy fallback chain for ASS/SSA conversion.
+ *
+ * @param {string} content - Subtitle content in any supported format (SRT, VTT, ASS, SSA)
+ * @param {string} [logPrefix='[SRT Conversion]'] - Log prefix for debug messages
+ * @returns {string} - SRT-formatted content (best effort; returns original on total failure)
+ */
+function convertToSRT(content, logPrefix = '[SRT Conversion]') {
+  if (!content || typeof content !== 'string') {
+    return content;
+  }
+
+  const trimmed = content.trimStart();
+
+  // Already SRT — pass through (SRT starts with a numeric index line)
+  if (/^\d+\s*[\r\n]/.test(trimmed)) {
+    return content;
+  }
+
+  // VTT → SRT
+  if (trimmed.startsWith('WEBVTT')) {
+    try {
+      const subsrt = require('subsrt-ts');
+      const converted = subsrt.convert(content, { to: 'srt', from: 'vtt' });
+      if (converted && typeof converted === 'string' && converted.trim().length > 0) {
+        log.debug(() => `${logPrefix} Converted VTT to SRT (${converted.length} chars)`);
+        return converted;
+      }
+    } catch (e) {
+      log.warn(() => [`${logPrefix} VTT to SRT conversion failed; proceeding with original content:`, e.message]);
+    }
+    return content;
+  }
+
+  // ASS/SSA → SRT (multi-strategy fallback)
+  const { isASS, format } = detectASSFormat(content);
+  if (isASS) {
+    log.debug(() => `${logPrefix} Detected ${(format || 'ass').toUpperCase()} subtitle, converting to SRT`);
+
+    // Strategy 1: Enhanced converter (preprocessASS → subsrt-ts → postprocessVTT) then VTT→SRT
+    try {
+      const assConverter = require('./assConverter');
+      const vttResult = assConverter.convertASSToVTT(content, format || 'ass');
+      if (vttResult && vttResult.success && vttResult.content) {
+        const subsrt = require('subsrt-ts');
+        const srtContent = subsrt.convert(vttResult.content, { to: 'srt', from: 'vtt' });
+        if (srtContent && typeof srtContent === 'string' && srtContent.trim().length > 0) {
+          log.debug(() => `${logPrefix} Converted ${(format || 'ass').toUpperCase()} → VTT → SRT successfully (${srtContent.length} chars)`);
+          return srtContent;
+        }
+        log.warn(() => `${logPrefix} VTT→SRT step returned empty after successful ASS→VTT conversion`);
+      } else {
+        log.warn(() => [`${logPrefix} Enhanced ASS→VTT conversion failed:`, vttResult?.error || 'unknown error']);
+      }
+    } catch (e) {
+      log.warn(() => [`${logPrefix} Enhanced ASS/SSA converter threw:`, e.message]);
+    }
+
+    // Strategy 2: Direct subsrt-ts ASS/SSA → SRT (with preprocessor fix for first-letter bug)
+    try {
+      const subsrt = require('subsrt-ts');
+      const assConverter = require('./assConverter');
+      const preprocessed = assConverter.preprocessASS(content, format || 'ass');
+      const directSrt = subsrt.convert(preprocessed, { to: 'srt', from: format || 'ass' });
+      if (directSrt && typeof directSrt === 'string' && directSrt.trim().length > 0) {
+        log.debug(() => `${logPrefix} Direct subsrt-ts ${(format || 'ass').toUpperCase()} → SRT succeeded (${directSrt.length} chars)`);
+        return directSrt;
+      }
+    } catch (e) {
+      log.warn(() => [`${logPrefix} Direct subsrt-ts ASS/SSA → SRT failed:`, e.message]);
+    }
+
+    // Strategy 3: Manual ASS parser → SRT (last resort)
+    try {
+      const manualResult = manualAssToSrt(content);
+      if (manualResult) {
+        log.debug(() => `${logPrefix} Manual ASS parser → SRT succeeded (${manualResult.length} chars)`);
+        return manualResult;
+      }
+    } catch (e) {
+      log.warn(() => [`${logPrefix} Manual ASS parser failed:`, e.message]);
+    }
+
+    log.warn(() => `${logPrefix} All ASS/SSA → SRT conversion strategies failed; proceeding with original content`);
+    return content;
+  }
+
+  // Unknown format — try generic subsrt-ts conversion as last resort
+  // Apply ASS preprocessor in case format detection missed an ASS/SSA variant (fixes subsrt-ts first-letter bug)
+  try {
+    const subsrt = require('subsrt-ts');
+    const assConverter = require('./assConverter');
+    const preprocessed = assConverter.preprocessASS(content);
+    const generic = subsrt.convert(preprocessed, { to: 'srt' });
+    if (generic && typeof generic === 'string' && generic.trim().length > 0) {
+      log.debug(() => `${logPrefix} Generic subsrt-ts conversion to SRT succeeded (${generic.length} chars)`);
+      return generic;
+    }
+  } catch (_) { }
+
+  return content;
+}
+
+/**
+ * Ensure subtitle content is in SRT format for translation.
+ * Thin wrapper around convertToSRT with a translation-specific log prefix.
+ *
+ * @param {string} content - Subtitle content in any supported format
+ * @param {string} [logPrefix='[Translation]'] - Log prefix for debug messages
+ * @returns {string} - SRT-formatted content (best effort; returns original on total failure)
+ */
+function ensureSRTForTranslation(content, logPrefix = '[Translation]') {
+  return convertToSRT(content, logPrefix);
+}
+
+/**
+ * Manual ASS/SSA to SRT converter (last-resort fallback).
+ * Parses Dialogue lines directly and produces SRT output.
+ * @param {string} input - Raw ASS/SSA content
+ * @returns {string|null} - SRT content or null on failure
+ */
+function manualAssToSrt(input) {
+  if (!input || !/\[events\]/i.test(input)) return null;
+
+  const lines = input.split(/\r?\n/);
+  let formatFields = [];
+  let inEvents = false;
+
+  for (const line of lines) {
+    const l = line.trim();
+    if (/^\[events\]/i.test(l)) { inEvents = true; continue; }
+    if (!inEvents) continue;
+    if (/^\[.*\]/.test(l)) break;
+    if (/^format\s*:/i.test(l)) {
+      formatFields = l.split(':')[1].split(',').map(s => s.trim().toLowerCase());
+    }
+  }
+
+  const idxStart = Math.max(0, formatFields.indexOf('start'));
+  const idxEnd = Math.max(1, formatFields.indexOf('end'));
+  const idxText = formatFields.length > 0 ? Math.max(formatFields.indexOf('text'), formatFields.length - 1) : 9;
+
+  const entries = [];
+
+  const parseTime = (t) => {
+    const m = t.trim().match(/(\d+):(\d{2}):(\d{2})[\.\:](\d{2})/);
+    if (!m) return null;
+    const h = parseInt(m[1], 10) || 0;
+    const mi = parseInt(m[2], 10) || 0;
+    const s = parseInt(m[3], 10) || 0;
+    const cs = parseInt(m[4], 10) || 0;
+    const ms = (h * 3600 + mi * 60 + s) * 1000 + cs * 10;
+    const hh = String(Math.floor(ms / 3600000)).padStart(2, '0');
+    const mm = String(Math.floor((ms % 3600000) / 60000)).padStart(2, '0');
+    const ss = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+    const mmm = String(ms % 1000).padStart(3, '0');
+    return `${hh}:${mm}:${ss},${mmm}`;
+  };
+
+  const cleanText = (txt) => {
+    let t = txt.replace(/\{[^}]*\}/g, '');
+    t = t.replace(/\\N/g, '\n').replace(/\\n/g, '\n').replace(/\\h/g, ' ');
+    t = t.replace(/[\u0000-\u001F]/g, '');
+    return t.trim();
+  };
+
+  for (const line of lines) {
+    if (!/^dialogue\s*:/i.test(line)) continue;
+    const payload = line.split(':').slice(1).join(':');
+    const parts = [];
+    let cur = '';
+    let splits = 0;
+    for (let i = 0; i < payload.length; i++) {
+      const ch = payload[i];
+      if (ch === ',' && splits < Math.max(idxText, 9)) {
+        parts.push(cur);
+        cur = '';
+        splits++;
+      } else {
+        cur += ch;
+      }
+    }
+    parts.push(cur);
+    const st = parseTime(parts[idxStart]);
+    const et = parseTime(parts[idxEnd]);
+    if (!st || !et) continue;
+    const ct = cleanText(parts[idxText] ?? '');
+    if (!ct) continue;
+    entries.push({ start: st, end: et, text: ct });
+  }
+
+  if (entries.length === 0) return null;
+
+  return entries.map((e, i) =>
+    `${i + 1}\n${e.start} --> ${e.end}\n${e.text}`
+  ).join('\n\n');
+}
+
 /**
  * Parse SRT subtitle content into structured format
  * @param {string} srtContent - SRT formatted subtitle content
@@ -448,5 +675,8 @@ module.exports = {
   parseStremioId,
   createSubtitleUrl,
   sanitizeSubtitleText,
-  srtPairToWebVTT
+  srtPairToWebVTT,
+  convertToSRT,
+  ensureSRTForTranslation,
+  detectASSFormat
 };

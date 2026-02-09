@@ -151,6 +151,23 @@ Try selecting a different subtitle.`;
 }
 
 /**
+ * Create informative subtitle for unsupported format errors
+ * @param {string} providerName - Name of the subtitle provider
+ * @param {string} formatName - Name of the unsupported format (e.g., 'VobSub', 'PGS')
+ * @param {string} filename - Original filename
+ * @param {string} reason - Why this format is unsupported
+ * @returns {string}
+ */
+function createUnsupportedFormatSubtitle(providerName, formatName, filename, reason) {
+    const message = `1
+00:00:00,000 --> 04:00:00,000
+Unsupported subtitle format: ${formatName}
+${reason}
+Please select a different subtitle (SRT, VTT, or ASS recommended).`;
+    return appendHiddenInformationalNote(message);
+}
+
+/**
  * Extract files from a RAR archive
  * @param {Buffer} buffer - RAR archive buffer
  * @returns {Promise<{files: Map<string, Buffer>, entries: string[]}>}
@@ -425,19 +442,29 @@ function decodeWithBomAwareness(buffer, providerName, languageHint) {
  * @param {string} content - Subtitle content
  * @param {string} filename - Original filename
  * @param {string} providerName - Provider name for logging
- * @returns {Promise<string>}
+ * @param {Object} options - Conversion options
+ * @param {boolean} options.skipAssConversion - If true, return ASS/SSA as-is without conversion
+ * @returns {Promise<string|{content: string, format: string}>} - VTT string or object with original content and format
  */
-async function convertSubtitleToVtt(content, filename, providerName) {
+async function convertSubtitleToVtt(content, filename, providerName, options = {}) {
+    const { skipAssConversion = false } = options;
     const lower = filename.toLowerCase();
     const contentLength = content?.length || 0;
 
-    log.debug(() => `[${providerName}] convertSubtitleToVtt: converting ${filename} (${contentLength} chars)`);
+    log.debug(() => `[${providerName}] convertSubtitleToVtt: converting ${filename} (${contentLength} chars, skipAss=${skipAssConversion})`);
 
     // Strip UTF-8 BOM if present
     if (content && typeof content === 'string') {
         const hadBom = content.charCodeAt(0) === 0xFEFF;
         content = content.replace(/^\uFEFF/, '');
         if (hadBom) log.debug(() => `[${providerName}] Stripped UTF-8 BOM from ${filename}`);
+    }
+
+    // If skipAssConversion is enabled, return ASS/SSA files as-is with format info
+    if (skipAssConversion && (lower.endsWith('.ass') || lower.endsWith('.ssa'))) {
+        const format = lower.endsWith('.ass') ? 'ass' : 'ssa';
+        log.debug(() => `[${providerName}] ASS/SSA conversion disabled, returning original ${format.toUpperCase()}: ${filename}`);
+        return { content, format };
     }
 
     // VTT - return as-is
@@ -467,6 +494,12 @@ async function convertSubtitleToVtt(content, filename, providerName) {
             }
         } else {
             log.warn(() => `[${providerName}] VobSub .sub format (binary/image-based) not supported: ${filename}`);
+            return createUnsupportedFormatSubtitle(
+                providerName,
+                'VobSub (.sub)',
+                filename,
+                'This is an image-based subtitle from a DVD rip.\nIt cannot be converted to text.'
+            );
         }
     }
 
@@ -488,22 +521,26 @@ async function convertSubtitleToVtt(content, filename, providerName) {
     }
 
     // Try subsrt-ts library conversion
+    // Apply ASS preprocessor to fix subsrt-ts first-letter-loss bug for ASS/SSA content
     log.debug(() => `[${providerName}] Attempting subsrt-ts conversion for ${filename}`);
     try {
         const subsrt = require('subsrt-ts');
+        const assConverterMod = require('./assConverter');
+        const isAss = lower.endsWith('.ass') || lower.endsWith('.ssa');
+        const preprocessed = isAss ? assConverterMod.preprocessASS(content, lower.endsWith('.ass') ? 'ass' : 'ssa') : content;
         let converted;
         if (lower.endsWith('.ass')) {
-            converted = subsrt.convert(content, { to: 'vtt', from: 'ass' });
+            converted = subsrt.convert(preprocessed, { to: 'vtt', from: 'ass' });
         } else if (lower.endsWith('.ssa')) {
-            converted = subsrt.convert(content, { to: 'vtt', from: 'ssa' });
+            converted = subsrt.convert(preprocessed, { to: 'vtt', from: 'ssa' });
         } else {
-            converted = subsrt.convert(content, { to: 'vtt' });
+            converted = subsrt.convert(preprocessed, { to: 'vtt' });
         }
 
         if (!converted || typeof converted !== 'string' || converted.trim().length === 0) {
             log.debug(() => `[${providerName}] subsrt-ts returned empty, trying with sanitized content (removing null chars)`);
-            const sanitized = (content || '').replace(/\u0000/g, '');
-            if (sanitized && sanitized !== content) {
+            const sanitized = (preprocessed || '').replace(/\u0000/g, '');
+            if (sanitized && sanitized !== preprocessed) {
                 if (lower.endsWith('.ass')) {
                     converted = subsrt.convert(sanitized, { to: 'vtt', from: 'ass' });
                 } else if (lower.endsWith('.ssa')) {
@@ -538,9 +575,27 @@ async function convertSubtitleToVtt(content, filename, providerName) {
         log.debug(() => `[${providerName}] Manual parser stack: ${fallbackErr.stack}`);
     }
 
-    // Return original content as last resort
-    log.warn(() => `[${providerName}] All conversion methods failed for ${filename}, returning raw content (${contentLength} chars)`);
-    return content;
+    // All conversion methods failed - return informational subtitle instead of garbage
+    log.warn(() => `[${providerName}] All conversion methods failed for ${filename} (${contentLength} chars)`);
+
+    // Detect specific unsupported formats for better messaging
+    const ext = lower.split('.').pop();
+    if (ext === 'idx') {
+        return createUnsupportedFormatSubtitle(providerName, 'VobSub Index (.idx)', filename, 'This is a VobSub index file, not a text subtitle.');
+    }
+    if (ext === 'sup') {
+        return createUnsupportedFormatSubtitle(providerName, 'PGS/SUP (.sup)', filename, 'This is a Blu-ray image-based subtitle.\nIt cannot be converted to text.');
+    }
+
+    // Check if content looks like binary (high ratio of non-printable chars)
+    const nonPrintable = (content.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g) || []).length;
+    const isBinary = contentLength > 0 && (nonPrintable / contentLength) > 0.1;
+    if (isBinary) {
+        return createUnsupportedFormatSubtitle(providerName, `Unknown binary format (.${ext})`, filename, 'This subtitle appears to be in an image-based or binary format.');
+    }
+
+    // Generic conversion failure
+    return createUnsupportedFormatSubtitle(providerName, `${ext.toUpperCase()} format`, filename, 'Could not convert this subtitle to a displayable format.');
 }
 
 /**
@@ -635,7 +690,8 @@ function manualAssToVtt(input) {
  * @param {boolean} options.isSeasonPack - Whether this is a season pack
  * @param {number} options.season - Season number (for season packs)
  * @param {number} options.episode - Episode number (for season packs)
- * @returns {Promise<string>} - Extracted subtitle content
+ * @param {boolean} options.skipAssConversion - If true, return ASS/SSA as-is without conversion
+ * @returns {Promise<string|{content: string, format: string}>} - Extracted subtitle content or object with format
  */
 async function extractSubtitleFromArchive(buffer, options = {}) {
     const {
@@ -644,7 +700,8 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
         isSeasonPack = false,
         season = null,
         episode = null,
-        languageHint = null
+        languageHint = null,
+        skipAssConversion = false
     } = options;
 
     log.debug(() => `[${providerName}] extractSubtitleFromArchive: starting (buffer=${buffer?.length || 0} bytes, isSeasonPack=${isSeasonPack}, season=${season}, episode=${episode})`);
@@ -757,8 +814,13 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
     const raw = decodeWithBomAwareness(fileBuffer, providerName, languageHint);
     log.debug(() => `[${providerName}] Decoded content: ${raw.length} chars, converting to VTT...`);
 
-    const result = await convertSubtitleToVtt(raw, filename, providerName);
-    log.debug(() => `[${providerName}] Final result: ${result.length} chars`);
+    const result = await convertSubtitleToVtt(raw, filename, providerName, { skipAssConversion });
+    // Handle both string returns (VTT) and object returns (original ASS/SSA)
+    if (typeof result === 'object' && result.content) {
+        log.debug(() => `[${providerName}] Final result: ${result.content.length} chars, format: ${result.format}`);
+    } else {
+        log.debug(() => `[${providerName}] Final result: ${result.length} chars`);
+    }
     return result;
 }
 
@@ -770,6 +832,7 @@ module.exports = {
     createZipTooLargeSubtitle: createArchiveTooLargeSubtitle, // Alias for backward compatibility
     createEpisodeNotFoundSubtitle,
     createCorruptedArchiveSubtitle,
+    createUnsupportedFormatSubtitle,
     findSubtitleFile,
     findEpisodeFile,
     findEpisodeFileAnime,

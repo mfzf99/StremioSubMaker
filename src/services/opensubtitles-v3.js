@@ -7,7 +7,7 @@ const { version } = require('../utils/version');
 const { appendHiddenInformationalNote } = require('../utils/subtitle');
 const log = require('../utils/logger');
 const { isTrueishFlag, inferHearingImpairedFromName } = require('../utils/subtitleFlags');
-const { detectArchiveType, extractSubtitleFromArchive, isArchive, createZipTooLargeSubtitle } = require('../utils/archiveExtractor');
+const { detectArchiveType, extractSubtitleFromArchive, isArchive, createZipTooLargeSubtitle, convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const { analyzeResponseContent, createInvalidResponseSubtitle } = require('../utils/responseAnalyzer');
 
 const OPENSUBTITLES_V3_BASE_URL = 'https://opensubtitles-v3.strem.io/subtitles/';
@@ -143,6 +143,41 @@ class OpenSubtitlesV3Service {
         episodeFilteredSubtitles = episodeFilteredSubtitles.filter(sub => {
           const nameLower = sub.name.toLowerCase();
 
+          // Season pack patterns (keep as fallback, mark for identification)
+          const seasonPackPatterns = [
+            new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${effectiveSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\d)`, 'i'),
+            new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
+            new RegExp(`s0*${effectiveSeason}\\s*(?:complete|full|pack)`, 'i')
+          ];
+
+          // Anime-specific season pack patterns
+          const animeSeasonPackPatterns = [
+            /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
+            /\[(?:batch|complete|full)\]/i,
+            /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i
+          ];
+
+          let isSeasonPack = false;
+          if (type === 'anime-episode') {
+            isSeasonPack = animeSeasonPackPatterns.some(p => p.test(nameLower)) &&
+              !new RegExp(`(?:^|[^0-9])0*${episode}(?:v\\d+)?(?:[^0-9]|$)`, 'i').test(nameLower);
+          } else {
+            isSeasonPack = seasonPackPatterns.some(p => p.test(nameLower)) &&
+              !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(nameLower);
+          }
+
+          if (isSeasonPack) {
+            sub.is_season_pack = true;
+            sub.season_pack_season = effectiveSeason;
+            sub.season_pack_episode = episode;
+            // Encode season pack info in fileId for download extraction
+            const originalFileId = sub.fileId || sub.id;
+            sub.fileId = `${originalFileId}_seasonpack_s${effectiveSeason}e${episode}`;
+            sub.id = sub.fileId;
+            log.debug(() => `[OpenSubtitles V3] Detected season pack: ${sub.name}`);
+            return true; // Keep season packs
+          }
+
           // Patterns to match the correct episode (S03E02, 3x02, etc.)
           const seasonEpisodePatterns = [
             new RegExp(`s0*${effectiveSeason}e0*${episode}\\b`, 'i'),           // S03E02, S3E2
@@ -194,8 +229,9 @@ class OpenSubtitlesV3Service {
         });
 
         const filteredCount = beforeCount - episodeFilteredSubtitles.length;
-        if (filteredCount > 0) {
-          log.debug(() => `[OpenSubtitles V3] Filtered out ${filteredCount} wrong episode subtitles (requested: S${String(effectiveSeason).padStart(2, '0')}E${String(episode).padStart(2, '0')})`);
+        const seasonPackCount = episodeFilteredSubtitles.filter(s => s.is_season_pack).length;
+        if (filteredCount > 0 || seasonPackCount > 0) {
+          log.debug(() => `[OpenSubtitles V3] Episode filtering kept ${episodeFilteredSubtitles.length}/${beforeCount} (season packs: ${seasonPackCount})`);
         }
       }
 
@@ -357,12 +393,27 @@ class OpenSubtitlesV3Service {
       maxRetries = options.maxRetries || 3;
     }
     // Extract encoded URL from fileId
-    // Format: v3_{base64url_encoded_url}
+    // Format: v3_{base64url_encoded_url} or v3_{base64url}_seasonpack_s{season}e{episode}
     if (!fileId.startsWith('v3_')) {
       throw new Error('Invalid V3 file ID format');
     }
 
-    const encodedUrl = fileId.substring(3); // Remove 'v3_' prefix
+    // Check for season pack encoding in fileId
+    let isSeasonPack = false;
+    let seasonPackSeason = null;
+    let seasonPackEpisode = null;
+    let baseFileId = fileId;
+
+    const seasonPackMatch = fileId.match(/^(v3_.+)_seasonpack_s(\d+)e(\d+)$/i);
+    if (seasonPackMatch) {
+      isSeasonPack = true;
+      baseFileId = seasonPackMatch[1];
+      seasonPackSeason = parseInt(seasonPackMatch[2], 10);
+      seasonPackEpisode = parseInt(seasonPackMatch[3], 10);
+      log.debug(() => `[OpenSubtitles V3] Season pack download: S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
+    }
+
+    const encodedUrl = baseFileId.substring(3); // Remove 'v3_' prefix
     const downloadUrl = Buffer.from(encodedUrl, 'base64url').toString('utf-8');
 
     log.debug(() => '[OpenSubtitles V3] Decoded download URL');
@@ -396,10 +447,11 @@ class OpenSubtitlesV3Service {
           return await extractSubtitleFromArchive(buf, {
             providerName: 'OpenSubtitles V3',
             maxBytes: MAX_ZIP_BYTES,
-            isSeasonPack: false,
-            season: null,
-            episode: null,
-            languageHint: options.languageHint || null
+            isSeasonPack: isSeasonPack,
+            season: seasonPackSeason,
+            episode: seasonPackEpisode,
+            languageHint: options.languageHint || null,
+            skipAssConversion: options.skipAssConversion
           });
         }
 
@@ -421,54 +473,25 @@ class OpenSubtitlesV3Service {
           return text;
         }
 
-        if (/\[events\]/i.test(text) || /^dialogue\s*:/im.test(text)) {
-          // Try enhanced ASS converter first
-          const assConverter = require('../utils/assConverter');
-          const result = assConverter.convertASSToVTT(text, 'ass');
-          if (result.success) return result.content;
-          log.debug(() => `[OpenSubtitles V3] Enhanced converter failed: ${result.error}, trying standard conversion`);
+        // Check if it's SRT format (no conversion needed)
+        if (/^\d+\s*\r?\n\d{2}:\d{2}:\d{2}[,.:]\d{2,3}/.test(trimmed)) {
+          log.debug(() => '[OpenSubtitles V3] Detected SRT; returning original SRT');
+          return text;
+        }
 
+        // Use centralized converter for ASS/SSA and other formats
+        // This handles unsupported formats gracefully with informational subtitles
+        if (/\[events\]/i.test(text) || /^dialogue\s*:/im.test(text) ||
+          trimmed.endsWith('.ass') || trimmed.endsWith('.ssa') ||
+          trimmed.endsWith('.sub')) {
+          log.debug(() => '[OpenSubtitles V3] Non-SRT format detected, using centralized converter');
+          // Determine filename for converter (best effort from URL)
+          let filename = 'subtitle.ass';
           try {
-            const subsrt = require('subsrt-ts');
-            let converted = subsrt.convert(text, { to: 'vtt', from: 'ass' });
-            if (!converted || converted.trim().length === 0) {
-              const sanitized = (text || '').replace(/\u0000/g, '');
-              converted = subsrt.convert(sanitized, { to: 'vtt', from: 'ass' });
-            }
-            if (converted && converted.trim().length > 0) return converted;
+            const urlMatch = downloadUrl.match(/\/([^\/]+)\.(srt|vtt|ass|ssa|sub)$/i);
+            if (urlMatch) filename = `${urlMatch[1]}.${urlMatch[2]}`;
           } catch (_) { }
-          const manual = (function assToVttFallback(input) {
-            if (!input || !/\[events\]/i.test(input)) return null;
-            const lines = input.split(/\r?\n/); let format = []; let inEvents = false;
-            for (const line of lines) {
-              const l = line.trim(); if (/^\[events\]/i.test(l)) { inEvents = true; continue; }
-              if (!inEvents) continue; if (/^\[.*\]/.test(l)) break;
-              if (/^format\s*:/i.test(l)) format = l.split(':')[1].split(',').map(s => s.trim().toLowerCase());
-            }
-            const idxStart = Math.max(0, format.indexOf('start'));
-            const idxEnd = Math.max(1, format.indexOf('end'));
-            const idxText = format.length > 0 ? Math.max(format.indexOf('text'), format.length - 1) : 9;
-            const out = ['WEBVTT', ''];
-            const parseTime = (t) => {
-              const m = t.trim().match(/(\d+):(\d{2}):(\d{2})[\.\:](\d{2})/);
-              if (!m) return null; const h = +m[1] || 0, mi = +m[2] || 0, s = +m[3] || 0, cs = +m[4] || 0;
-              const ms = (h * 3600 + mi * 60 + s) * 1000 + cs * 10; const hh = String(Math.floor(ms / 3600000)).padStart(2, '0');
-              const mm = String(Math.floor((ms % 3600000) / 60000)).padStart(2, '0'); const ss = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
-              const mmm = String(ms % 1000).padStart(3, '0'); return `${hh}:${mm}:${ss}.${mmm}`;
-            };
-            const cleanText = (txt) => {
-              let t = txt.replace(/\{[^}]*\}/g, ''); t = t.replace(/\\N/g, '\n').replace(/\\n/g, '\n').replace(/\\h/g, ' ');
-              t = t.replace(/[\u0000-\u001F]/g, ''); return t.trim();
-            };
-            for (const line of lines) {
-              if (!/^dialogue\s*:/i.test(line)) continue; const payload = line.split(':').slice(1).join(':');
-              const parts = []; let cur = ''; let splits = 0; for (let i = 0; i < payload.length; i++) { const ch = payload[i]; if (ch === ',' && splits < Math.max(idxText, 9)) { parts.push(cur); cur = ''; splits++; } else { cur += ch; } }
-              parts.push(cur); const st = parseTime(parts[idxStart]); const et = parseTime(parts[idxEnd]); if (!st || !et) continue;
-              const ct = cleanText(parts[idxText] ?? ''); if (!ct) continue; out.push(`${st} --> ${et}`); out.push(ct); out.push('');
-            }
-            return out.length > 2 ? out.join('\n') : null;
-          })(text);
-          if (manual && manual.trim().length > 0) return manual;
+          return await convertSubtitleToVtt(text, filename, 'OpenSubtitles V3', { skipAssConversion: options.skipAssConversion });
         }
 
         log.debug(() => '[OpenSubtitles V3] Subtitle downloaded successfully');

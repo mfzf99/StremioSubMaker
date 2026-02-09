@@ -449,6 +449,11 @@ function normalizeConfig(config) {
   mergedConfig.multiProviderEnabled = mergedConfig.multiProviderEnabled === true;
   mergedConfig.excludeHearingImpairedSubtitles = mergedConfig.excludeHearingImpairedSubtitles === true;
   mergedConfig.forceSRTOutput = mergedConfig.forceSRTOutput === true;
+  // ASS/SSA conversion enabled by default (backwards compatible) - only disabled when explicitly set to false
+  // When forceSRTOutput is true, ASS conversion is always enabled (SRT output requires conversion)
+  mergedConfig.convertAssToVtt = mergedConfig.forceSRTOutput === true || mergedConfig.convertAssToVtt !== false;
+  // Season packs enabled by default (backwards compatible) - only disabled when explicitly set to false
+  mergedConfig.enableSeasonPacks = mergedConfig.enableSeasonPacks !== false;
   // Deduplication is enabled by default (only disabled if explicitly set to false)
   mergedConfig.deduplicateSubtitles = mergedConfig.deduplicateSubtitles !== false;
 
@@ -1032,8 +1037,13 @@ function getDefaultConfig(modelName = null) {
     syncSubtitlesEnabled: false, // legacy flag (mirrors subToolboxEnabled)
     // If true, filter out SDH/HI (hearing impaired) subtitles from provider results
     excludeHearingImpairedSubtitles: false,
+    // If true, include season pack subtitles in results (default: enabled for backwards compatibility)
+    enableSeasonPacks: true,
     // If true, convert all subtitle outputs (VTT, ASS, etc.) to SRT format for maximum player compatibility
     forceSRTOutput: false,
+    // If true, convert ASS/SSA subtitles to VTT format (default: enabled for backwards compatibility)
+    // When false, original ASS/SSA styling is preserved (Stremio supports ASS natively)
+    convertAssToVtt: true,
     mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
     singleBatchMode: false, // Translate whole file at once (streaming partials)
     // Minimum size for a subtitle file to be considered valid (bytes)

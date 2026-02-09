@@ -9,7 +9,7 @@ const { version } = require('../utils/version');
 const { appendHiddenInformationalNote } = require('../utils/subtitle');
 const log = require('../utils/logger');
 const { isTrueishFlag } = require('../utils/subtitleFlags');
-const { detectArchiveType, extractSubtitleFromArchive, isArchive, createEpisodeNotFoundSubtitle, createZipTooLargeSubtitle } = require('../utils/archiveExtractor');
+const { detectArchiveType, extractSubtitleFromArchive, isArchive, createEpisodeNotFoundSubtitle, createZipTooLargeSubtitle, convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const { analyzeResponseContent, createInvalidResponseSubtitle } = require('../utils/responseAnalyzer');
 
 const OPENSUBTITLES_API_URL = 'https://api.opensubtitles.com/api/v1';
@@ -758,7 +758,8 @@ class OpenSubtitlesService {
           isSeasonPack: isSeasonPack,
           season: seasonPackSeason,
           episode: seasonPackEpisode,
-          languageHint: options.languageHint || null
+          languageHint: options.languageHint || null,
+          skipAssConversion: options.skipAssConversion
         });
       }
 
@@ -779,57 +780,10 @@ class OpenSubtitlesService {
         return text;
       }
 
-      // If content looks like ASS/SSA, convert to SRT
+      // If content looks like ASS/SSA, convert to VTT using centralized converter
       if (/\[events\]/i.test(text) || /^dialogue\s*:/im.test(text)) {
-        // Try enhanced ASS converter first
-        const assConverter = require('../utils/assConverter');
-        const result = assConverter.convertASSToVTT(text, 'ass');
-        if (result.success) return result.content;
-        log.debug(() => `[OpenSubtitles] Enhanced converter failed: ${result.error}, trying standard conversion`);
-
-        try {
-          const subsrt = require('subsrt-ts');
-          let converted = subsrt.convert(text, { to: 'vtt', from: 'ass' });
-          if (!converted || converted.trim().length === 0) {
-            const sanitized = (text || '').replace(/\u0000/g, '');
-            converted = subsrt.convert(sanitized, { to: 'vtt', from: 'ass' });
-          }
-          if (converted && converted.trim().length > 0) return converted;
-        } catch (_) {
-          // ignore and fallback to manual
-        }
-        const manual = (function assToVttFallback(input) {
-          if (!input || !/\[events\]/i.test(input)) return null;
-          const lines = input.split(/\r?\n/); let format = []; let inEvents = false;
-          for (const line of lines) {
-            const l = line.trim(); if (/^\[events\]/i.test(l)) { inEvents = true; continue; }
-            if (!inEvents) continue; if (/^\[.*\]/.test(l)) break;
-            if (/^format\s*:/i.test(l)) format = l.split(':')[1].split(',').map(s => s.trim().toLowerCase());
-          }
-          const idxStart = Math.max(0, format.indexOf('start'));
-          const idxEnd = Math.max(1, format.indexOf('end'));
-          const idxText = format.length > 0 ? Math.max(format.indexOf('text'), format.length - 1) : 9;
-          const out = ['WEBVTT', ''];
-          const parseTime = (t) => {
-            const m = t.trim().match(/(\d+):(\d{2}):(\d{2})[\.\:](\d{2})/);
-            if (!m) return null; const h = +m[1] || 0, mi = +m[2] || 0, s = +m[3] || 0, cs = +m[4] || 0;
-            const ms = (h * 3600 + mi * 60 + s) * 1000 + cs * 10; const hh = String(Math.floor(ms / 3600000)).padStart(2, '0');
-            const mm = String(Math.floor((ms % 3600000) / 60000)).padStart(2, '0'); const ss = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
-            const mmm = String(ms % 1000).padStart(3, '0'); return `${hh}:${mm}:${ss}.${mmm}`;
-          };
-          const cleanText = (txt) => {
-            let t = txt.replace(/\{[^}]*\}/g, ''); t = t.replace(/\\N/g, '\n').replace(/\\n/g, '\n').replace(/\\h/g, ' ');
-            t = t.replace(/[\u0000-\u001F]/g, ''); return t.trim();
-          };
-          for (const line of lines) {
-            if (!/^dialogue\s*:/i.test(line)) continue; const payload = line.split(':').slice(1).join(':');
-            const parts = []; let cur = ''; let splits = 0; for (let i = 0; i < payload.length; i++) { const ch = payload[i]; if (ch === ',' && splits < Math.max(idxText, 9)) { parts.push(cur); cur = ''; splits++; } else { cur += ch; } }
-            parts.push(cur); const st = parseTime(parts[idxStart]); const et = parseTime(parts[idxEnd]); if (!st || !et) continue;
-            const ct = cleanText(parts[idxText] ?? ''); if (!ct) continue; out.push(`${st} --> ${et}`); out.push(ct); out.push('');
-          }
-          return out.length > 2 ? out.join('\n') : null;
-        })(text);
-        if (manual && manual.trim().length > 0) return manual;
+        log.debug(() => '[OpenSubtitles] Detected ASS/SSA format, using centralized converter');
+        return await convertSubtitleToVtt(text, 'subtitle.ass', 'OpenSubtitles', { skipAssConversion: options.skipAssConversion });
       }
 
       log.debug(() => '[OpenSubtitles] Subtitle downloaded successfully');

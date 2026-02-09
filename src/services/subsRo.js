@@ -542,7 +542,8 @@ class SubsRoService {
                         isSeasonPack: isSeasonPack,
                         season: seasonPackSeason,
                         episode: seasonPackEpisode,
-                        languageHint: options.languageHint || null
+                        languageHint: options.languageHint || null,
+                        skipAssConversion: options.skipAssConversion
                     });
 
                 } else {

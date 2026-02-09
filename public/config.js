@@ -757,7 +757,9 @@ Translate to {target_language}.`;
             fileTranslationEnabled: false, // legacy flag (mirrors subToolboxEnabled)
             syncSubtitlesEnabled: false, // legacy flag (mirrors subToolboxEnabled)
             excludeHearingImpairedSubtitles: false, // If true, hide SDH/HI subtitles from results
+            enableSeasonPacks: true, // If true, show season pack subtitles in results (default: enabled for backwards compatibility)
             forceSRTOutput: false, // If true, convert all subtitle outputs to SRT format
+            convertAssToVtt: true, // If true, convert ASS/SSA subtitles to VTT (default: enabled for backwards compatibility)
             mobileMode: false, // Opt-in: wait for full translation before responding (no automatic device detection)
             singleBatchMode: false, // Try translating whole file at once
             advancedSettings: {
@@ -4380,6 +4382,7 @@ Translate to {target_language}.`;
         const otherSettingsCard = document.getElementById('otherSettingsCard');
         const subToolboxNoTranslationGroup = document.getElementById('subToolboxNoTranslationGroup');
         const excludeHearingImpairedNoTranslationGroup = document.getElementById('excludeHearingImpairedNoTranslationGroup');
+        const enableSeasonPacksNoTranslationGroup = document.getElementById('enableSeasonPacksNoTranslationGroup');
 
         ['sendTimestampsToAI', 'enableJsonOutput', 'databaseMode', 'learnModeEnabled', 'mobileMode', 'singleBatchMode', 'betaMode'].forEach(id => {
             const group = document.getElementById(id)?.closest('.form-group');
@@ -4402,6 +4405,9 @@ Translate to {target_language}.`;
             if (excludeHearingImpairedNoTranslationGroup) {
                 excludeHearingImpairedNoTranslationGroup.style.display = '';
             }
+            if (enableSeasonPacksNoTranslationGroup) {
+                enableSeasonPacksNoTranslationGroup.style.display = '';
+            }
             return;
         }
 
@@ -4412,6 +4418,9 @@ Translate to {target_language}.`;
             }
             if (excludeHearingImpairedNoTranslationGroup) {
                 excludeHearingImpairedNoTranslationGroup.style.display = 'none';
+            }
+            if (enableSeasonPacksNoTranslationGroup) {
+                enableSeasonPacksNoTranslationGroup.style.display = 'none';
             }
             return;
         }
@@ -4430,6 +4439,9 @@ Translate to {target_language}.`;
         }
         if (excludeHearingImpairedNoTranslationGroup) {
             excludeHearingImpairedNoTranslationGroup.style.display = 'none';
+        }
+        if (enableSeasonPacksNoTranslationGroup) {
+            enableSeasonPacksNoTranslationGroup.style.display = 'none';
         }
     }
 
@@ -5176,6 +5188,8 @@ Translate to {target_language}.`;
             newConfig.singleBatchMode = oldConfig.singleBatchMode === true;
             // - exclude HI/SDH subtitles
             newConfig.excludeHearingImpairedSubtitles = oldConfig.excludeHearingImpairedSubtitles === true;
+            // - enable season pack subtitles (defaults to true for backwards compatibility)
+            newConfig.enableSeasonPacks = oldConfig.enableSeasonPacks !== false;
             // - subtitle provider timeout (preserve user's setting, fallback to default 12 if not set)
             const oldTimeout = parseInt(oldConfig.subtitleProviderTimeout, 10);
             newConfig.subtitleProviderTimeout = Number.isFinite(oldTimeout) ? Math.max(8, Math.min(30, oldTimeout)) : 12;
@@ -5484,6 +5498,33 @@ Translate to {target_language}.`;
         if (singleBatchEl) singleBatchEl.checked = currentConfig.singleBatchMode === true;
         const forceSRTEl = document.getElementById('forceSRTOutput');
         if (forceSRTEl) forceSRTEl.checked = currentConfig.forceSRTOutput === true;
+        // Convert ASS/SSA defaults to enabled (true) for backwards compatibility
+        const convertAssToVttEl = document.getElementById('convertAssToVtt');
+        if (convertAssToVttEl) {
+            convertAssToVttEl.checked = currentConfig.convertAssToVtt !== false;
+            // Disable ASS/SSA toggle when Force SRT is enabled (they conflict)
+            if (forceSRTEl && forceSRTEl.checked) {
+                convertAssToVttEl.disabled = true;
+                convertAssToVttEl.checked = true; // Force SRT implies conversion
+            }
+        }
+        // Add Force SRT change listener to control ASS/SSA toggle
+        if (forceSRTEl && convertAssToVttEl) {
+            forceSRTEl.addEventListener('change', () => {
+                if (forceSRTEl.checked) {
+                    convertAssToVttEl.disabled = true;
+                    convertAssToVttEl.checked = true; // Force SRT implies conversion
+                } else {
+                    convertAssToVttEl.disabled = false;
+                }
+            });
+        }
+        // Season packs default to enabled (true) for backwards compatibility
+        const seasonPacksEnabled = currentConfig.enableSeasonPacks !== false;
+        const seasonPacksEl = document.getElementById('enableSeasonPacks');
+        const seasonPacksElNoTranslation = document.getElementById('enableSeasonPacksNoTranslation');
+        if (seasonPacksEl) seasonPacksEl.checked = seasonPacksEnabled;
+        if (seasonPacksElNoTranslation) seasonPacksElNoTranslation.checked = seasonPacksEnabled;
 
         // Load translation cache settings
         if (!currentConfig.translationCache) {
@@ -5619,6 +5660,28 @@ Translate to {target_language}.`;
         }
         if (!hiExcludeToggle && !hiExcludeToggleNoTranslation) {
             currentConfig.excludeHearingImpairedSubtitles = currentConfig.excludeHearingImpairedSubtitles === true;
+        }
+
+        // Track Season Pack toggles (keep both in sync)
+        const seasonPackToggle = document.getElementById('enableSeasonPacks');
+        const seasonPackToggleNoTranslation = document.getElementById('enableSeasonPacksNoTranslation');
+        const syncSeasonPack = (value) => {
+            currentConfig.enableSeasonPacks = value !== false; // Default to true
+            if (seasonPackToggle && seasonPackToggle.checked !== currentConfig.enableSeasonPacks) {
+                seasonPackToggle.checked = currentConfig.enableSeasonPacks;
+            }
+            if (seasonPackToggleNoTranslation && seasonPackToggleNoTranslation.checked !== currentConfig.enableSeasonPacks) {
+                seasonPackToggleNoTranslation.checked = currentConfig.enableSeasonPacks;
+            }
+        };
+        if (seasonPackToggle) {
+            seasonPackToggle.addEventListener('change', (e) => syncSeasonPack(e.target.checked));
+        }
+        if (seasonPackToggleNoTranslation) {
+            seasonPackToggleNoTranslation.addEventListener('change', (e) => syncSeasonPack(e.target.checked));
+        }
+        if (!seasonPackToggle && !seasonPackToggleNoTranslation) {
+            currentConfig.enableSeasonPacks = currentConfig.enableSeasonPacks !== false;
         }
         const singleBatchToggle = document.getElementById('singleBatchMode');
         if (singleBatchToggle) {
@@ -5758,9 +5821,19 @@ Translate to {target_language}.`;
                 const el = document.getElementById('excludeHearingImpairedSubtitlesNoTranslation') || document.getElementById('excludeHearingImpairedSubtitles');
                 return el ? el.checked === true : (currentConfig?.excludeHearingImpairedSubtitles === true);
             })(),
+            enableSeasonPacks: (function () {
+                const el = document.getElementById('enableSeasonPacksNoTranslation') || document.getElementById('enableSeasonPacks');
+                // Default to true if element not found (backwards compatible)
+                return el ? el.checked : (currentConfig?.enableSeasonPacks !== false);
+            })(),
             forceSRTOutput: (function () {
                 const el = document.getElementById('forceSRTOutput');
                 return el ? el.checked === true : (currentConfig?.forceSRTOutput === true);
+            })(),
+            convertAssToVtt: (function () {
+                const el = document.getElementById('convertAssToVtt');
+                // Default to true if element not found (backwards compatible)
+                return el ? el.checked : (currentConfig?.convertAssToVtt !== false);
             })(),
             subToolboxEnabled: (function () {
                 const el = document.getElementById('subToolboxEnabledNoTranslation') || document.getElementById('subToolboxEnabled');

@@ -1168,6 +1168,22 @@
           "label": "Modo móvil (arreglo/mitigación)",
           "description": "Stremio hace solo 1 petición y la cachea, así que en Android no se pueden entregar subtítulos parciales. Modo móvil retiene la traducción y envía el subtítulo final cuando esté listo. Úsalo si ves en Android/iOS. Sin traducciones parciales ni mensajes de carga. Puede congelar el stream hasta que esté listo. Flash-lite recomendado. Espera 1-3 min; si no carga, cambia de subtítulo y vuelve."
         },
+        "excludeHearingImpaired": {
+          "label": "Ocultar subtítulos SDH/HI",
+          "description": "Excluir subtítulos etiquetados como \"Subtítulos para personas con discapacidad auditiva\" (SDH/HI) de los resultados."
+        },
+        "enableSeasonPacks": {
+          "label": "Incluir Subtítulos de Temporada Completa",
+          "description": "SubMaker busca y extrae subtítulos específicos de paquetes de temporada completa para mejor cobertura. Útil para Animes. Desactiva para mostrar solo subtítulos específicos de episodio."
+        },
+        "forceSRTOutput": {
+          "label": "Forzar salida SRT",
+          "description": "Convertir todas las salidas de subtítulos a formato SRT para máxima compatibilidad con reproductores."
+        },
+        "convertAssToVtt": {
+          "label": "Convertir ASS/SSA a VTT",
+          "description": "Convertir subtítulos ASS/SSA a formato VTT para compatibilidad. Desactiva para enviar subtítulos ASS/SSA tal cual a Stremio. (Las traducciones siempre convierten automáticamente)"
+        },
         "betaMode": {
           "label": "Modo Avanzado",
           "description": "Desbloquea la configuración de parámetros avanzados para Gemini y otros proveedores."
