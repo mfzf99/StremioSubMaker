@@ -563,7 +563,7 @@ class TranslationEngine {
 
     log.info(() => `[TranslationEngine] Starting translation: ${entries.length} entries, ${Math.ceil(entries.length / this.batchSize)} batches`);
 
-    const streamingEnabled = this.enableStreaming && !this.singleBatchMode;
+    const streamingEnabled = this.enableStreaming;
     let globalStreamSequence = 0;
 
     // Step 2: Create batches
@@ -775,7 +775,7 @@ class TranslationEngine {
 
     for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
       const batch = chunks[batchIndex];
-      const useStreaming = chunkCount === 1 && this.enableStreaming;
+      const useStreaming = this.enableStreaming;
 
       // Rotate API key for this batch if per-batch rotation is enabled
       await this.maybeRotateKeyForBatch(batchIndex);

@@ -529,13 +529,13 @@ class SubsRoService {
                     return createZipTooLargeSubtitle(MAX_ZIP_BYTES, buffer.length);
                 }
 
-                // Check for valid archive (ZIP or RAR)
+                // Check for valid archive (ZIP, RAR, Gzip, 7z, Tar, etc.)
                 const archiveType = detectArchiveType(buffer);
 
                 if (archiveType) {
                     log.debug(() => `[SubsRo] Received ${archiveType.toUpperCase()} archive (${buffer.length} bytes), extracting...`);
 
-                    // Use the centralized archive extractor that handles both ZIP and RAR
+                    // Use the centralized archive extractor
                     return await extractSubtitleFromArchive(buffer, {
                         providerName: 'SubsRo',
                         maxBytes: MAX_ZIP_BYTES,
@@ -552,7 +552,7 @@ class SubsRoService {
                     log.debug(() => `[SubsRo] Response is not an archive (${buffer.length} bytes). Content analysis: ${contentAnalysis.type} - ${contentAnalysis.hint}`);
 
                     // If it's an error response (HTML, Cloudflare, JSON error, etc.), show user-friendly message
-                    if (contentAnalysis.type.startsWith('html') || contentAnalysis.type === 'json_error' || contentAnalysis.type === 'text_error' || contentAnalysis.type === 'empty' || contentAnalysis.type === 'truncated' || contentAnalysis.type === 'gzip') {
+                    if (contentAnalysis.type.startsWith('html') || contentAnalysis.type === 'json_error' || contentAnalysis.type === 'text_error' || contentAnalysis.type === 'empty' || contentAnalysis.type === 'truncated') {
                         log.error(() => `[SubsRo] Download failed: ${contentAnalysis.type} - ${contentAnalysis.hint}`);
                         return createInvalidResponseSubtitle('SubsRo', contentAnalysis, buffer.length);
                     }

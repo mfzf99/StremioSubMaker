@@ -28,10 +28,36 @@ function analyzeResponseContent(buffer) {
     if (isRar) return { type: 'rar', hint: 'Valid RAR file', isRetryable: false };
 
     // Check for Gzip (compressed content) - 1f 8b
-    // Gzip is retryable because the server might decompress on retry, or it may indicate
-    // a misconfigured response that the server could fix
+    // We can now decompress gzip content, so it's a valid archive type
     const isGzip = buffer.length >= 2 && buffer[0] === 0x1F && buffer[1] === 0x8B;
-    if (isGzip) return { type: 'gzip', hint: 'Gzip-compressed content (possibly not decompressed)', isRetryable: true };
+    if (isGzip) return { type: 'gzip', hint: 'Gzip-compressed content', isRetryable: false };
+
+    // Check for 7-Zip archive - 37 7A BC AF 27 1C
+    if (buffer.length >= 6 &&
+        buffer[0] === 0x37 && buffer[1] === 0x7A && buffer[2] === 0xBC &&
+        buffer[3] === 0xAF && buffer[4] === 0x27 && buffer[5] === 0x1C) {
+        return { type: '7z', hint: 'Valid 7-Zip archive', isRetryable: false };
+    }
+
+    // Check for XZ compressed - FD 37 7A 58 5A 00
+    if (buffer.length >= 6 &&
+        buffer[0] === 0xFD && buffer[1] === 0x37 && buffer[2] === 0x7A &&
+        buffer[3] === 0x58 && buffer[4] === 0x5A && buffer[5] === 0x00) {
+        return { type: 'xz', hint: 'XZ-compressed content', isRetryable: false };
+    }
+
+    // Check for Bzip2 compressed - 42 5A 68 ("BZh")
+    if (buffer.length >= 3 &&
+        buffer[0] === 0x42 && buffer[1] === 0x5A && buffer[2] === 0x68) {
+        return { type: 'bz2', hint: 'Bzip2-compressed content', isRetryable: false };
+    }
+
+    // Check for Tar archive - 'ustar' at offset 257
+    if (buffer.length >= 263 &&
+        buffer[257] === 0x75 && buffer[258] === 0x73 && buffer[259] === 0x74 &&
+        buffer[260] === 0x61 && buffer[261] === 0x72) {
+        return { type: 'tar', hint: 'Valid Tar archive', isRetryable: false };
+    }
 
     // Try to interpret as text for further analysis
     // Use 2000 bytes to catch longer error messages in HTML pages
@@ -168,7 +194,11 @@ function createInvalidResponseSubtitle(providerName, analysis, responseSize = 0)
             suggestion = 'Response was incomplete. Network issues may be affecting the download.';
             break;
         case 'gzip':
-            suggestion = 'Server returned compressed data that could not be processed. Try again.';
+        case '7z':
+        case 'xz':
+        case 'bz2':
+        case 'tar':
+            suggestion = 'Server returned a compressed/archive format that could not be processed. Try again.';
             break;
         default:
             break;

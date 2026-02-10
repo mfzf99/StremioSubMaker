@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { LRUCache } = require('lru-cache');
 const { sanitizeApiKeyForHeader } = require('../utils/security');
 const crypto = require('crypto');
 const { toISO6391, toISO6392 } = require('../utils/languages');
@@ -30,6 +31,96 @@ const TOKEN_TTL_SECONDS = 23 * 60 * 60; // 23 hours (token valid for 24h, 1h buf
 // Login mutex: prevents multiple concurrent /login calls for the same credentials
 // Key: credentialsCacheKey, Value: Promise that resolves when login completes
 const loginMutex = new Map();
+
+// ─── Token-bucket rate limiter ────────────────────────────────────────────────
+// OpenSubtitles enforces 5 req/sec/IP.  On shared-IP deployments every pod
+// shares that budget, so we cap at 4/sec locally to leave margin.
+// All outbound OpenSubtitles API calls (login, search, download-link) must
+// call `await acquireToken()` before making the HTTP request.
+const RATE_LIMIT_TOKENS_MAX = 4;          // max burst
+const RATE_LIMIT_REFILL_INTERVAL_MS = 1000; // refill every 1 s
+let _rateLimitTokens = RATE_LIMIT_TOKENS_MAX;
+const _rateLimitQueue = [];              // waiters: array of resolve callbacks
+let _rateLimitTimer = null;
+
+function _startRefillTimer() {
+  if (_rateLimitTimer) return;
+  _rateLimitTimer = setInterval(() => {
+    // Refill up to max
+    _rateLimitTokens = Math.min(_rateLimitTokens + RATE_LIMIT_TOKENS_MAX, RATE_LIMIT_TOKENS_MAX);
+    // Wake queued waiters
+    while (_rateLimitTokens > 0 && _rateLimitQueue.length > 0) {
+      _rateLimitTokens--;
+      const resolve = _rateLimitQueue.shift();
+      resolve();
+    }
+    // Stop timer when idle (no waiters, bucket full) to avoid keeping process alive
+    if (_rateLimitQueue.length === 0 && _rateLimitTokens >= RATE_LIMIT_TOKENS_MAX) {
+      clearInterval(_rateLimitTimer);
+      _rateLimitTimer = null;
+    }
+  }, RATE_LIMIT_REFILL_INTERVAL_MS);
+  // Allow Node to exit even if the timer is running
+  if (_rateLimitTimer && typeof _rateLimitTimer.unref === 'function') {
+    _rateLimitTimer.unref();
+  }
+}
+
+/**
+ * Acquire a rate-limit token before making an OpenSubtitles API call.
+ * Resolves immediately if tokens are available, otherwise queues.
+ * @returns {Promise<void>}
+ */
+function acquireToken() {
+  if (_rateLimitTokens > 0) {
+    _rateLimitTokens--;
+    _startRefillTimer();
+    return Promise.resolve();
+  }
+  // No tokens – queue and start the refill timer
+  _startRefillTimer();
+  return new Promise(resolve => {
+    _rateLimitQueue.push(resolve);
+  });
+}
+// ─── End rate limiter ─────────────────────────────────────────────────────────
+
+// ─── Provider-level search result cache ───────────────────────────────────────
+// Shared across ALL users within a pod. Safe because OpenSubtitles returns
+// identical search results regardless of which user's token is used — the token
+// only affects download quotas, not search results.
+// Cache key = exact API query params (imdb_id, languages, season, episode, HI).
+// IMPORTANT: results are deep-cloned on retrieval because downstream code
+// (episode filtering, season pack detection) mutates the subtitle objects.
+const OS_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const OS_SEARCH_CACHE_MAX = 2000;
+const osSearchCache = new LRUCache({
+  max: OS_SEARCH_CACHE_MAX,
+  ttl: OS_SEARCH_CACHE_TTL_MS,
+  updateAgeOnGet: true, // popular content stays cached longer
+});
+
+/**
+ * Build a deterministic cache key from the exact query params sent to the
+ * OpenSubtitles API.  Languages are sorted so that the same set in any order
+ * produces the same key.
+ * @param {Object} queryParams - The query params object sent to /subtitles
+ * @returns {string}
+ */
+function buildSearchCacheKey(queryParams) {
+  const langs = (queryParams.languages || '').split(',').sort().join(',');
+  const parts = [
+    'os_search',
+    queryParams.imdb_id || '',
+    langs,
+    queryParams.season_number || '',
+    queryParams.episode_number || '',
+    queryParams.hearing_impaired || ''
+  ];
+  return parts.join(':');
+}
+// ─── End search cache ─────────────────────────────────────────────────────────
+
 
 /**
  * Get cached token for credentials (if valid)
@@ -375,6 +466,7 @@ class OpenSubtitlesService {
 
       // Use provided timeout or fall back to client default
       const requestConfig = timeout ? { timeout } : {};
+      await acquireToken(); // Rate-limit: wait for token before hitting OpenSubtitles API
       const response = await this.client.post('/login', {
         username: username,
         password: password
@@ -660,7 +752,37 @@ class OpenSubtitlesService {
       // Use providerTimeout from config if provided, otherwise use client default
       const requestConfig = { params: queryParams };
       if (providerTimeout) requestConfig.timeout = providerTimeout;
-      const response = await this.client.get('/subtitles', requestConfig);
+
+      // ── Provider-level shared cache: check before hitting the API ──
+      const searchCacheKey = buildSearchCacheKey(queryParams);
+      const cachedResults = osSearchCache.get(searchCacheKey);
+      if (cachedResults) {
+        log.debug(() => `[OpenSubtitles] Search cache HIT: ${searchCacheKey} (${cachedResults.length} subs)`);
+        // Deep-clone: downstream code mutates objects (season pack fileId, etc.)
+        let subtitles = cachedResults.map(s => ({ ...s }));
+        // Jump to episode filtering (skip API call entirely)
+        return this._postProcessSearchResults(subtitles, type, season, episode, convertedLanguages);
+      }
+
+      // Rate-limit + 429 retry: throttle locally and retry once if still rate-limited
+      await acquireToken();
+      let response;
+      try {
+        response = await this.client.get('/subtitles', requestConfig);
+      } catch (searchErr) {
+        const status = searchErr?.response?.status;
+        if (status === 429) {
+          // Parse retry-after header or fall back to 1.5s
+          const retryAfter = parseInt(searchErr.response?.headers?.['ratelimit-reset'] || searchErr.response?.headers?.['retry-after'], 10);
+          const waitMs = (retryAfter && retryAfter > 0 && retryAfter <= 10) ? retryAfter * 1000 : 1500;
+          log.warn(() => `[OpenSubtitles] Search 429 rate limited, retrying in ${waitMs}ms`);
+          await new Promise(r => setTimeout(r, waitMs));
+          await acquireToken();
+          response = await this.client.get('/subtitles', requestConfig);
+        } else {
+          throw searchErr;
+        }
+      }
 
       if (!response.data || !response.data.data || response.data.data.length === 0) {
         log.debug(() => '[OpenSubtitles] No subtitles found in response');
@@ -698,100 +820,121 @@ class OpenSubtitlesService {
         };
       });
 
-      // Client-side episode filtering and season pack detection
-      if ((type === 'episode' || type === 'anime-episode') && episode) {
-        const targetSeason = season || 1;
-        const targetEpisode = episode;
+      // Store raw mapped results in shared cache (before episode filtering mutates them)
+      osSearchCache.set(searchCacheKey, subtitles.map(s => ({ ...s })));
+      log.debug(() => `[OpenSubtitles] Search cache STORE: ${searchCacheKey} (${subtitles.length} subs)`);
 
-        const beforeCount = subtitles.length;
-
-        subtitles = subtitles.filter(sub => {
-          const name = String(sub.name || '').toLowerCase();
-
-          // Season pack patterns
-          const seasonPackPatterns = [
-            new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\\d)`, 'i'),
-            new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
-            new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
-          ];
-
-          // Anime pack patterns
-          const animeSeasonPackPatterns = [
-            /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
-            /\[(?:batch|complete|full)\]/i,
-            /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i
-          ];
-
-          let isSeasonPack = false;
-          if (type === 'anime-episode') {
-            isSeasonPack = animeSeasonPackPatterns.some(p => p.test(name)) &&
-              !new RegExp(`(?:^|[^0-9])0*${targetEpisode}(?:v\\d+)?(?:[^0-9]|$)`, 'i').test(name);
-          } else {
-            isSeasonPack = seasonPackPatterns.some(p => p.test(name)) &&
-              !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(name);
-          }
-
-          if (isSeasonPack) {
-            sub.is_season_pack = true;
-            sub.season_pack_season = targetSeason;
-            sub.season_pack_episode = targetEpisode;
-            const originalFileId = sub.fileId || sub.id;
-            sub.fileId = `${originalFileId}_seasonpack_s${targetSeason}e${targetEpisode}`;
-            sub.id = sub.fileId;
-            log.debug(() => `[OpenSubtitles] Detected season pack: ${sub.name}`);
-            return true;
-          }
-
-          // Episode match patterns
-          const seasonEpisodePatterns = [
-            new RegExp(`s0*${targetSeason}e0*${targetEpisode}(?![0-9])`, 'i'),
-            new RegExp(`${targetSeason}x0*${targetEpisode}(?![0-9])`, 'i'),
-            new RegExp(`s0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'), // S01xE01, S01x1
-            new RegExp(`0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),  // 01xE01, 1xE01
-            new RegExp(`s0*${targetSeason}\\.e0*${targetEpisode}(?![0-9])`, 'i'),
-            new RegExp(`season\\s*0*${targetSeason}.*episode\\s*0*${targetEpisode}(?![0-9])`, 'i')
-          ];
-          if (seasonEpisodePatterns.some(p => p.test(name))) return true;
-
-          // If it explicitly references a different episode, exclude
-          const m = name.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
-          if (m) {
-            const subSeason = parseInt(m[1] || m[3], 10);
-            const subEpisode = parseInt(m[2] || m[4], 10);
-            if (subSeason === targetSeason && subEpisode !== targetEpisode) return false;
-          }
-
-          return true; // keep ambiguous
-        });
-
-        const filteredOut = beforeCount - subtitles.length;
-        const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
-        if (filteredOut > 0 || seasonPackCount > 0) {
-          log.debug(() => `[OpenSubtitles] Episode filtering kept ${subtitles.length}/${beforeCount} (season packs: ${seasonPackCount})`);
-        }
-      }
-
-      // Limit to 14 results per language to control response size
-      const MAX_RESULTS_PER_LANGUAGE = 14;
-      const groupedByLanguage = {};
-
-      for (const sub of subtitles) {
-        const lang = sub.languageCode || 'unknown';
-        if (!groupedByLanguage[lang]) {
-          groupedByLanguage[lang] = [];
-        }
-        if (groupedByLanguage[lang].length < MAX_RESULTS_PER_LANGUAGE) {
-          groupedByLanguage[lang].push(sub);
-        }
-      }
-
-      const limitedSubtitles = Object.values(groupedByLanguage).flat();
-      log.debug(() => `[OpenSubtitles] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
-      return limitedSubtitles;
+      return this._postProcessSearchResults(subtitles, type, season, episode, convertedLanguages);
 
     } catch (error) {
       return handleSearchError(error, 'OpenSubtitles');
     }
+  }
+
+  /**
+   * Post-process raw mapped search results: episode filtering, season pack
+   * detection, and per-language limiting.
+   * Extracted so both the live API path and the cache-hit path share the same
+   * logic without duplication.
+   * @param {Array} subtitles - Raw mapped subtitle objects
+   * @param {string} type - Content type (movie, episode, anime-episode)
+   * @param {number} season - Season number
+   * @param {number} episode - Episode number
+   * @param {string[]} convertedLanguages - Languages used in the query (for logging)
+   * @returns {Array} - Filtered and limited subtitle results
+   * @private
+   */
+  _postProcessSearchResults(subtitles, type, season, episode, convertedLanguages) {
+    // Client-side episode filtering and season pack detection
+    if ((type === 'episode' || type === 'anime-episode') && episode) {
+      const targetSeason = season || 1;
+      const targetEpisode = episode;
+
+      const beforeCount = subtitles.length;
+
+      subtitles = subtitles.filter(sub => {
+        const name = String(sub.name || '').toLowerCase();
+
+        // Season pack patterns
+        const seasonPackPatterns = [
+          new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\\d)`, 'i'),
+          new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
+          new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
+        ];
+
+        // Anime pack patterns
+        const animeSeasonPackPatterns = [
+          /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
+          /\[(?:batch|complete|full)\]/i,
+          /(?:episode\s*)?(?:01|001)\s*[-~]\s*(?:\d{2}|\d{3})/i
+        ];
+
+        let isSeasonPack = false;
+        if (type === 'anime-episode') {
+          isSeasonPack = animeSeasonPackPatterns.some(p => p.test(name)) &&
+            !new RegExp(`(?:^|[^0-9])0*${targetEpisode}(?:v\\d+)?(?:[^0-9]|$)`, 'i').test(name);
+        } else {
+          isSeasonPack = seasonPackPatterns.some(p => p.test(name)) &&
+            !/s0*\d+e0*\d+|\d+x\d+|episode\s*\d+|ep\s*\d+/i.test(name);
+        }
+
+        if (isSeasonPack) {
+          sub.is_season_pack = true;
+          sub.season_pack_season = targetSeason;
+          sub.season_pack_episode = targetEpisode;
+          const originalFileId = sub.fileId || sub.id;
+          sub.fileId = `${originalFileId}_seasonpack_s${targetSeason}e${targetEpisode}`;
+          sub.id = sub.fileId;
+          log.debug(() => `[OpenSubtitles] Detected season pack: ${sub.name}`);
+          return true;
+        }
+
+        // Episode match patterns
+        const seasonEpisodePatterns = [
+          new RegExp(`s0*${targetSeason}e0*${targetEpisode}(?![0-9])`, 'i'),
+          new RegExp(`${targetSeason}x0*${targetEpisode}(?![0-9])`, 'i'),
+          new RegExp(`s0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'), // S01xE01, S01x1
+          new RegExp(`0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),  // 01xE01, 1xE01
+          new RegExp(`s0*${targetSeason}\\.e0*${targetEpisode}(?![0-9])`, 'i'),
+          new RegExp(`season\\s*0*${targetSeason}.*episode\\s*0*${targetEpisode}(?![0-9])`, 'i')
+        ];
+        if (seasonEpisodePatterns.some(p => p.test(name))) return true;
+
+        // If it explicitly references a different episode, exclude
+        const m = name.match(/s0*(\d+)e0*(\d+)|(\d+)x0*(\d+)/i);
+        if (m) {
+          const subSeason = parseInt(m[1] || m[3], 10);
+          const subEpisode = parseInt(m[2] || m[4], 10);
+          if (subSeason === targetSeason && subEpisode !== targetEpisode) return false;
+        }
+
+        return true; // keep ambiguous
+      });
+
+      const filteredOut = beforeCount - subtitles.length;
+      const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
+      if (filteredOut > 0 || seasonPackCount > 0) {
+        log.debug(() => `[OpenSubtitles] Episode filtering kept ${subtitles.length}/${beforeCount} (season packs: ${seasonPackCount})`);
+      }
+    }
+
+    // Limit to 14 results per language to control response size
+    const MAX_RESULTS_PER_LANGUAGE = 14;
+    const groupedByLanguage = {};
+
+    for (const sub of subtitles) {
+      const lang = sub.languageCode || 'unknown';
+      if (!groupedByLanguage[lang]) {
+        groupedByLanguage[lang] = [];
+      }
+      if (groupedByLanguage[lang].length < MAX_RESULTS_PER_LANGUAGE) {
+        groupedByLanguage[lang].push(sub);
+      }
+    }
+
+    const limitedSubtitles = Object.values(groupedByLanguage).flat();
+    log.debug(() => `[OpenSubtitles] Found ${subtitles.length} subtitles total, limited to ${limitedSubtitles.length} (max ${MAX_RESULTS_PER_LANGUAGE} per language)`);
+    return limitedSubtitles;
   }
 
   /**
@@ -844,6 +987,7 @@ class OpenSubtitlesService {
 
       // First, request download link
       // Use the primary client so Api-Key is sent (required by OpenSubtitles for /download)
+      await acquireToken(); // Rate-limit: wait for token before hitting OpenSubtitles API
       const downloadResponse = await this.client.post('/download', {
         file_id: parseInt(baseFileId)
       });
@@ -869,13 +1013,13 @@ class OpenSubtitlesService {
       // Analyze response content to detect HTML error pages, Cloudflare blocks, etc.
       const contentAnalysis = analyzeResponseContent(buf);
 
-      // Check for archive by magic bytes (ZIP or RAR)
+      // Check for archive by magic bytes (ZIP, RAR, Gzip, 7z, Tar, etc.)
       const archiveType = detectArchiveType(buf);
 
       if (archiveType) {
         log.debug(() => `[OpenSubtitles] Detected ${archiveType.toUpperCase()} archive`);
 
-        // Use the centralized archive extractor that handles both ZIP and RAR
+        // Use the centralized archive extractor
         return await extractSubtitleFromArchive(buf, {
           providerName: 'OpenSubtitles',
           maxBytes: MAX_ZIP_BYTES,
@@ -889,7 +1033,7 @@ class OpenSubtitlesService {
 
       // If not an archive, check if it's an error response (HTML, Cloudflare, etc.)
       if (contentAnalysis.type !== 'subtitle' && contentAnalysis.type !== 'unknown') {
-        if (contentAnalysis.type.startsWith('html') || contentAnalysis.type === 'json_error' || contentAnalysis.type === 'text_error' || contentAnalysis.type === 'empty' || contentAnalysis.type === 'truncated' || contentAnalysis.type === 'gzip') {
+        if (contentAnalysis.type.startsWith('html') || contentAnalysis.type === 'json_error' || contentAnalysis.type === 'text_error' || contentAnalysis.type === 'empty' || contentAnalysis.type === 'truncated') {
           log.error(() => `[OpenSubtitles] Download failed: ${contentAnalysis.type} - ${contentAnalysis.hint}`);
           return createInvalidResponseSubtitle('OpenSubtitles', contentAnalysis, buf.length);
         }

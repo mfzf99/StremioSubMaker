@@ -1212,6 +1212,10 @@ label {
     white-space: pre-line;
 }
 
+.force-normal-whitespace {
+    white-space: normal !important;
+}
+
 .subtoolbox-instructions {
     margin-left: 0.35rem;
     font-weight: 500;

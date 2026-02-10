@@ -58,6 +58,17 @@
     <!-- Disable native HTML validation: we run all validation in config.js and hidden inputs (provider advanced sliders) can trip browser validity when collapsed -->
     <form id="configForm" autocomplete="off" spellcheck="false" novalidate>
 
+        <!-- Quick Setup Entry Banner (shown on first run or via help menu) -->
+        <div class="qs-entry-banner" id="quickSetupBanner" role="button" tabindex="0"
+            aria-label="Open Quick Setup wizard">
+            <span class="qs-entry-icon">⚡</span>
+            <div class="qs-entry-text">
+                <span class="qs-entry-title">Quick Setup</span>
+                <span class="qs-entry-desc">New here? Get started in under a minute</span>
+            </div>
+            <span class="qs-entry-arrow">→</span>
+        </div>
+
         <!-- No Translation Mode Toggle -->
         <div
             style="margin: 2rem 0; padding: 1.5rem; background: var(--surface-light); border: 2px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 1rem;">
@@ -220,9 +231,10 @@
                                             </div>
 
                                             <span id="opensubsRateNote" class="label-description"
-                                                data-i18n="config.opensubs.rateNote">20 subtitles a day. <a
-                                                    href="https://www.opensubtitles.com/en/newuser" target="_blank"
-                                                    style="color: var(--primary-light);">Create a free account</a> if
+                                                data-i18n="config.opensubs.rateNote" data-i18n-attr="innerHTML">20
+                                                subtitles a day. <a href="https://www.opensubtitles.com/en/newuser"
+                                                    target="_blank" style="color: var(--primary-light);">Create a free
+                                                    account</a> if
                                                 you don't
                                                 have one.</span>
                                         </div>
@@ -607,8 +619,7 @@
                         </div>
 
                         <!-- Dynamic API Keys List (shown when rotation is enabled) -->
-                        <div id="geminiApiKeysContainer" class="api-keys-list"
-                            style="display: none; padding: 0.75rem; background: var(--surface-elevated); border-radius: 8px;">
+                        <div id="geminiApiKeysContainer" class="api-keys-list" style="display: none;">
                             <label style="display: block; margin-bottom: 0.35rem;">
                                 <span data-i18n="config.gemini.keyRotation.additionalKeysLabel">Additional API
                                     Keys</span>
@@ -650,7 +661,8 @@
                         <div class="form-group">
                             <label for="geminiModel">
                                 <span data-i18n="config.gemini.model.label">Translation Model</span>
-                                <span class="label-description" data-i18n="config.gemini.model.helper">AI model for translations</span>
+                                <span class="label-description force-normal-whitespace"
+                                    data-i18n="config.gemini.model.helper">AI model for translations</span>
                             </label>
                             <select id="geminiModel" required>
                                 <option value="gemini-3-flash-preview" data-i18n="config.gemini.model.options.flash3"
@@ -711,7 +723,9 @@
                                 <input type="checkbox" id="geminiKeyRotationEnabled">
                                 <span data-i18n="config.gemini.keyRotation.label">Enable Gemini API key rotation</span>
                             </label>
-                            <span class="label-description" data-i18n="config.gemini.keyRotation.description">Distribute API calls across multiple keys to avoid rate limits.</span>
+                            <span class="label-description force-normal-whitespace"
+                                data-i18n="config.gemini.keyRotation.description">Distribute API calls across multiple
+                                keys to avoid rate limits.</span>
                         </div>
 
                         <!-- Advanced Settings removed by request -->
@@ -720,7 +734,9 @@
                                 <input type="checkbox" id="enableMultiProviders">
                                 <span data-i18n="config.multiProvider.label">Multiple providers (beta)</span>
                             </label>
-                            <span class="label-description" data-i18n="config.multiProvider.description">Enables multiple AI providers. You can set primary/secondary providers in "Translation Settings".</span>
+                            <span class="label-description" data-i18n="config.multiProvider.description">Enables
+                                multiple AI providers. You can set primary/secondary providers in "Translation
+                                Settings".</span>
                         </div>
 
                         <div id="multiProvidersContainer"
@@ -1453,7 +1469,13 @@
                                             aria-label="Translation workflow details"
                                             data-i18n="config.translationSettings.workflow.tooltip"
                                             data-i18n-attr="aria-label">?</span>
-                                        <div class="tooltip-bubble" role="tooltip" aria-hidden="true" id="translationWorkflowTooltip" data-i18n="config.translationSettings.workflow.tooltip">"Original Timestamps" sends a numbered list and reattaches original timecodes. "Send Timestamps to AI" sends full SRT and trusts the AI to preserve timecodes. "XML Tags" wraps each entry in &lt;s id="N"&gt; tags for robust ID-based recovery — recommended if you have sync problems.</div>
+                                        <div class="tooltip-bubble" role="tooltip" aria-hidden="true"
+                                            id="translationWorkflowTooltip"
+                                            data-i18n="config.translationSettings.workflow.tooltip">"Original
+                                            Timestamps" sends a numbered list and reattaches original timecodes. "Send
+                                            Timestamps to AI" sends full SRT and trusts the AI to preserve timecodes.
+                                            "XML Tags" wraps each entry in &lt;s id="N"&gt; tags for robust ID-based
+                                            recovery — recommended if you have sync problems.</div>
                                     </div>
                                 </div>
                             </label>
@@ -1733,12 +1755,15 @@
                         <div class="form-group" id="urlExtensionTestGroup" style="display: none;">
                             <label>
                                 <span style="font-weight: 600; color: #f59e0b;">🧪 URL Extension Test Mode</span>
-                                <span class="label-description">Test different URL extensions for ASS/SSA subtitle compatibility with Stremio. Only visible when "Convert ASS/SSA to VTT" is disabled.</span>
+                                <span class="label-description">Test different URL extensions for ASS/SSA subtitle
+                                    compatibility with Stremio. Only visible when "Convert ASS/SSA to VTT" is
+                                    disabled.</span>
                             </label>
                             <div style="margin-top: 8px; padding-left: 4px;">
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="srt" checked>
-                                    <span><strong>.srt</strong> (default) - Current behavior, may fail with raw ASS</span>
+                                    <span><strong>.srt</strong> (default) - Current behavior, may fail with raw
+                                        ASS</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="sub">
@@ -1746,7 +1771,8 @@
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="none">
-                                    <span><strong>No extension</strong> (Option B) - Let Content-Type header drive format</span>
+                                    <span><strong>No extension</strong> (Option B) - Let Content-Type header drive
+                                        format</span>
                                 </label>
                             </div>
                         </div>
@@ -2367,43 +2393,6 @@
             </div>
             <div class="card-content">
             </div>
-        </div>
-
-        <!-- Subtitles Toolbox Inline Button -->
-        <div class="toolbox-inline-wrapper" id="toolboxInlineWrapper" style="display:none; margin-bottom: 1.5rem;">
-            <a href="#" class="toolbox-inline-btn" id="toolboxInlineBtn" data-i18n="config.actions.openToolboxInline"
-                data-i18n-attr="title" title="Open Subtitles Toolbox">
-                <span class="toolbox-inline-icon" aria-hidden="true">
-                    <svg viewBox="0 0 64 64" role="img" focusable="false">
-                        <defs>
-                            <linearGradient id="tbBodyInline" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stop-color="#ffb347" />
-                                <stop offset="45%" stop-color="#ff7a59" />
-                                <stop offset="100%" stop-color="#ff3d7f" />
-                            </linearGradient>
-                            <linearGradient id="tbLidInline" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stop-color="#ffe9a3" />
-                                <stop offset="100%" stop-color="#ffc34a" />
-                            </linearGradient>
-                        </defs>
-                        <rect x="10" y="22" width="44" height="28" rx="6" fill="url(#tbBodyInline)" stroke="#2b0f08"
-                            stroke-width="2.2" />
-                        <path d="M14 30h36" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round" />
-                        <rect x="16" y="18" width="32" height="10" rx="3" fill="url(#tbLidInline)" stroke="#2b0f08"
-                            stroke-width="2.2" />
-                        <rect x="28" y="34" width="8" height="8" rx="2" fill="#ffe9a3" stroke="#2b0f08"
-                            stroke-width="1.6" />
-                        <path d="M26 18v-2a6 6 0 0 1 12 0v2" stroke="#2b0f08" stroke-width="2.2" stroke-linecap="round"
-                            fill="none" />
-                        <circle cx="32" cy="38" r="1.4" fill="#2b0f08" />
-                        <circle cx="20" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
-                        <circle cx="44" cy="26" r="1.8" fill="#2b0f08" opacity="0.35" />
-                    </svg>
-                </span>
-                <span class="toolbox-inline-text" data-i18n="config.actions.openToolboxBtn">Open Subtitles
-                    Toolbox</span>
-                <span class="toolbox-inline-arrow" aria-hidden="true">→</span>
-            </a>
         </div>
 
         <!-- Actions -->

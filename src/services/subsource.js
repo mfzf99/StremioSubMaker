@@ -1012,7 +1012,7 @@ class SubSourceService {
 
         log.debug(() => `[SubSource] Detected ${(archiveType || 'ZIP').toUpperCase()} archive`);
 
-        // Use the centralized archive extractor that handles both ZIP and RAR
+        // Use the centralized archive extractor
         return await extractSubtitleFromArchive(responseBuffer, {
           providerName: 'SubSource',
           maxBytes: MAX_ZIP_BYTES,

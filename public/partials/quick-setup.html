@@ -1,0 +1,473 @@
+<!-- Quick Setup Wizard Overlay -->
+<div class="qs-overlay" id="quickSetupOverlay">
+    <div class="qs-backdrop" id="qsBackdrop"></div>
+    <div class="qs-container">
+        <!-- Header with progress -->
+        <div class="qs-header">
+            <div class="qs-header-top">
+                <div class="qs-logo">
+                    <span class="qs-logo-icon">⚡</span>
+                    <span class="qs-logo-text">Quick Setup</span>
+                </div>
+                <button class="qs-close-btn" id="qsCloseBtn" title="Close">&times;</button>
+            </div>
+            <div class="qs-progress" id="qsProgress">
+                <div class="qs-progress-bar">
+                    <div class="qs-progress-fill" id="qsProgressFill"></div>
+                </div>
+                <div class="qs-progress-dots" id="qsProgressDots"></div>
+            </div>
+        </div>
+
+        <!-- Step Container -->
+        <div class="qs-steps-wrapper" id="qsStepsWrapper">
+
+            <!-- ===== STEP 1: Mode Selection ===== -->
+            <div class="qs-step" data-step="1" id="qsStep1">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">What would you like to do?</h2>
+                        <p class="qs-step-subtitle">Choose how SubMaker should handle your subtitles</p>
+                    </div>
+
+                    <div class="qs-mode-cards">
+                        <button class="qs-mode-card" data-mode="translate" id="qsModeTranslate">
+                            <div class="qs-mode-icon">
+                                <svg viewBox="0 0 48 48" fill="none">
+                                    <rect x="4" y="8" width="18" height="24" rx="3" stroke="currentColor"
+                                        stroke-width="2.5" opacity="0.5" />
+                                    <rect x="26" y="16" width="18" height="24" rx="3" stroke="currentColor"
+                                        stroke-width="2.5" />
+                                    <path d="M10 16h6M10 20h8M10 24h5" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" opacity="0.5" />
+                                    <path d="M32 24h6M32 28h8M32 32h5" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                    <path d="M22 22l4 4" stroke="currentColor" stroke-width="2.5"
+                                        stroke-linecap="round" />
+                                    <circle cx="28" cy="28" r="2" fill="currentColor" opacity="0.7" />
+                                </svg>
+                            </div>
+                            <div class="qs-mode-info">
+                                <h3>Translate Subtitles</h3>
+                                <p>Fetch subtitles and translate them to your language using AI</p>
+                            </div>
+                            <div class="qs-mode-badge">Recommended</div>
+                        </button>
+
+                        <button class="qs-mode-card" data-mode="fetch" id="qsModeFetch">
+                            <div class="qs-mode-icon">
+                                <svg viewBox="0 0 48 48" fill="none">
+                                    <rect x="10" y="8" width="28" height="32" rx="3" stroke="currentColor"
+                                        stroke-width="2.5" />
+                                    <path d="M16 18h16M16 24h12M16 30h14" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                    <path d="M24 6v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+                                    <circle cx="24" cy="4" r="2" fill="currentColor" opacity="0.7" />
+                                </svg>
+                            </div>
+                            <div class="qs-mode-info">
+                                <h3>Just Fetch Subtitles</h3>
+                                <p>Download subtitles as-is, no AI translation needed</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 2: Subtitle Sources ===== -->
+            <div class="qs-step" data-step="2" id="qsStep2">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">Subtitle Sources</h2>
+                        <p class="qs-step-subtitle">Where should SubMaker fetch subtitles from?</p>
+                    </div>
+
+                    <div class="qs-sources-list">
+                        <!-- OpenSubtitles V3 - always on -->
+                        <div class="qs-source-item qs-source-fixed">
+                            <div class="qs-source-header">
+                                <div class="qs-source-name">
+                                    <span class="qs-source-emoji">🎬</span>
+                                    <span>OpenSubtitles</span>
+                                </div>
+                                <span class="qs-source-badge-auto">Auto-enabled</span>
+                            </div>
+                            <p class="qs-source-desc">The largest subtitle database — no API key needed</p>
+                            <button type="button" class="qs-auth-toggle" id="qsOpenSubsAuthToggle">
+                                🔓 I have an OpenSubtitles account <span class="qs-optional-tag">optional</span>
+                            </button>
+                            <div class="qs-auth-fields" id="qsOpenSubsAuthFields" style="display: none;">
+                                <input type="text" id="qsOpenSubsUsername" class="qs-input"
+                                    placeholder="OpenSubtitles username" autocomplete="off" spellcheck="false">
+                                <input type="password" id="qsOpenSubsPassword" class="qs-input"
+                                    placeholder="OpenSubtitles password" autocomplete="off" spellcheck="false">
+                                <button type="button" class="qs-btn-validate qs-btn-validate-wide"
+                                    id="qsValidateOpenSubs" title="Test credentials">
+                                    <span class="qs-validate-icon">✓</span>
+                                    <span class="qs-validate-text">Test</span>
+                                </button>
+                                <div class="qs-key-status" id="qsOpenSubsStatus"></div>
+                                <p class="qs-rate-note">20 subtitles a day. <a
+                                        href="https://www.opensubtitles.com/en/users/sign_up" target="_blank"
+                                        rel="noopener noreferrer">Create a free account</a> if you don't have one.</p>
+                                <p class="qs-auth-hint">Logged-in users get higher rate limits and VIP features.</p>
+                            </div>
+                        </div>
+
+                        <!-- SubDL - optional -->
+                        <div class="qs-source-item" id="qsSubdlSource">
+                            <div class="qs-source-header">
+                                <div class="qs-source-name">
+                                    <span class="qs-source-emoji">📥</span>
+                                    <span>SubDL</span>
+                                    <span class="qs-optional-tag">Optional</span>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsEnableSubDL">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p class="qs-source-desc">Additional subtitle source for wider coverage</p>
+                            <div class="qs-source-key-wrap" id="qsSubdlKeyWrap" style="display: none;">
+                                <div class="qs-key-input-row">
+                                    <input type="text" id="qsSubdlApiKey" class="qs-input qs-input-key"
+                                        placeholder="Enter SubDL API key" autocomplete="off" spellcheck="false">
+                                    <button type="button" class="qs-btn-validate" id="qsValidateSubDL"
+                                        title="Test API key">
+                                        <span class="qs-validate-icon">✓</span>
+                                    </button>
+                                </div>
+                                <div class="qs-key-status" id="qsSubDLStatus"></div>
+                                <p class="qs-rate-note"><a href="https://subdl.com" target="_blank"
+                                        rel="noopener noreferrer">Get your free API key at SubDL.com</a></p>
+                            </div>
+                        </div>
+
+                        <!-- SubSource - optional -->
+                        <div class="qs-source-item" id="qsSubsourceSource">
+                            <div class="qs-source-header">
+                                <div class="qs-source-name">
+                                    <span class="qs-source-emoji">📡</span>
+                                    <span>SubSource</span>
+                                    <span class="qs-optional-tag">Optional</span>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsEnableSubSource">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p class="qs-source-desc">Community-driven subtitle provider</p>
+                            <div class="qs-source-key-wrap" id="qsSubsourceKeyWrap" style="display: none;">
+                                <div class="qs-key-input-row">
+                                    <input type="text" id="qsSubsourceApiKey" class="qs-input qs-input-key"
+                                        placeholder="Enter SubSource API key" autocomplete="off" spellcheck="false">
+                                    <button type="button" class="qs-btn-validate" id="qsValidateSubSource"
+                                        title="Test API key">
+                                        <span class="qs-validate-icon">✓</span>
+                                    </button>
+                                </div>
+                                <div class="qs-key-status" id="qsSubSourceStatus"></div>
+                                <p class="qs-rate-note"><a href="https://subsource.net/" target="_blank"
+                                        rel="noopener noreferrer">Get your free API key at SubSource.net</a></p>
+                            </div>
+                        </div>
+
+                        <!-- SCS - no key needed -->
+                        <div class="qs-source-item" id="qsScsSource">
+                            <div class="qs-source-header">
+                                <div class="qs-source-name">
+                                    <span class="qs-source-emoji">🌐</span>
+                                    <span>Stremio Community Subs</span>
+                                    <span class="qs-badge-free">No key needed</span>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsEnableSCS">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p class="qs-source-desc">Community-curated subtitles from the Stremio community</p>
+                            <div class="qs-source-note" id="qsScsNote" style="display: none;">
+                                ⏱ Requires 28-30s timeout (auto-set when enabled)
+                            </div>
+                        </div>
+
+                        <!-- Wyzie Subs - no key needed -->
+                        <div class="qs-source-item" id="qsWyzieSource">
+                            <div class="qs-source-header">
+                                <div class="qs-source-name">
+                                    <span class="qs-source-emoji">🔍</span>
+                                    <span>Wyzie Subs</span>
+                                    <span class="qs-badge-free">No key needed</span>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsEnableWyzie">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p class="qs-source-desc">Free subtitle aggregator that searches multiple sources</p>
+                            <div class="qs-wyzie-sources" id="qsWyzieSources" style="display: none;">
+                                <div class="qs-wyzie-sources-label">Sources:</div>
+                                <div class="qs-wyzie-sources-grid">
+                                    <label class="qs-wyzie-cb"><input type="checkbox" id="qsWyzieSubf2m"
+                                            checked><span>Subf2m</span></label>
+                                    <label class="qs-wyzie-cb"><input type="checkbox" id="qsWyziePodnapisi"
+                                            checked><span>Podnapisi</span></label>
+                                    <label class="qs-wyzie-cb"><input type="checkbox" id="qsWyzieGestdown"
+                                            checked><span>Gestdown</span></label>
+                                    <label class="qs-wyzie-cb"><input type="checkbox" id="qsWyzieAnimetosho"
+                                            checked><span>Animetosho</span></label>
+                                    <label class="qs-wyzie-cb"><input type="checkbox"
+                                            id="qsWyzieOpensubs"><span>OpenSubtitles</span></label>
+                                    <label class="qs-wyzie-cb"><input type="checkbox"
+                                            id="qsWyzieSubdl"><span>SubDL</span></label>
+                                </div>
+                                <div class="qs-source-note">More sources = more subtitles but slower</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 3: AI Translation (skipped in Fetch mode) ===== -->
+            <div class="qs-step" data-step="3" id="qsStep3">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">AI Translation</h2>
+                        <p class="qs-step-subtitle">Set up Gemini AI for translating your subtitles</p>
+                    </div>
+
+                    <div class="qs-ai-setup">
+                        <div class="qs-ai-info-box">
+                            <div class="qs-ai-info-icon">✨</div>
+                            <div class="qs-ai-info-text">
+                                <strong>Powered by Google Gemini</strong>
+                                <p>SubMaker uses Gemini Flash 3.0 for fast, accurate subtitle translations. You'll need
+                                    a free API key from Google AI Studio.</p>
+                            </div>
+                        </div>
+
+                        <div class="qs-form-group">
+                            <label class="qs-label" for="qsGeminiApiKey">
+                                Gemini API Key
+                                <span class="qs-required">*</span>
+                            </label>
+                            <div class="qs-key-input-row">
+                                <input type="password" id="qsGeminiApiKey" class="qs-input qs-input-key"
+                                    placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
+                                <button type="button" class="qs-btn-validate" id="qsValidateGemini"
+                                    title="Validate key">
+                                    <span class="qs-validate-icon">✓</span>
+                                </button>
+                            </div>
+                            <div class="qs-key-status" id="qsGeminiKeyStatus"></div>
+                            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                                class="qs-get-key-link">
+                                🔑 Get a free API key from Google AI Studio →
+                            </a>
+                        </div>
+
+                        <div class="qs-ai-defaults">
+                            <div class="qs-ai-default-item">
+                                <span class="qs-check-icon">✓</span>
+                                <span>Model: <strong>Gemini 3.0 Flash</strong></span>
+                            </div>
+                            <div class="qs-ai-default-item">
+                                <span class="qs-check-icon">✓</span>
+                                <span>Google Translate fallback: <strong>Enabled</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 4: Languages ===== -->
+            <div class="qs-step" data-step="4" id="qsStep4">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title" id="qsLangTitle">Choose Your Target Language</h2>
+                        <p class="qs-step-subtitle" id="qsLangSubtitle">What language do you want your subtitles in?</p>
+                    </div>
+
+                    <!-- Source language info (translation mode) -->
+                    <div class="qs-source-lang-info" id="qsSourceLangInfo">
+                        <span class="qs-check-icon">✓</span>
+                        <span>Source language: <strong>English</strong> (fixed)</span>
+                    </div>
+
+                    <!-- Language search -->
+                    <div class="qs-lang-search-wrap">
+                        <span class="qs-lang-search-icon">🔍</span>
+                        <input type="text" id="qsLangSearch" class="qs-input qs-lang-search"
+                            placeholder="Search languages..." autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <!-- Selected languages chips -->
+                    <div class="qs-selected-langs" id="qsSelectedLangs"></div>
+
+                    <!-- Language grid -->
+                    <div class="qs-lang-grid" id="qsLangGrid">
+                        <div class="qs-lang-loading">Loading languages...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 5: Extras ===== -->
+            <div class="qs-step" data-step="5" id="qsStep5">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">Extras</h2>
+                        <p class="qs-step-subtitle">Optional features to enhance your experience</p>
+                    </div>
+
+                    <div class="qs-extras-list">
+                        <div class="qs-extra-item">
+                            <div class="qs-extra-header">
+                                <div class="qs-extra-info">
+                                    <div class="qs-extra-icon">🧰</div>
+                                    <div>
+                                        <h3>Sub Toolbox</h3>
+                                        <p>Translate files, extract embedded subtitles, sync subtitles, and more — right
+                                            on your browser</p>
+                                    </div>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsSubToolbox" checked>
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="qs-extra-item">
+                            <div class="qs-extra-header">
+                                <div class="qs-extra-info">
+                                    <div class="qs-extra-icon">📦</div>
+                                    <div>
+                                        <h3>Season Pack Subtitles</h3>
+                                        <p>Fetch and extract subtitles from full season packs for bigger coverage</p>
+                                    </div>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsSeasonPacks" checked>
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="qs-extra-item">
+                            <div class="qs-extra-header">
+                                <div class="qs-extra-info">
+                                    <div class="qs-extra-icon">🚫</div>
+                                    <div>
+                                        <h3>Hide SDH/HI Subtitles</h3>
+                                        <p>Exclude subtitles with hearing-impaired annotations (SDH/HI)</p>
+                                    </div>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsExcludeHI">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Learn Languages (translate mode only) -->
+                        <div class="qs-extra-item" id="qsLearnModeItem" style="display: none;">
+                            <div class="qs-extra-header">
+                                <div class="qs-extra-info">
+                                    <div class="qs-extra-icon">📖</div>
+                                    <div>
+                                        <h3>Learn Languages</h3>
+                                        <p>Add dual-language subtitle entries for language learning — shows both source
+                                            and translated lines side by side</p>
+                                    </div>
+                                </div>
+                                <label class="qs-toggle">
+                                    <input type="checkbox" id="qsLearnMode">
+                                    <span class="qs-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 6: Learn Language Selection (translate + learn mode only) ===== -->
+            <div class="qs-step" data-step="6" id="qsStep6">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">Choose Learn Languages</h2>
+                        <p class="qs-step-subtitle">Which languages do you want to learn? Dual-language subtitles will
+                            be created for each.</p>
+                    </div>
+
+                    <!-- Learn Language search -->
+                    <div class="qs-lang-search-wrap">
+                        <span class="qs-lang-search-icon">🔍</span>
+                        <input type="text" id="qsLearnLangSearch" class="qs-input qs-lang-search"
+                            placeholder="Search languages..." autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <!-- Selected learn languages chips -->
+                    <div class="qs-selected-langs" id="qsSelectedLearnLangs"></div>
+
+                    <!-- Learn language grid -->
+                    <div class="qs-lang-grid" id="qsLearnLangGrid">
+                        <div class="qs-lang-loading">Loading languages...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 7: Summary & Install ===== -->
+            <div class="qs-step" data-step="7" id="qsStep7">
+                <div class="qs-step-content">
+                    <div class="qs-step-header">
+                        <h2 class="qs-step-title">You're All Set! 🎉</h2>
+                        <p class="qs-step-subtitle">Here's a summary of your configuration</p>
+                    </div>
+
+                    <div class="qs-summary" id="qsSummary">
+                        <!-- Dynamically populated -->
+                    </div>
+
+                    <div class="qs-install-section">
+                        <div class="qs-install-status" id="qsInstallStatus"></div>
+
+                        <div class="qs-install-url-box" id="qsInstallUrlBox" style="display: none;">
+                            <label class="qs-label">Install URL</label>
+                            <div class="qs-url-row">
+                                <input type="text" id="qsInstallUrlDisplay" class="qs-input qs-url-input" readonly>
+                                <button type="button" class="qs-btn-copy" id="qsCopyUrlBtn" title="Copy URL">📋</button>
+                            </div>
+                        </div>
+
+                        <div class="qs-install-actions" id="qsInstallActions">
+                            <button type="button" class="qs-btn qs-btn-primary qs-btn-install" id="qsSaveInstallBtn">
+                                <span class="qs-btn-icon">🚀</span>
+                                Save & Install on Stremio
+                            </button>
+                            <button type="button" class="qs-btn qs-btn-secondary" id="qsCopyBtn" style="display: none;">
+                                <span class="qs-btn-icon">📋</span>
+                                Copy Install URL
+                            </button>
+                        </div>
+
+                        <button type="button" class="qs-btn-advanced" id="qsGoAdvanced">
+                            ⚙️ Open Advanced Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Navigation Footer -->
+        <div class="qs-nav" id="qsNav">
+            <button type="button" class="qs-btn qs-btn-ghost" id="qsBackBtn">
+                ← Back
+            </button>
+            <div class="qs-step-indicator" id="qsStepIndicator">Step 1 of 7</div>
+            <button type="button" class="qs-btn qs-btn-primary" id="qsNextBtn">
+                Next →
+            </button>
+        </div>
+    </div>
+</div>

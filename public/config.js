@@ -223,20 +223,7 @@
         );
         setText('opensubsUsernameLabel', 'config.opensubs.usernameLabel', 'Username');
         setText('opensubsPasswordLabel', 'config.opensubs.passwordLabel', 'Password');
-        const rateNote = document.getElementById('opensubsRateNote');
-        if (rateNote) {
-            const existingLink = rateNote.querySelector('a');
-            const linkHref = existingLink ? existingLink.getAttribute('href') : 'https://www.opensubtitles.com/en/newuser';
-            const linkText = existingLink ? existingLink.textContent : 'Create a free account';
-            const linkColor = existingLink ? existingLink.style.color : 'var(--primary-light)';
-            rateNote.textContent = tConfig('config.opensubs.rateNote', {}, '20 subtitles a day. Create a free account if you do not have one.') + ' ';
-            const link = document.createElement('a');
-            link.href = linkHref;
-            link.target = '_blank';
-            link.style.color = linkColor;
-            link.textContent = linkText;
-            rateNote.appendChild(link);
-        }
+
         setAttr('toggleOpenSubsPassword', 'title', 'config.opensubs.showHidePassword', 'Show/hide password');
         setAttr('validateOpenSubtitles', 'title', 'config.opensubs.validateTitle', 'Validate OpenSubtitles credentials');
         const validateBtn = document.getElementById('validateOpenSubtitles');
@@ -1648,7 +1635,6 @@ Translate to {target_language}.`;
 
     function updateToolboxLauncherVisibility(configOverride) {
         const btn = document.getElementById('subToolboxLauncher');
-        const inlineWrapper = document.getElementById('toolboxInlineWrapper');
         if (!btn) return;
         // Visibility is based solely on whether toolbox is enabled, not viewport size
         const cfgRef = configOverride || getActiveConfigRef();
@@ -1657,12 +1643,10 @@ Translate to {target_language}.`;
             btn.style.display = 'flex';
             btn.dataset.configRef = cfgRef;
             btn.classList.add('show');
-            if (inlineWrapper) inlineWrapper.style.display = '';
         } else {
             btn.style.display = 'none';
             btn.dataset.configRef = '';
             btn.classList.remove('show');
-            if (inlineWrapper) inlineWrapper.style.display = 'none';
         }
 
         updateQuickStats();
@@ -2141,6 +2125,24 @@ Translate to {target_language}.`;
         // Form submission
         document.getElementById('configForm').addEventListener('submit', handleSubmit);
 
+        // Quick Setup → Advanced Settings bridge
+        // When the Quick Setup wizard's "Open Advanced" button is clicked, it dispatches
+        // a 'quickSetupApply' event with the wizard's config. We merge it into currentConfig
+        // and reload the form so the user can fine-tune before saving.
+        window.addEventListener('quickSetupApply', (e) => {
+            if (e.detail && typeof e.detail === 'object') {
+                const defaults = getDefaultConfig();
+                currentConfig = { ...defaults, ...e.detail };
+                ensureProvidersInState();
+                ensureProviderParametersInState();
+                loadConfigToForm();
+                // Reload languages to reflect new selections
+                if (typeof loadLanguages === 'function') {
+                    loadLanguages().catch(() => { /* ignore */ });
+                }
+            }
+        });
+
         // More Providers (beta) collapsible section toggle
         const moreProvidersToggle = document.getElementById('moreProvidersToggle');
         const moreProvidersContent = document.getElementById('moreProvidersContent');
@@ -2388,20 +2390,6 @@ Translate to {target_language}.`;
         if (toolboxLauncher) {
             toolboxLauncher.addEventListener('click', () => {
                 const configRef = toolboxLauncher.dataset.configRef || getActiveConfigRef();
-                const url = buildToolboxUrl(configRef);
-                if (!url) {
-                    showAlert(tConfig('config.alerts.saveConfigFirst', {}, 'Save your config first to open Sub Toolbox.'), 'warning', 'config.alerts.saveConfigFirst', {});
-                    return;
-                }
-                window.open(url, '_blank', 'noopener,noreferrer');
-            });
-        }
-        // Inline toolbox button (below Install URL)
-        const toolboxInlineBtn = document.getElementById('toolboxInlineBtn');
-        if (toolboxInlineBtn) {
-            toolboxInlineBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const configRef = getActiveConfigRef();
                 const url = buildToolboxUrl(configRef);
                 if (!url) {
                     showAlert(tConfig('config.alerts.saveConfigFirst', {}, 'Save your config first to open Sub Toolbox.'), 'warning', 'config.alerts.saveConfigFirst', {});

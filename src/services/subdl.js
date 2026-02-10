@@ -312,13 +312,13 @@ class SubDLService {
     // New pattern: downloadSubtitle(fileId, { timeout })
     let subdl_id = null;
     let subtitles_id = null;
-    let timeout = options?.timeout || 20000; // Default 20s (SubDL download server is slow)
+    let timeout = options?.timeout || 18000; // Default 18s (SubDL download server is slow)
 
     // Handle legacy call pattern where second arg is subdl_id string
     if (typeof options === 'string') {
       subdl_id = options;
       subtitles_id = arguments[2] || null;
-      timeout = 20000; // Match default timeout for new pattern
+      timeout = 18000; // Match default timeout for new pattern
     }
     try {
       log.debug(() => ['[SubDL] Downloading subtitle:', fileId]);
@@ -410,7 +410,7 @@ class SubDLService {
       const responseBuffer = Buffer.isBuffer(subtitleResponse.data) ? subtitleResponse.data : Buffer.from(subtitleResponse.data);
       const contentAnalysis = analyzeResponseContent(responseBuffer);
 
-      // Check for valid archive signature (ZIP or RAR)
+      // Check for valid archive signature (ZIP, RAR, Gzip, 7z, Tar, etc.)
       const archiveType = detectArchiveType(responseBuffer);
       if (!archiveType) {
         // Not a valid archive - provide user-friendly error message
@@ -425,7 +425,7 @@ class SubDLService {
 
       log.debug(() => `[SubDL] Detected ${archiveType.toUpperCase()} archive`);
 
-      // Use the centralized archive extractor that handles both ZIP and RAR
+      // Use the centralized archive extractor
       return await extractSubtitleFromArchive(responseBuffer, {
         providerName: 'SubDL',
         maxBytes: MAX_ZIP_BYTES,

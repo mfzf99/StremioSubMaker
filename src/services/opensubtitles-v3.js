@@ -437,13 +437,13 @@ class OpenSubtitlesV3Service {
         // Analyze response content to detect HTML error pages, Cloudflare blocks, etc.
         const contentAnalysis = analyzeResponseContent(buf);
 
-        // Check for archive by magic bytes (ZIP or RAR)
+        // Check for archive by magic bytes (ZIP, RAR, Gzip, 7z, Tar, etc.)
         const archiveType = detectArchiveType(buf);
 
         if (archiveType) {
           log.debug(() => `[OpenSubtitles V3] Detected ${archiveType.toUpperCase()} archive`);
 
-          // Use the centralized archive extractor that handles both ZIP and RAR
+          // Use the centralized archive extractor
           return await extractSubtitleFromArchive(buf, {
             providerName: 'OpenSubtitles V3',
             maxBytes: MAX_ZIP_BYTES,

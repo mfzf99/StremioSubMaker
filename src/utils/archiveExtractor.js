@@ -1,17 +1,24 @@
 /**
  * Archive Extractor Utility
- * Handles extraction of subtitle files from ZIP and RAR archives
+ * Handles extraction of subtitle files from ZIP, RAR, Gzip, 7z, Tar, Bzip2, XZ, and Brotli archives
  */
 
 const log = require('./logger');
 const { detectAndConvertEncoding } = require('./encodingDetector');
 const { appendHiddenInformationalNote } = require('./subtitle');
+const zlib = require('zlib');
 
 // Magic byte signatures for archive detection
 const ARCHIVE_SIGNATURES = {
     ZIP: [0x50, 0x4B, 0x03, 0x04],  // PK..
     RAR4: [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00],  // Rar!...  (RAR 4.x)
-    RAR5: [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00]  // Rar!.... (RAR 5.x)
+    RAR5: [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00],  // Rar!.... (RAR 5.x)
+    GZIP: [0x1F, 0x8B],  // Gzip compressed
+    SEVENZ: [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C],  // 7z archive
+    XZ: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00],  // XZ compressed
+    BZIP2: [0x42, 0x5A, 0x68],  // BZh (Bzip2)
+    // Tar has no fixed header magic at offset 0, but 'ustar' at offset 257
+    // Brotli has no reliable magic bytes — detected by exclusion + trial decompression
 };
 
 /**
@@ -44,12 +51,49 @@ function detectArchiveType(buffer) {
         return 'rar';
     }
 
+    // Check Gzip signature (1F 8B)
+    if (buffer.length >= 2 && buffer[0] === 0x1F && buffer[1] === 0x8B) {
+        log.debug(() => `[ArchiveExtractor] Detected Gzip compressed content`);
+        return 'gzip';
+    }
+
+    // Check 7z signature (37 7A BC AF 27 1C)
+    if (buffer.length >= 6 &&
+        buffer[0] === 0x37 && buffer[1] === 0x7A && buffer[2] === 0xBC &&
+        buffer[3] === 0xAF && buffer[4] === 0x27 && buffer[5] === 0x1C) {
+        log.debug(() => `[ArchiveExtractor] Detected 7-Zip archive`);
+        return '7z';
+    }
+
+    // Check XZ signature (FD 37 7A 58 5A 00)
+    if (buffer.length >= 6 &&
+        buffer[0] === 0xFD && buffer[1] === 0x37 && buffer[2] === 0x7A &&
+        buffer[3] === 0x58 && buffer[4] === 0x5A && buffer[5] === 0x00) {
+        log.debug(() => `[ArchiveExtractor] Detected XZ compressed content`);
+        return 'xz';
+    }
+
+    // Check Bzip2 signature (42 5A 68) - "BZh"
+    if (buffer.length >= 3 &&
+        buffer[0] === 0x42 && buffer[1] === 0x5A && buffer[2] === 0x68) {
+        log.debug(() => `[ArchiveExtractor] Detected Bzip2 compressed content`);
+        return 'bz2';
+    }
+
+    // Check Tar archive - 'ustar' at offset 257
+    if (buffer.length >= 263 &&
+        buffer[257] === 0x75 && buffer[258] === 0x73 && buffer[259] === 0x74 &&
+        buffer[260] === 0x61 && buffer[261] === 0x72) {
+        log.debug(() => `[ArchiveExtractor] Detected Tar archive (ustar signature)`);
+        return 'tar';
+    }
+
     log.debug(() => `[ArchiveExtractor] Content is not an archive (plain subtitle file)`);
     return null;
 }
 
 /**
- * Check if buffer is a valid archive (ZIP or RAR)
+ * Check if buffer is a valid archive (ZIP, RAR, Gzip, 7z, Tar, Bzip2, or XZ)
  * @param {Buffer} buffer - Buffer to check
  * @returns {boolean}
  */
@@ -137,11 +181,11 @@ Episode not found in this subtitle pack.
 /**
  * Create informative subtitle for corrupted archive errors
  * @param {string} providerName - Name of the subtitle provider
- * @param {string} archiveType - Type of archive (zip/rar)
+ * @param {string} archiveType - Type of archive (zip/rar/gzip/7z/tar/bz2/xz)
  * @returns {string}
  */
 function createCorruptedArchiveSubtitle(providerName, archiveType) {
-    const archiveName = archiveType === 'rar' ? 'RAR' : 'ZIP';
+    const archiveName = (archiveType || 'unknown').toUpperCase();
     const message = `1
 00:00:00,000 --> 04:00:00,000
 ${providerName} download failed: Corrupted ${archiveName} file
@@ -235,6 +279,208 @@ async function extractRar(buffer) {
     }
 }
 
+/**
+ * Decompress a Gzip buffer
+ * After decompression, the result may be a tar archive, another archive, or plain subtitle content
+ * @param {Buffer} buffer - Gzip compressed buffer
+ * @returns {Promise<Buffer>} - Decompressed buffer
+ */
+async function decompressGzip(buffer) {
+    log.debug(() => `[ArchiveExtractor] decompressGzip: decompressing ${buffer.length} bytes`);
+    try {
+        const decompressed = zlib.gunzipSync(buffer);
+        log.debug(() => `[ArchiveExtractor] decompressGzip: decompressed to ${decompressed.length} bytes`);
+        return decompressed;
+    } catch (err) {
+        log.error(() => [`[ArchiveExtractor] decompressGzip: Gzip decompression failed:`, err.message]);
+        throw err;
+    }
+}
+
+/**
+ * Decompress a Brotli buffer
+ * @param {Buffer} buffer - Brotli compressed buffer
+ * @returns {Promise<Buffer>} - Decompressed buffer
+ */
+async function decompressBrotli(buffer) {
+    log.debug(() => `[ArchiveExtractor] decompressBrotli: decompressing ${buffer.length} bytes`);
+    try {
+        const decompressed = zlib.brotliDecompressSync(buffer);
+        log.debug(() => `[ArchiveExtractor] decompressBrotli: decompressed to ${decompressed.length} bytes`);
+        return decompressed;
+    } catch (err) {
+        log.error(() => [`[ArchiveExtractor] decompressBrotli: Brotli decompression failed:`, err.message]);
+        throw err;
+    }
+}
+
+/**
+ * Decompress a Bzip2 buffer using bzip2 decompression
+ * Node.js doesn't include bzip2 natively, so we attempt with a pure-JS fallback
+ * @param {Buffer} buffer - Bzip2 compressed buffer
+ * @returns {Promise<Buffer>} - Decompressed buffer
+ */
+async function decompressBzip2(buffer) {
+    log.debug(() => `[ArchiveExtractor] decompressBzip2: decompressing ${buffer.length} bytes`);
+    try {
+        // Try to use seek-bzip if available
+        const seekBzip = require('seek-bzip');
+        const decompressed = seekBzip.decode(buffer);
+        log.debug(() => `[ArchiveExtractor] decompressBzip2: decompressed to ${decompressed.length} bytes`);
+        return Buffer.from(decompressed);
+    } catch (err) {
+        if (err.code === 'MODULE_NOT_FOUND') {
+            log.warn(() => `[ArchiveExtractor] decompressBzip2: seek-bzip not installed, Bzip2 decompression unavailable`);
+            throw new Error('Bzip2 decompression not available (seek-bzip not installed)');
+        }
+        log.error(() => [`[ArchiveExtractor] decompressBzip2: Bzip2 decompression failed:`, err.message]);
+        throw err;
+    }
+}
+
+/**
+ * Decompress an XZ/LZMA buffer
+ * Node.js doesn't include XZ natively; we try lzma-native if available
+ * @param {Buffer} buffer - XZ compressed buffer
+ * @returns {Promise<Buffer>} - Decompressed buffer
+ */
+async function decompressXz(buffer) {
+    log.debug(() => `[ArchiveExtractor] decompressXz: decompressing ${buffer.length} bytes`);
+    try {
+        const lzma = require('lzma-native');
+        const decompressed = await new Promise((resolve, reject) => {
+            lzma.decompress(buffer, (result, err) => {
+                if (err) reject(err);
+                else resolve(result);
+            });
+        });
+        log.debug(() => `[ArchiveExtractor] decompressXz: decompressed to ${decompressed.length} bytes`);
+        return Buffer.from(decompressed);
+    } catch (err) {
+        if (err.code === 'MODULE_NOT_FOUND') {
+            log.warn(() => `[ArchiveExtractor] decompressXz: lzma-native not installed, XZ decompression unavailable`);
+            throw new Error('XZ decompression not available (lzma-native not installed)');
+        }
+        log.error(() => [`[ArchiveExtractor] decompressXz: XZ decompression failed:`, err.message]);
+        throw err;
+    }
+}
+
+/**
+ * Extract files from a 7-Zip archive
+ * @param {Buffer} buffer - 7z archive buffer
+ * @returns {Promise<{files: Map<string, Buffer>, entries: string[]}>}
+ */
+async function extract7z(buffer) {
+    log.debug(() => `[ArchiveExtractor] extract7z: starting 7z extraction (${buffer.length} bytes)`);
+    const path = require('path');
+
+    try {
+        const { SevenZipReader } = require('7z-iterator');
+        const reader = new SevenZipReader(buffer);
+        const files = new Map();
+        const entries = [];
+
+        for (const entry of reader) {
+            // Skip directories
+            if (entry.isDirectory) continue;
+
+            const name = entry.name || entry.path || '';
+            // Path traversal protection
+            const normalized = name.replace(/\\/g, '/');
+            const hasPathTraversal = /(^|\/)\.\.(\/$|$)/.test(normalized);
+            if (hasPathTraversal || path.isAbsolute(normalized) || normalized.startsWith('/')) {
+                log.warn(() => `[ArchiveExtractor] extract7z: skipping suspicious entry: ${name}`);
+                continue;
+            }
+
+            entries.push(name);
+            const content = entry.extract();
+            if (content) {
+                files.set(name, Buffer.from(content));
+                log.debug(() => `[ArchiveExtractor] extract7z: extracted ${name} (${content.length} bytes)`);
+            }
+        }
+
+        log.debug(() => `[ArchiveExtractor] extract7z: successfully extracted ${files.size} files`);
+        return { files, entries };
+    } catch (err) {
+        log.error(() => [`[ArchiveExtractor] extract7z: 7z extraction failed:`, err.message]);
+        log.error(() => `[ArchiveExtractor] extract7z: stack trace: ${err.stack}`);
+        throw err;
+    }
+}
+
+/**
+ * Extract files from a Tar archive
+ * @param {Buffer} buffer - Tar archive buffer
+ * @returns {Promise<{files: Map<string, Buffer>, entries: string[]}>}
+ */
+async function extractTar(buffer) {
+    log.debug(() => `[ArchiveExtractor] extractTar: starting Tar extraction (${buffer.length} bytes)`);
+    const path = require('path');
+
+    try {
+        const tar = require('tar-stream');
+        const { Readable } = require('stream');
+        const extract = tar.extract();
+        const files = new Map();
+        const entries = [];
+
+        const promise = new Promise((resolve, reject) => {
+            extract.on('entry', (header, stream, next) => {
+                const name = header.name || '';
+                const chunks = [];
+
+                // Skip directories
+                if (header.type === 'directory') {
+                    stream.resume();
+                    next();
+                    return;
+                }
+
+                // Path traversal protection
+                const normalized = name.replace(/\\/g, '/');
+                const hasPathTraversal = /(^|\/)\.\.(\/$|$)/.test(normalized);
+                if (hasPathTraversal || path.isAbsolute(normalized) || normalized.startsWith('/')) {
+                    log.warn(() => `[ArchiveExtractor] extractTar: skipping suspicious entry: ${name}`);
+                    stream.resume();
+                    next();
+                    return;
+                }
+
+                stream.on('data', (chunk) => chunks.push(chunk));
+                stream.on('end', () => {
+                    const fileBuffer = Buffer.concat(chunks);
+                    entries.push(name);
+                    files.set(name, fileBuffer);
+                    log.debug(() => `[ArchiveExtractor] extractTar: extracted ${name} (${fileBuffer.length} bytes)`);
+                    next();
+                });
+                stream.on('error', (err) => {
+                    log.warn(() => `[ArchiveExtractor] extractTar: error reading entry ${name}: ${err.message}`);
+                    next();
+                });
+            });
+
+            extract.on('finish', () => resolve());
+            extract.on('error', (err) => reject(err));
+        });
+
+        // Pipe buffer into the tar extractor
+        const readable = Readable.from(buffer);
+        readable.pipe(extract);
+
+        await promise;
+
+        log.debug(() => `[ArchiveExtractor] extractTar: successfully extracted ${files.size} files`);
+        return { files, entries };
+    } catch (err) {
+        log.error(() => [`[ArchiveExtractor] extractTar: Tar extraction failed:`, err.message]);
+        log.error(() => `[ArchiveExtractor] extractTar: stack trace: ${err.stack}`);
+        throw err;
+    }
+}
 
 /**
  * Extract files from a ZIP archive
@@ -683,7 +929,7 @@ function manualAssToVtt(input) {
 
 /**
  * Extract subtitle content from an archive buffer
- * @param {Buffer} buffer - Archive buffer (ZIP or RAR)
+ * @param {Buffer} buffer - Archive buffer (ZIP, RAR, Gzip, 7z, Tar, etc.)
  * @param {Object} options - Extraction options
  * @param {string} options.providerName - Provider name for logging
  * @param {number} options.maxBytes - Maximum archive size in bytes
@@ -713,12 +959,29 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
     }
 
     // Detect archive type
-    const archiveType = detectArchiveType(buffer);
+    let archiveType = detectArchiveType(buffer);
     if (!archiveType) {
-        // Log first bytes for debugging
-        const hexBytes = buffer.slice(0, Math.min(20, buffer.length)).toString('hex').match(/.{2}/g)?.join(' ') || '';
-        log.error(() => `[${providerName}] Not a valid archive file. First 20 bytes: ${hexBytes}`);
-        throw new Error('Not a valid archive file (neither ZIP nor RAR)');
+        // Try Brotli decompression as last resort (no reliable magic bytes)
+        try {
+            log.debug(() => `[${providerName}] No archive signature detected, trying Brotli decompression...`);
+            const decompressed = await decompressBrotli(buffer);
+            if (decompressed && decompressed.length > 0) {
+                const innerType = detectArchiveType(decompressed);
+                if (innerType) {
+                    log.debug(() => `[${providerName}] Brotli decompressed to ${innerType.toUpperCase()} (${decompressed.length} bytes)`);
+                    buffer = decompressed;
+                    archiveType = innerType;
+                }
+            }
+        } catch (_) {
+            // Not Brotli — continue to error
+        }
+
+        if (!archiveType) {
+            const hexBytes = buffer.slice(0, Math.min(20, buffer.length)).toString('hex').match(/.{2}/g)?.join(' ') || '';
+            log.error(() => `[${providerName}] Not a valid archive file. First 20 bytes: ${hexBytes}`);
+            throw new Error('Not a valid archive file (not a recognized archive format)');
+        }
     }
 
     log.debug(() => `[${providerName}] Archive type: ${archiveType.toUpperCase()}, size: ${buffer.length} bytes`);
@@ -729,6 +992,50 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
         const limitMB = (maxBytes / (1024 * 1024)).toFixed(2);
         log.warn(() => `[${providerName}] Archive too large: ${sizeMB} MB > ${limitMB} MB limit`);
         return createArchiveTooLargeSubtitle(maxBytes, buffer.length);
+    }
+
+    // Handle compression-only formats (gzip, bz2, xz) by decompressing first,
+    // then re-detecting the inner content (may be tar, another archive, or plain subtitle)
+    if (archiveType === 'gzip' || archiveType === 'bz2' || archiveType === 'xz') {
+        try {
+            let decompressed;
+            if (archiveType === 'gzip') {
+                decompressed = await decompressGzip(buffer);
+            } else if (archiveType === 'bz2') {
+                decompressed = await decompressBzip2(buffer);
+            } else {
+                decompressed = await decompressXz(buffer);
+            }
+
+            // Check size limit on decompressed content
+            if (decompressed.length > maxBytes) {
+                log.warn(() => `[${providerName}] Decompressed content too large: ${(decompressed.length / (1024 * 1024)).toFixed(2)} MB`);
+                return createArchiveTooLargeSubtitle(maxBytes, decompressed.length);
+            }
+
+            // Re-detect the inner content type
+            const innerType = detectArchiveType(decompressed);
+            if (innerType) {
+                log.debug(() => `[${providerName}] ${archiveType.toUpperCase()} decompressed to ${innerType.toUpperCase()} archive, extracting recursively...`);
+                // Recursively extract the inner archive (e.g., tar.gz → tar → files)
+                return await extractSubtitleFromArchive(decompressed, options);
+            }
+
+            // Not an archive — treat as plain subtitle content
+            log.debug(() => `[${providerName}] ${archiveType.toUpperCase()} decompressed to plain content (${decompressed.length} bytes)`);
+            const content = detectAndConvertEncoding(decompressed, providerName, languageHint);
+            if (content && content.trim().length > 0) {
+                return content;
+            }
+            throw new Error(`${archiveType.toUpperCase()} decompressed content is empty`);
+        } catch (err) {
+            if (err.message && (err.message.includes('not available') || err.message.includes('not installed'))) {
+                // Optional dependency not installed
+                return createCorruptedArchiveSubtitle(providerName, archiveType);
+            }
+            log.error(() => [`[${providerName}] ${archiveType.toUpperCase()} decompression failed:`, err.message]);
+            return createCorruptedArchiveSubtitle(providerName, archiveType);
+        }
     }
 
     let entries = [];
@@ -745,6 +1052,14 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
             entries = result.entries;
         } else if (archiveType === 'rar') {
             const result = await extractRar(buffer);
+            filesMap = result.files;
+            entries = result.entries;
+        } else if (archiveType === '7z') {
+            const result = await extract7z(buffer);
+            filesMap = result.files;
+            entries = result.entries;
+        } else if (archiveType === 'tar') {
+            const result = await extractTar(buffer);
             filesMap = result.files;
             entries = result.entries;
         }
@@ -784,8 +1099,8 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
         if (archiveType === 'zip') {
             log.debug(() => `[${providerName}] Reading ${filename} from ZIP...`);
             fileBuffer = await archive.files[filename].async('nodebuffer');
-        } else if (archiveType === 'rar') {
-            log.debug(() => `[${providerName}] Reading ${filename} from RAR...`);
+        } else if (archiveType === 'rar' || archiveType === '7z' || archiveType === 'tar') {
+            log.debug(() => `[${providerName}] Reading ${filename} from ${archiveType.toUpperCase()}...`);
             fileBuffer = filesMap.get(filename);
         }
     } catch (readErr) {
@@ -838,5 +1153,9 @@ module.exports = {
     findEpisodeFileAnime,
     convertSubtitleToVtt,
     decodeWithBomAwareness,
-    manualAssToVtt
+    manualAssToVtt,
+    decompressGzip,
+    decompressBrotli,
+    extract7z,
+    extractTar
 };
