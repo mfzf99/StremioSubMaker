@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.51
+
+**Bug Fixes:**
+
+- **Fixed OpenSubtitles 403 rate-limit responses being cached as authentication failures:** When OpenSubtitles returned a 403 "You cannot consume this service" (API key rate-limited/blocked), the error was misclassified as an authentication failure and cached for 5 minutes by `credentialFailureCache`. All subsequent login attempts — both from the config page test button and from actual Stremio subtitle requests — were instantly blocked without contacting OpenSubtitles, showing misleading error messages. The fix detects 403 responses with rate-limit keywords ("cannot consume", "throttle", "too many", "rate limit") and reclassifies them as `rate_limit` errors (429), preventing them from being cached as bad credentials.
+
+- **Fixed validate endpoint not retrying on rate limit (429):** The `/api/validate-opensubtitles` endpoint (config page "Test" button) now retries up to 3 times with exponential backoff (2s, 4s) when OpenSubtitles returns a rate limit error, instead of immediately failing. If all retries are exhausted, the error message now clarifies it's a temporary server-side issue, not a credentials problem.
+
+- **Added cached token fast path to validate endpoint:** The validate endpoint now checks if a valid cached token already exists for the given credentials before calling OpenSubtitles `/login`. If a token is found, credentials are confirmed valid instantly without any API call — eliminating unnecessary rate-limit pressure on the shared API key.
+
+- **Fixed OpenSubtitles CDN 403 showing wrong error message in Stremio:** When the OpenSubtitles CDN returned a 403 for a specific subtitle file (file unavailable on CDN — a per-file issue, not an auth issue), the subtitle download error handler in `subtitles.js` treated ALL 403s as authentication failures and displayed "Please check your OpenSubtitles credentials in the addon configuration and reinstall." Now, CDN 403s (containing "cdn", "file unavailable", "varnish") and rate-limit 403s (containing "cannot consume", "throttle", "rate limit", "too many") are excluded from the auth error path and instead show a generic download failure message.
+
+- **Multiple other fixes.**
+
 ## SubMaker v1.4.50
 
 **Bug Fixes:**

@@ -3402,9 +3402,19 @@ ${t('subtitle.providerRateLimitBody', {}, 'Too many requests in a short period.\
     }
     const rawMsg = (error.response?.data?.message || error.message || '').toString();
     const lowerMsg = rawMsg.toLowerCase();
+    // CDN 403 (file unavailable) and rate-limit 403 (cannot consume) are NOT auth failures
+    const is403ButNotAuth = errorStatus === 403 && (
+      lowerMsg.includes('cdn') ||
+      lowerMsg.includes('file unavailable') ||
+      lowerMsg.includes('varnish') ||
+      lowerMsg.includes('cannot consume') ||
+      lowerMsg.includes('throttle') ||
+      lowerMsg.includes('rate limit') ||
+      lowerMsg.includes('too many')
+    );
     const isAuthError =
       errorStatus === 401 ||
-      errorStatus === 403 ||
+      (errorStatus === 403 && !is403ButNotAuth) ||
       lowerMsg.includes('authentication failed') ||
       lowerMsg.includes('invalid username/password');
 

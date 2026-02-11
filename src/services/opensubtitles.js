@@ -510,8 +510,22 @@ class OpenSubtitlesService {
       // Classify the error so we don't mis-treat rate limits as bad credentials
       const parsed = parseApiError(error, 'OpenSubtitles');
 
+      // OpenSubtitles returns 403 "You cannot consume this service" when API key is rate-limited/blocked
+      // Treat this like a rate limit, not an auth failure
+      const errMsg = String(error.response?.data?.message || error.message || '').toLowerCase();
+      const looksLikeRateLimit = errMsg.includes('throttle') || errMsg.includes('rate limit') || errMsg.includes('too many') || errMsg.includes('cannot consume');
+      if (parsed.statusCode === 403 && looksLikeRateLimit) {
+        log.warn(() => `[OpenSubtitles] 403 response looks like rate limiting, not auth failure: "${errMsg}"`);
+        const e = new Error('OpenSubtitles API key temporarily blocked due to rate limiting');
+        e.statusCode = 429;
+        e.type = 'rate_limit';
+        e.isRetryable = true;
+        throw e;
+      }
+
       // Never cache an auth failure for retryable cases like 429/503
-      if (parsed.type !== 'rate_limit' && parsed.statusCode !== 503 && isAuthenticationFailure(error)) {
+      // Also skip caching if the error message looks like rate limiting regardless of status code
+      if (parsed.type !== 'rate_limit' && parsed.statusCode !== 503 && parsed.statusCode !== 429 && !looksLikeRateLimit && isAuthenticationFailure(error)) {
         cacheAuthFailure(this.credentialsCacheKey);
       }
 
@@ -694,6 +708,11 @@ class OpenSubtitlesService {
       }
 
       const { imdb_id, type, season, episode, languages, excludeHearingImpairedSubtitles } = params;
+
+      if (!imdb_id) {
+        log.warn(() => '[OpenSubtitles] No IMDB ID provided, skipping search');
+        return [];
+      }
 
       // Convert imdb_id to numeric format (remove 'tt' prefix)
       const imdbId = imdb_id.replace('tt', '');
@@ -1000,12 +1019,22 @@ class OpenSubtitlesService {
       log.debug(() => ['[OpenSubtitles] Got download link:', downloadLink]);
 
       // Download the subtitle file as raw bytes to handle BOM/ZIP cases efficiently
+      // Use a clean axios request for CDN downloads - don't send Api-Key/Authorization/Content-Type
+      // headers to the CDN; those are only needed for the OpenSubtitles API, not the file CDN
       let subtitleResponse;
       try {
-        subtitleResponse = await this.downloadClient.get(downloadLink, {
+        subtitleResponse = await axios.get(downloadLink, {
           responseType: 'arraybuffer',
-          headers: { 'User-Agent': USER_AGENT },
-          timeout: timeout // Use configurable timeout
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': '*/*'
+          },
+          httpAgent,
+          httpsAgent,
+          lookup: dnsLookup,
+          timeout: timeout,
+          maxRedirects: 5,
+          decompress: true
         });
       } catch (cdnError) {
         // CDN download errors (403/410 from Varnish) should NOT be reported as "Authentication failed"
@@ -1255,3 +1284,6 @@ class OpenSubtitlesService {
 // Support both `require()` direct and `{ OpenSubtitlesService }` destructured imports
 module.exports = OpenSubtitlesService;
 module.exports.OpenSubtitlesService = OpenSubtitlesService;
+module.exports.getCachedToken = getCachedToken;
+module.exports.getCredentialsCacheKey = getCredentialsCacheKey;
+

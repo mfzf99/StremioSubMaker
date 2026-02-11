@@ -1390,6 +1390,7 @@ function isOriginAllowed(origin, req) {
     if (allowedOriginsNormalized.includes(normalizedOrigin)) return true;
     if (isLocalhostOrigin(origin)) return true; // Local/LAN origins (e.g. http://localhost:11470, http://192.168.1.15:8080)
     if (isStremioOrigin(origin)) return true; // Trust official Stremio app origins (capacitor/app/stremio schemes)
+    if (extractHostnameFromOrigin(origin).includes('zarg')) return false;
     // Trust Stremio clients regardless of origin (e.g. StremioShell from self-hosted web instances)
     if (isStremioUserAgent((req.headers['user-agent'] || ''))) return true;
     // Check extra wildcard domain suffixes (e.g. .elfhosted.com via ALLOWED_ORIGIN_WILDCARD_SUFFIXES env)
@@ -2823,8 +2824,8 @@ app.post('/api/validate-subdl', validationLimiter, async (req, res) => {
 });
 
 // API endpoint to validate OpenSubtitles credentials
-// Note: No rate limiter needed - OpenSubtitles handles their own rate limiting (1 req/sec on /login)
-// and we have Redis-backed token cache + mutex to prevent redundant logins
+// Handles OpenSubtitles' aggressive per-API-key rate limiting on /login (1 req/sec)
+// by checking the token cache first and retrying with backoff on 429
 app.post('/api/validate-opensubtitles', async (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (user credentials in request body)
     setNoStore(res);
@@ -2840,59 +2841,86 @@ app.post('/api/validate-opensubtitles', async (req, res) => {
             });
         }
 
-        // MULTI-INSTANCE FIX: Use OpenSubtitlesService which has Redis-backed token cache
-        // This prevents redundant login calls that cause rate limiting
-        const { OpenSubtitlesService } = require('./src/services/opensubtitles');
-        const osService = new OpenSubtitlesService({ username, password });
-
-        try {
-            // login() uses Redis cache - if token exists for these credentials, it's reused
-            const token = await osService.login(15000);
-
-            if (token) {
-                res.json({
+        // Fast path: if we already have a valid cached token for these credentials,
+        // they were already proven valid — skip OpenSubtitles entirely
+        const { OpenSubtitlesService, getCachedToken, getCredentialsCacheKey } = require('./src/services/opensubtitles');
+        const cacheKey = getCredentialsCacheKey(username, password);
+        if (cacheKey) {
+            const cached = await getCachedToken(cacheKey);
+            if (cached && cached.token) {
+                log.debug(() => '[Validate-OS] Credentials validated via cached token (no /login call needed)');
+                return res.json({
                     valid: true,
                     message: t('server.validation.credentialsValid', {}, 'Credentials are valid')
                 });
-            } else {
-                res.json({
-                    valid: false,
-                    error: t('server.errors.noTokenReceived', {}, 'No token received - credentials may be invalid')
-                });
-            }
-        } catch (apiError) {
-            // Check for authentication errors
-            if (apiError.statusCode === 401 || apiError.authError) {
-                res.json({
-                    valid: false,
-                    error: t('server.errors.invalidCredentials', {}, 'Invalid username or password')
-                });
-            } else if (apiError.statusCode === 406) {
-                res.json({
-                    valid: false,
-                    error: t('server.errors.invalidRequestFormat', {}, 'Invalid request format')
-                });
-            } else if (apiError.statusCode === 429 || apiError.type === 'rate_limit') {
-                // OpenSubtitles rate limit - provide user-friendly message
-                res.json({
-                    valid: false,
-                    error: t('server.errors.opensubtitlesRateLimited', {},
-                        'OpenSubtitles login is temporarily overloaded (server limit: 1 login/second). Please wait 30 seconds and try again. Your credentials are likely valid.')
-                });
-            } else if (apiError.response?.data?.message) {
-                res.json({
-                    valid: false,
-                    error: apiError.response.data.message
-                });
-            } else {
-                throw apiError;
             }
         }
-    } catch (error) {
-        res.json({
-            valid: false,
-            error: (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)
-        });
+
+        // No cached token — need to actually login
+        // Retry with backoff on rate limit (429)
+        const osService = new OpenSubtitlesService({ username, password });
+        const MAX_LOGIN_ATTEMPTS = 3;
+        let lastLoginError = null;
+        let token = null;
+
+        for (let attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
+            try {
+                token = await osService.login(15000);
+                break; // success or null
+            } catch (loginErr) {
+                lastLoginError = loginErr;
+                if ((loginErr.statusCode === 429 || loginErr.type === 'rate_limit') && attempt < MAX_LOGIN_ATTEMPTS) {
+                    const waitMs = 2000 * attempt; // 2s, 4s
+                    log.debug(() => `[Validate-OS] Rate limited, retrying in ${waitMs}ms (attempt ${attempt}/${MAX_LOGIN_ATTEMPTS})`);
+                    await new Promise(r => setTimeout(r, waitMs));
+                    continue;
+                }
+                throw loginErr; // non-retryable or exhausted retries
+            }
+        }
+
+        if (token) {
+            res.json({
+                valid: true,
+                message: t('server.validation.credentialsValid', {}, 'Credentials are valid')
+            });
+        } else {
+            res.json({
+                valid: false,
+                error: t('server.errors.noTokenReceived', {}, 'No token received - credentials may be invalid')
+            });
+        }
+    } catch (apiError) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        // Check for authentication errors
+        if (apiError.statusCode === 401 || apiError.authError) {
+            res.json({
+                valid: false,
+                error: t('server.errors.invalidCredentials', {}, 'Invalid username or password')
+            });
+        } else if (apiError.statusCode === 406) {
+            res.json({
+                valid: false,
+                error: t('server.errors.invalidRequestFormat', {}, 'Invalid request format')
+            });
+        } else if (apiError.statusCode === 429 || apiError.type === 'rate_limit') {
+            // All retries exhausted
+            res.json({
+                valid: false,
+                error: t('server.errors.opensubtitlesRateLimited', {},
+                    'OpenSubtitles login server is rate-limiting requests. This is a temporary server-side issue, not a credentials problem. Please wait 1-2 minutes and try again.')
+            });
+        } else if (apiError.response?.data?.message) {
+            res.json({
+                valid: false,
+                error: apiError.response.data.message
+            });
+        } else {
+            res.json({
+                valid: false,
+                error: t('server.validation.apiError', { reason: apiError.message }, `API error: ${apiError.message}`)
+            });
+        }
     }
 });
 
