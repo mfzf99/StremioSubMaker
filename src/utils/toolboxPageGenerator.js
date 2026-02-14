@@ -7,6 +7,7 @@ const { version: appVersion } = require('../../package.json');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
 const { resolveHistoryTitle } = require('../handlers/subtitles');
+const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function escapeHtml(value) {
   if (value === undefined || value === null) return '';
@@ -170,6 +171,14 @@ function cleanDisplayName(raw) {
   const withoutExt = lastSegment.replace(/\.[^.]+$/, '');
   const spaced = withoutExt.replace(/[_\\.]+/g, ' ').replace(/\s+/g, ' ').trim();
   return spaced || withoutExt || lastSegment;
+}
+
+function buildLinkedMetaSubtitleHtml(topLine, fileLine, fallbackLine) {
+  const parts = [];
+  if (topLine) parts.push(escapeHtml(topLine));
+  if (fileLine) parts.push(`<strong class="meta-file-line">${escapeHtml(fileLine)}</strong>`);
+  if (parts.length) return parts.join('<br>');
+  return escapeHtml(fallbackLine || '');
 }
 
 function formatEpisodeTag(parsed) {
@@ -776,6 +785,17 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       cursor: default;
       font-weight: 800;
     }
+    .xsync-version-warning {
+      margin-top: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.14);
+      color: var(--text);
+      font-weight: 700;
+      padding: 11px 14px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(245, 158, 11, 0.16);
+    }
     .status-dot {
       width: 12px;
       height: 12px;
@@ -1379,6 +1399,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
         </div>
       </div>
     </header>
+    <div id="xsync-version-warning" class="xsync-version-warning" style="display:none;" role="status" aria-live="polite"></div>
 
     <section class="hero">
       <div class="hero-content">
@@ -1428,7 +1449,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
                 <span class="tool-link">${t('toolbox.tools.sync.cta', {}, 'Open sync studio')}</span>
               </div>
             </a>
-            <a class="tool-tile${devDisabledClass}" href="${devOnlyLink(links.automaticSubs)}">
+            <a class="tool-tile" href="${links.automaticSubs}">
               <div class="tool-icon">🤖</div>
               <div>
                 <div class="tool-title">${t('toolbox.tools.auto.title', {}, 'Automatic subtitles')}</div>
@@ -1563,11 +1584,57 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       const timeEl = document.getElementById('time-value');
       const extValue = document.getElementById('ext-value');
       const extDot = document.getElementById('ext-dot');
+      const xsyncVersionWarning = document.getElementById('xsync-version-warning');
       let extReady = false;
       let pingTimer = null;
       let pingAttempts = 0;
       const MAX_PINGS = 5;
       const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
+      const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+      const VERSION_WARNING_TEMPLATE = window.t
+        ? window.t(
+          'toolbox.extension.versionOutdated',
+          { detected: '{detected}', required: '{required}' },
+          'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.'
+        )
+        : 'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.';
+
+      function parseVersionParts(version) {
+        if (!version) return null;
+        const cleaned = String(version).trim().replace(/^v/i, '').split('-')[0];
+        if (!cleaned) return null;
+        const parts = cleaned.split('.').slice(0, 3).map(part => Number.parseInt(part, 10));
+        if (!parts.length || parts.some(part => !Number.isFinite(part))) return null;
+        while (parts.length < 3) parts.push(0);
+        return parts;
+      }
+
+      function compareVersions(a, b) {
+        const aParts = parseVersionParts(a);
+        const bParts = parseVersionParts(b);
+        if (!aParts || !bParts) return null;
+        for (let i = 0; i < 3; i += 1) {
+          if (aParts[i] > bParts[i]) return 1;
+          if (aParts[i] < bParts[i]) return -1;
+        }
+        return 0;
+      }
+
+      function updateVersionWarning(installedVersion) {
+        if (!xsyncVersionWarning) return;
+        const cmp = compareVersions(installedVersion, REQUIRED_XSYNC_VERSION);
+        if (cmp !== null && cmp < 0) {
+          const detectedLabel = 'v' + String(installedVersion || '').replace(/^v/i, '');
+          xsyncVersionWarning.textContent = VERSION_WARNING_TEMPLATE
+            .replace('{detected}', detectedLabel)
+            .replace('{required}', 'v' + REQUIRED_XSYNC_VERSION);
+          xsyncVersionWarning.style.display = 'block';
+          return;
+        }
+        xsyncVersionWarning.style.display = 'none';
+        xsyncVersionWarning.textContent = '';
+      }
+
       function updateTime() {
         const now = new Date();
         timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1616,6 +1683,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
         const detected = window.t ? window.t('toolbox.status.detected', {}, 'Detected') : 'Detected';
         const version = msg.version ? 'v' + msg.version : detected;
         setExtensionStatus(true, version);
+        updateVersionWarning(msg.version || '');
         if (pingTimer) clearInterval(pingTimer);
       });
       updateTime();
@@ -1684,7 +1752,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       gotIt: t('toolbox.embedded.instructions.gotIt', {}, 'Got it')
     },
     videoMeta: {
-      label: t('toolbox.embedded.videoMeta.label', {}, 'Linked stream'),
+      label: t('toolbox.embedded.videoMeta.label', {}, 'Linked Stream'),
       none: t('toolbox.embedded.videoMeta.none', {}, 'No stream linked'),
       unavailable: t('toolbox.embedded.videoMeta.unavailable', {}, 'Video ID unavailable'),
       waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...'),
@@ -1767,13 +1835,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     }
   };
   const translationContextLabel = linkedVideoDisplay || copy.step2.translationContextFallback;
-  const metaDetails = [];
-  if (linkedTitle) metaDetails.push(t('toolbox.embedded.meta.title', { title: linkedTitle }, `Title: ${linkedTitle}`));
-  else if (videoId) metaDetails.push(t('toolbox.embedded.meta.videoId', { id: videoId }, `Video ID: ${videoId}`));
-  if (episodeTag) metaDetails.push(t('toolbox.embedded.meta.episode', { episode: episodeTag }, `Episode: ${episodeTag}`));
-  if (filename) metaDetails.push(t('toolbox.embedded.meta.file', { file: cleanDisplayName(filename) }, `File: ${cleanDisplayName(filename)}`));
+  const metaTop = [];
+  if (videoId) metaTop.push(t('toolbox.embedded.meta.videoId', { id: videoId }, `Video ID: ${videoId}`));
+  if (linkedTitle) metaTop.push(t('toolbox.embedded.meta.title', { title: linkedTitle }, `Title: ${linkedTitle}`));
+  if (videoId || filename || linkedTitle) metaTop.push(t('toolbox.embedded.meta.episode', { episode: episodeTag || '-' }, `Episode: ${episodeTag || '-'}`));
+  const metaFile = filename ? t('toolbox.embedded.meta.file', { file: cleanDisplayName(filename) }, `File: ${cleanDisplayName(filename)}`) : '';
   const initialVideoTitle = escapeHtml(linkedVideoDisplay || copy.videoMeta.none);
-  const initialVideoSubtitle = escapeHtml(metaDetails.join(metaSeparator) || copy.videoMeta.unavailable);
+  const initialVideoSubtitle = buildLinkedMetaSubtitleHtml(metaTop.join(' | '), metaFile, copy.videoMeta.unavailable);
   const initialTranslationContext = escapeHtml(
     t(
       'toolbox.embedded.step2.translationContext',
@@ -2334,6 +2402,18 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       cursor: default;
       font-weight: 800;
     }
+    .xsync-version-warning {
+      margin: 10px auto 0;
+      width: min(980px, 100%);
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.14);
+      color: var(--text-primary);
+      font-weight: 700;
+      padding: 10px 14px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(245, 158, 11, 0.16);
+    }
     .status-badge .ext-link {
       font-size: 14px;
       font-weight: 700;
@@ -2847,6 +2927,19 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       color: var(--muted);
       font-size: 13px;
       word-break: break-word;
+      white-space: pre-line;
+    }
+    .step1-warning {
+      margin: 0 auto 8px;
+      padding: 8px 12px;
+      width: min(780px, 100%);
+      border-radius: 10px;
+      border: 1px solid var(--warning);
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
     }
     .downloads { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 10px; }
     .result-box {
@@ -3087,6 +3180,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         </div>
       </div>
     </header>
+    <div id="xsync-version-warning" class="xsync-version-warning" style="display:none;" role="status" aria-live="polite"></div>
 
     <section class="section-grid">
       <div class="card section centered-section" id="step1Card">
@@ -3286,6 +3380,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         .replace(/\"/g, '&quot;')
         .replace(/'/g, '&#39;');
     };
+    function buildMetaSubtitleHtml(topLine, fileLine, fallbackLine) {
+      const parts = [];
+      if (topLine) parts.push(escapeHtmlClient(topLine));
+      if (fileLine) parts.push('<strong class="meta-file-line">' + escapeHtmlClient(fileLine) + '</strong>');
+      if (parts.length) return parts.join('<br>');
+      return escapeHtmlClient(fallbackLine || '');
+    }
     function formatMetaLabel(type, value) {
       if (!value) return '';
       const template = metaTemplates[type] || '{value}';
@@ -3348,6 +3449,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       cacheBlocked: false,
       cacheBlockInfo: null,
       streamHashInfo: null,
+      streamHashCandidates: [],
       hashMismatchBlocked: false,
       hashMismatchInfo: null,
       hashMismatchLogged: false
@@ -3684,6 +3786,60 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       };
     }
 
+    function collectHashCandidates(values = []) {
+      const seen = new Set();
+      const out = [];
+      values.forEach((value) => {
+        const normalized = (value || '').toString().trim().toLowerCase();
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        out.push(normalized);
+      });
+      return out;
+    }
+
+    function getLinkedHashCandidates() {
+      return collectHashCandidates([
+        getVideoHash(),
+        deriveVideoHashFromParts(PAGE.filename || BOOTSTRAP.filename, PAGE.videoId || BOOTSTRAP.videoId)
+      ]);
+    }
+
+    async function resolveStreamHashCandidates(streamUrl, fallback = {}) {
+      const immediate = deriveStreamHashFromUrl(streamUrl, fallback);
+      let resolved = null;
+      try {
+        const resolvedUrl = await resolveStreamUrlRedirect(streamUrl);
+        resolved = deriveStreamHashFromUrl(resolvedUrl, fallback);
+      } catch (_) {
+        resolved = null;
+      }
+      const hashes = collectHashCandidates([immediate.hash, resolved?.hash]);
+      return {
+        immediate,
+        resolved,
+        hashes,
+        preferred: resolved?.hash ? resolved : (immediate.hash ? immediate : null)
+      };
+    }
+
+    function compareHashSets(linkedHashes = [], streamHashes = []) {
+      const linkedSet = new Set(collectHashCandidates(linkedHashes));
+      const streamSet = new Set(collectHashCandidates(streamHashes));
+      const matches = [];
+      streamSet.forEach((hash) => {
+        if (linkedSet.has(hash)) matches.push(hash);
+      });
+      return {
+        hasLinked: linkedSet.size > 0,
+        hasStream: streamSet.size > 0,
+        match: matches.length > 0,
+        matches,
+        linkedHash: linkedSet.values().next().value || '',
+        streamHash: streamSet.values().next().value || ''
+      };
+    }
+
     // Cache for resolved redirect URLs to avoid repeated fetches
     const resolvedUrlCache = new Map();
     const REDIRECT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -3930,6 +4086,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       extStatus: document.getElementById('ext-status'),
       extDot: document.getElementById('ext-dot'),
       extLabel: document.getElementById('ext-label'),
+      xsyncVersionWarning: document.getElementById('xsync-version-warning'),
       extractLog: document.getElementById('extract-log'),
       translateLog: document.getElementById('translate-log'),
       streamUrl: document.getElementById('stream-url'),
@@ -3983,6 +4140,48 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       el.removeAttribute('inert');
     }
     const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
+    const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+    const VERSION_WARNING_TEMPLATE = tt(
+      'toolbox.extension.versionOutdated',
+      { detected: '{detected}', required: '{required}' },
+      'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.'
+    );
+
+    function parseVersionParts(version) {
+      if (!version) return null;
+      const cleaned = String(version).trim().replace(/^v/i, '').split('-')[0];
+      if (!cleaned) return null;
+      const parts = cleaned.split('.').slice(0, 3).map(part => Number.parseInt(part, 10));
+      if (!parts.length || parts.some(part => !Number.isFinite(part))) return null;
+      while (parts.length < 3) parts.push(0);
+      return parts;
+    }
+
+    function compareVersions(a, b) {
+      const aParts = parseVersionParts(a);
+      const bParts = parseVersionParts(b);
+      if (!aParts || !bParts) return null;
+      for (let i = 0; i < 3; i += 1) {
+        if (aParts[i] > bParts[i]) return 1;
+        if (aParts[i] < bParts[i]) return -1;
+      }
+      return 0;
+    }
+
+    function setXsyncVersionWarning(installedVersion) {
+      if (!els.xsyncVersionWarning) return;
+      const cmp = compareVersions(installedVersion, REQUIRED_XSYNC_VERSION);
+      if (cmp !== null && cmp < 0) {
+        const detectedLabel = 'v' + String(installedVersion || '').replace(/^v/i, '');
+        els.xsyncVersionWarning.textContent = VERSION_WARNING_TEMPLATE
+          .replace('{detected}', detectedLabel)
+          .replace('{required}', 'v' + REQUIRED_XSYNC_VERSION);
+        els.xsyncVersionWarning.style.display = 'block';
+        return;
+      }
+      els.xsyncVersionWarning.style.display = 'none';
+      els.xsyncVersionWarning.textContent = '';
+    }
 
     if (els.extractLog) els.extractLog.innerHTML = '';
     if (els.translateLog) els.translateLog.innerHTML = '';
@@ -4209,13 +4408,13 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       const episodeTag = formatEpisodeTag(source.videoId);
       const fallbackTitle = buildLinkedVideoLabel(source.videoId, source.filename, knownTitle);
       const fallbackDetails = [];
+      if (source.videoId) fallbackDetails.push(formatMetaLabel('videoId', source.videoId));
       if (knownTitle) fallbackDetails.push(formatMetaLabel('title', knownTitle));
-      else if (source.videoId) fallbackDetails.push(formatMetaLabel('videoId', source.videoId));
-      if (episodeTag) fallbackDetails.push(formatMetaLabel('episode', episodeTag));
-      if (source.filename) fallbackDetails.push(formatMetaLabel('file', source.filename));
+      if (source.videoId || source.filename || knownTitle) fallbackDetails.push(formatMetaLabel('episode', episodeTag || '-'));
+      const fallbackFileLine = source.filename ? formatMetaLabel('file', cleanDisplayNameClient(source.filename)) : '';
       const renderedFallbackTitle = fallbackTitle || metaTemplates.none;
       els.videoMetaTitle.textContent = renderedFallbackTitle;
-      els.videoMetaSubtitle.textContent = fallbackDetails.join(metaSeparator) || metaTemplates.waiting;
+      els.videoMetaSubtitle.innerHTML = buildMetaSubtitleHtml(fallbackDetails.join(' | '), fallbackFileLine, metaTemplates.waiting);
       updateTranslationContext({ ...source, title: renderedFallbackTitle, videoId: source.videoId, filename: source.filename });
 
       const requestId = ++linkedTitleRequestId;
@@ -4225,15 +4424,15 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
 
       const details = [];
       const resolvedFetchedTitle = fetchedTitle || knownTitle;
+      if (source.videoId) details.push(formatMetaLabel('videoId', source.videoId));
       if (resolvedFetchedTitle) details.push(formatMetaLabel('title', resolvedFetchedTitle));
-      else if (source.videoId) details.push(formatMetaLabel('videoId', source.videoId));
-      if (episodeTag) details.push(formatMetaLabel('episode', episodeTag));
-      if (source.filename) details.push(formatMetaLabel('file', source.filename));
+      if (source.videoId || source.filename || resolvedFetchedTitle) details.push(formatMetaLabel('episode', episodeTag || '-'));
+      const fileLine = source.filename ? formatMetaLabel('file', cleanDisplayNameClient(source.filename)) : '';
 
       const resolvedTitle = buildLinkedVideoLabel(source.videoId, source.filename, resolvedFetchedTitle);
       const renderedResolvedTitle = resolvedTitle || metaTemplates.none;
       els.videoMetaTitle.textContent = renderedResolvedTitle;
-      els.videoMetaSubtitle.textContent = details.join(metaSeparator) || metaTemplates.waiting;
+      els.videoMetaSubtitle.innerHTML = buildMetaSubtitleHtml(details.join(' | '), fileLine, metaTemplates.waiting);
       updateTranslationContext({ ...source, title: renderedResolvedTitle, videoId: source.videoId, filename: source.filename });
       updateHashMismatchState({ log: false });
     }
@@ -4387,35 +4586,82 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       els.hashStatus.innerHTML = buildHashStatusContent(head, bodyLines);
     }
 
-    function updateHashMismatchState(opts = {}) {
+    let hashMismatchResolutionPending = null;
+
+    async function updateHashMismatchState(opts = {}) {
       const streamUrl = typeof opts.streamUrl === 'string' ? opts.streamUrl : (els.streamUrl?.value || '');
       const trimmedUrl = (streamUrl || '').trim();
-      const linkedHash = getVideoHash();
+      const linkedHashes = getLinkedHashCandidates();
+      const linkedHash = linkedHashes[0] || '';
       const fallback = { videoId: PAGE.videoId || BOOTSTRAP.videoId, filename: PAGE.filename || BOOTSTRAP.filename };
-      const streamHashInfo = trimmedUrl ? deriveStreamHashFromUrl(trimmedUrl, fallback) : { hash: '', filename: '', videoId: '', source: 'stream-url' };
-      const hasStreamHash = !!streamHashInfo.hash;
-      const hasLinkedHash = !!linkedHash;
-      const mismatch = hasStreamHash && hasLinkedHash && streamHashInfo.hash !== linkedHash;
-      state.streamHashInfo = hasStreamHash ? streamHashInfo : null;
+      if (!trimmedUrl) {
+        state.streamHashInfo = null;
+        state.streamHashCandidates = [];
+        state.hashMismatchBlocked = false;
+        state.hashMismatchInfo = null;
+        state.hashMismatchLogged = false;
+        if (!opts.keepAlert) setHashMismatchAlert('');
+        renderHashMismatchAlert();
+        renderHashStatus(linkedHash, '');
+        applyExtractDisabled();
+        return { mismatch: false, linkedHash, streamHash: '' };
+      }
+
+      const resolutionId = Date.now() + Math.random();
+      hashMismatchResolutionPending = resolutionId;
+
+      let resolvedData = null;
+      try {
+        resolvedData = await resolveStreamHashCandidates(trimmedUrl, fallback);
+      } catch (_) {
+        resolvedData = null;
+      }
+      if (hashMismatchResolutionPending !== resolutionId) {
+        return {
+          mismatch: state.hashMismatchBlocked,
+          linkedHash: state.hashMismatchInfo?.linked || linkedHash,
+          streamHash: state.hashMismatchInfo?.stream || state.streamHashInfo?.hash || ''
+        };
+      }
+
+      const streamHashInfo = resolvedData?.preferred || deriveStreamHashFromUrl(trimmedUrl, fallback);
+      const streamHashes = collectHashCandidates([
+        ...(resolvedData?.hashes || []),
+        streamHashInfo?.hash
+      ]);
+      const compared = compareHashSets(linkedHashes, streamHashes);
+      const mismatch = compared.hasLinked && compared.hasStream && !compared.match;
+      state.streamHashInfo = streamHashInfo?.hash ? streamHashInfo : null;
+      state.streamHashCandidates = streamHashes;
       state.hashMismatchBlocked = mismatch;
-      state.hashMismatchInfo = mismatch ? { linked: linkedHash, stream: streamHashInfo.hash } : null;
+      state.hashMismatchInfo = mismatch ? { linked: compared.linkedHash || linkedHash, stream: compared.streamHash } : null;
 
       if (!mismatch) {
         state.hashMismatchLogged = false;
         if (!opts.keepAlert) setHashMismatchAlert('');
       } else {
-        const alertHtml = buildHashMismatchAlert(linkedHash, streamHashInfo.hash);
+        const alertHtml = buildHashMismatchAlert(compared.linkedHash || linkedHash, compared.streamHash);
         setHashMismatchAlert(alertHtml, { asHtml: true });
         if (opts.log !== false && !state.hashMismatchLogged) {
-          const mismatchMsg = 'Hash mismatch detected: linked stream (' + linkedHash + ') vs pasted URL (' + streamHashInfo.hash + '). Extraction is blocked until hashes match.';
+          const mismatchMsg = 'Hash mismatch detected: linked stream (' + (compared.linkedHash || linkedHash) + ') vs pasted URL (' + compared.streamHash + '). Extraction is blocked until hashes match.';
           logExtract(mismatchMsg);
           state.hashMismatchLogged = true;
         }
       }
       renderHashMismatchAlert();
-      renderHashStatus(linkedHash, streamHashInfo.hash);
+      const displayStreamHash = compared.match
+        ? (compared.matches[0] || streamHashInfo?.hash || '')
+        : (streamHashInfo?.hash || compared.streamHash || '');
+      renderHashStatus(compared.linkedHash || linkedHash, displayStreamHash);
       applyExtractDisabled();
-      return { mismatch, linkedHash, streamHash: streamHashInfo.hash || '' };
+      return {
+        mismatch,
+        linkedHash: compared.linkedHash || linkedHash,
+        streamHash: compared.streamHash || '',
+        linkedHashes,
+        streamHashes,
+        matches: compared.matches
+      };
     }
 
     function resetExtractionState(clearLogs = false, opts = {}) {
@@ -4431,6 +4677,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         state.cacheBlocked = false;
         state.cacheBlockInfo = null;
         state.streamHashInfo = null;
+        state.streamHashCandidates = [];
         if (state.hashMismatchBlocked && state.hashMismatchInfo) {
           const alertHtml = buildHashMismatchAlert(state.hashMismatchInfo.linked, state.hashMismatchInfo.stream);
           setHashMismatchAlert(alertHtml, { asHtml: true });
@@ -5211,6 +5458,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         }
         const readyWithVersion = tt('toolbox.autoSubs.extension.readyWithVersion', { version: msg.version || '-' }, 'Ready (v' + (msg.version || '-') + ')');
         updateExtensionStatus(true, readyWithVersion);
+        setXsyncVersionWarning(msg.version || '');
       } else if (msg.type === 'SUBMAKER_DEBUG_LOG') {
         const level = (msg.level || 'info').toUpperCase();
         const text = msg.text || (window.t ? window.t('toolbox.logs.event', {}, 'Log event') : 'Log event');
@@ -5341,7 +5589,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       tick();
     }
 
-    function requestExtraction() {
+    async function requestExtraction() {
       if (!state.extensionReady) {
         const label = window.t ? window.t('toolbox.logs.extensionMissing', {}, 'Extension not detected yet. Install SubMaker xSync and wait for detection.') : 'Extension not detected yet. Install SubMaker xSync and wait for detection.';
         logExtract(label);
@@ -5360,7 +5608,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
         logExtract(label);
         return;
       }
-      const hashStatus = updateHashMismatchState({ streamUrl, log: true });
+      const hashStatus = await updateHashMismatchState({ streamUrl, log: true });
       if (hashStatus.mismatch) {
         return;
       }
@@ -5372,13 +5620,16 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       state.hashMismatchLogged = false;
       if (els.extractLog) els.extractLog.innerHTML = '';
       const linkedHash = hashStatus.linkedHash || getVideoHash();
-      const streamHashInfo = deriveStreamHashFromUrl(streamUrl, { videoId: PAGE.videoId || BOOTSTRAP.videoId, filename: PAGE.filename || BOOTSTRAP.filename });
-      state.streamHashInfo = streamHashInfo;
-      if (streamHashInfo.hash && linkedHash && streamHashInfo.hash !== linkedHash) {
+      const streamHashInfo = state.streamHashInfo || null;
+      const compared = compareHashSets(
+        hashStatus.linkedHashes || getLinkedHashCandidates(),
+        hashStatus.streamHashes || collectHashCandidates([streamHashInfo?.hash])
+      );
+      if (compared.hasLinked && compared.hasStream && !compared.match) {
         state.cacheBlocked = true;
-        state.cacheBlockInfo = { linked: linkedHash, stream: streamHashInfo.hash };
-        const mismatchMsg = 'Hash mismatch detected: linked stream (' + linkedHash + ') vs pasted URL (' + streamHashInfo.hash + '). Extraction is blocked until the hashes match.';
-        const alertHtml = buildHashMismatchAlert(linkedHash, streamHashInfo.hash);
+        state.cacheBlockInfo = { linked: compared.linkedHash || linkedHash, stream: compared.streamHash };
+        const mismatchMsg = 'Hash mismatch detected: linked stream (' + (compared.linkedHash || linkedHash) + ') vs pasted URL (' + compared.streamHash + '). Extraction is blocked until the hashes match.';
+        const alertHtml = buildHashMismatchAlert(compared.linkedHash || linkedHash, compared.streamHash);
         setHashMismatchAlert(alertHtml, { asHtml: true });
         logExtract(mismatchMsg);
         applyExtractDisabled();
@@ -5636,18 +5887,20 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         sourceLang: document.getElementById('detectedLang'),
         targetLang: document.getElementById('targetLang'),
         model: document.getElementById('whisperModel'),
+        assemblyModel: document.getElementById('assemblySpeechModel'),
         translateToggle: document.getElementById('translateOutput'),
         targetLangWrapper: document.getElementById('targetLangWrapper'),
         srtPreview: document.getElementById('srtPreview'),
         dlSrt: document.getElementById('downloadSrt'),
-        dlVtt: document.getElementById('downloadVtt'),
         dlRaw: document.getElementById('downloadRawTranscript'),
         translations: document.getElementById('translationDownloads'),
+        stremioDeliveryWarning: document.getElementById('stremioDeliveryWarning'),
         videoMetaTitle: document.getElementById('video-meta-title'),
         videoMetaSubtitle: document.getElementById('video-meta-subtitle'),
         extDot: document.getElementById('ext-dot'),
         extLabel: document.getElementById('ext-label'),
         extStatus: document.getElementById('ext-status'),
+        xsyncVersionWarning: document.getElementById('xsync-version-warning'),
         hashBadge: document.getElementById('hashBadge'),
         hashBadgeDot: document.getElementById('hashBadgeDot'),
         hashBadgeValue: document.getElementById('hashBadgeValue'),
@@ -5681,6 +5934,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       const state = {
         extensionReady: false,
         cacheBlocked: false,
+        streamHashInfo: null,
+        streamHashCandidates: [],
         decodeStatus: 'pending',
         autoSubsInFlight: false,
         step1Confirmed: false,
@@ -5714,6 +5969,13 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           .replace(/\"/g, '&quot;')
           .replace(/'/g, '&#39;');
       };
+      function buildMetaSubtitleHtml(topLine, fileLine, fallbackLine) {
+        const parts = [];
+        if (topLine) parts.push(escapeHtmlClient(topLine));
+        if (fileLine) parts.push('<strong class="meta-file-line">' + escapeHtmlClient(fileLine) + '</strong>');
+        if (parts.length) return parts.join('<br>');
+        return escapeHtmlClient(fallbackLine || '');
+      }
       const HASH_MISMATCH_LINES = [
         tt('toolbox.embedded.step1.hashMismatchLine1', {}, 'Hashes must match (Linked Stream and Stream URL) before extraction can start.')
       ];
@@ -5757,17 +6019,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         els.hashMismatchAlert.classList.add('is-visible');
         els.hashMismatchAlert.removeAttribute('aria-hidden');
       }
+      const runtimeCopy = (typeof copy !== 'undefined' && copy) ? copy : null;
       const lockReasons = {
-        needContinue: (copy?.locks && copy.locks.needContinue) || tt('toolbox.autoSubs.locks.needContinue', {}, 'Click Continue to unlock the next steps.'),
-        needTarget: (copy?.locks && copy.locks.needTarget) || tt('toolbox.autoSubs.locks.needTarget', {}, 'Select a target or disable translation to unlock Run.'),
-        needStep2: (copy?.locks && copy.locks.needStep2) || tt('toolbox.autoSubs.locks.needStep2', {}, 'Complete Step 2 and press Continue to proceed.'),
-        needRun: (copy?.locks && copy.locks.needRun) || tt('toolbox.autoSubs.locks.needRun', {}, 'Run auto-subs to unlock downloads.')
+        needContinue: (runtimeCopy?.locks && runtimeCopy.locks.needContinue) || tt('toolbox.autoSubs.locks.needContinue', {}, 'Click Continue to unlock the next steps.'),
+        needTarget: (runtimeCopy?.locks && runtimeCopy.locks.needTarget) || tt('toolbox.autoSubs.locks.needTarget', {}, 'Select a target or disable translation to unlock Run.'),
+        needStep2: (runtimeCopy?.locks && runtimeCopy.locks.needStep2) || tt('toolbox.autoSubs.locks.needStep2', {}, 'Complete Step 2 and press Continue to proceed.'),
+        needRun: (runtimeCopy?.locks && runtimeCopy.locks.needRun) || tt('toolbox.autoSubs.locks.needRun', {}, 'Run auto-subs to unlock downloads.')
       };
       const decodeLabels = {
-        pending: copy?.badges?.pending || tt('toolbox.autoSubs.badges.pending', {}, 'WAITING'),
-        working: copy?.badges?.decodeWorking || tt('toolbox.autoSubs.badges.decodeWorking', {}, 'FFmpeg decoding'),
+        pending: runtimeCopy?.badges?.pending || tt('toolbox.autoSubs.badges.pending', {}, 'WAITING'),
+        working: runtimeCopy?.badges?.decodeWorking || tt('toolbox.autoSubs.badges.decodeWorking', {}, 'FFmpeg decoding'),
         ready: tt('toolbox.autoSubs.badges.decodeReady', {}, 'OK'),
-        error: copy?.badges?.decodeError || tt('toolbox.autoSubs.badges.decodeError', {}, 'Decode failed')
+        error: runtimeCopy?.badges?.decodeError || tt('toolbox.autoSubs.badges.decodeError', {}, 'Decode failed')
       };
       function setDecodeBadge(tone, text, pulsing = false) {
         if (els.decodeBadge) {
@@ -5813,7 +6076,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           lower.includes('ffmpeg demux: completed') ||
           lower.includes('demux: completed');
         if (successHit) {
-          markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+          markDecodeDone(runtimeCopy?.badges?.decodeReady || decodeLabels.ready);
           return;
         }
         const errorHit =
@@ -5821,7 +6084,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           (lower.includes('ffmpeg') && (lower.includes('fail') || lower.includes('error'))) ||
           (lower.includes('decode') && lower.includes('audio') && lower.includes('fail'));
         if (errorHit || toneLower === 'error') {
-          markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+          markDecodeError(runtimeCopy?.badges?.decodeError || decodeLabels.error);
           return;
         }
         const workingHit =
@@ -5831,7 +6094,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           lower.includes('demux') ||
           (lower.includes('decode') && lower.includes('audio'));
         if (workingHit) {
-          markDecodeWorking(copy?.badges?.decodeWorking || decodeLabels.working);
+          markDecodeWorking(runtimeCopy?.badges?.decodeWorking || decodeLabels.working);
         }
       }
       function lockSection(el, label) {
@@ -5932,7 +6195,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         state.selectedAudioTrack = desiredTrack !== null ? desiredTrack : 0;
         const helper = document.getElementById('autoTrackHelper');
         if (helper) {
-          helper.textContent = copy?.steps?.audioTrackHelper || 'Multiple audio tracks detected. Choose one, then continue.';
+          helper.textContent = runtimeCopy?.steps?.audioTrackHelper || 'Multiple audio tracks detected. Choose one, then continue.';
         }
         renderAudioTrackOptions(state.audioTracks, preferredIdx, extractedIdx);
         els.audioTrackPrompt.classList.add('show');
@@ -6178,6 +6441,60 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         const streamVideoId = extractStreamVideoId(streamUrl) || fallback.videoId || '';
         const hash = deriveVideoHashFromParts(filename, streamVideoId);
         return { hash, filename, videoId: streamVideoId, source: 'stream-url' };
+      }
+
+      function collectAutoHashCandidates(values = []) {
+        const seen = new Set();
+        const out = [];
+        values.forEach((value) => {
+          const normalized = (value || '').toString().trim().toLowerCase();
+          if (!normalized || seen.has(normalized)) return;
+          seen.add(normalized);
+          out.push(normalized);
+        });
+        return out;
+      }
+
+      function getAutoLinkedHashCandidates() {
+        return collectAutoHashCandidates([
+          PAGE.videoHash || '',
+          deriveVideoHashFromParts(PAGE.filename, PAGE.videoId)
+        ]);
+      }
+
+      function compareAutoHashSets(linkedHashes = [], streamHashes = []) {
+        const linkedSet = new Set(collectAutoHashCandidates(linkedHashes));
+        const streamSet = new Set(collectAutoHashCandidates(streamHashes));
+        const matches = [];
+        streamSet.forEach((hash) => {
+          if (linkedSet.has(hash)) matches.push(hash);
+        });
+        return {
+          hasLinked: linkedSet.size > 0,
+          hasStream: streamSet.size > 0,
+          match: matches.length > 0,
+          matches,
+          linkedHash: linkedSet.values().next().value || '',
+          streamHash: streamSet.values().next().value || ''
+        };
+      }
+
+      async function resolveAutoStreamHashCandidates(streamUrl, fallback = {}) {
+        const immediate = deriveStreamHashFromUrl(streamUrl, fallback);
+        let resolved = null;
+        try {
+          const resolvedUrl = await resolveStreamUrlRedirect(streamUrl);
+          resolved = deriveStreamHashFromUrl(resolvedUrl, fallback);
+        } catch (_) {
+          resolved = null;
+        }
+        const hashes = collectAutoHashCandidates([immediate.hash, resolved?.hash]);
+        return {
+          immediate,
+          resolved,
+          hashes,
+          preferred: resolved?.hash ? resolved : (immediate.hash ? immediate : null)
+        };
       }
 
       const LOG_LIMIT = 250;
@@ -6426,12 +6743,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           ? resolvedTitle + ' - ' + episodeLabel
           : resolvedTitle;
         const details = [];
+        if (source.videoId) details.push('Video ID: ' + source.videoId);
         if (source.title) details.push('Title: ' + source.title);
-        else if (source.videoId) details.push('Video ID: ' + source.videoId);
-        if (episodeLabel) details.push('Episode: ' + episodeLabel);
-        if (source.filename) details.push('File: ' + cleanDisplayNameClient(source.filename));
+        if (source.videoId || source.filename || source.title) details.push('Episode: ' + (episodeLabel || '-'));
+        const fileLine = source.filename ? ('File: ' + cleanDisplayNameClient(source.filename)) : '';
         els.videoMetaTitle.textContent = displayTitle;
-        els.videoMetaSubtitle.textContent = details.join(' - ') || copy.videoMeta.waiting;
+        els.videoMetaSubtitle.innerHTML = buildMetaSubtitleHtml(details.join(' | '), fileLine, copy.videoMeta.waiting);
       }
 
       async function hydrateVideoMeta(source = {}) {
@@ -6466,7 +6783,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         pill.classList.remove('check', 'warn', 'danger');
         pill.classList.add(state);
         const okLabel = tt('toolbox.autoSubs.status.ok', {}, 'OK');
-        const waitingLabel = copy?.badges?.pending || tt('toolbox.autoSubs.badges.pending', {}, 'WAITING');
+        const waitingLabel = runtimeCopy?.badges?.pending || tt('toolbox.autoSubs.badges.pending', {}, 'WAITING');
         if (valueEl && baseLabel) {
           if (state === 'check') {
             valueEl.textContent = okLabel;
@@ -6513,11 +6830,24 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         return (selected || fallback || 'Whisper').toString().trim() || 'Whisper';
       }
 
+      function getSelectedAssemblyModelLabel() {
+        const selected = (els.assemblyModel && els.assemblyModel.selectedOptions && els.assemblyModel.selectedOptions[0])
+          ? (els.assemblyModel.selectedOptions[0].textContent || els.assemblyModel.selectedOptions[0].value || '')
+          : '';
+        const fallback = (els.assemblyModel && (els.assemblyModel.value || '')) || '';
+        return (selected || fallback || 'Universal-2').toString().trim() || 'Universal-2';
+      }
+
       function getTranscribeStatusLabel(statusText) {
         if (statusText) return statusText;
         const mode = (els.modeSelect?.value || '').toLowerCase();
         if (mode === 'assemblyai') {
-          return tt('toolbox.autoSubs.status.transcribing', { model: 'AssemblyAI' }, 'Transcribing with AssemblyAI');
+          const assemblyModelLabel = getSelectedAssemblyModelLabel();
+          return tt(
+            'toolbox.autoSubs.status.transcribingAssembly',
+            { model: 'AssemblyAI (' + assemblyModelLabel + ')' },
+            'Transcribing with AssemblyAI (' + assemblyModelLabel + ')'
+          );
         }
         const modelLabel = getSelectedModelLabel();
         return tt('toolbox.autoSubs.status.transcribing', { model: modelLabel }, 'Transcribing with Whisper (' + modelLabel + ')');
@@ -6557,22 +6887,25 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         const mode = (els.modeSelect?.value || '').toString().toLowerCase();
         const isAssembly = mode === 'assemblyai';
         const isCloudflare = mode === 'cloudflare';
-        const hideSourceAndModel = isAssembly || isCloudflare;
-        // Hide modeDetails entirely when local (no details) or when source/model are hidden (nothing left inside)
-        const showDetails = mode !== 'local' && !hideSourceAndModel;
+        // Show modeDetails for cloudflare (model only) and non-local/non-assembly modes
+        const showDetails = mode !== 'local' && !isAssembly;
         if (els.modeDetails) {
-          els.modeDetails.style.display = showDetails ? '' : 'none';
+          els.modeDetails.style.display = (showDetails || isCloudflare) ? '' : 'none';
         }
         const langAudioRow = els.modeDetails ? els.modeDetails.querySelector('.row') : null;
         const sourceLangRow = els.sourceLang ? els.sourceLang.closest('div') : null;
         const modelRow = els.model ? els.model.closest('div') : null;
-        if (langAudioRow) langAudioRow.style.display = hideSourceAndModel ? 'none' : '';
-        if (sourceLangRow) sourceLangRow.style.display = hideSourceAndModel ? 'none' : '';
-        if (modelRow) modelRow.style.display = hideSourceAndModel ? 'none' : '';
-        if (els.sourceLang) els.sourceLang.disabled = hideSourceAndModel;
-        if (els.model) els.model.disabled = hideSourceAndModel;
-        // Force whisper-large-v3-turbo for Cloudflare
-        if (isCloudflare && els.model) {
+        const assemblyOptions = els.assemblyOptions || null;
+        // For Cloudflare: show the row but hide source lang, show model only
+        if (langAudioRow) langAudioRow.style.display = isAssembly ? 'none' : '';
+        if (sourceLangRow) sourceLangRow.style.display = (isAssembly || isCloudflare) ? 'none' : '';
+        if (modelRow) modelRow.style.display = (isAssembly) ? 'none' : '';
+        if (assemblyOptions) assemblyOptions.style.display = isAssembly ? 'flex' : 'none';
+        if (els.sourceLang) els.sourceLang.disabled = isAssembly || isCloudflare;
+        if (els.model) els.model.disabled = isAssembly;
+        if (els.assemblyModel) els.assemblyModel.disabled = !isAssembly;
+        // Default to turbo for Cloudflare
+        if (isCloudflare && els.model && !els.model.value) {
           els.model.value = '@cf/openai/whisper-large-v3-turbo';
         }
       }
@@ -6600,18 +6933,6 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             );
           } else {
             disableDownloadLink(els.dlSrt);
-          }
-        }
-        if (els.dlVtt) {
-          if (original?.vtt) {
-            const blob = new Blob([original.vtt], { type: 'text/vtt' });
-            enableDownloadLink(
-              els.dlVtt,
-              original.downloadUrl || URL.createObjectURL(blob),
-              (PAGE.videoHash || 'video') + '_' + (original.languageCode || 'und') + '_autosub.vtt'
-            );
-          } else {
-            disableDownloadLink(els.dlVtt);
           }
         }
         if (els.dlRaw) {
@@ -6686,6 +7007,28 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             els.translations.appendChild(empty);
           }
         }
+        updateStremioDeliveryWarning(translations);
+      }
+
+      function updateStremioDeliveryWarning(translations) {
+        if (!els.stremioDeliveryWarning) return;
+        const translatedOkCount = Array.isArray(translations)
+          ? translations.filter((entry) => entry && !entry.error && entry.srt).length
+          : 0;
+        if (translatedOkCount <= 0) {
+          els.stremioDeliveryWarning.style.display = 'none';
+          els.stremioDeliveryWarning.textContent = '';
+          return;
+        }
+
+        const blocked = state.cacheBlocked === true;
+        const toneClass = blocked ? 'warn' : 'info';
+        const message = blocked
+          ? (runtimeCopy?.steps?.sentToStremioBlocked || tt('toolbox.autoSubs.steps.sentToStremioBlocked', {}, 'Translated subtitles were not sent to Stremio Auto for this run because of hash mismatch.'))
+          : (runtimeCopy?.steps?.sentToStremio || tt('toolbox.autoSubs.steps.sentToStremio', {}, 'Translated subtitles were sent to Stremio under the Auto entry.'));
+        els.stremioDeliveryWarning.className = 'step4-warning ' + toneClass;
+        els.stremioDeliveryWarning.textContent = message;
+        els.stremioDeliveryWarning.style.display = 'block';
       }
 
       function processAutoSubResult(data, transcript, translateEnabled, targets, serverLogs = []) {
@@ -6725,7 +7068,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         markStep('deliver', 'check');
         setPillLabel('deliver', okLabel);
         if (state.decodeStatus !== 'done') {
-          markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+          markDecodeDone(runtimeCopy?.badges?.decodeReady || decodeLabels.ready);
         }
         setProgress(100);
         setStatus(tt('toolbox.autoSubs.status.done', {}, 'Done. Ready to download.'));
@@ -6746,8 +7089,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         resetDecodeBadge();
         setPreview('');
         disableDownloadLink(els.dlSrt);
-        disableDownloadLink(els.dlVtt);
         disableDownloadLink(els.dlRaw);
+        if (els.stremioDeliveryWarning) {
+          els.stremioDeliveryWarning.style.display = 'none';
+          els.stremioDeliveryWarning.textContent = '';
+          els.stremioDeliveryWarning.className = 'step4-warning info';
+        }
         if (els.translations) {
           els.translations.innerHTML = '';
         }
@@ -6772,11 +7119,26 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       function handleHashStatus(hashes = {}, cacheBlocked = false) {
         const hashEl = els.hashStatus;
-        const linked = hashes.linked || PAGE.videoHash || '';
-        const streamHash = hashes.stream || '';
-        const hasMismatch = linked && streamHash && linked !== streamHash;
+        const linkedHashes = collectAutoHashCandidates([
+          ...(Array.isArray(hashes.linkedHashes) ? hashes.linkedHashes : []),
+          hashes.linked,
+          PAGE.videoHash,
+          deriveVideoHashFromParts(PAGE.filename, PAGE.videoId)
+        ]);
+        const streamHashes = collectAutoHashCandidates([
+          ...(Array.isArray(hashes.streamHashes) ? hashes.streamHashes : []),
+          hashes.stream
+        ]);
+        const compared = compareAutoHashSets(linkedHashes, streamHashes);
+        const linked = compared.linkedHash || linkedHashes[0] || '';
+        const streamHash = compared.match
+          ? (compared.matches[0] || compared.streamHash || '')
+          : (compared.streamHash || streamHashes[0] || '');
+        const hasMismatch = compared.hasLinked && compared.hasStream && !compared.match;
         const cacheFlag = cacheBlocked || hasMismatch;
         state.cacheBlocked = cacheFlag;
+        state.streamHashCandidates = streamHashes;
+        state.streamHashInfo = streamHash ? { hash: streamHash, filename: '', videoId: '', source: 'stream-url' } : null;
         if (els.hashBadgeValue) {
           const fallback = tt('toolbox.autoSubs.badges.pending', {}, 'WAITING');
           const badgeValue = linked || streamHash || fallback;
@@ -6814,8 +7176,11 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       async function updateHashStatusFromInput() {
         if (!els.streamUrl) return;
         const url = (els.streamUrl.value || '').trim();
+        const linkedHashes = getAutoLinkedHashCandidates();
         if (!url) {
-          handleHashStatus({ linked: PAGE.videoHash, stream: '' }, false);
+          state.streamHashInfo = null;
+          state.streamHashCandidates = [];
+          handleHashStatus({ linkedHashes, streamHashes: [], stream: '' }, false);
           return;
         }
 
@@ -6826,10 +7191,16 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         // First, immediately compute hash from the input URL as-is
         // This gives instant feedback while we resolve redirects
         const immediateDerived = deriveStreamHashFromUrl(url, { filename: PAGE.filename, videoId: PAGE.videoId });
+        const immediateHashes = collectAutoHashCandidates([immediateDerived.hash]);
+        const immediateCompared = compareAutoHashSets(linkedHashes, immediateHashes);
 
         // If immediate hash matches, no need to resolve redirects
-        if (immediateDerived.hash === PAGE.videoHash) {
-          handleHashStatus({ linked: PAGE.videoHash, stream: immediateDerived.hash }, state.cacheBlocked);
+        if (immediateCompared.match) {
+          handleHashStatus({
+            linkedHashes,
+            streamHashes: immediateHashes,
+            stream: immediateCompared.matches[0] || immediateCompared.streamHash || immediateDerived.hash
+          }, state.cacheBlocked);
           return;
         }
 
@@ -6841,26 +7212,30 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         }
 
         try {
-          // Resolve redirects to get the final URL (where the real filename is)
-          const resolvedUrl = await resolveStreamUrlRedirect(url);
+          const resolvedData = await resolveAutoStreamHashCandidates(url, { filename: PAGE.filename, videoId: PAGE.videoId });
 
           // Check if this resolution is still current (no newer input)
           if (hashResolutionPending !== resolutionId) return;
-
-          // Compute hash from the resolved URL
-          const derived = deriveStreamHashFromUrl(resolvedUrl, { filename: PAGE.filename, videoId: PAGE.videoId });
-
-          // If resolved URL gave a different result, use it; otherwise fall back to immediate
-          const finalHash = derived.hash || immediateDerived.hash;
-
-          handleHashStatus({ linked: PAGE.videoHash, stream: finalHash }, state.cacheBlocked);
+          const compared = compareAutoHashSets(linkedHashes, resolvedData.hashes);
+          const finalHash = compared.match
+            ? (compared.matches[0] || resolvedData.preferred?.hash || '')
+            : (resolvedData.preferred?.hash || resolvedData.immediate?.hash || '');
+          handleHashStatus({
+            linkedHashes,
+            streamHashes: resolvedData.hashes,
+            stream: finalHash
+          }, state.cacheBlocked);
         } catch (err) {
           // Check if this resolution is still current
           if (hashResolutionPending !== resolutionId) return;
 
           // On error, use the immediate hash
           console.warn('[updateHashStatusFromInput] Redirect resolution failed:', err);
-          handleHashStatus({ linked: PAGE.videoHash, stream: immediateDerived.hash }, state.cacheBlocked);
+          handleHashStatus({
+            linkedHashes,
+            streamHashes: immediateHashes,
+            stream: immediateDerived.hash
+          }, state.cacheBlocked);
         }
       }
 
@@ -6887,7 +7262,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         state.autoSubsReject = null;
         const err = new Error('Extension did not return a transcript in time');
         if (state.decodeStatus !== 'done') {
-          markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+          markDecodeError(runtimeCopy?.badges?.decodeError || decodeLabels.error);
         }
         if (typeof rejecter === 'function') rejecter(err);
         else appendLog(err.message, 'error');
@@ -6925,10 +7300,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         const suggested = Number.isInteger(msg.suggestedIndex) ? msg.suggestedIndex : msg.extractedIndex;
         const extracted = Number.isInteger(msg.extractedIndex) ? msg.extractedIndex : null;
         showAudioTrackPrompt(state.audioTracks, suggested, extracted);
-        const promptStatus = copy?.steps?.audioTrackHelper || tt('toolbox.autoSubs.status.audioTrackPrompt', {}, 'Multiple audio tracks detected. Choose one to continue.');
+        const promptStatus = runtimeCopy?.steps?.audioTrackHelper || tt('toolbox.autoSubs.status.audioTrackPrompt', {}, 'Multiple audio tracks detected. Choose one to continue.');
         setStatus(promptStatus);
         appendLog(promptStatus, 'info');
-        markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+        markDecodeDone(runtimeCopy?.badges?.decodeReady || decodeLabels.ready);
       }
 
       function submitAudioTrackSelection() {
@@ -6955,6 +7330,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
       async function submitTranscriptToServer(transcript, stream, targets, translateEnabled, overrides = {}) {
         const engine = overrides.engine || 'remote';
+        const assemblySpeechModel = (overrides.assemblySpeechModel || els.assemblyModel?.value || BOOTSTRAP.defaults?.assemblySpeechModel || 'universal-3-pro')
+          .toString()
+          .trim()
+          .toLowerCase();
         const payload = {
           configStr: PAGE.configStr,
           streamUrl: stream,
@@ -6973,19 +7352,24 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         };
         if (engine === 'assemblyai') {
           delete payload.model;
+          payload.assemblySpeechModel = assemblySpeechModel;
           // sourceLanguage is kept - server normalizes to AssemblyAI format (e.g., 'jpn' -> 'ja')
         }
         if (transcript && transcript.srt) {
-          payload.transcript = {
+          const transcriptPayload = {
             srt: transcript.srt || '',
             languageCode: transcript.languageCode || transcript.language || '',
             cfStatus: transcript.cfStatus || transcript.status || null,
             cfBody: transcript.cfBody || '',
-            model: transcript.model || '',
+            model: transcript.model || (engine === 'assemblyai' ? assemblySpeechModel : ''),
             audioBytes: transcript.audioBytes,
             audioSource: transcript.audioSource || 'extension',
             contentType: transcript.contentType || 'audio/wav'
           };
+          if (engine === 'assemblyai') {
+            transcriptPayload.speechModel = assemblySpeechModel;
+          }
+          payload.transcript = transcriptPayload;
         }
 
         const resp = await fetch('/api/auto-subtitles/run', {
@@ -7263,6 +7647,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             markStep('fetch', 'warn');
             markStep('transcribe', 'warn');
             const messageId = assemblyJobId || ('autosub_' + Date.now());
+            const assemblySpeechModel = (els.assemblyModel?.value || BOOTSTRAP.defaults?.assemblySpeechModel || 'universal-3-pro')
+              .toString()
+              .trim()
+              .toLowerCase();
             const waitForTranscript = waitForAutoSubResponse(messageId);
             window.postMessage({
               type: 'SUBMAKER_AUTOSUB_REQUEST',
@@ -7274,10 +7662,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 sourceLanguage: els.sourceLang?.value || '', // Extension normalizes to AssemblyAI format
                 diarization: true,
                 useAssembly: true,
-                assemblyApiKey: BOOTSTRAP.assemblyApiKey || ''
+                assemblyApiKey: BOOTSTRAP.assemblyApiKey || '',
+                speech_model: assemblySpeechModel,
+                speechModel: assemblySpeechModel
               }
             }, '*');
-            appendLog('Sent auto-sub request to extension (AssemblyAI path)', 'info');
+            appendLog('Sent auto-sub request to extension (AssemblyAI path, model=' + assemblySpeechModel + ')', 'info');
 
             transcript = await waitForTranscript;
             if (!transcript || transcript === true) {
@@ -7287,15 +7677,19 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
             if (state.decodeStatus !== 'done') {
-              markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+              markDecodeDone(runtimeCopy?.badges?.decodeReady || decodeLabels.ready);
             }
             setProgress(60);
-            appendLog(tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.'), 'success');
+            const transcriptionDoneLog = translateEnabled
+              ? `${tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.')} ${tt('toolbox.autoSubs.logs.translatingNow', {}, 'Translating...')}`
+              : tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.');
+            appendLog(transcriptionDoneLog, 'success');
             setPreview(transcript.srt || '');
             setStatus(tt('toolbox.autoSubs.status.transcriptionDone', {}, 'Transcription complete. Preparing downloads...'));
 
             const { resp, data } = await submitTranscriptToServer(transcript, stream, targets, translateEnabled, {
               engine: 'assemblyai',
+              assemblySpeechModel,
               sendFullVideo: els.assemblySendFullVideo?.checked === true,
               diarization: true,
               jobId: assemblyJobId
@@ -7337,10 +7731,13 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             markStep('fetch', 'check');
             markStep('transcribe', 'check');
             if (state.decodeStatus !== 'done') {
-              markDecodeDone(copy?.badges?.decodeReady || decodeLabels.ready);
+              markDecodeDone(runtimeCopy?.badges?.decodeReady || decodeLabels.ready);
             }
             setProgress(60);
-            appendLog(tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.'), 'success');
+            const transcriptionDoneLog = translateEnabled
+              ? `${tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.')} ${tt('toolbox.autoSubs.logs.translatingNow', {}, 'Translating...')}`
+              : tt('toolbox.autoSubs.logs.transcriptionDone', {}, 'Transcription completed.');
+            appendLog(transcriptionDoneLog, 'success');
             setPreview(transcript.srt || '');
             setStatus(tt('toolbox.autoSubs.status.transcriptionDone', {}, 'Transcription complete. Preparing downloads...'));
 
@@ -7375,7 +7772,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           }
           appendLog(tt('toolbox.autoSubs.logs.errorPrefix', {}, 'Error: ') + (error.message || error), 'error');
           if (state.decodeStatus !== 'done') {
-            markDecodeError(copy?.badges?.decodeError || decodeLabels.error);
+            markDecodeError(runtimeCopy?.badges?.decodeError || decodeLabels.error);
           }
         } finally {
           stopLiveLogs();
@@ -7415,6 +7812,16 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             els.model.value = opts[0].value;
           }
         }
+        if (els.assemblyModel) {
+          const desiredAssemblyModel = (BOOTSTRAP.defaults?.assemblySpeechModel || 'universal-3-pro').toLowerCase();
+          const opts = Array.from(els.assemblyModel.options || []);
+          const hasDesired = desiredAssemblyModel && opts.some(opt => opt.value === desiredAssemblyModel);
+          if (hasDesired) {
+            els.assemblyModel.value = desiredAssemblyModel;
+          } else if (!els.assemblyModel.value && opts.length) {
+            els.assemblyModel.value = opts[0].value;
+          }
+        }
         if (els.translateToggle) {
           els.translateToggle.checked = BOOTSTRAP.defaults?.translateToTarget !== false;
         }
@@ -7446,6 +7853,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           refreshStepLocks();
         });
         els.modeSelect?.addEventListener('change', toggleModeDetails);
+        els.assemblyModel?.addEventListener('change', () => refreshStepLocks());
         els.targetLang?.addEventListener('change', () => refreshStepLocks());
         els.audioTrackSelect?.addEventListener('change', () => {
           const raw = els.audioTrackSelect ? parseInt(els.audioTrackSelect.value, 10) : NaN;
@@ -7454,10 +7862,9 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           }
         });
         els.audioTrackContinue?.addEventListener('click', submitAudioTrackSelection);
-        els.continueBtn?.addEventListener('click', () => {
+        els.continueBtn?.addEventListener('click', async () => {
           const stream = (els.streamUrl?.value || '').trim();
-          const linkedHash = PAGE.videoHash || '';
-          const fallback = { filename: PAGE.filename, videoId: PAGE.videoId };
+          const linkedHashes = getAutoLinkedHashCandidates();
           const invalidMsg = tt('toolbox.logs.invalidUrl', {}, 'Invalid stream URL. Paste a full http/https link.');
           const missingMsg = tt('toolbox.autoSubs.logs.noStream', {}, 'Paste a stream URL first.');
           const mismatchMsg = HASH_MISMATCH_LINES[0] || tt('toolbox.embedded.step1.hashMismatchLine1', {}, 'Hashes must match (Linked Stream and Stream URL) before extraction can start.');
@@ -7480,15 +7887,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             return;
           }
 
-          let derived = { hash: '', filename: '', videoId: '', source: 'stream-url' };
-          try {
-            derived = deriveStreamHashFromUrl(stream, fallback);
-          } catch (_) {
-            derived = { hash: '', filename: '', videoId: '', source: 'stream-url' };
-          }
-          const hasMismatch = linkedHash && derived.hash && linkedHash !== derived.hash;
-          if (hasMismatch) {
-            const alert = buildHashMismatchAlert(linkedHash, derived.hash);
+          await updateHashStatusFromInput();
+          const streamHashes = collectAutoHashCandidates([
+            ...(Array.isArray(state.streamHashCandidates) ? state.streamHashCandidates : []),
+            state.streamHashInfo?.hash
+          ]);
+          const compared = compareAutoHashSets(linkedHashes, streamHashes);
+          if (compared.hasLinked && compared.hasStream && !compared.match) {
+            const alert = buildHashMismatchAlert(compared.linkedHash, compared.streamHash);
             setHashMismatchAlert(alert);
             appendLog(mismatchMsg, 'warn');
             resetWithReason(mismatchMsg);
@@ -7559,6 +7965,45 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         let pingTimer = null;
         const MAX_PING_RETRIES = 5;
         const EXT_INSTALL_URL = (els.extLabel && els.extLabel.getAttribute('href')) || 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
+        const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+        const VERSION_WARNING_TEMPLATE = tt(
+          'toolbox.extension.versionOutdated',
+          { detected: '{detected}', required: '{required}' },
+          'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.'
+        );
+        function parseVersionParts(version) {
+          if (!version) return null;
+          const cleaned = String(version).trim().replace(/^v/i, '').split('-')[0];
+          if (!cleaned) return null;
+          const parts = cleaned.split('.').slice(0, 3).map(part => Number.parseInt(part, 10));
+          if (!parts.length || parts.some(part => !Number.isFinite(part))) return null;
+          while (parts.length < 3) parts.push(0);
+          return parts;
+        }
+        function compareVersions(a, b) {
+          const aParts = parseVersionParts(a);
+          const bParts = parseVersionParts(b);
+          if (!aParts || !bParts) return null;
+          for (let i = 0; i < 3; i += 1) {
+            if (aParts[i] > bParts[i]) return 1;
+            if (aParts[i] < bParts[i]) return -1;
+          }
+          return 0;
+        }
+        function updateVersionWarning(installedVersion) {
+          if (!els.xsyncVersionWarning) return;
+          const cmp = compareVersions(installedVersion, REQUIRED_XSYNC_VERSION);
+          if (cmp !== null && cmp < 0) {
+            const detectedLabel = 'v' + String(installedVersion || '').replace(/^v/i, '');
+            els.xsyncVersionWarning.textContent = VERSION_WARNING_TEMPLATE
+              .replace('{detected}', detectedLabel)
+              .replace('{required}', 'v' + REQUIRED_XSYNC_VERSION);
+            els.xsyncVersionWarning.style.display = 'block';
+            return;
+          }
+          els.xsyncVersionWarning.style.display = 'none';
+          els.xsyncVersionWarning.textContent = '';
+        }
         function updateExtensionStatus(ready, text, tone) {
           state.extensionReady = ready;
           const dotTone = ready ? 'ok' : (tone || 'bad');
@@ -7594,6 +8039,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
               ? tt('toolbox.autoSubs.extension.readyWithVersion', { version: msg.version || '-' }, 'Ready (v' + (msg.version || '-') + ')')
               : tt('toolbox.autoSubs.extension.ready', {}, 'Ready');
             updateExtensionStatus(true, readyLabel);
+            updateVersionWarning(msg.version || '');
           }
           if (msg.type === 'SUBMAKER_AUTOSUB_PROGRESS') {
             handleAutoSubProgressMessage(msg);
@@ -7655,6 +8101,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
   }
 
   const preferredMode = (config?.autoSubs?.defaultMode || 'cloudflare').toLowerCase();
+  const allowedAssemblySpeechModels = new Set(['universal-2', 'universal-3-pro']);
+  const requestedAssemblySpeechModel = (config?.autoSubs?.assemblySpeechModel || 'universal-3-pro')
+    .toString()
+    .trim()
+    .toLowerCase();
+  const defaultAssemblySpeechModel = allowedAssemblySpeechModels.has(requestedAssemblySpeechModel)
+    ? requestedAssemblySpeechModel
+    : 'universal-3-pro';
   const defaultMode = (() => {
     if (preferredMode === 'cloudflare' && !cloudflareEnabled) {
       return assemblyEnabled ? 'assemblyai' : preferredMode;
@@ -7673,7 +8127,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     translationModel: config?.geminiModel || '',
     sendTimestampsToAI: config?.advancedSettings?.sendTimestampsToAI === true,
     singleBatchMode: config?.singleBatchMode === true,
-    assemblySendFullVideo: config?.autoSubs?.sendFullVideoToAssembly === true
+    assemblySendFullVideo: config?.autoSubs?.sendFullVideoToAssembly === true,
+    assemblySpeechModel: defaultAssemblySpeechModel
   };
 
   const themeToggleLabel = t('fileUpload.themeToggle', {}, 'Toggle theme');
@@ -7712,7 +8167,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       cacheDisabled: t('toolbox.autoSubs.hash.cacheDisabled', {}, 'Cache disabled for this run.')
     },
     videoMeta: {
-      label: t('toolbox.embedded.videoMeta.label', {}, 'Linked stream'),
+      label: t('toolbox.embedded.videoMeta.label', {}, 'Linked Stream'),
       none: t('toolbox.embedded.videoMeta.none', {}, 'No stream linked'),
       unavailable: t('toolbox.embedded.videoMeta.unavailable', {}, 'Video ID unavailable'),
       waiting: t('toolbox.embedded.videoMeta.waiting', {}, 'Waiting for a linked stream...'),
@@ -7730,11 +8185,14 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       inputTitle: t('toolbox.autoSubs.steps.step1Title', {}, 'Input audio or video'),
       streamLabel: t('toolbox.embedded.step1.streamLabel', {}, t('toolbox.autoSubs.steps.streamLabel', {}, 'Stream URL:')),
       streamPlaceholder: t('toolbox.embedded.step1.streamPlaceholder', {}, t('toolbox.autoSubs.steps.streamPlaceholder', {}, 'Paste the video/stream URL from Stremio or your browser')),
+      englishRecommended: t('toolbox.autoSubs.steps.englishRecommended', {}, 'English audio source recommended.'),
+      localDecodeWarning: t('toolbox.autoSubs.steps.localDecodeWarning', {}, 'Avoid large files when possible. The stream file is downloaded and audio is decoded locally for transcription, so smaller files are recommended.'),
       langModelTitle: t('toolbox.autoSubs.steps.step2Title', {}, 'Mode & audio'),
       modeLabel: t('toolbox.autoSubs.steps.modeLabel', {}, 'Auto-subtitles mode'),
       modeLocal: t('toolbox.autoSubs.steps.modeLocal', {}, 'Local (xSync)'),
       modeRemote: t('toolbox.autoSubs.steps.modeRemote', {}, 'Cloudflare Workers AI'),
       modeAssembly: t('toolbox.autoSubs.steps.modeAssembly', {}, 'AssemblyAI'),
+      assemblyModelLabel: t('toolbox.autoSubs.steps.assemblyModelLabel', {}, 'AssemblyAI speech model'),
       sourceLabel: t('toolbox.autoSubs.steps.sourceLabel', {}, 'Source audio language'),
       autoDetect: t('toolbox.autoSubs.steps.autoDetect', {}, 'Auto-detect'),
       modelLabel: t('toolbox.autoSubs.steps.modelLabel', {}, 'Whisper model'),
@@ -7742,7 +8200,11 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         standard: t('toolbox.autoSubs.steps.modelStandard', {}, 'Whisper'),
         turbo: t('toolbox.autoSubs.steps.modelTurbo', {}, 'Whisper Large V3 Turbo')
       },
-      translateOutput: t('toolbox.autoSubs.steps.translateOutput', {}, 'Translate to target languages'),
+      assemblyModel: {
+        universal2: t('toolbox.autoSubs.steps.assemblyModelUniversal2', {}, 'Universal-2'),
+        universal3Pro: t('toolbox.autoSubs.steps.assemblyModelUniversal3Pro', {}, 'Universal-3 Pro')
+      },
+      translateOutput: t('toolbox.autoSubs.steps.translateOutput', {}, 'Translate to target language'),
       assemblySendFullVideo: t('toolbox.autoSubs.steps.sendFullVideo', {}, 'Send full video to AssemblyAI (≤5GB)'),
       assemblySendFullVideoHelper: t('toolbox.autoSubs.steps.sendFullVideoHelper', {}, 'If the stream is larger than 5GB, we will fall back to audio extraction automatically.'),
       vadFilter: t('toolbox.autoSubs.steps.vadFilter', {}, 'Enable VAD filter (Turbo model)'),
@@ -7752,6 +8214,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       translationSettingsTitle: t('toolbox.autoSubs.steps.translationSettings', {}, 'Translation settings'),
       translationSettingsMeta: t('toolbox.autoSubs.steps.translationSettingsMeta', {}, 'Batching & timestamps'),
       targetLabel: t('toolbox.autoSubs.steps.targetLabel', {}, 'Target language'),
+      targetWorkflowHelper: t('toolbox.autoSubs.steps.targetWorkflowHelper', {}, 'Uses the same translation workflow configured for Stremio.'),
       providerLabel: t('toolbox.autoSubs.steps.providerLabel', {}, 'Translation provider'),
       providerModelLabel: t('toolbox.autoSubs.steps.providerModelLabel', {}, 'Translation model'),
       providerModelPlaceholder: t('toolbox.autoSubs.steps.providerModelPlaceholder', {}, 'Use provider default'),
@@ -7781,12 +8244,13 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       noOutput: t('toolbox.autoSubs.status.noOutput', {}, 'No output yet.'),
       downloads: t('toolbox.autoSubs.steps.downloads', {}, 'Downloads'),
       downloadSrt: t('toolbox.autoSubs.actions.downloadSrt', {}, 'Download SRT'),
-      downloadVtt: t('toolbox.autoSubs.actions.downloadVtt', {}, 'Download VTT'),
       downloadRawTranscript: t('toolbox.autoSubs.actions.downloadRawTranscript', {}, 'Download raw transcript'),
       translationsEmpty: t('toolbox.autoSubs.steps.translationsEmpty', {}, 'No translations yet.'),
       translationCardTitle: t('toolbox.autoSubs.steps.translationCardTitle', { lang: '{lang}' }, 'Translated {lang}'),
       translationCardFallback: t('toolbox.autoSubs.steps.translationCardFallback', {}, 'Translated subtitle'),
-      enableAfter: t('toolbox.autoSubs.steps.downloadsNote', {}, 'We\'ll enable downloads after the pipeline finishes.')
+      enableAfter: t('toolbox.autoSubs.steps.downloadsNote', {}, 'We\'ll enable downloads after the pipeline finishes.'),
+      sentToStremio: t('toolbox.autoSubs.steps.sentToStremio', {}, 'Translated subtitles were sent to Stremio under the Auto entry.'),
+      sentToStremioBlocked: t('toolbox.autoSubs.steps.sentToStremioBlocked', {}, 'Translated subtitles were not sent to Stremio Auto for this run because of hash mismatch.')
     },
     locks: {
       needContinue: t('toolbox.autoSubs.locks.needContinue', {}, 'Click Continue to unlock the next steps.'),
@@ -7827,16 +8291,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       readyWithVersion: t('toolbox.autoSubs.extension.readyVersion', {}, 'Ready (v{version})')
     }
   };
-  const metaDetails = [];
-  if (linkedTitle) metaDetails.push(t('toolbox.embedded.meta.title', { title: linkedTitle }, `Title: ${linkedTitle}`));
-  else if (videoId) metaDetails.push(t('toolbox.embedded.meta.videoId', { id: videoId }, `Video ID: ${videoId}`));
-  if (episodeTag) metaDetails.push(t('toolbox.embedded.meta.episode', { episode: episodeTag }, `Episode: ${episodeTag}`));
-  if (filename) {
-    const cleanedFile = cleanDisplayName(filename);
-    metaDetails.push(t('toolbox.embedded.meta.file', { file: cleanedFile }, `File: ${cleanedFile}`));
-  }
-  const initialVideoTitle = escapeHtml(linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || copy.videoMeta.none);
-  const initialVideoSubtitle = escapeHtml(metaDetails.join(' - ') || copy.videoMeta.unavailable);
+  const metaDetailsTop = [];
+  if (videoId) metaDetailsTop.push(t('toolbox.embedded.meta.videoId', { id: videoId }, `Video ID: ${videoId}`));
+  if (linkedTitle) metaDetailsTop.push(t('toolbox.embedded.meta.title', { title: linkedTitle }, `Title: ${linkedTitle}`));
+  if (videoId || filename || linkedTitle) metaDetailsTop.push(t('toolbox.embedded.meta.episode', { episode: episodeTag || '-' }, `Episode: ${episodeTag || '-'}`));
+  const cleanedFile = filename ? cleanDisplayName(filename) : '';
+  const metaFileLine = cleanedFile ? t('toolbox.embedded.meta.file', { file: cleanedFile }, `File: ${cleanedFile}`) : '';
+  const baseInitialTitle = linkedTitle || cleanDisplayName(filename) || cleanDisplayName(videoId) || copy.videoMeta.none;
+  const initialVideoTitleValue = (episodeTag && !String(baseInitialTitle).toUpperCase().includes(String(episodeTag).toUpperCase()))
+    ? (baseInitialTitle + ' - ' + episodeTag)
+    : baseInitialTitle;
+  const initialVideoTitle = escapeHtml(initialVideoTitleValue);
+  const initialVideoSubtitle = buildLinkedMetaSubtitleHtml(metaDetailsTop.join(' | '), metaFileLine, copy.videoMeta.unavailable);
 
   return `
 <!DOCTYPE html>
@@ -8022,6 +8488,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       pointer-events: none;
       cursor: default;
       font-weight: 800;
+    }
+    .xsync-version-warning {
+      margin: 10px auto 0;
+      width: min(980px, 100%);
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.14);
+      color: var(--text-primary);
+      font-weight: 700;
+      padding: 10px 14px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(245, 158, 11, 0.16);
     }
     .status-badge.warn { border-color: rgba(244,63,94,0.25); box-shadow: 0 12px 30px rgba(244,63,94,0.16); }
     .status-dot {
@@ -8218,7 +8696,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
 
     .row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
-    .controls.wrap { justify-content: flex-start; }
+    .controls.controls-wrap { justify-content: flex-start; }
     .inline-checkbox { display: flex; gap: 8px; align-items: center; font-weight: 600; color: var(--text-primary); }
     .mode-details { margin-top: 10px; display: grid; gap: 12px; }
     .mode-helper { margin: 6px 0 0; }
@@ -8385,7 +8863,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     #autoStep2Card .row { width: auto; max-width: 640px; margin: 0 auto; justify-items: center; }
     #autoStep2Card .row > div { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
     #autoStep2Card label { text-align: center; }
-    #autoStep2Card .controls.wrap { justify-content: center; margin-top: 0; }
+    #autoStep2Card .controls.controls-wrap { justify-content: center; margin-top: 0; }
     #autoStep2Card .mode-details { 
       height: auto;
       align-content: start;
@@ -8469,6 +8947,19 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       outline: none;
       border-color: var(--primary);
       box-shadow: 0 0 0 4px var(--glow);
+    }
+    #autoStep1Card .step1-warning {
+      margin: 4px auto 2px;
+      padding: 6px 10px;
+      width: min(720px, 100%);
+      border-radius: 8px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: left;
     }
 
     .btn {
@@ -8587,6 +9078,25 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       margin-top: 8px;
       font-weight: 700;
       color: var(--text-secondary);
+    }
+    .step4-warning {
+      margin-top: 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+    .step4-warning.info {
+      background: rgba(22, 163, 74, 0.08);
+      border-color: rgba(22, 163, 74, 0.24);
+      color: #166534;
+    }
+    .step4-warning.warn {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #92400e;
     }
 
     .pill.check { color: var(--success); border-color: #b3ead6; background: #f0fdf4; }
@@ -8731,6 +9241,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       color: var(--muted);
       font-size: 13px;
       word-break: break-word;
+      white-space: pre-line;
     }
     .audio-track-prompt {
       display: none;
@@ -8802,6 +9313,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         </div>
       </div>
     </header>
+    <div id="xsync-version-warning" class="xsync-version-warning" style="display:none;" role="status" aria-live="polite"></div>
 
     <div class="section section-joined">
       <h2><span class="section-number">1-2</span> ${escapeHtml(copy.sections.linkAndPrep)}</h2>
@@ -8823,6 +9335,8 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
               <label for="streamUrl">${escapeHtml(copy.steps.streamLabel)}</label>
               <input type="text" id="streamUrl" placeholder="${escapeHtml(copy.steps.streamPlaceholder)}">
             </div>
+            <p class="step1-warning" style="text-align:center;">${escapeHtml(copy.steps.englishRecommended)}</p>
+            <p class="step1-warning" style="text-align:center;">${escapeHtml(copy.steps.localDecodeWarning)}</p>
             <div class="hash-mismatch-alert" id="auto-hash-mismatch" role="status" aria-live="polite" aria-hidden="true"></div>
             <div class="controls" style="margin-top:12px;">
               <button class="btn" id="autoContinue"><span>➡️</span> ${escapeHtml(copy.actions.continue)}</button>
@@ -8834,7 +9348,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           <div class="step-body">
             <label for="autoSubsMode">${escapeHtml(copy.steps.modeLabel)}</label>
             <select id="autoSubsMode">
-              <option value="local">${escapeHtml(copy.steps.modeLocal)}</option>
+              <option value="local" disabled>${escapeHtml(copy.steps.modeLocal)}</option>
               <option value="cloudflare"${cloudflareEnabled ? '' : ' disabled'}>${escapeHtml(copy.steps.modeRemote)}</option>
               <option value="assemblyai"${assemblyEnabled ? '' : ' disabled'}>${escapeHtml(copy.steps.modeAssembly)}</option>
             </select>
@@ -8850,13 +9364,22 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 <div>
                   <label for="whisperModel">${escapeHtml(copy.steps.modelLabel)}</label>
                   <select id="whisperModel">
-                    <option value="@cf/openai/whisper">${escapeHtml(copy.steps.model.standard)}</option>
+                    ${devMode ? `<option value="@cf/openai/whisper">${escapeHtml(copy.steps.model.standard)}</option>` : ''}
                     <option value="@cf/openai/whisper-large-v3-turbo" selected>${escapeHtml(copy.steps.model.turbo)}</option>
                   </select>
                 </div>
               </div>
             </div>
-            <div class="controls wrap">
+            <div id="assemblyOptions" class="mode-details" style="display:none;">
+              <div>
+                <label for="assemblySpeechModel">${escapeHtml(copy.steps.assemblyModelLabel)}</label>
+                <select id="assemblySpeechModel">
+                  <option value="universal-2">${escapeHtml(copy.steps.assemblyModel.universal2)}</option>
+                  <option value="universal-3-pro">${escapeHtml(copy.steps.assemblyModel.universal3Pro)}</option>
+                </select>
+              </div>
+            </div>
+            <div class="controls controls-wrap">
               <label class="inline-checkbox">
                 <input type="checkbox" id="translateOutput" checked> ${escapeHtml(copy.steps.translateOutput)}
               </label>
@@ -8866,6 +9389,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
               <select id="targetLang">
                 ${targetOptions}
               </select>
+              <p class="muted" style="margin:8px 0 0; text-align:center;">${escapeHtml(copy.steps.targetWorkflowHelper)}</p>
             </div>
             <div class="controls" style="margin-top:12px;">
               <button class="btn" id="autoStep2Continue"><span>➡️</span> ${escapeHtml(copy.actions.continue)}</button>
@@ -8943,7 +9467,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             <div class="audio-track-prompt" id="autoTrackPrompt">
               <label for="autoAudioTrack">${escapeHtml(copy.steps.audioTrackLabel)}</label>
               <p class="muted" id="autoTrackHelper">${escapeHtml(copy.steps.audioTrackHelper)}</p>
-              <div class="controls wrap">
+              <div class="controls controls-wrap">
                 <select id="autoAudioTrack"></select>
                 <button class="btn secondary" type="button" id="autoTrackContinue">${escapeHtml(copy.actions.useTrack)}</button>
               </div>
@@ -8964,7 +9488,6 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 </div>
                 <div class="controls" style="margin-top:8px;">
                   <a class="btn secondary disabled" aria-disabled="true" id="downloadSrt">${escapeHtml(copy.steps.downloadSrt)}</a>
-                  <a class="btn secondary disabled" aria-disabled="true" id="downloadVtt">${escapeHtml(copy.steps.downloadVtt)}</a>
                   <a class="btn secondary disabled" aria-disabled="true" id="downloadRawTranscript">${escapeHtml(copy.steps.downloadRawTranscript)}</a>
                 </div>
               </div>
@@ -8974,6 +9497,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
                 <p style="margin-top:8px; color: var(--text-secondary);">${escapeHtml(copy.steps.enableAfter)}</p>
               </div>
             </div>
+            <div class="step4-warning info" id="stremioDeliveryWarning" style="display:none;"></div>
           </div>
         </div>
       </div>

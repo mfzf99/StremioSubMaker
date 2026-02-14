@@ -416,6 +416,7 @@
           "step1Title": "Vídeo ou áudio de entrada",
           "streamLabel": "URL do Stream / arquivo",
           "streamPlaceholder": "Cole a URL do vídeo/stream do Stremio ou do navegador",
+  "localDecodeWarning": "Evite arquivos grandes quando possível. O arquivo do stream é baixado e o áudio é decodificado localmente para a transcrição, então arquivos menores são recomendados.",
           "streamNote": "Buscaremos e extrairemos o áudio; streams protegidos/DRM não funcionarão.",
           "prefill": "Usar id de stream fornecido",
           "clear": "Limpar",
@@ -428,12 +429,13 @@
           "sourceLabel": "Idioma de origem (opcional)",
           "autoDetect": "Auto-detectar",
           "targetLabel": "Idioma de destino",
+          "targetWorkflowHelper": "Isto usa o mesmo fluxo de traducao que voce configurou para o Stremio.",
           "modelLabel": "Modelo Whisper",
           "modelTiny": "tiny (mais rápido)",
           "modelSmall": "small",
           "modelMedium": "medium (equilibrado)",
           "modelTurbo": "Whisper Large V3 Turbo",
-          "translateOutput": "Traduzir para idiomas de destino",
+          "translateOutput": "Traduzir para idioma de destino",
           "sendFullVideo": "Enviar vídeo completo para a AssemblyAI (≤5GB)",
           "sendFullVideoHelper": "Se o stream ultrapassar 5GB, faremos fallback para extração de áudio automaticamente.",
           "singleBatch": "Modo de lote único",
@@ -452,6 +454,8 @@
           "translationCardTitle": "Traduzido {lang}",
           "translationCardFallback": "Legenda traduzida",
           "downloadsNote": "Habilitaremos os downloads após o pipeline terminar.",
+          "sentToStremio": "As legendas traduzidas foram enviadas ao Stremio na entrada Auto.",
+          "sentToStremioBlocked": "As legendas traduzidas não foram enviadas ao Stremio Auto nesta execução por incompatibilidade de hash.",
           "fetchPill": "Buscar stream",
           "transcribePill": "Transcrever",
           "alignPill": "Alinhar + timestamps",
@@ -524,7 +528,8 @@
           "translationFailed": "{count} falharam",
           "readyToDeliver": "Pronto para entregar {count} faixa(s).",
           "cfStatus": "Status do Cloudflare: {status}",
-          "cfBody": "Resposta do Cloudflare: "
+          "cfBody": "Resposta do Cloudflare: ",
+          "translatingNow": "Translating..."
         },
         "providers": {
           "missing": "Nenhum fornecedor configurado"
@@ -1022,54 +1027,52 @@
         "googleWeb": "web (fixo)",
         "googleHint": "Usa o endpoint público da web do Google Translate (pode ser instável).",
         "testConnection": "Testar conexão",
-        "customHint": "Para Ollama, LM Studio, LocalAI ou qualquer API compatível com OpenAI. Deixe a chave vazia se não for necessária."
-      },
-      "gemini": {
-        "title": "Chaves de API de Tradução por IA",
+        "customHint": "Para Ollama, LM Studio, LocalAI ou qualquer API compatível com OpenAI. Deixe a chave vazia se não for necessária.",
+        "title": "AI Translation API Keys",
         "apiKey": {
-          "label": "Chave da API Gemini",
-          "helper": "Obtenha sua chave de API gratuita em",
+          "label": "Gemini API Key",
+          "helper": "Get your free API key from",
           "linkLabel": "Google AI Studio",
-          "placeholder": "Digite sua chave da API Gemini",
-          "validateTitle": "Validar chave da API",
-          "validateCta": "Teste",
-          "showHideKey": "Mostrar/ocultar chave da API",
-          "showKey": "Mostrar chave da API",
-          "hideKey": "Ocultar chave da API"
+          "placeholder": "Enter your Gemini API key",
+          "validateTitle": "Validate API key",
+          "validateCta": "Test",
+          "showHideKey": "Show/hide API key",
+          "showKey": "Show API key",
+          "hideKey": "Hide API key"
         },
         "model": {
-          "label": "Modelo de Tradução",
-          "helper": "Modelo de IA para traduções",
+          "label": "Translation Model",
+          "helper": "AI model for translations",
           "options": {
-            "gemma27b": "Gemma 27b (beta) (Recomendado para Limites de Taxa)",
+            "gemma27b": "Gemma 27b (beta) (Recommended for Rate Limits)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
-            "flash3": "Gemini 3.0 Flash (Preview)",
-            "pro": "Gemini 2.5 Pro (Lento)",
+            "flash3": "Gemini 3.0 Flash (beta)",
+            "pro": "Gemini 2.5 Pro (beta)",
             "pro3": "Gemini 3.0 Pro (beta)"
           },
-          "hintTitle": "Tradução ruim/quebrada ou fora de sincronia?",
-          "hintBody": "Clique três vezes rapidamente na legenda para forçar uma retradução.",
-          "retranslationHintTitle": "Tradução ruim/quebrada ou fora de sincronia?",
-          "retranslationHintBody": "Clique três vezes rapidamente na legenda para forçar uma retradução.",
-          "betaTitle": "⚡ O uso do 2.5 Pro ainda está em Beta.",
-          "betaAdvice": "Se tiver problemas de tradução, use o Flash-Lite.",
-          "rateWarningTitle": "⚠️ Limitação da Camada Gratuita:",
-          "rateWarningBody": "Se estiver usando uma chave de API gratuita, o Gemini 2.5 Pro pode acionar limites de taxa (HTTP 429). Você provavelmente só conseguirá traduzir uma legenda por vez."
+          "hintTitle": "Bad/broken or out-of-sync translation?",
+          "hintBody": "Quickly triple-click the subtitle to force a re-translation.",
+          "retranslationHintTitle": "Bad/broken or out-of-sync translation?",
+          "retranslationHintBody": "Quickly triple-click the subtitle to force a re-translation.",
+          "betaTitle": "⚡ 2.5 Pro usage is still in Beta.",
+          "betaAdvice": "If you have translation problems, use Flash-Lite.",
+          "rateWarningTitle": "⚠️ Free Tier Limitation:",
+          "rateWarningBody": "If using a free API key, Gemini 2.5 Pro may trigger rate limits (HTTP 429). You'll likely only be able to translate one subtitle at a time."
         },
         "keyRotation": {
-          "label": "Ativar rotação de chaves de API do Gemini",
-          "description": "Distribua as chamadas de API entre várias chaves para evitar limites de taxa.",
-          "additionalKeysLabel": "Chaves de API adicionais",
-          "additionalKeys": "adicionais",
-          "addKey": "Adicionar chave",
-          "testKey": "Testar esta chave",
-          "removeKey": "Remover esta chave",
-          "keyPlaceholder": "Insira a chave de API",
-          "modeLabel": "Frequência de rotação",
-          "modeDescription": "Com que frequência alternar entre as chaves de API",
-          "modePerRequest": "Por solicitação (uma vez por arquivo)",
-          "modePerBatch": "Por lote (cada lote de tradução)"
+          "label": "Enable Gemini API key rotation",
+          "description": "Distribute API calls across multiple keys to avoid rate limits.",
+          "additionalKeysLabel": "Additional API Keys",
+          "additionalKeys": "additional",
+          "addKey": "Add Key",
+          "testKey": "Test this key",
+          "removeKey": "Remove this key",
+          "keyPlaceholder": "Enter API key",
+          "modeLabel": "Rotation Frequency",
+          "modeDescription": "How often to switch between API keys",
+          "modePerRequest": "Per Request (once per file)",
+          "modePerBatch": "Per Batch (each translation batch)"
         }
       },
       "otherApiKeys": {
@@ -1129,7 +1132,8 @@
           "description": "Alternar entre modos é recomendado se você tiver problemas de sincronia de tradução.",
           "tooltip": "O modo \"Timestamps Originais\" remove os timestamps e envia para a IA uma lista numerada de entradas, depois reconstrói o SRT com os timestamps originais. \"Enviar Timestamps para IA\" envia as legendas COM códigos de tempo e confia que a IA devolva os tempos corretos. Adicionado para preparar o addon para o futuro.",
           "original": "Timestamps Originais (Padrão)",
-          "ai": "Enviar Timestamps para IA"
+          "ai": "Enviar Timestamps para IA",
+          "xml": "XML Tags (Default)"
         },
         "promptStyle": {
           "label": "Estilo de Prompt",
@@ -1151,6 +1155,10 @@
           "description": "Traduza toda a legenda de uma vez (ainda divide apenas quando extremamente grande). Melhora a coerência contextual, mas pode atingir limites do provedor com mais facilidade.",
           "multiple": "Lotes Múltiplos (Padrão)",
           "single": "Lote Único"
+        },
+        "jsonOutput": {
+          "label": "Enable JSON Structured Output (Beta)",
+          "description": "Request JSON array format from AI for unambiguous response parsing. May improve accuracy but not all providers support it. Disabled by default."
         }
       },
       "multiProvider": {
@@ -1225,6 +1233,10 @@
         "contextSize": {
           "label": "Tamanho do Contexto",
           "description": "Número de entradas ao redor para incluir como contexto (1-10). Padrão: 3"
+        },
+        "mismatchRetries": {
+          "label": "Mismatch Retries",
+          "description": "When the AI returns a different number of subtitle entries than expected, retry the batch this many times before marking untranslated lines. (0-3, Default: 1)"
         }
       },
       "providerAdvanced": {

@@ -675,7 +675,8 @@ Translate to {target_language}.`;
             otherApiKeysEnabled: true,
             autoSubs: {
                 defaultMode: 'cloudflare',
-                sendFullVideoToAssembly: false
+                sendFullVideoToAssembly: false,
+                assemblySpeechModel: 'universal-3-pro'
             },
             geminiModel: modelName,
             betaModeEnabled: false,
@@ -874,7 +875,17 @@ Translate to {target_language}.`;
             ...defaults,
             ...(currentConfig.autoSubs || {})
         };
-        currentConfig.otherApiKeysEnabled = isDevModeEnabled();
+        currentConfig.otherApiKeysEnabled = isSubToolboxEnabled();
+    }
+
+    function isSubToolboxEnabled() {
+        const toolboxToggle = document.getElementById('subToolboxEnabledNoTranslation') || document.getElementById('subToolboxEnabled');
+        if (toolboxToggle) {
+            return toolboxToggle.checked === true;
+        }
+        return currentConfig?.subToolboxEnabled === true
+            || currentConfig?.fileTranslationEnabled === true
+            || currentConfig?.syncSubtitlesEnabled === true;
     }
 
     function ensureUiLanguageDockExists() {
@@ -1696,6 +1707,7 @@ Translate to {target_language}.`;
             toolboxToggleNoTranslation.checked = isEnabled;
         }
         updateSubToolboxInstructionsLink();
+        toggleOtherApiKeysSection();
     }
 
     // (Removed extra window load fallback to reduce complexity)
@@ -4717,13 +4729,13 @@ Translate to {target_language}.`;
 
     function toggleOtherApiKeysSection() {
         const card = document.getElementById('otherApiKeysCard');
-        const devEnabled = isDevModeEnabled();
+        const toolboxEnabled = isSubToolboxEnabled();
         if (card) {
-            card.style.display = devEnabled ? '' : 'none';
-            card.setAttribute('aria-hidden', devEnabled ? 'false' : 'true');
+            card.style.display = toolboxEnabled ? '' : 'none';
+            card.setAttribute('aria-hidden', toolboxEnabled ? 'false' : 'true');
         }
         if (currentConfig) {
-            currentConfig.otherApiKeysEnabled = devEnabled;
+            currentConfig.otherApiKeysEnabled = toolboxEnabled;
         }
     }
 
@@ -5528,6 +5540,24 @@ Translate to {target_language}.`;
                 }
             });
         }
+        // Re-apply dev-only option visibility after config values are loaded.
+        // Without this, these groups can stay hidden after reload until the user toggles Dev Mode again.
+        const devEnabledAfterLoad = currentConfig.devMode === true;
+        const convertAssGroup = document.getElementById('convertAssToVttGroup');
+        if (convertAssGroup) {
+            convertAssGroup.style.display = devEnabledAfterLoad ? 'block' : 'none';
+        }
+        const urlExtTestGroup = document.getElementById('urlExtensionTestGroup');
+        if (urlExtTestGroup) {
+            const assConversionDisabled = convertAssToVttEl ? !convertAssToVttEl.checked : false;
+            urlExtTestGroup.style.display = (devEnabledAfterLoad && assConversionDisabled) ? 'block' : 'none';
+        }
+        const selectedUrlExt = String(currentConfig.urlExtensionTest || 'srt');
+        const urlExtRadio = document.querySelector(`input[name="urlExtensionTest"][value="${selectedUrlExt}"]`)
+            || document.querySelector('input[name="urlExtensionTest"][value="srt"]');
+        if (urlExtRadio) {
+            urlExtRadio.checked = true;
+        }
         // Season packs default to enabled (true) for backwards compatibility
         const seasonPacksEnabled = currentConfig.enableSeasonPacks !== false;
         const seasonPacksEl = document.getElementById('enableSeasonPacks');
@@ -5749,11 +5779,12 @@ Translate to {target_language}.`;
             geminiKeyRotationMode: document.getElementById('geminiKeyRotationMode')?.value || 'per-batch',
             assemblyAiApiKey: (function () { const el = document.getElementById('assemblyAiApiKey'); return el ? el.value.trim() : ''; })(),
             cloudflareWorkersApiKey: (function () { const el = document.getElementById('cloudflareWorkersApiKey'); return el ? el.value.trim() : ''; })(),
-            otherApiKeysEnabled: isDevModeEnabled(),
+            otherApiKeysEnabled: isSubToolboxEnabled(),
             autoSubs: {
                 ...currentConfig.autoSubs,
                 defaultMode: currentConfig.autoSubs?.defaultMode || 'cloudflare',
-                sendFullVideoToAssembly: currentConfig.autoSubs?.sendFullVideoToAssembly === true
+                sendFullVideoToAssembly: currentConfig.autoSubs?.sendFullVideoToAssembly === true,
+                assemblySpeechModel: currentConfig.autoSubs?.assemblySpeechModel || 'universal-3-pro'
             },
             // Save the selected model from the dropdown
             // Advanced settings can override this if enabled
@@ -5763,7 +5794,8 @@ Translate to {target_language}.`;
             betaModeEnabled: isBetaModeEnabled(),
             devMode: (function () { const el = document.getElementById('devMode'); return el ? el.checked : false; })(),
             urlExtensionTest: (function () {
-                // Only include if devMode is enabled and convertAssToVtt is disabled
+                // Only include if devMode is enabled and convertAssToVtt is disabled.
+                // Supported values: srt (default), sub (A), none (B), resolve (C).
                 const devEl = document.getElementById('devMode');
                 const convertAssEl = document.getElementById('convertAssToVtt');
                 if (devEl && devEl.checked && convertAssEl && !convertAssEl.checked) {
@@ -6431,9 +6463,3 @@ Translate to {target_language}.`;
         }
     }
 })();
-
-
-
-
-
-

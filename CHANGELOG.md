@@ -2,6 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.54
+
+**New Features:**
+
+- **AutoSubs is now officially released:** Added the new **AutoSubs page** in Toolbox as a guided subtitle-generation flow for stream/video inputs. The page is organized as a step-by-step pipeline (input URL, mode/audio setup, run, preview/download) and is designed to generate subtitles automatically and optionally translate output to a selected target language.
+
+**Improvements:**
+
+- **AutoSubs cache is now fully separated from xSync:** AutoSubs outputs are now stored in a dedicated cache namespace (`AUTOSUB`) instead of the manual sync cache (`SYNC`). Subtitle lists now surface these as `Auto (Language)` entries while manual sync remains under `xSync (Language)`, preventing method/source collisions.
+
+- **Dedicated Auto subtitle download route:** Added `GET /addon/:config/auto/:videoHash/:lang/:sourceSubId` for Auto entries. AutoSubs API responses now return `/auto/...` download URLs instead of `/xsync/...`, so Auto and manual-sync flows remain isolated end-to-end.
+
+- **Legacy AutoSubs compatibility path:** Existing historical AutoSubs records that were saved in `xSync` cache are now treated as legacy Auto data: they are excluded from `xSync` listing, surfaced under `Auto`, and still downloadable through the new `/auto/...` route via controlled fallback.
+
+- **Storage controls for Auto cache:** Added independent cache sizing and cleanup for AutoSubs (`CACHE_LIMIT_AUTOSUB`, default `0.5GB`) with periodic cleanup scheduling equivalent to other cache types.
+
+- **Immediate cache visibility after sync/autosub writes:** Subtitle search dedup keys now include a per-user revision token that is bumped after sync/autosub cache writes, so newly created `xSync`/`Auto` entries appear without waiting for subtitle-search TTL expiry.
+
+- **AssemblyAI timing preservation in normalization pipeline:** `normalizeAutoSubSrt()` now supports `preserveTiming` mode. When AutoSubs runs with AssemblyAI, subtitle entries keep original timing shape (with monotonic guard + minimum duration) instead of being aggressively re-merged, reducing timing drift in generated SRTs.
+
+- **AutoSubs run route now applies engine-aware normalization options:** `/api/auto-subtitles/run` now computes normalization options based on engine/model (`assemblyai`) and applies the same option set consistently to both transcript payload fallback input and the final transcription SRT.
+
+- **Clearer AutoSubs run log during translation path:** when "translate output" is enabled, the success log after transcription now explicitly appends a "Translating..." status so the next processing phase is visible immediately in the UI trail.
+
+- **New local decode warning in AutoSubs Step 1:** Added a prominent warning banner explaining that large files are less ideal because stream download + audio decode happen locally before transcription.
+
+- **AutoSubs checkbox copy clarified:** Updated wording from "Translate to target languages" to singular "Translate to target language" (and localized equivalents) to match actual selection behavior.
+
+- **AutoSubs control wrapper class cleanup:** standardized `.controls.controls-wrap` usage for layout consistency across mode controls and track-selection controls.
+
+- **AutoSubs is no longer dev-mode gated in UI navigation:** the AutoSubs entry now stays enabled in Quick Nav and in the main Toolbox tiles even when `devMode` is disabled, so the feature is visible by default.
+
+- **Configure page "Other API Keys" visibility now follows Sub Toolbox state:** the section is now shown whenever Sub Toolbox is enabled (instead of requiring Dev Mode), matching AutoSubs availability expectations.
+
+- **xSync AutoSubs language normalization expanded for many real-world tags:** the background worker now normalizes a much wider range of source-language hints across ISO-639-1/2 codes, common language names, locale/script variants, and legacy aliases (for example `eng`, `jpn`, `es-419`, `pt-BR`, `zh-Hant`, `iw`, `in`, `ji`) before STT provider requests.
+
+- **Cloudflare/AssemblyAI track-language matching hardened:** preferred audio-track selection now uses the shared normalization path, improving matching for locale-formatted metadata (including underscore variants like `en_us`) and reducing fallback-to-`und` behavior.
+
+- **AssemblyAI source-language handling now normalizes at input boundary:** explicit source language values are normalized immediately in the request handler, preventing invalid raw tags from blocking selected-track language fallback.
+
+**Bug Fixes:**
+
+- **Final subtitle responses now enforce no-store:** all subtitle payloads served via `setSubtitleCacheHeaders(..., 'final')` (standard downloads, translation finals, xSync, Auto, xEmbed, and addon SMDB SRT route) now return strict no-store headers instead of `private, max-age=86400`, reducing stale subtitle reuse on clients that persist subtitle responses too aggressively.
+
+- **Removed duplicate language rows for cached sync outputs:** Listing logic now selects only the newest cached entry per language for both `xSync` and `Auto`, eliminating repeated `#1/#2/...` style duplicates in subtitle menus.
+
+- **Sync page subtitle source filtering updated:** The sync page now excludes `Auto` cached entries from the selectable provider subtitle list (same treatment as `xSync`/action entries), preventing cache entries from appearing as raw source candidates.
+
+- **Invalid CSS class selector fixed:** replaced `.controls.wrap` usage with `.controls.controls-wrap`, ensuring the intended layout rules are applied predictably in AutoSubs cards.
+
+- **Fixed malformed track-language normalization entry (`mlt`) in xSync:** corrected incorrect mapping of `mlt` to Chinese; `mlt` now maps to Maltese, and additional Chinese-family alias coverage was aligned.
+
+- **Fixed xSync source-language propagation for multi-track AutoSubs runs:** when source language is auto, the selected audio track language is now used consistently for transcription request hints (Cloudflare and AssemblyAI paths), improving language consistency for dual-audio content.
+
+- **Matroska audio default-language fallback applied in xSync track probing:** when MKV audio track language elements are omitted, probing now treats the track as English by default, matching Matroska defaults and avoiding empty-language edge cases.
+
+**User Interface:**
+
+- **Auto Subs Step 4 action cleanup:** removed the Step 4 `Download VTT` button and runtime wiring from the Auto Subs output UI.
+
+- **Auto Subs Step 4 warning block added:** when translation succeeds, the page now shows a final warning block at the bottom to clarify expected behavior for the generated outputs.
+
+- **Auto Subs Step 1 recommendation banners:** Added centered "English audio source recommended." and updated "Avoid large files when possible…" warning texts in the Step 1 card.
+
+- **Re-enabled Cloudflare Whisper model selector:** The model dropdown now shows when Cloudflare mode is selected (previously hidden). Normal users see only "Whisper Large V3 Turbo"; the base "Whisper" option is gated behind dev mode.
+
+**Localization:**
+
+- **Updated AutoSubs locale keys across supported languages:** added `localDecodeWarning` and aligned `translateOutput` text in `en`, `es`, `pt-br`, `pt-pt`, and added `localDecodeWarning` in `ar`.
+
 ## SubMaker v1.4.53
 
 **New Features:**

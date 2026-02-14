@@ -4,6 +4,7 @@ const { allLanguages } = require('./allLanguages');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
 const { version: appVersion } = require('../../package.json');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
+const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function safeLanguageMaps() {
     try {
@@ -599,6 +600,18 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
 
         .status-badge strong {
             font-size: 14px;
+        }
+        .xsync-version-warning {
+            margin: 10px auto 0;
+            width: min(980px, 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            background: rgba(245, 158, 11, 0.14);
+            color: var(--text-primary);
+            font-weight: 700;
+            padding: 10px 14px;
+            text-align: center;
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.16);
         }
 
         .status-dot {
@@ -2070,6 +2083,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 </div>
             </div>
         </header>
+        <div id="xsync-version-warning" class="xsync-version-warning" style="display:none;" role="status" aria-live="polite"></div>
 
         <!-- Instructions Modal -->
         <div class="instructions-overlay" id="instructionsOverlay">
@@ -2476,6 +2490,82 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         if (subtitleMenuInstance && typeof subtitleMenuInstance.prefetch === 'function') {
             subtitleMenuInstance.prefetch();
         }
+
+        (function initXsyncVersionWarning() {
+            const warningEl = document.getElementById('xsync-version-warning');
+            if (!warningEl) return;
+            let extensionDetected = false;
+            let pingTimer = null;
+            let pingAttempts = 0;
+            const MAX_PINGS = 5;
+            const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+            const VERSION_WARNING_TEMPLATE = tt(
+                'toolbox.extension.versionOutdated',
+                { detected: '{detected}', required: '{required}' },
+                'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.'
+            );
+
+            function parseVersionParts(version) {
+                if (!version) return null;
+                const cleaned = String(version).trim().replace(/^v/i, '').split('-')[0];
+                if (!cleaned) return null;
+                const parts = cleaned.split('.').slice(0, 3).map(part => Number.parseInt(part, 10));
+                if (!parts.length || parts.some(part => !Number.isFinite(part))) return null;
+                while (parts.length < 3) parts.push(0);
+                return parts;
+            }
+
+            function compareVersions(a, b) {
+                const aParts = parseVersionParts(a);
+                const bParts = parseVersionParts(b);
+                if (!aParts || !bParts) return null;
+                for (let i = 0; i < 3; i += 1) {
+                    if (aParts[i] > bParts[i]) return 1;
+                    if (aParts[i] < bParts[i]) return -1;
+                }
+                return 0;
+            }
+
+            function updateWarning(installedVersion) {
+                const cmp = compareVersions(installedVersion, REQUIRED_XSYNC_VERSION);
+                if (cmp !== null && cmp < 0) {
+                    const detectedLabel = 'v' + String(installedVersion || '').replace(/^v/i, '');
+                    warningEl.textContent = VERSION_WARNING_TEMPLATE
+                        .replace('{detected}', detectedLabel)
+                        .replace('{required}', 'v' + REQUIRED_XSYNC_VERSION);
+                    warningEl.style.display = 'block';
+                    return;
+                }
+                warningEl.style.display = 'none';
+                warningEl.textContent = '';
+            }
+
+            function pingExtension() {
+                if (pingTimer) clearInterval(pingTimer);
+                pingAttempts = 0;
+                const sendPing = () => {
+                    if (extensionDetected) return;
+                    pingAttempts += 1;
+                    window.postMessage({ type: 'SUBMAKER_PING', source: 'webpage' }, '*');
+                    if (pingAttempts >= MAX_PINGS && !extensionDetected) {
+                        clearInterval(pingTimer);
+                    }
+                };
+                sendPing();
+                pingTimer = setInterval(sendPing, 5000);
+            }
+
+            window.addEventListener('message', (event) => {
+                const msg = event.data || {};
+                if (!msg || msg.type !== 'SUBMAKER_PONG') return;
+                if (msg.source && msg.source !== 'extension') return;
+                extensionDetected = true;
+                if (pingTimer) clearInterval(pingTimer);
+                updateWarning(msg.version || '');
+            });
+
+            setTimeout(pingExtension, 200);
+        })();
 
         function forwardMenuNotification(info) {
             if (!subtitleMenuInstance || typeof subtitleMenuInstance.notify !== 'function') return false;

@@ -16,7 +16,7 @@ const { parseStremioId } = require('./subtitle');
 const { version: appVersion } = require('../../package.json');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
-const { resolveHistoryTitle } = require('../handlers/subtitles');
+const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function escapeHtml(text) {
     if (!text) return '';
@@ -129,6 +129,14 @@ function cleanDisplayName(raw) {
     return spaced || withoutExt || lastSegment;
 }
 
+function buildLinkedMetaSubtitleHtml(topLine, fileLine, fallbackLine) {
+    const parts = [];
+    if (topLine) parts.push(escapeHtml(topLine));
+    if (fileLine) parts.push(`<strong class="meta-file-line">${escapeHtml(fileLine)}</strong>`);
+    if (parts.length) return parts.join('<br>');
+    return escapeHtml(fallbackLine || '');
+}
+
 // Language helpers (mirrors subtitle-menu logic to keep naming consistent)
 function normalizeLangKey(val) {
     return (val || '').toString().trim().toLowerCase().replace(/[^a-z]/g, '');
@@ -179,16 +187,6 @@ function resolveSubtitleLanguage(sub, languageMaps) {
         name,
         key
     };
-}
-
-async function fetchLinkedTitleServer(videoId) {
-    try {
-        const resolved = await resolveHistoryTitle(videoId, '');
-        const title = String(resolved?.title || '').trim();
-        return title && title !== String(videoId).trim() ? title : null;
-    } catch (_) {
-        return null;
-    }
 }
 
 function themeToggleStyles() {
@@ -397,7 +395,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         step1: {
             chip: t('sync.step1.chip', {}, 'Step 1'),
             title: t('sync.step1.title', {}, 'Provide Stream Information'),
-            linkedLabel: t('sync.step1.linkedLabel', {}, 'Linked stream'),
+            linkedLabel: t('sync.step1.linkedLabel', {}, 'Linked Stream'),
             linkedRefreshTitle: t('toolbox.embedded.videoMeta.refreshTitle', {}, 'Refresh linked stream'),
             streamLabel: t('sync.step1.streamLabel', {}, 'Stream URL:'),
             placeholder: t('sync.step1.placeholder', {}, 'Paste your stream URL here (e.g., http://... or magnet:...)'),
@@ -408,7 +406,10 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             title: t('sync.step2.title', {}, 'Select Subtitle to Sync'),
             selectLabel: t('sync.step2.selectLabel', { title: '{title}' }, 'Choose from {title} fetched subtitles:'),
             selectPlaceholder: t('sync.step2.selectPlaceholder', {}, 'Choose a subtitle'),
-            uploadTitle: t('sync.step2.uploadTitle', {}, '📁 Or drag & drop your .srt file here'),
+            loadingPlaceholder: t('sync.step2.loadingPlaceholder', {}, 'Loading subtitles...'),
+            emptyPlaceholder: t('sync.step2.emptyPlaceholder', {}, 'No subtitles found'),
+            loadFailedPlaceholder: t('sync.step2.loadFailedPlaceholder', {}, 'Failed to load subtitles'),
+            uploadTitle: t('sync.step2.uploadTitle', {}, 'Or drag & drop your .srt file here'),
             uploadSubtitle: t('sync.step2.uploadSubtitle', {}, 'Click to browse files'),
             sourceLabel: t('sync.step2.sourceLabel', {}, 'Source Language:'),
             sourcePlaceholder: t('sync.step2.sourcePlaceholder', {}, 'Select source language'),
@@ -421,28 +422,17 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             primaryLabel: t('sync.step3.primaryLabel', {}, 'Primary Mode:'),
             secondaryLabel: t('sync.step3.secondaryLabel', {}, 'Scan Profile:'),
             primaryOptions: {
-                manual: t('sync.step3.primaryOptions.manual', {}, '📝 Manual Offset Adjustment'),
-                alass: t('sync.step3.primaryOptions.alass', {}, '🎯 ALASS (audio -> subtitle)'),
-                ffsubsync: t('sync.step3.primaryOptions.ffsubsync', {}, '🎛️ FFSubSync (audio -> subtitle)'),
-                vosk: t('sync.step3.primaryOptions.vosk', {}, '🧭 Vosk CTC/DTW (text -> audio)'),
-                whisper: t('sync.step3.primaryOptions.whisper', {}, '🗣️ Whisper + ALASS (subtitle -> subtitle)')
+                alass: t('sync.step3.primaryOptions.alass', {}, 'ALASS (audio -> subtitle)'),
+                ffsubsync: t('sync.step3.primaryOptions.ffsubsync', {}, 'FFSubSync (audio -> subtitle)'),
+                vosk: t('sync.step3.primaryOptions.vosk', {}, 'Vosk CTC/DTW (text -> audio)'),
+                whisper: t('sync.step3.primaryOptions.whisper', {}, 'Whisper + ALASS (subtitle -> subtitle)')
             },
-            manualLabel: t('sync.step3.manualLabel', {}, 'Time Offset (milliseconds):'),
-            offsetHotkeys: t('sync.step3.offsetHotkeys', {}, 'Hotkeys: ←/→ = ±100ms • Shift+←/→ = ±500ms • 0 = reset'),
-            offsetHintPositive: t('sync.step3.offsetHintPositive', {}, 'Positive values = delay subtitles (appear later)'),
-            offsetHintNegative: t('sync.step3.offsetHintNegative', {}, 'Negative values = advance subtitles (appear earlier)'),
-            offsetButtons: {
-                minus1000: t('sync.step3.offsetButtons.minus1000', {}, '-1s'),
-                minus500: t('sync.step3.offsetButtons.minus500', {}, '-500ms'),
-                minus100: t('sync.step3.offsetButtons.minus100', {}, '-100ms'),
-                reset: t('sync.step3.offsetButtons.reset', {}, 'Reset'),
-                plus100: t('sync.step3.offsetButtons.plus100', {}, '+100ms'),
-                plus500: t('sync.step3.offsetButtons.plus500', {}, '+500ms'),
-                plus1000: t('sync.step3.offsetButtons.plus1000', {}, '+1s')
-            },
-            start: t('sync.step3.start', {}, '⚡ Apply Sync'),
+            start: t('sync.step3.start', {}, 'Apply Sync'),
             startBusy: t('sync.step3.startBusy', {}, 'Syncing...'),
-            progress: t('sync.step3.progress', {}, 'Syncing subtitles...')
+            progress: t('sync.step3.progress', {}, 'Syncing subtitles...'),
+            audioTrackLabel: t('toolbox.autoSubs.steps.audioTrackLabel', {}, 'Audio track for transcription'),
+            audioTrackHelper: t('toolbox.autoSubs.steps.audioTrackHelper', {}, 'Multiple audio tracks detected. Choose one, then continue.'),
+            useTrack: t('toolbox.autoSubs.actions.useTrack', {}, 'Continue with track')
         },
         locks: {
             needContinue: t('sync.locks.needContinue', {}, 'Click Continue to unlock subtitle selection.'),
@@ -458,7 +448,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             title: t('sync.instructions.title', {}, 'Subtitle Sync Instructions'),
             methods: t('sync.instructions.methods', {}, 'Sync Methods'),
             items: {
-                manual: t('sync.instructions.items.manual', {}, "Manual Offset: Adjust subtitle timing manually with positive/negative milliseconds when you don't want to run autosync."),
                 fingerprint: t('sync.instructions.items.fingerprint', {}, 'Fast Fingerprint Pre-pass: Coarse ffsubsync fingerprint check to lock the big offset before deeper scans (on by default).'),
                 alass: t('sync.instructions.items.alass', {}, 'ALASS (audio -> subtitle): Fast wasm anchors against the audio; pick Rapid/Balanced/Deep/Complete profiles for coverage.'),
                 ffsubsync: t('sync.instructions.items.ffsubsync', {}, 'FFSubSync (audio -> subtitle): Drift-aware audio alignment via ffsubsync-wasm; choose a light, balanced, deep, or complete scan.'),
@@ -492,19 +481,19 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
     const videoHash = deriveVideoHash(streamFilename, videoId);
     const parsedVideoId = parseStremioId(videoId);
     const episodeTag = formatEpisodeTag(parsedVideoId);
-    const linkedTitle = await fetchLinkedTitleServer(videoId);
+    // Avoid blocking first paint on remote metadata lookups.
+    // Client-side hydration will resolve the linked title asynchronously.
+    const linkedTitle = null;
     const linkedVideoDisplay = buildLinkedVideoLabel(videoId, streamFilename, linkedTitle, t);
     const linkedVideoLabel = escapeHtml(linkedVideoDisplay);
     const initialVideoTitle = escapeHtml(linkedTitle || buildLinkedVideoLabel(videoId, streamFilename, null, t));
-    const subtitleDetails = [];
-    if (linkedTitle) {
-        subtitleDetails.push(`${copy.meta.titleLabel}: ${linkedTitle}`);
-    } else if (videoId) {
-        subtitleDetails.push(`${copy.meta.videoIdLabel}: ${videoId}`);
-    }
-    if (episodeTag) subtitleDetails.push(`${copy.meta.episodeLabel}: ${episodeTag}`);
-    if (streamFilename) subtitleDetails.push(`${copy.meta.fileLabel}: ${cleanDisplayName(streamFilename)}`);
-    const initialVideoSubtitle = escapeHtml(subtitleDetails.join(' • ') || copy.meta.videoIdUnavailable);
+    const subtitleDetailsTop = [];
+    const hasInitialContext = !!(videoId || streamFilename || linkedTitle);
+    if (videoId) subtitleDetailsTop.push(`${copy.meta.videoIdLabel}: ${videoId}`);
+    if (linkedTitle) subtitleDetailsTop.push(`${copy.meta.titleLabel}: ${linkedTitle}`);
+    if (hasInitialContext) subtitleDetailsTop.push(`${copy.meta.episodeLabel}: ${episodeTag || '-'}`);
+    const subtitleDetailsBottom = streamFilename ? `${copy.meta.fileLabel}: ${cleanDisplayName(streamFilename)}` : '';
+    const initialVideoSubtitle = buildLinkedMetaSubtitleHtml(subtitleDetailsTop.join(' | '), subtitleDetailsBottom, copy.meta.videoIdUnavailable);
     const links = {
         translateFiles: `/file-upload?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}`,
         syncSubtitles: `/subtitle-sync?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
@@ -518,7 +507,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
     const devMode = (config || {}).devMode === true;
     const languageMaps = buildLanguageLookupMaps();
 
-    // Filter out action buttons and xSync entries to show only fetchable subtitles
+    // Filter out action buttons and cached entries to show only fetchable provider subtitles
     // Filter out action buttons (legacy and new Sub Toolbox) so only real subtitles are selectable
     const fetchableSubtitles = subtitles.filter(sub => {
         const id = sub?.id || '';
@@ -526,7 +515,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             id !== 'file_upload' &&
             id !== 'sub_toolbox' &&
             !id.startsWith('translate_') &&
-            !id.startsWith('xsync_');
+            !id.startsWith('xsync_') &&
+            !id.startsWith('auto_');
     });
 
     // Group subtitles by language
@@ -544,20 +534,25 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
     }
 
     // Generate subtitle options HTML
-    let subtitleOptionsHTML = `<option value="" disabled selected>${escapeHtml(copy.step2.selectPlaceholder)}</option>`;
-    for (const { label, code, items } of subtitlesByLang.values()) {
-        const langLabel = label || 'Unknown';
-        subtitleOptionsHTML += `
-            <optgroup label="${escapeHtml(langLabel)}">`;
-        for (let i = 0; i < items.length; i++) {
-            const sub = items[i].entry;
-            const langCode = items[i].langInfo?.code || code || langLabel || 'unknown';
-            const displayName = t('sync.step2.subtitleOption', { language: langLabel, index: i + 1 }, `${langLabel} - Subtitle #${i + 1}`);
+    let subtitleOptionsHTML = '';
+    if (subtitlesByLang.size === 0) {
+        subtitleOptionsHTML = `<option value="" disabled selected>${escapeHtml(copy.step2.loadingPlaceholder)}</option>`;
+    } else {
+        subtitleOptionsHTML = `<option value="" disabled selected>${escapeHtml(copy.step2.selectPlaceholder)}</option>`;
+        for (const { label, code, items } of subtitlesByLang.values()) {
+            const langLabel = label || 'Unknown';
             subtitleOptionsHTML += `
-                <option value="${escapeHtml(sub.id)}" data-lang="${escapeHtml(langCode)}" data-url="${escapeHtml(sub.url)}">${escapeHtml(displayName)}</option>`;
+                <optgroup label="${escapeHtml(langLabel)}">`;
+            for (let i = 0; i < items.length; i++) {
+                const sub = items[i].entry;
+                const langCode = items[i].langInfo?.code || code || langLabel || 'unknown';
+                const displayName = t('sync.step2.subtitleOption', { language: langLabel, index: i + 1 }, `${langLabel} - Subtitle #${i + 1}`);
+                subtitleOptionsHTML += `
+                    <option value="${escapeHtml(sub.id)}" data-lang="${escapeHtml(langCode)}" data-url="${escapeHtml(sub.url)}">${escapeHtml(displayName)}</option>`;
+            }
+            subtitleOptionsHTML += `
+                </optgroup>`;
         }
-        subtitleOptionsHTML += `
-            </optgroup>`;
     }
 
     // Generate language options for source (ALL languages for file upload case)
@@ -1234,6 +1229,18 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             text-decoration: none;
             pointer-events: none;
         }
+        .xsync-version-warning {
+            margin: 10px auto 0;
+            width: min(980px, 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            background: rgba(245, 158, 11, 0.14);
+            color: var(--text-primary);
+            font-weight: 700;
+            padding: 10px 14px;
+            text-align: center;
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.16);
+        }
         .status-dot {
             width: 12px;
             height: 12px;
@@ -1797,6 +1804,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             color: var(--muted);
             font-size: 13px;
             word-break: break-word;
+            white-space: pre-line;
         }
 
         @keyframes spin {
@@ -1876,6 +1884,37 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         .upload-area p:last-child {
             font-size: 0.875rem;
             color: var(--text-secondary);
+        }
+
+        .sync-audio-track-prompt {
+            display: none;
+            margin: 0.75rem 0 1rem;
+            padding: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-light);
+        }
+
+        .sync-audio-track-prompt.show {
+            display: block;
+        }
+
+        .sync-audio-track-prompt p {
+            margin: 0.35rem 0 0.6rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .sync-audio-track-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
+        .sync-audio-track-controls select {
+            flex: 1 1 260px;
+            min-width: 220px;
         }
 
         .hidden {
@@ -1958,7 +1997,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             <div class="modal-content">
                 <h3>${escapeHtml(copy.instructions.methods)}</h3>
                 <ol>
-                    <li>${escapeHtml(copy.instructions.items.manual)}</li>
                     <li>${escapeHtml(copy.instructions.items.fingerprint)}</li>
                     <li>${escapeHtml(copy.instructions.items.alass)}</li>
                     <li>${escapeHtml(copy.instructions.items.ffsubsync)}</li>
@@ -2018,6 +2056,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 </div>
             </div>
         </header>
+        <div id="xsync-version-warning" class="xsync-version-warning" style="display:none;" role="status" aria-live="polite"></div>
 
         <!-- Steps 1-3: Combined Flow -->
         <div class="section" id="syncFlowSection">
@@ -2096,8 +2135,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     <div class="form-group">
                         <label for="primarySyncMode">${escapeHtml(copy.step3.primaryLabel)}</label>
                         <select id="primarySyncMode">
-                            <option value="manual" selected>${escapeHtml(copy.step3.primaryOptions.manual)}</option>
-                            <option value="alass" disabled>${escapeHtml(copy.step3.primaryOptions.alass)}</option>
+                            <option value="alass" selected disabled>${escapeHtml(copy.step3.primaryOptions.alass)}</option>
                             <option value="ffsubsync" disabled>${escapeHtml(copy.step3.primaryOptions.ffsubsync)}</option>
                             <option value="vosk-ctc" disabled>${escapeHtml(copy.step3.primaryOptions.vosk)}</option>
                             <option value="whisper-alass" disabled>${escapeHtml(copy.step3.primaryOptions.whisper)}</option>
@@ -2109,43 +2147,13 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         <select id="secondarySyncMode"></select>
                     </div>
 
-                    <!-- Manual Sync Controls -->
-                    <div id="manualSyncControls">
-                        <div class="form-group">
-                            <label for="offsetMs">${escapeHtml(copy.step3.manualLabel)}</label>
-                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                                <div class="offset-headline">
-                                    <div id="offsetSummary" class="offset-summary">${escapeHtml(t('sync.offset.onTime', {}, 'On time'))}</div>
-                                    <div class="offset-hint">${escapeHtml(copy.step3.offsetHotkeys)}</div>
-                                </div>
-                                <input type="range" id="offsetSlider" min="-15000" max="15000" step="50" value="0" style="width: 100%;">
-                                <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                    <input type="number" id="offsetMs" value="0" step="50" style="flex: 1;">
-                                    <div class="offset-nudges">
-                                        <button class="btn btn-secondary offset-btn" data-step="-1000">${escapeHtml(copy.step3.offsetButtons.minus1000)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-step="-500">${escapeHtml(copy.step3.offsetButtons.minus500)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-step="-100">${escapeHtml(copy.step3.offsetButtons.minus100)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-reset="true">${escapeHtml(copy.step3.offsetButtons.reset)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-step="100">${escapeHtml(copy.step3.offsetButtons.plus100)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-step="500">${escapeHtml(copy.step3.offsetButtons.plus500)}</button>
-                                        <button class="btn btn-secondary offset-btn" data-step="1000">${escapeHtml(copy.step3.offsetButtons.plus1000)}</button>
-                                    </div>
-                                </div>
-                            </div>
-                            <p style="font-size: 0.85rem; color: #9CA3AF; margin-top: 0.5rem;">
-                                ${escapeHtml(copy.step3.offsetHintPositive)}<br>
-                                ${escapeHtml(copy.step3.offsetHintNegative)}
-                            </p>
-                        </div>
-                    </div>
-
                     <!-- Auto Sync Info -->
-                    <div id="autoSyncInfo" style="display: none;">
+                    <div id="autoSyncInfo">
                     <div class="info-box auto-sync-box">
                         <p id="syncMethodDescription" class="sync-method-description"></p>
                     </div>
                 </div>
-                <div class="form-group" id="fingerprintPrepassGroup" style="display: none;">
+                    <div class="form-group" id="fingerprintPrepassGroup" style="display: none;">
                         <label class="modal-checkbox" style="display: flex; align-items: flex-start; gap: 0.5rem;">
                             <input type="checkbox" id="useFingerprintPrepass" checked>
                             <span>
@@ -2153,6 +2161,15 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                                 ${escapeHtml(t('sync.auto.fingerprintDescription', {}, 'Runs a quick ffsubsync coarse offset pass on the first audio windows before your selected engine. Disable only if the audio is muted, heavily trimmed, or you want to skip the extra hop.'))}
                             </span>
                         </label>
+                    </div>
+
+                    <div class="sync-audio-track-prompt" id="syncTrackPrompt">
+                        <label for="syncAudioTrack">${escapeHtml(copy.step3.audioTrackLabel)}</label>
+                        <p id="syncTrackHelper">${escapeHtml(copy.step3.audioTrackHelper)}</p>
+                        <div class="sync-audio-track-controls">
+                            <select id="syncAudioTrack"></select>
+                            <button class="btn" type="button" id="syncTrackContinue">${escapeHtml(copy.step3.useTrack)}</button>
+                        </div>
                     </div>
 
                 <button id="startSyncBtn" class="btn btn-primary">
@@ -2166,23 +2183,17 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     </div>
                     <div class="log-panel" id="syncLog" aria-live="polite"></div>
                     <div class="status-message" id="syncStatus"></div>
+                    <div class="download-buttons">
+                        <button id="downloadSyncedBtn" class="btn btn-success" style="display: none;">
+                            <span>⬇️</span> ${escapeHtml(copy.step4.downloadSynced)}
+                        </button>
+                        <button id="downloadTranslatedBtn" class="btn btn-success" style="display: none;">
+                            <span>⬇️</span> ${escapeHtml(copy.step4.downloadTranslated)}
+                        </button>
+                    </div>
+                    <div class="status-message" id="translateStatus"></div>
                 </div>
             </div>
-        </div>
-
-        <!-- Step 4: Preview & Download -->
-        <div class="section" id="step4Section" style="display: none;">
-            <h2><span class="section-number">4</span> ${escapeHtml(copy.step4.title)}</h2>
-            <video id="videoPreview" class="video-preview" controls></video>
-            <div class="download-buttons">
-                <button id="downloadSyncedBtn" class="btn btn-success">
-                    <span>⬇️</span> ${escapeHtml(copy.step4.downloadSynced)}
-                </button>
-                <button id="downloadTranslatedBtn" class="btn btn-success" style="display: none;">
-                    <span>⬇️</span> ${escapeHtml(copy.step4.downloadTranslated)}
-                </button>
-            </div>
-            <div class="status-message" id="translateStatus"></div>
         </div>
     </div>
 
@@ -2215,12 +2226,32 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         sourceLanguages: config.sourceLanguages || [],
         targetLanguages: config.targetLanguages || []
     })};
+        const PAGE = {
+            configStr: CONFIG.configStr || '',
+            videoId: CONFIG.videoId || '',
+            filename: CONFIG.streamFilename || '',
+            videoHash: CONFIG.videoHash || ''
+        };
+        // Runtime copy object for safe client-side fallback strings.
+        // Prevents ReferenceError if any client code path references copy.*.
+        const copy = ${safeJsonSerialize(copy)};
         const subtitleMenuTargets = ${JSON.stringify(targetLanguages.map(lang => ({ code: lang, name: getLanguageName(lang) || lang })))};
         const hashStatusEl = document.getElementById('hashStatus');
         const hashMismatchEl = document.getElementById('hashMismatchAlert');
         const lockReasons = {
             needContinue: ${JSON.stringify(copy.locks.needContinue)},
             needSubtitle: ${JSON.stringify(copy.locks.needSubtitle)}
+        };
+        const subtitleUi = {
+            selectPlaceholder: ${JSON.stringify(copy.step2.selectPlaceholder)},
+            loadingPlaceholder: ${JSON.stringify(copy.step2.loadingPlaceholder)},
+            emptyPlaceholder: ${JSON.stringify(copy.step2.emptyPlaceholder)},
+            loadFailedPlaceholder: ${JSON.stringify(copy.step2.loadFailedPlaceholder)}
+        };
+        const subtitleLoadState = {
+            requestId: 0,
+            prefetchSig: '',
+            prefetchPromise: null
         };
         const escapeHtmlClient = (value) => {
             if (value === undefined || value === null) return '';
@@ -2231,6 +2262,63 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 .replace(/\"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         };
+        function normalizeStreamContext(payload = {}) {
+            const videoId = (payload.videoId ?? CONFIG.videoId ?? '').toString().trim();
+            const filename = (payload.filename ?? CONFIG.streamFilename ?? '').toString().trim();
+            return { videoId, filename };
+        }
+        function subtitleContextSig(payload = {}) {
+            const ctx = normalizeStreamContext(payload);
+            return ctx.videoId + '::' + ctx.filename;
+        }
+        function startSubtitlePrefetch(payload = {}, options = {}) {
+            const force = !!options.force;
+            const ctx = normalizeStreamContext(payload);
+            const sig = subtitleContextSig(ctx);
+
+            if (!ctx.videoId) {
+                subtitleLoadState.prefetchSig = sig;
+                subtitleLoadState.prefetchPromise = Promise.resolve({ success: true, subtitles: [] });
+                return subtitleLoadState.prefetchPromise;
+            }
+
+            if (!force && subtitleLoadState.prefetchPromise && subtitleLoadState.prefetchSig === sig) {
+                return subtitleLoadState.prefetchPromise;
+            }
+
+            const query = new URLSearchParams({
+                config: CONFIG.configStr || '',
+                videoId: ctx.videoId,
+                filename: ctx.filename || ''
+            });
+            subtitleLoadState.prefetchSig = sig;
+            subtitleLoadState.prefetchPromise = fetch('/api/subtitle-sync/subtitles?' + query.toString(), { cache: 'no-store' })
+                .then((resp) => {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.json();
+                });
+            return subtitleLoadState.prefetchPromise;
+        }
+        function resetSubtitleSelectionState() {
+            const subtitleSelect = document.getElementById('subtitleSelect');
+            if (subtitleSelect) {
+                subtitleSelect.disabled = true;
+                subtitleSelect.innerHTML = '<option value=\"\" disabled selected>' + escapeHtmlClient(subtitleUi.loadingPlaceholder) + '</option>';
+            }
+            STATE.selectedSubtitleId = null;
+            STATE.selectedSubtitleLang = null;
+            STATE.subtitleContent = null;
+            lockSection('step3Section', lockReasons.needSubtitle);
+        }
+        // Kick off subtitle fetch immediately on page load so step 2 is warm by the time user confirms step 1.
+        startSubtitlePrefetch();
+        function buildMetaSubtitleHtml(topLine, fileLine, fallbackLine) {
+            const parts = [];
+            if (topLine) parts.push(escapeHtmlClient(topLine));
+            if (fileLine) parts.push('<strong class="meta-file-line">' + escapeHtmlClient(fileLine) + '</strong>');
+            if (parts.length) return parts.join('<br>');
+            return escapeHtmlClient(fallbackLine || '');
+        }
         const HASH_MISMATCH_LINES = [
             tt('toolbox.embedded.step1.hashMismatchLine1', {}, 'Hashes must match before extraction can start.')
         ];
@@ -2480,6 +2568,61 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             return { hash, filename, videoId: streamVideoId, source: 'stream-url' };
         }
 
+        function collectHashCandidates(values = []) {
+            const seen = new Set();
+            const out = [];
+            values.forEach((value) => {
+                const normalized = (value || '').toString().trim().toLowerCase();
+                if (!normalized || seen.has(normalized)) return;
+                seen.add(normalized);
+                out.push(normalized);
+            });
+            return out;
+        }
+
+        function getLinkedHashCandidates() {
+            return collectHashCandidates([
+                CONFIG.videoHash,
+                deriveVideoHashFromParts(CONFIG.streamFilename, CONFIG.videoId)
+            ]);
+        }
+
+        async function resolveStreamHashCandidates(streamUrl) {
+            const fallback = { filename: CONFIG.streamFilename, videoId: CONFIG.videoId };
+            const immediate = deriveStreamHashFromUrl(streamUrl, fallback);
+            let resolved = null;
+            try {
+                const resolvedUrl = await resolveStreamUrlRedirect(streamUrl);
+                resolved = deriveStreamHashFromUrl(resolvedUrl, fallback);
+            } catch (_) {
+                resolved = null;
+            }
+            const hashes = collectHashCandidates([immediate.hash, resolved?.hash]);
+            return {
+                immediate,
+                resolved,
+                hashes,
+                preferred: resolved?.hash ? resolved : (immediate.hash ? immediate : null)
+            };
+        }
+
+        function compareHashSets(linkedHashes = [], streamHashes = []) {
+            const linkedSet = new Set(collectHashCandidates(linkedHashes));
+            const streamSet = new Set(collectHashCandidates(streamHashes));
+            const matches = [];
+            streamSet.forEach((hash) => {
+                if (linkedSet.has(hash)) matches.push(hash);
+            });
+            return {
+                hasLinked: linkedSet.size > 0,
+                hasStream: streamSet.size > 0,
+                match: matches.length > 0,
+                matches,
+                linkedHash: linkedSet.values().next().value || '',
+                streamHash: streamSet.values().next().value || ''
+            };
+        }
+
         // Cache for resolved redirect URLs to avoid repeated fetches
         const resolvedUrlCache = new Map();
         const REDIRECT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -2548,10 +2691,12 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             const streamInput = document.getElementById('streamUrl');
             if (!streamInput) return;
             const streamUrl = (streamInput.value || '').trim();
+            const linkedHashes = getLinkedHashCandidates();
+            const linkedPrimary = linkedHashes[0] || '';
             if (!streamUrl) {
                 STATE.streamHashInfo = null;
-                const linkedHash = CONFIG.videoHash || deriveVideoHashFromParts(CONFIG.streamFilename, CONFIG.videoId);
-                renderHashStatus({ linked: linkedHash, stream: '' }, STATE.cacheBlocked);
+                STATE.streamHashCandidates = [];
+                renderHashStatus({ linked: linkedPrimary, stream: '' }, STATE.cacheBlocked);
                 return;
             }
 
@@ -2561,12 +2706,16 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
             // First, immediately compute hash from the input URL as-is
             const immediateDerived = deriveStreamHashFromUrl(streamUrl, { filename: CONFIG.streamFilename, videoId: CONFIG.videoId });
-            const linkedHash = CONFIG.videoHash || deriveVideoHashFromParts(CONFIG.streamFilename, CONFIG.videoId);
+            STATE.streamHashCandidates = collectHashCandidates([immediateDerived.hash]);
+            const immediateCompare = compareHashSets(linkedHashes, STATE.streamHashCandidates);
 
-            // If immediate hash matches, no need to resolve redirects
-            if (immediateDerived.hash === linkedHash) {
-                STATE.streamHashInfo = immediateDerived;
-                renderHashStatus({ linked: linkedHash, stream: immediateDerived.hash }, STATE.cacheBlocked);
+            // If immediate set already intersects, no need to resolve redirects
+            if (immediateCompare.match) {
+                STATE.streamHashInfo = immediateDerived.hash ? immediateDerived : null;
+                renderHashStatus({
+                    linked: immediateCompare.linkedHash || linkedPrimary,
+                    stream: immediateCompare.matches[0] || immediateCompare.streamHash
+                }, STATE.cacheBlocked);
                 return;
             }
 
@@ -2578,20 +2727,18 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             }
 
             try {
-                // Resolve redirects to get the final URL (where the real filename is)
-                const resolvedUrl = await resolveStreamUrlRedirect(streamUrl);
+                const resolvedData = await resolveStreamHashCandidates(streamUrl);
 
                 // Check if this resolution is still current (no newer input)
                 if (hashResolutionPending !== resolutionId) return;
 
-                // Compute hash from the resolved URL
-                const derived = deriveStreamHashFromUrl(resolvedUrl, { filename: CONFIG.streamFilename, videoId: CONFIG.videoId });
-
-                // If resolved URL gave a different result, use it; otherwise fall back to immediate
-                const finalHash = derived.hash || immediateDerived.hash;
-                STATE.streamHashInfo = derived.hash ? derived : (immediateDerived.hash ? immediateDerived : null);
-
-                renderHashStatus({ linked: linkedHash, stream: finalHash }, STATE.cacheBlocked);
+                STATE.streamHashInfo = resolvedData.preferred;
+                STATE.streamHashCandidates = resolvedData.hashes;
+                const compared = compareHashSets(linkedHashes, resolvedData.hashes);
+                const displayStreamHash = compared.match
+                    ? (compared.matches[0] || resolvedData.preferred?.hash || '')
+                    : (resolvedData.preferred?.hash || resolvedData.immediate?.hash || '');
+                renderHashStatus({ linked: compared.linkedHash || linkedPrimary, stream: displayStreamHash }, STATE.cacheBlocked);
             } catch (err) {
                 // Check if this resolution is still current
                 if (hashResolutionPending !== resolutionId) return;
@@ -2599,17 +2746,19 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 // On error, use the immediate hash
                 console.warn('[updateHashStatusFromInput] Redirect resolution failed:', err);
                 STATE.streamHashInfo = immediateDerived.hash ? immediateDerived : null;
-                renderHashStatus({ linked: linkedHash, stream: immediateDerived.hash }, STATE.cacheBlocked);
+                STATE.streamHashCandidates = collectHashCandidates([immediateDerived.hash]);
+                const compared = compareHashSets(linkedHashes, STATE.streamHashCandidates);
+                renderHashStatus({ linked: compared.linkedHash || linkedPrimary, stream: immediateDerived.hash }, STATE.cacheBlocked);
             }
         }
 
         let subtitleMenuInstance = null;
-        let pendingStreamUpdate = null;
 
         let STATE = {
             step1Confirmed: false,
             streamUrl: null,
             streamHashInfo: null,
+            streamHashCandidates: [],
             cacheBlocked: false,
             subtitleContent: null,
             selectedSubtitleLang: null,
@@ -2618,12 +2767,19 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             syncedSubtitle: null,
             translatedSubtitle: null,
             activeSyncPlan: null,
-            useFingerprintPrepass: true
+            useFingerprintPrepass: true,
+            audioTracks: [],
+            selectedAudioTrack: null,
+            awaitingTrackChoice: false
         };
         const startSyncBtn = document.getElementById('startSyncBtn');
         const startSyncLabel = startSyncBtn ? startSyncBtn.innerHTML : '<span>⚡</span> ' + ${JSON.stringify(copy.step3.start)};
         const startSyncBusyLabel = ${JSON.stringify(copy.step3.startBusy)};
         let syncInFlight = false;
+        const syncTrackPrompt = document.getElementById('syncTrackPrompt');
+        const syncAudioTrackSelect = document.getElementById('syncAudioTrack');
+        const syncTrackContinueBtn = document.getElementById('syncTrackContinue');
+        const syncTrackHelper = document.getElementById('syncTrackHelper');
 
         const LINKED_META = {
             title: document.getElementById('sync-video-meta-title'),
@@ -2650,36 +2806,20 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             if (!window.SubtitleMenu || typeof window.SubtitleMenu.mount !== 'function') return null;
             try {
                 return window.SubtitleMenu.mount({
-                    configStr: CONFIG.configStr,
-                    videoId: CONFIG.videoId,
-                    filename: CONFIG.streamFilename,
-                    videoHash: CONFIG.videoHash,
+                    configStr: PAGE.configStr,
+                    videoId: PAGE.videoId,
+                    filename: PAGE.filename,
+                    videoHash: PAGE.videoHash,
                     targetOptions: subtitleMenuTargets,
                     sourceLanguages: CONFIG.sourceLanguages || [],
                     targetLanguages: CONFIG.targetLanguages || [],
                     languageMaps: CONFIG.languageMaps,
-                    getVideoHash: () => CONFIG.videoHash || ''
+                    getVideoHash: () => PAGE.videoHash || ''
                 });
             } catch (err) {
                 console.warn('Subtitle menu init failed', err);
                 return null;
             }
-        }
-
-        function handleStreamUpdate(payload = {}) {
-            const nextVideoId = (payload.videoId || '').trim();
-            const nextFilename = (payload.filename || '').trim();
-            const nextHash = (payload.videoHash || '').trim();
-            const changed = (nextVideoId && nextVideoId !== CONFIG.videoId) ||
-                (nextFilename && nextFilename !== CONFIG.streamFilename) ||
-                (nextHash && nextHash !== CONFIG.videoHash);
-            if (!changed) return;
-            // Require explicit user action; keep update pending
-            pendingStreamUpdate = {
-                videoId: nextVideoId || CONFIG.videoId,
-                filename: nextFilename || CONFIG.streamFilename,
-                videoHash: nextHash || CONFIG.videoHash
-            };
         }
 
         function openInstructions(auto = false) {
@@ -2734,6 +2874,154 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             subtitleMenuInstance.prefetch();
         }
 
+        function normalizeLangKeyClient(val) {
+            return (val || '').toString().trim().toLowerCase().replace(/[^a-z]/g, '');
+        }
+
+        function normalizeNameKeyClient(val) {
+            return (val || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        function extractLanguageCodeClient(value) {
+            if (!value) return '';
+            const raw = value.toString();
+            const direct = raw.match(/^[a-z]{2,3}(?:-[a-z]{2})?$/i);
+            if (direct) return normalizeLangKeyClient(direct[0]);
+            const translateMatch = raw.match(/_to_([a-z]{2,3}(?:-[a-z]{2})?)/i);
+            if (translateMatch) return normalizeLangKeyClient(translateMatch[1]);
+            const urlMatch = raw.match(/\\/([a-z]{2,3}(?:-[a-z]{2})?)\\.srt/i);
+            if (urlMatch) return normalizeLangKeyClient(urlMatch[1]);
+            const pathMatch = raw.match(/\\/([a-z]{2,3}(?:-[a-z]{2})?)\\/[^/]*$/i);
+            if (pathMatch) return normalizeLangKeyClient(pathMatch[1]);
+            return '';
+        }
+
+        function resolveSubtitleLanguageClient(sub) {
+            const rawLabel = (sub?.language || sub?.lang || sub?.langName || sub?.title || sub?.name || sub?.label || '').toString().trim();
+            const code =
+                extractLanguageCodeClient(sub?.languageCode) ||
+                extractLanguageCodeClient(sub?.lang) ||
+                extractLanguageCodeClient(sub?.language) ||
+                extractLanguageCodeClient(rawLabel) ||
+                extractLanguageCodeClient(sub?.url) ||
+                extractLanguageCodeClient(sub?.id);
+            const byCode = CONFIG?.languageMaps?.byCode || {};
+            const byNameKey = CONFIG?.languageMaps?.byNameKey || {};
+            const friendly = byCode[normalizeLangKeyClient(code)] || byNameKey[normalizeNameKeyClient(rawLabel)] || '';
+            const name = friendly || rawLabel || 'Unknown';
+            return {
+                code: code || normalizeLangKeyClient(sub?.lang || sub?.language || '') || 'unknown',
+                name,
+                key: normalizeLangKeyClient(code || rawLabel || name || 'unknown')
+            };
+        }
+
+        function renderSubtitleOptions(list) {
+            const subtitleSelect = document.getElementById('subtitleSelect');
+            if (!subtitleSelect) return;
+            const subtitles = Array.isArray(list) ? list : [];
+            const filtered = subtitles.filter((sub) => {
+                const id = (sub && sub.id) ? String(sub.id) : '';
+                return id !== 'sync_subtitles' &&
+                    id !== 'file_upload' &&
+                    id !== 'sub_toolbox' &&
+                    !id.startsWith('translate_') &&
+                    !id.startsWith('xsync_') &&
+                    !id.startsWith('auto_');
+            });
+
+            if (!filtered.length) {
+                subtitleSelect.innerHTML = '<option value=\"\" disabled selected>' + escapeHtmlClient(subtitleUi.emptyPlaceholder) + '</option>';
+                subtitleSelect.disabled = true;
+                return;
+            }
+
+            const grouped = new Map();
+            filtered.forEach((sub) => {
+                const langInfo = resolveSubtitleLanguageClient(sub);
+                const key = langInfo.key || 'unknown';
+                if (!grouped.has(key)) grouped.set(key, { label: langInfo.name || 'Unknown', code: langInfo.code || 'unknown', items: [] });
+                grouped.get(key).items.push({ sub, langInfo });
+            });
+
+            const parts = ['<option value=\"\" disabled selected>' + escapeHtmlClient(subtitleUi.selectPlaceholder) + '</option>'];
+            for (const group of grouped.values()) {
+                const label = group.label || 'Unknown';
+                parts.push('<optgroup label=\"' + escapeHtmlClient(label) + '\">');
+                group.items.forEach((item, idx) => {
+                    const displayName = tt('sync.step2.subtitleOption', { language: label, index: idx + 1 }, label + ' - Subtitle #' + (idx + 1));
+                    const sub = item.sub || {};
+                    const langCode = (item.langInfo && item.langInfo.code) ? item.langInfo.code : (group.code || 'unknown');
+                    parts.push('<option value=\"' + escapeHtmlClient(sub.id || '') + '\" data-lang=\"' + escapeHtmlClient(langCode) + '\" data-url=\"' + escapeHtmlClient(sub.url || '') + '\">' + escapeHtmlClient(displayName) + '</option>');
+                });
+                parts.push('</optgroup>');
+            }
+            subtitleSelect.innerHTML = parts.join('');
+            subtitleSelect.disabled = false;
+        }
+
+        async function loadProviderSubtitles() {
+            const subtitleSelect = document.getElementById('subtitleSelect');
+            if (!subtitleSelect) return;
+            const expectedSig = subtitleContextSig();
+            const requestId = ++subtitleLoadState.requestId;
+            subtitleSelect.disabled = true;
+            subtitleSelect.innerHTML = '<option value=\"\" disabled selected>' + escapeHtmlClient(subtitleUi.loadingPlaceholder) + '</option>';
+            try {
+                const payload = await startSubtitlePrefetch({}, { force: false });
+                if (requestId !== subtitleLoadState.requestId) return;
+                if (expectedSig !== subtitleContextSig()) return;
+                renderSubtitleOptions(payload && payload.subtitles ? payload.subtitles : []);
+            } catch (err) {
+                if (requestId !== subtitleLoadState.requestId) return;
+                if (expectedSig !== subtitleContextSig()) return;
+                console.error('[Sync] Failed to load subtitle list:', err);
+                subtitleSelect.innerHTML = '<option value=\"\" disabled selected>' + escapeHtmlClient(subtitleUi.loadFailedPlaceholder) + '</option>';
+                subtitleSelect.disabled = true;
+            }
+        }
+
+        loadProviderSubtitles();
+
+        function handleStreamEpisodeUpdate(payload = {}) {
+            const nextVideoId = (payload.videoId || '').trim();
+            const nextFilename = (payload.filename || '').trim();
+            const nextHash = (payload.videoHash || '').trim();
+            if (!nextVideoId && !nextFilename && !nextHash) return;
+
+            const changed = (nextVideoId && nextVideoId !== PAGE.videoId)
+                || (nextFilename && nextFilename !== PAGE.filename)
+                || (nextHash && nextHash !== PAGE.videoHash);
+            if (!changed) return;
+
+            if (nextVideoId) {
+                PAGE.videoId = nextVideoId;
+                CONFIG.videoId = nextVideoId;
+            }
+            if (nextFilename) {
+                PAGE.filename = nextFilename;
+                CONFIG.streamFilename = nextFilename;
+            }
+            if (nextHash) {
+                PAGE.videoHash = nextHash;
+                CONFIG.videoHash = nextHash;
+            } else {
+                const derived = deriveVideoHashFromParts(PAGE.filename, PAGE.videoId);
+                PAGE.videoHash = derived;
+                CONFIG.videoHash = derived;
+            }
+
+            resetStepFlow(lockReasons.needContinue);
+            resetSubtitleSelectionState();
+            updateLinkedMeta({
+                videoId: PAGE.videoId,
+                filename: PAGE.filename
+            });
+            updateHashStatusFromInput();
+            // Avoid firing extra subtitle-list requests on the old page context.
+            // The refreshed/new page will preload immediately with the new stream context.
+        }
+
         function forwardMenuNotification(info) {
             if (!subtitleMenuInstance || typeof subtitleMenuInstance.notify !== 'function') return false;
             const message = (info && info.message) ? info.message : tt('sync.toast.meta', {}, ${JSON.stringify(copy.toast.meta)});
@@ -2744,8 +3032,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         initStreamRefreshButton({
             buttonId: 'quickNavRefresh',
-            configStr: CONFIG.configStr,
-            current: { videoId: CONFIG.videoId, filename: CONFIG.streamFilename, videoHash: CONFIG.videoHash },
+            configStr: PAGE.configStr,
+            current: { videoId: PAGE.videoId, filename: PAGE.filename, videoHash: PAGE.videoHash },
             labels: {
                 loading: tt('sync.refresh.loading', {}, 'Refreshing...'),
                 empty: tt('sync.refresh.empty', {}, 'No stream yet'),
@@ -2753,7 +3041,23 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 current: tt('sync.refresh.current', {}, 'Already latest')
             },
             buildUrl: (payload) => {
-                return '/subtitle-sync?config=' + encodeURIComponent(CONFIG.configStr) +
+                return '/subtitle-sync?config=' + encodeURIComponent(PAGE.configStr) +
+                    '&videoId=' + encodeURIComponent(payload.videoId || '') +
+                    '&filename=' + encodeURIComponent(payload.filename || '');
+            }
+        });
+        initStreamRefreshButton({
+            buttonId: 'linkedStreamRefresh',
+            configStr: PAGE.configStr,
+            current: { videoId: PAGE.videoId, filename: PAGE.filename, videoHash: PAGE.videoHash },
+            labels: {
+                loading: tt('sync.refresh.loading', {}, 'Refreshing...'),
+                empty: tt('sync.refresh.empty', {}, 'No stream yet'),
+                error: tt('sync.refresh.error', {}, 'Refresh failed'),
+                current: tt('sync.refresh.current', {}, 'Already latest')
+            },
+            buildUrl: (payload) => {
+                return '/subtitle-sync?config=' + encodeURIComponent(PAGE.configStr) +
                     '&videoId=' + encodeURIComponent(payload.videoId || '') +
                     '&filename=' + encodeURIComponent(payload.filename || '');
             }
@@ -2761,14 +3065,14 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         // Episode change watcher (toast + manual update)
         initStreamWatcher({
-            configStr: CONFIG.configStr,
-            current: { videoId: CONFIG.videoId, filename: CONFIG.streamFilename, videoHash: CONFIG.videoHash },
+            configStr: PAGE.configStr,
+            current: { videoId: PAGE.videoId, filename: PAGE.filename, videoHash: PAGE.videoHash },
             buildUrl: (payload) => {
-                return '/subtitle-sync?config=' + encodeURIComponent(CONFIG.configStr) +
+                return '/subtitle-sync?config=' + encodeURIComponent(PAGE.configStr) +
                     '&videoId=' + encodeURIComponent(payload.videoId || '') +
                     '&filename=' + encodeURIComponent(payload.filename || '');
             },
-            onEpisode: handleStreamUpdate,
+            onEpisode: handleStreamEpisodeUpdate,
             notify: forwardMenuNotification
         });
 
@@ -2814,6 +3118,120 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             refreshSyncPlanPreview();
         }
 
+        function normalizeTrackLanguageTag(raw) {
+            if (!raw) return '';
+            const normalized = String(raw).trim().toLowerCase().replace(/_/g, '-');
+            const direct = normalized.match(/^[a-z]{2,3}(?:-[a-z]{2})?$/);
+            if (direct) return direct[0];
+            return '';
+        }
+
+        function resolveTrackLanguageLabel(raw) {
+            const code = normalizeTrackLanguageTag(raw);
+            if (!code) return '';
+            const byCode = CONFIG?.languageMaps?.byCode || {};
+            const compact = normalizeLangKeyClient(code);
+            const baseCompact = normalizeLangKeyClient(code.split('-')[0]);
+            return byCode[compact] || byCode[baseCompact] || code.toUpperCase();
+        }
+
+        function buildSyncTrackLabel(track, fallbackIndex, suggestedIndex, extractedIndex) {
+            const idx = Number.isInteger(track?.index) ? track.index : fallbackIndex;
+            const parts = [tt('sync.audioTrack.track', { n: idx + 1 }, 'Track ' + (idx + 1))];
+            const lang = resolveTrackLanguageLabel(track?.language || '');
+            if (lang) parts.push(lang);
+            if (track?.name) parts.push(String(track.name));
+            if (track?.codecId) parts.push(String(track.codecId));
+            if (idx === suggestedIndex || idx === extractedIndex) {
+                parts.push(tt('sync.audioTrack.recommended', {}, 'Recommended'));
+            }
+            return parts.filter(Boolean).join(' - ');
+        }
+
+        function renderSyncTrackOptions(tracks, suggestedIndex, extractedIndex) {
+            if (!syncAudioTrackSelect) return;
+            const options = Array.isArray(tracks) ? tracks : [];
+            syncAudioTrackSelect.innerHTML = '';
+            options.forEach((track, pos) => {
+                const option = document.createElement('option');
+                const idx = Number.isInteger(track?.index) ? track.index : pos;
+                option.value = String(idx);
+                option.textContent = buildSyncTrackLabel(track, pos, suggestedIndex, extractedIndex);
+                syncAudioTrackSelect.appendChild(option);
+            });
+            const knownChoice = Number.isInteger(STATE.selectedAudioTrack) ? STATE.selectedAudioTrack : null;
+            const fallback = Number.isInteger(suggestedIndex)
+                ? suggestedIndex
+                : (Number.isInteger(extractedIndex) ? extractedIndex : 0);
+            const desired = knownChoice !== null ? knownChoice : fallback;
+            if (syncAudioTrackSelect.querySelector('option[value="' + String(desired) + '"]')) {
+                syncAudioTrackSelect.value = String(desired);
+            } else if (!syncAudioTrackSelect.value && options.length) {
+                const firstIdx = Number.isInteger(options[0]?.index) ? options[0].index : 0;
+                syncAudioTrackSelect.value = String(firstIdx);
+            }
+        }
+
+        function showSyncTrackPrompt(tracks, suggestedIndex, extractedIndex) {
+            STATE.audioTracks = Array.isArray(tracks) ? tracks : [];
+            STATE.awaitingTrackChoice = true;
+            renderSyncTrackOptions(STATE.audioTracks, suggestedIndex, extractedIndex);
+            if (syncTrackHelper) {
+                const helperFallback = (copy && copy.step3 && copy.step3.audioTrackHelper)
+                    ? copy.step3.audioTrackHelper
+                    : 'Multiple audio tracks detected. Choose one, then continue.';
+                syncTrackHelper.textContent = tt('toolbox.autoSubs.steps.audioTrackHelper', {}, helperFallback);
+            }
+            if (syncTrackContinueBtn) syncTrackContinueBtn.disabled = false;
+            if (syncTrackPrompt) syncTrackPrompt.classList.add('show');
+        }
+
+        function hideSyncTrackPrompt() {
+            STATE.awaitingTrackChoice = false;
+            STATE.audioTracks = [];
+            if (syncTrackPrompt) syncTrackPrompt.classList.remove('show');
+            if (syncTrackContinueBtn) syncTrackContinueBtn.disabled = false;
+        }
+
+        function handleSyncTrackOptionsMessage(msg) {
+            if (!syncInFlight) return;
+            if (!msg || !STATE.activeMessageId || (msg.messageId && msg.messageId !== STATE.activeMessageId)) return;
+            const tracks = Array.isArray(msg.tracks) ? msg.tracks : [];
+            if (tracks.length <= 1) return;
+            const suggested = Number.isInteger(msg.suggestedIndex) ? msg.suggestedIndex : msg.extractedIndex;
+            const extracted = Number.isInteger(msg.extractedIndex) ? msg.extractedIndex : null;
+            showSyncTrackPrompt(tracks, suggested, extracted);
+            const status = tt('sync.status.audioTrackPrompt', {}, 'Multiple audio tracks detected. Choose one to continue.');
+            showStatus('syncStatus', status, 'info');
+            logSync(status, 'info');
+        }
+
+        function submitSyncTrackSelection() {
+            if (!STATE.awaitingTrackChoice || !STATE.activeMessageId) return;
+            const raw = syncAudioTrackSelect ? parseInt(syncAudioTrackSelect.value, 10) : NaN;
+            const trackIndex = Number.isInteger(raw) && raw >= 0 ? raw : 0;
+            STATE.selectedAudioTrack = trackIndex;
+            STATE.awaitingTrackChoice = false;
+            if (syncTrackContinueBtn) syncTrackContinueBtn.disabled = true;
+            const status = tt('sync.status.continuingTrack', { track: trackIndex + 1 }, 'Continuing with audio track ' + (trackIndex + 1) + '...');
+            showStatus('syncStatus', status, 'info');
+            logSync(status, 'info');
+            window.postMessage({
+                type: 'SUBMAKER_SYNC_SELECT_TRACK',
+                source: 'webpage',
+                messageId: STATE.activeMessageId,
+                trackIndex
+            }, '*');
+            // Backward-compat for older content scripts that only forward AUTOSUB_SELECT_TRACK.
+            window.postMessage({
+                type: 'SUBMAKER_AUTOSUB_SELECT_TRACK',
+                source: 'webpage',
+                messageId: STATE.activeMessageId,
+                trackIndex
+            }, '*');
+            hideSyncTrackPrompt();
+        }
+
         function isHttpUrl(url) {
             try {
                 const u = new URL(url);
@@ -2856,6 +3274,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         function resetStepFlow(reasonLabel) {
             STATE.step1Confirmed = false;
+            STATE.selectedAudioTrack = null;
+            hideSyncTrackPrompt();
             lockSection('step2Section', reasonLabel || lockReasons.needContinue);
             lockSection('step3Section', reasonLabel || lockReasons.needContinue);
         }
@@ -3014,28 +3434,22 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 ? fallbackTitle + ' - ' + episodeTag
                 : fallbackTitle;
             const fallbackDetails = [];
-            if (source.title) {
-                fallbackDetails.push(tt('sync.meta.titleLabel', {}, ${JSON.stringify(copy.meta.titleLabel)}) + ': ' + source.title);
-            } else if (source.videoId) {
-                fallbackDetails.push(tt('sync.meta.videoIdLabel', {}, ${JSON.stringify(copy.meta.videoIdLabel)}) + ': ' + source.videoId);
-            }
-            if (episodeTag) fallbackDetails.push(tt('sync.meta.episodeLabel', {}, ${JSON.stringify(copy.meta.episodeLabel)}) + ': ' + episodeTag);
-            if (source.filename) fallbackDetails.push(tt('sync.meta.fileLabel', {}, ${JSON.stringify(copy.meta.fileLabel)}) + ': ' + source.filename);
+            if (source.videoId) fallbackDetails.push(tt('sync.meta.videoIdLabel', {}, ${JSON.stringify(copy.meta.videoIdLabel)}) + ': ' + source.videoId);
+            if (source.title) fallbackDetails.push(tt('sync.meta.titleLabel', {}, ${JSON.stringify(copy.meta.titleLabel)}) + ': ' + source.title);
+            if (source.videoId || source.filename || source.title) fallbackDetails.push(tt('sync.meta.episodeLabel', {}, ${JSON.stringify(copy.meta.episodeLabel)}) + ': ' + (episodeTag || '-'));
+            const fallbackFileLine = source.filename ? (tt('sync.meta.fileLabel', {}, ${JSON.stringify(copy.meta.fileLabel)}) + ': ' + cleanLinkedName(source.filename)) : '';
             LINKED_META.title.textContent = displayFallbackTitle;
-            LINKED_META.subtitle.textContent = fallbackDetails.join(' • ') || tt('sync.meta.waiting', {}, ${JSON.stringify(copy.meta.waiting)});
+            LINKED_META.subtitle.innerHTML = buildMetaSubtitleHtml(fallbackDetails.join(' | '), fallbackFileLine, tt('sync.meta.waiting', {}, ${JSON.stringify(copy.meta.waiting)}));
 
             const requestId = ++linkedTitleRequestId;
             const fetchedTitle = source.title || await fetchLinkedTitle(source.videoId);
             if (requestId !== linkedTitleRequestId) return;
 
             const details = [];
-            if (fetchedTitle) {
-                details.push(tt('sync.meta.titleLabel', {}, ${JSON.stringify(copy.meta.titleLabel)}) + ': ' + fetchedTitle);
-            } else if (source.videoId) {
-                details.push(tt('sync.meta.videoIdLabel', {}, ${JSON.stringify(copy.meta.videoIdLabel)}) + ': ' + source.videoId);
-            }
-            if (episodeTag) details.push(tt('sync.meta.episodeLabel', {}, ${JSON.stringify(copy.meta.episodeLabel)}) + ': ' + episodeTag);
-            if (source.filename) details.push(tt('sync.meta.fileLabel', {}, ${JSON.stringify(copy.meta.fileLabel)}) + ': ' + source.filename);
+            if (source.videoId) details.push(tt('sync.meta.videoIdLabel', {}, ${JSON.stringify(copy.meta.videoIdLabel)}) + ': ' + source.videoId);
+            if (fetchedTitle) details.push(tt('sync.meta.titleLabel', {}, ${JSON.stringify(copy.meta.titleLabel)}) + ': ' + fetchedTitle);
+            if (source.videoId || source.filename || fetchedTitle || source.title) details.push(tt('sync.meta.episodeLabel', {}, ${JSON.stringify(copy.meta.episodeLabel)}) + ': ' + (episodeTag || '-'));
+            const fileLine = source.filename ? (tt('sync.meta.fileLabel', {}, ${JSON.stringify(copy.meta.fileLabel)}) + ': ' + cleanLinkedName(source.filename)) : '';
 
             // Append episode tag to main title for episodes
             const resolvedTitle = fetchedTitle || fallbackTitle;
@@ -3043,7 +3457,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 ? resolvedTitle + ' - ' + episodeTag
                 : resolvedTitle;
             LINKED_META.title.textContent = displayTitle;
-            LINKED_META.subtitle.textContent = details.join(' • ') || tt('sync.meta.waiting', {}, ${JSON.stringify(copy.meta.waiting)});
+            LINKED_META.subtitle.innerHTML = buildMetaSubtitleHtml(details.join(' | '), fileLine, tt('sync.meta.waiting', {}, ${JSON.stringify(copy.meta.waiting)}));
         }
 
         updateLinkedMeta();
@@ -3166,11 +3580,10 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             }
         };
         const PRIMARY_DESCRIPTIONS = {
-            manual: tt('sync.primary.manual', {}, '📝 Manual offset: type the millisecond shift you need.'),
-            alass: tt('sync.primary.alass', {}, '🎯 ALASS anchors the subtitle to audio for fast, offline alignment.'),
-            ffsubsync: tt('sync.primary.ffsubsync', {}, '🎛️ FFSubSync detects drifts/ads directly from the audio waveform.'),
-            'vosk-ctc': tt('sync.primary.vosk', {}, '🧭 Vosk CTC/DTW force-aligns your subtitle text directly to the audio.'),
-            'whisper-alass': tt('sync.primary.whisper', {}, '🗣️ Whisper transcript alignment with an ALASS refinement pass.')
+            alass: tt('sync.primary.alass', {}, 'ALASS anchors the subtitle to audio for fast, offline alignment.'),
+            ffsubsync: tt('sync.primary.ffsubsync', {}, 'FFSubSync detects drifts/ads directly from the audio waveform.'),
+            'vosk-ctc': tt('sync.primary.vosk', {}, 'Vosk CTC/DTW force-aligns your subtitle text directly to the audio.'),
+            'whisper-alass': tt('sync.primary.whisper', {}, 'Whisper transcript alignment with an ALASS refinement pass.')
         };
         const PRESET_DESCRIPTIONS = (() => {
             const map = {};
@@ -3287,24 +3700,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             if (plan.useFingerprintPrepass) {
                 parts.push(tt('sync.plan.fingerprint', {}, 'fingerprint pre-pass'));
             }
-            return parts.join(' • ');
-        }
-
-        function offsetSubtitles(srtContent, offsetMs) {
-            const subtitles = parseSRT(srtContent);
-            let result = '';
-
-            for (const sub of subtitles) {
-                const newStart = Math.max(0, sub.start + offsetMs);
-                const newEnd = Math.max(newStart, sub.end + offsetMs);
-
-                result += \`\${sub.index}\\n\`;
-                result += \`\${formatTime(newStart)} --> \${formatTime(newEnd)}\\n\`;
-                result += sub.text;
-                result += '\\n';
-            }
-
-            return result.trim();
+            return parts.join(' | ');
         }
 
         // Chrome Extension Communication
@@ -3316,16 +3712,56 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         const extDot = document.getElementById('ext-dot');
         const extLabel = document.getElementById('ext-label');
         const extStatus = document.getElementById('ext-status');
+        const xsyncVersionWarning = document.getElementById('xsync-version-warning');
         const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
+        const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+        const VERSION_WARNING_TEMPLATE = tt(
+            'toolbox.extension.versionOutdated',
+            { detected: '{detected}', required: '{required}' },
+            'SubMaker xSync {detected} detected. This toolbox expects {required} or newer, so some sync and subtitle tools may behave unpredictably until you update.'
+        );
         const primaryModeSelect = document.getElementById('primarySyncMode');
         const secondaryModeSelect = document.getElementById('secondarySyncMode');
         const secondaryModeGroup = document.getElementById('secondaryModeGroup');
-        const manualOffsetInput = document.getElementById('offsetMs');
-        const manualOffsetSlider = document.getElementById('offsetSlider');
-        const manualOffsetSummary = document.getElementById('offsetSummary');
         const fingerprintPrepassGroup = document.getElementById('fingerprintPrepassGroup');
         const fingerprintPrepassCheckbox = document.getElementById('useFingerprintPrepass');
         const sourceLanguageSelect = document.getElementById('sourceLanguage');
+
+        function parseVersionParts(version) {
+            if (!version) return null;
+            const cleaned = String(version).trim().replace(/^v/i, '').split('-')[0];
+            if (!cleaned) return null;
+            const parts = cleaned.split('.').slice(0, 3).map(part => Number.parseInt(part, 10));
+            if (!parts.length || parts.some(part => !Number.isFinite(part))) return null;
+            while (parts.length < 3) parts.push(0);
+            return parts;
+        }
+
+        function compareVersions(a, b) {
+            const aParts = parseVersionParts(a);
+            const bParts = parseVersionParts(b);
+            if (!aParts || !bParts) return null;
+            for (let i = 0; i < 3; i += 1) {
+                if (aParts[i] > bParts[i]) return 1;
+                if (aParts[i] < bParts[i]) return -1;
+            }
+            return 0;
+        }
+
+        function updateVersionWarning(installedVersion) {
+            if (!xsyncVersionWarning) return;
+            const cmp = compareVersions(installedVersion, REQUIRED_XSYNC_VERSION);
+            if (cmp !== null && cmp < 0) {
+                const detectedLabel = 'v' + String(installedVersion || '').replace(/^v/i, '');
+                xsyncVersionWarning.textContent = VERSION_WARNING_TEMPLATE
+                    .replace('{detected}', detectedLabel)
+                    .replace('{required}', 'v' + REQUIRED_XSYNC_VERSION);
+                xsyncVersionWarning.style.display = 'block';
+                return;
+            }
+            xsyncVersionWarning.style.display = 'none';
+            xsyncVersionWarning.textContent = '';
+        }
 
         function setAutoSyncAvailability(enabled) {
             const primaryOptions = ['alass', 'ffsubsync', 'vosk-ctc', 'whisper-alass'];
@@ -3340,10 +3776,10 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 fingerprintPrepassCheckbox.disabled = !enabled;
             }
             if (!enabled) {
-                if (primaryModeSelect && primaryModeSelect.value !== 'manual') {
-                    primaryModeSelect.value = 'manual';
+                if (primaryModeSelect) {
+                    primaryModeSelect.value = 'alass';
                 }
-                populateSecondaryOptions('manual');
+                populateSecondaryOptions('alass');
                 if (fingerprintPrepassGroup) {
                     fingerprintPrepassGroup.style.display = 'none';
                 }
@@ -3353,35 +3789,13 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             }
         }
 
-        // Default: manual-only until the extension unlocks autosync engines
+        // Default: autosync options stay locked until extension is detected
         setAutoSyncAvailability(false);
-
-        function formatOffsetLabel(ms) {
-            const onTime = tt('sync.offset.onTime', {}, ${JSON.stringify(t('sync.offset.onTime', {}, 'On time'))});
-            if (!Number.isFinite(ms)) return onTime;
-            if (ms === 0) return onTime;
-            const dir = ms > 0
-                ? tt('sync.offset.direction.later', {}, 'later')
-                : tt('sync.offset.direction.earlier', {}, 'earlier');
-            const abs = Math.abs(ms);
-            const pretty = abs >= 1000 ? (abs / 1000).toFixed(abs % 1000 === 0 ? 0 : 1) + 's' : abs + 'ms';
-            return \`\${pretty} \${dir}\`;
-        }
-
-        function setManualOffset(ms) {
-            const min = Number(manualOffsetSlider?.min) || -15000;
-            const max = Number(manualOffsetSlider?.max) || 15000;
-            const clamped = Math.min(max, Math.max(min, Math.round(ms || 0)));
-            if (manualOffsetInput) manualOffsetInput.value = clamped;
-            if (manualOffsetSlider) manualOffsetSlider.value = clamped;
-            if (manualOffsetSummary) manualOffsetSummary.textContent = formatOffsetLabel(clamped);
-            return clamped;
-        }
 
         function populateSecondaryOptions(primaryMode) {
             if (!secondaryModeSelect || !secondaryModeGroup) return;
             const opts = (SYNC_MODE_LIBRARY[primaryMode] || {}).options || [];
-            if (!opts.length || primaryMode === 'manual') {
+            if (!opts.length) {
                 secondaryModeGroup.style.display = 'none';
                 secondaryModeSelect.innerHTML = '';
                 return;
@@ -3478,39 +3892,41 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             const msg = event.data || {};
             if (!msg || (msg.source && msg.source !== 'extension')) return;
 
-            switch (msg.type) {
-                case 'SUBMAKER_PONG': {
-                    extensionInstalled = true;
-                    const version = msg.version || '1.0.0';
-                    updateExtensionStatus(true, tt('sync.extension.readyVersion', { version }, 'Ready (v' + version + ')'));
-                    logSync(tt('sync.extension.detected', { version }, 'Extension detected (v' + version + ')'), 'info');
-                    if (pingTimer) clearInterval(pingTimer);
+            if (msg.type === 'SUBMAKER_PONG') {
+                extensionInstalled = true;
+                const version = msg.version || '1.0.0';
+                updateExtensionStatus(true, tt('sync.extension.readyVersion', { version }, 'Ready (v' + version + ')'));
+                updateVersionWarning(msg.version || '');
+                logSync(tt('sync.extension.detected', { version }, 'Extension detected (v' + version + ')'), 'info');
+                if (pingTimer) clearInterval(pingTimer);
 
-                    setAutoSyncAvailability(true);
+                setAutoSyncAvailability(true);
 
-                    logSync(tt('sync.extension.unlocked', {}, 'Sync engines unlocked (ALASS / FFSubSync / Vosk CTC/DTW / Whisper + ALASS)'), 'info');
+                logSync(tt('sync.extension.unlocked', {}, 'Sync engines unlocked (ALASS / FFSubSync / Vosk CTC/DTW / Whisper + ALASS)'), 'info');
 
-                    if (primaryModeSelect && primaryModeSelect.value === 'manual') {
-                        primaryModeSelect.value = 'alass';
-                    }
-                    populateSecondaryOptions(primaryModeSelect?.value || 'alass');
-                    refreshSyncPlanPreview();
-                    break;
+                populateSecondaryOptions(primaryModeSelect?.value || 'alass');
+                refreshSyncPlanPreview();
+                return;
+            }
+            if (msg.type === 'SUBMAKER_DEBUG_LOG') {
+                if (msg.messageId && STATE?.activeMessageId && msg.messageId !== STATE.activeMessageId) {
+                    return;
                 }
-                case 'SUBMAKER_DEBUG_LOG': {
-                    if (msg.messageId && STATE?.activeMessageId && msg.messageId !== STATE.activeMessageId) {
-                        break;
-                    }
-                    logSync(msg.text || tt('sync.logs.generic', {}, 'Log event'), msg.level || 'info');
-                    break;
-                }
-                case 'SUBMAKER_SYNC_PROGRESS': {
-                    // Progress for the active job is handled by the request-specific listener to avoid duplicates.
-                    if (!msg.messageId || !STATE?.activeMessageId || msg.messageId !== STATE.activeMessageId) break;
-                    break;
-                }
-                default:
-                    break;
+                logSync(msg.text || tt('sync.logs.generic', {}, 'Log event'), msg.level || 'info');
+                return;
+            }
+            if (msg.type === 'SUBMAKER_SYNC_TRACKS') {
+                handleSyncTrackOptionsMessage(msg);
+                return;
+            }
+            if (msg.type === 'SUBMAKER_AUTOSUB_TRACKS') {
+                // Backward-compat for older content scripts forwarding sync track prompts under autosub type.
+                handleSyncTrackOptionsMessage(msg);
+                return;
+            }
+            if (msg.type === 'SUBMAKER_SYNC_PROGRESS') {
+                // Progress for the active job is handled by the request-specific listener to avoid duplicates.
+                if (!msg.messageId || !STATE?.activeMessageId || msg.messageId !== STATE.activeMessageId) return;
             }
         });
 
@@ -3526,7 +3942,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         setTimeout(pingExtension, 150);
 
         // Request sync from Chrome extension
-        function requestExtensionSync(streamUrl, subtitleContent, primaryMode, plan = null, preferAlass = false, preferFfsubsync = false, preferCtc = false, useFingerprintPrepass = true) {
+        function requestExtensionSync(streamUrl, subtitleContent, primaryMode, plan = null, preferAlass = false, preferFfsubsync = false, preferCtc = false, useFingerprintPrepass = true, audioTrackIndex = null, sourceLanguageHint = '') {
             return new Promise((resolve, reject) => {
                 const messageId = 'sync_' + Date.now();
                 const modeToSend = (plan && plan.legacyMode) ? plan.legacyMode : (plan && plan.preset) ? plan.preset : 'smart';
@@ -3591,7 +4007,9 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         preferAlass: !!preferAlass,
                         preferFfsubsync: !!preferFfsubsync,
                         preferCtc: !!preferCtc,
-                        useFingerprintPrepass: !!useFingerprintPrepass
+                        useFingerprintPrepass: !!useFingerprintPrepass,
+                        audioTrackIndex: Number.isInteger(audioTrackIndex) && audioTrackIndex >= 0 ? audioTrackIndex : null,
+                        sourceLanguageHint: sourceLanguageHint || ''
                     }
                 }, '*');
                 const summary = describeSyncPlan(plan);
@@ -3609,22 +4027,9 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         // Sync method change handler
         function refreshSyncPlanPreview() {
-            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'manual';
-            const manualControls = document.getElementById('manualSyncControls');
+            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'alass';
             const autoSyncInfo = document.getElementById('autoSyncInfo');
             const syncMethodDesc = document.getElementById('syncMethodDescription');
-
-            if (primaryMode === 'manual') {
-                manualControls.style.display = 'block';
-                autoSyncInfo.style.display = 'none';
-                if (fingerprintPrepassGroup) fingerprintPrepassGroup.style.display = 'none';
-                syncMethodDesc.innerHTML = '';
-                STATE.activeSyncPlan = null;
-                setManualOffset(parseInt(manualOffsetInput?.value || '0', 10) || 0);
-                return;
-            }
-
-            manualControls.style.display = 'none';
             autoSyncInfo.style.display = 'block';
             if (fingerprintPrepassGroup) fingerprintPrepassGroup.style.display = 'block';
             if (fingerprintPrepassCheckbox) {
@@ -3666,19 +4071,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         });
         secondaryModeSelect?.addEventListener('change', refreshSyncPlanPreview);
 
-        // Manual offset controls sync
-        if (manualOffsetInput) {
-            manualOffsetInput.addEventListener('input', (e) => {
-                const ms = parseInt(e.target.value || '0', 10);
-                setManualOffset(ms);
-            });
-        }
-        if (manualOffsetSlider) {
-            manualOffsetSlider.addEventListener('input', (e) => {
-                const ms = parseInt(e.target.value || '0', 10);
-                setManualOffset(ms);
-            });
-        }
         if (fingerprintPrepassCheckbox) {
             STATE.useFingerprintPrepass = fingerprintPrepassCheckbox.checked;
             fingerprintPrepassCheckbox.addEventListener('change', (e) => {
@@ -3686,31 +4078,13 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 refreshSyncPlanPreview();
             });
         }
-        document.querySelectorAll('.offset-btn').forEach((btn) => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const reset = e.currentTarget.getAttribute('data-reset') === 'true';
-                const step = parseInt(e.currentTarget.getAttribute('data-step') || '0', 10);
-                const current = parseInt(manualOffsetInput?.value || '0', 10);
-                const next = reset ? 0 : current + step;
-                setManualOffset(next);
-            });
-        });
-        window.addEventListener('keydown', (e) => {
-            if (!primaryModeSelect || primaryModeSelect.value !== 'manual') return;
-            if (['ArrowLeft', 'ArrowRight', '0'].includes(e.key)) {
-                if (e.key === '0') {
-                    setManualOffset(0);
-                    e.preventDefault();
-                    return;
-                }
-                const base = e.shiftKey ? 500 : 100;
-                const delta = e.key === 'ArrowRight' ? base : -base;
-                setManualOffset((parseInt(manualOffsetInput?.value || '0', 10) || 0) + delta);
-                e.preventDefault();
+        syncAudioTrackSelect?.addEventListener('change', () => {
+            const raw = syncAudioTrackSelect ? parseInt(syncAudioTrackSelect.value, 10) : NaN;
+            if (Number.isInteger(raw) && raw >= 0) {
+                STATE.selectedAudioTrack = raw;
             }
         });
-        setManualOffset(0);
+        syncTrackContinueBtn?.addEventListener('click', submitSyncTrackSelection);
 
         populateSecondaryOptions(primaryModeSelect?.value || 'alass');
         refreshSyncPlanPreview();
@@ -3727,44 +4101,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
             });
         }
 
-        // Linked stream refresh button handler
-        const linkedStreamRefreshBtn = document.getElementById('linkedStreamRefresh');
-        if (linkedStreamRefreshBtn) {
-            linkedStreamRefreshBtn.addEventListener('click', async () => {
-                if (linkedStreamRefreshBtn.disabled || linkedStreamRefreshBtn.classList.contains('spinning')) return;
-                linkedStreamRefreshBtn.disabled = true;
-                linkedStreamRefreshBtn.classList.add('spinning');
-                try {
-                    const resp = await fetch('/api/stream-activity?config=' + encodeURIComponent(CONFIG.configStr), { cache: 'no-store' });
-                    if (resp.status === 204) {
-                        linkedStreamRefreshBtn.classList.remove('spinning');
-                        linkedStreamRefreshBtn.disabled = false;
-                        return;
-                    }
-                    if (!resp.ok) throw new Error('Bad response');
-                    const data = await resp.json();
-                    if (!data || !data.videoId) {
-                        linkedStreamRefreshBtn.classList.remove('spinning');
-                        linkedStreamRefreshBtn.disabled = false;
-                        return;
-                    }
-                    const currentSig = [CONFIG.videoHash || '', CONFIG.videoId || '', CONFIG.streamFilename || ''].join('::');
-                    const newSig = [data.videoHash || '', data.videoId || '', data.filename || ''].join('::');
-                    if (newSig !== currentSig && newSig.trim()) {
-                        const targetUrl = '/subtitle-sync?config=' + encodeURIComponent(CONFIG.configStr) +
-                            '&videoId=' + encodeURIComponent(data.videoId || '') +
-                            '&filename=' + encodeURIComponent(data.filename || '');
-                        window.location.href = targetUrl;
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('Linked stream refresh failed:', e);
-                }
-                linkedStreamRefreshBtn.classList.remove('spinning');
-                linkedStreamRefreshBtn.disabled = false;
-            });
-        }
-
         resetStepFlow(lockReasons.needContinue);
         updateHashStatusFromInput();
 
@@ -3772,22 +4108,11 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         document.getElementById('continueBtn').addEventListener('click', async () => {
             const streamUrlInput = document.getElementById('streamUrl');
             const streamUrl = (streamUrlInput?.value || '').trim();
-            const linkedHash = CONFIG.videoHash || deriveVideoHashFromParts(CONFIG.streamFilename, CONFIG.videoId);
+            const linkedHashes = getLinkedHashCandidates();
             const requiredMsg = tt('sync.step3.status.urlRequired', {}, 'Autosync requires a valid http(s) stream URL. Please paste it in Step 1.');
-            const invalidMsg = tt('sync.step3.status.invalidStream', {}, 'Autosync requires a valid http(s) stream URL. Manual offsets can run without it.');
+            const invalidMsg = tt('sync.step3.status.invalidStream', {}, 'Autosync requires a valid http(s) stream URL.');
             const mismatchMsg = HASH_MISMATCH_LINES[0] || tt('toolbox.embedded.step1.hashMismatchLine1', {}, 'Hashes must match before extraction can start.');
             const resetFlow = (reason) => resetStepFlow(reason || lockReasons.needContinue);
-
-            let derived = { hash: '', filename: '', videoId: '', source: 'stream-url' };
-            try {
-                derived = streamUrl
-                    ? deriveStreamHashFromUrl(streamUrl, { filename: CONFIG.streamFilename, videoId: CONFIG.videoId })
-                    : derived;
-            } catch (_) {
-                derived = { hash: '', filename: '', videoId: '', source: 'stream-url' };
-            }
-
-            updateHashStatusFromInput();
 
             if (!streamUrl) {
                 STATE.streamUrl = null;
@@ -3803,9 +4128,15 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 return;
             }
 
-            if (linkedHash && derived.hash && linkedHash !== derived.hash) {
+            await updateHashStatusFromInput();
+            const streamHashes = collectHashCandidates([
+                ...(Array.isArray(STATE.streamHashCandidates) ? STATE.streamHashCandidates : []),
+                STATE.streamHashInfo?.hash
+            ]);
+            const compared = compareHashSets(linkedHashes, streamHashes);
+            if (compared.hasLinked && compared.hasStream && !compared.match) {
                 STATE.streamUrl = null;
-                setHashMismatchAlert(buildHashMismatchAlert(linkedHash, derived.hash));
+                setHashMismatchAlert(buildHashMismatchAlert(compared.linkedHash, compared.streamHash));
                 showStatus('syncStatus', mismatchMsg, 'error');
                 resetFlow(mismatchMsg);
                 return;
@@ -3948,7 +4279,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 return;
             }
 
-            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'manual';
+            const primaryMode = primaryModeSelect ? primaryModeSelect.value : 'alass';
             const secondaryMode = secondaryModeSelect ? secondaryModeSelect.value : null;
             const streamInputEl = document.getElementById('streamUrl');
             if (streamInputEl) {
@@ -3965,30 +4296,24 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
             try {
                 setSyncInFlight(true);
+                hideSyncTrackPrompt();
                 document.getElementById('syncProgress').style.display = 'block';
                 hideStatus('syncStatus');
+                hideStatus('translateStatus');
+                STATE.syncedSubtitle = null;
+                STATE.translatedSubtitle = null;
+                document.getElementById('downloadSyncedBtn').style.display = 'none';
+                document.getElementById('downloadTranslatedBtn').style.display = 'none';
 
-                if (primaryMode !== 'manual') {
-                    if (!extensionInstalled) {
-                        pingExtension(true);
-                        throw new Error(tt('sync.step3.status.extensionRequired', {}, 'Autosync requires the SubMaker Chrome Extension. Please install/enable it.'));
-                    }
-                    if (!isHttpUrl(STATE.streamUrl || '')) {
-                        throw new Error(tt('sync.step3.status.urlRequired', {}, 'Autosync requires a valid http(s) stream URL. Please paste it in Step 1.'));
-                    }
+                if (!extensionInstalled) {
+                    pingExtension(true);
+                    throw new Error(tt('sync.step3.status.extensionRequired', {}, 'Autosync requires the SubMaker Chrome Extension. Please install/enable it.'));
+                }
+                if (!isHttpUrl(STATE.streamUrl || '')) {
+                    throw new Error(tt('sync.step3.status.urlRequired', {}, 'Autosync requires a valid http(s) stream URL. Please paste it in Step 1.'));
                 }
 
-                if (primaryMode === 'manual') {
-                    // Manual offset adjustment
-                    const offsetMs = parseInt(document.getElementById('offsetMs').value) || 0;
-
-                    updateProgress('syncProgressFill', 'syncProgressText', 50, tt('sync.step3.progressApplying', { ms: offsetMs }, 'Applying offset: ' + offsetMs + 'ms...'));
-
-                    // Apply offset to subtitle
-                    STATE.syncedSubtitle = offsetSubtitles(STATE.subtitleContent, offsetMs);
-
-                    updateProgress('syncProgressFill', 'syncProgressText', 100, tt('sync.step3.progressComplete', {}, 'Sync complete!'));
-                } else if (AUTO_PRIMARY_MODES.includes(primaryMode)) {
+                if (AUTO_PRIMARY_MODES.includes(primaryMode)) {
                     const preset = resolveSecondaryPreset(primaryMode, secondaryMode);
                     if (!preset) {
                         throw new Error(tt('sync.step3.status.profileRequired', {}, 'Select a scan profile before starting autosync.'));
@@ -4001,6 +4326,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     const syncPlan = buildSyncPlan(primaryMode, preset.value, STATE.estimatedDurationMs, { useFingerprintPrepass });
                     STATE.activeSyncPlan = syncPlan;
                     const planSummary = describeSyncPlan(syncPlan);
+                    const sourceLanguageHint = (needsSourceLanguage ? chosenSourceLanguage : null) || STATE.selectedSubtitleLang || '';
 
                     if (planSummary) {
                         logSync(tt('sync.plan.summary', { plan: planSummary }, 'Plan: ' + planSummary), 'info');
@@ -4018,7 +4344,9 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                         prefs.preferAlass,
                         prefs.preferFfsubsync,
                         prefs.preferCtc,
-                        useFingerprintPrepass
+                        useFingerprintPrepass,
+                        STATE.selectedAudioTrack,
+                        sourceLanguageHint
                     );
 
                     if (!syncResult.success) {
@@ -4030,7 +4358,7 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                 }
 
                 // Save to cache
-                // Extract language code: use manual selection if visible (file upload), otherwise auto-detected (dropdown)
+                // Extract language code: use file-upload selection when present, otherwise provider language from dropdown
                 const sourceLanguage = (needsSourceLanguage ? chosenSourceLanguage : null) || STATE.selectedSubtitleLang || 'eng';
                 await saveSyncedSubtitle(CONFIG.videoHash, sourceLanguage, STATE.selectedSubtitleId, STATE.syncedSubtitle);
 
@@ -4041,8 +4369,6 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
                     await translateSubtitle();
                 }
 
-                // Show preview section
-                document.getElementById('step4Section').style.display = 'block';
                 document.getElementById('downloadSyncedBtn').style.display = 'inline-flex';
 
             } catch (error) {
@@ -4116,10 +4442,12 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
 
         // Download handlers
         document.getElementById('downloadSyncedBtn').addEventListener('click', () => {
+            if (!STATE.syncedSubtitle) return;
             downloadSubtitle(STATE.syncedSubtitle, 'synced_subtitle.srt');
         });
 
         document.getElementById('downloadTranslatedBtn').addEventListener('click', () => {
+            if (!STATE.translatedSubtitle) return;
             downloadSubtitle(STATE.translatedSubtitle, 'translated_subtitle.srt');
         });
 

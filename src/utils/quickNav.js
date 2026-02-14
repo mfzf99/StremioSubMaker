@@ -355,7 +355,7 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
         <span>${label('syncSubtitles', 'Sync subtitles')}</span>
         ${activeKey === 'syncSubtitles' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
-      <a class="quick-nav-link${activeKey === 'automaticSubs' ? ' active' : ''}${devDisabled}" href="${devOnlyHref(links.automaticSubs)}">
+      <a class="quick-nav-link${activeKey === 'automaticSubs' ? ' active' : ''}" href="${links.automaticSubs}">
         <span>🤖</span>
         <span>${label('automaticSubs', 'Auto subs')}</span>
         ${activeKey === 'automaticSubs' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}

@@ -416,6 +416,7 @@
           "step1Title": "إدخال الصوت أو الفيديو",
           "streamLabel": "رابط البث / الملف",
           "streamPlaceholder": "الصق رابط الفيديو/البث من Stremio أو متصفحك",
+  "localDecodeWarning": "تجنب الملفات الكبيرة كلما أمكن. يتم تنزيل ملف البث وفك ترميز الصوت محليًا لعملية التفريغ، لذلك يُنصح بملفات أصغر.",
           "streamNote": "سنقوم بجلب واستخراج الصوت؛ التدفقات المحمية/DRM لن تعمل.",
           "prefill": "استخدام معرف البث المقدم",
           "clear": "مسح",
@@ -428,6 +429,7 @@
           "sourceLabel": "لغة المصدر (اختياري)",
           "autoDetect": "كشف تلقائي",
           "targetLabel": "لغة الهدف",
+          "targetWorkflowHelper": "يستخدم هذا نفس سير عمل الترجمة الذي قمت باعداده لـ Stremio.",
           "modelLabel": "نموذج Whisper",
           "modelTiny": "tiny (الأسرع)",
           "modelSmall": "small",
@@ -457,6 +459,8 @@
           "translationsEmpty": "لا توجد ترجمات بعد.",
           "translationCardTitle": "ترجمة {lang}",
           "translationCardFallback": "ترجمة مترجمة",
+          "sentToStremio": "تم إرسال الترجمات المترجمة إلى Stremio تحت إدخال Auto.",
+          "sentToStremioBlocked": "لم يتم إرسال الترجمات المترجمة إلى Stremio Auto في هذا التشغيل بسبب عدم تطابق الهاش.",
           "translationStepChip": "الخطوة 2.5",
           "translationStepTitle": "لغات الترجمة",
           "translationSettingsTitle": "إعدادات الترجمة",
@@ -516,7 +520,8 @@
           "translationFailed": "{count} فشلت",
           "readyToDeliver": "جاهز لتسليم {count} مسار/مسارات.",
           "cfStatus": "حالة Cloudflare: {status}",
-          "cfBody": "استجابة Cloudflare: "
+          "cfBody": "استجابة Cloudflare: ",
+          "translatingNow": "Translating..."
         },
         "hash": {
           "mismatch": "عدم تطابق في التجزئة: المرتبط {linked} مقابل المُدخل {stream}. تم تعطيل رفع التخزين المؤقت.",
@@ -1022,54 +1027,52 @@
         "googleWeb": "ويب (ثابت)",
         "googleHint": "يستخدم نقطة نهاية الويب العامة لترجمة Google (قد تكون غير مستقرة).",
         "testConnection": "اختبار الاتصال",
-        "customHint": "لـ Ollama أو LM Studio أو LocalAI أو أي واجهة برمجة تطبيقات متوافقة مع OpenAI. اترك المفتاح فارغاً إذا لم يكن مطلوباً."
-      },
-      "gemini": {
-        "title": "مفاتيح API للترجمة بالذكاء الاصطناعي",
+        "customHint": "لـ Ollama أو LM Studio أو LocalAI أو أي واجهة برمجة تطبيقات متوافقة مع OpenAI. اترك المفتاح فارغاً إذا لم يكن مطلوباً.",
+        "title": "AI Translation API Keys",
         "apiKey": {
-          "label": "مفتاح Gemini API",
-          "helper": "احصل على مفتاح API المجاني الخاص بك من",
+          "label": "Gemini API Key",
+          "helper": "Get your free API key from",
           "linkLabel": "Google AI Studio",
-          "placeholder": "أدخل مفتاح Gemini API الخاص بك",
-          "validateTitle": "التحقق من مفتاح API",
-          "validateCta": "اختبار",
-          "showHideKey": "إظهار/إخفاء مفتاح API",
-          "showKey": "إظهار مفتاح API",
-          "hideKey": "إخفاء مفتاح API"
+          "placeholder": "Enter your Gemini API key",
+          "validateTitle": "Validate API key",
+          "validateCta": "Test",
+          "showHideKey": "Show/hide API key",
+          "showKey": "Show API key",
+          "hideKey": "Hide API key"
         },
         "model": {
-          "label": "نموذج الترجمة",
-          "helper": "نموذج الذكاء الاصطناعي للترجمات",
+          "label": "Translation Model",
+          "helper": "AI model for translations",
           "options": {
-            "gemma27b": "Gemma 27b (بيتا) (موصى به لحدود المعدل)",
+            "gemma27b": "Gemma 27b (beta) (Recommended for Rate Limits)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
-            "flash3": "Gemini 3.0 Flash (Preview)",
-            "pro": "Gemini 2.5 Pro (بطيء)",
-            "pro3": "Gemini 3.0 Pro (بيتا)"
+            "flash3": "Gemini 3.0 Flash (beta)",
+            "pro": "Gemini 2.5 Pro (beta)",
+            "pro3": "Gemini 3.0 Pro (beta)"
           },
-          "hintTitle": "ترجمة سيئة/معطلة أو غير متزامنة؟",
-          "hintBody": "انقر ثلاث مرات بسرعة على الترجمة لفرض إعادة الترجمة.",
-          "retranslationHintTitle": "ترجمة سيئة/معطلة أو غير متزامنة؟",
-          "retranslationHintBody": "انقر ثلاث مرات بسرعة على الترجمة لفرض إعادة الترجمة.",
-          "betaTitle": "⚡ استخدام 2.5 Pro لا يزال في مرحلة بيتا.",
-          "betaAdvice": "إذا واجهت مشاكل في الترجمة، استخدم Flash-Lite.",
-          "rateWarningTitle": "⚠️ قيود الفئة المجانية:",
-          "rateWarningBody": "إذا كنت تستخدم مفتاح API مجاني، قد يطلق Gemini 2.5 Pro حدود المعدل (HTTP 429). على الأرجح ستتمكن فقط من ترجمة ترجمة واحدة في كل مرة."
+          "hintTitle": "Bad/broken or out-of-sync translation?",
+          "hintBody": "Quickly triple-click the subtitle to force a re-translation.",
+          "retranslationHintTitle": "Bad/broken or out-of-sync translation?",
+          "retranslationHintBody": "Quickly triple-click the subtitle to force a re-translation.",
+          "betaTitle": "⚡ 2.5 Pro usage is still in Beta.",
+          "betaAdvice": "If you have translation problems, use Flash-Lite.",
+          "rateWarningTitle": "⚠️ Free Tier Limitation:",
+          "rateWarningBody": "If using a free API key, Gemini 2.5 Pro may trigger rate limits (HTTP 429). You'll likely only be able to translate one subtitle at a time."
         },
         "keyRotation": {
-          "label": "تمكين تدوير مفاتيح Gemini API",
-          "description": "وزّع طلبات API عبر عدة مفاتيح لتجنّب حدود المعدّل.",
-          "additionalKeysLabel": "مفاتيح API إضافية",
-          "additionalKeys": "إضافية",
-          "addKey": "إضافة مفتاح",
-          "testKey": "اختبار هذا المفتاح",
-          "removeKey": "إزالة هذا المفتاح",
-          "keyPlaceholder": "أدخل مفتاح API",
-          "modeLabel": "وتيرة التدوير",
-          "modeDescription": "متى يتم التبديل بين مفاتيح API",
-          "modePerRequest": "لكل طلب (مرة لكل ملف)",
-          "modePerBatch": "لكل دفعة (كل دفعة ترجمة)"
+          "label": "Enable Gemini API key rotation",
+          "description": "Distribute API calls across multiple keys to avoid rate limits.",
+          "additionalKeysLabel": "Additional API Keys",
+          "additionalKeys": "additional",
+          "addKey": "Add Key",
+          "testKey": "Test this key",
+          "removeKey": "Remove this key",
+          "keyPlaceholder": "Enter API key",
+          "modeLabel": "Rotation Frequency",
+          "modeDescription": "How often to switch between API keys",
+          "modePerRequest": "Per Request (once per file)",
+          "modePerBatch": "Per Batch (each translation batch)"
         }
       },
       "otherApiKeys": {
@@ -1129,7 +1132,8 @@
           "description": "Switching between modes is recommended if you have translation sync problems.",
           "tooltip": "\"Original Timestamps\" mode removes timestamps and sends a numbered list of subtitle entries to the AI, then reconstructs the SRT with the original timestamps. \"Send Timestamps to AI\" sends the subtitles WITH timecodes and trusts the AI to return correct timestamps. Added for future-proofing the addon.",
           "original": "الطوابع الزمنية الأصلية (الافتراضي)",
-          "ai": "إرسال الطوابع الزمنية إلى الذكاء الاصطناعي"
+          "ai": "إرسال الطوابع الزمنية إلى الذكاء الاصطناعي",
+          "xml": "XML Tags (Default)"
         },
         "promptStyle": {
           "label": "نمط الموجه (Prompt)",
@@ -1151,6 +1155,10 @@
           "description": "ترجم ملف الترجمة بالكامل دفعة واحدة (يتم التقسيم فقط عند الأحجام الكبيرة جداً). يحسن الترابط السياقي لكنه قد يصطدم بحدود المزود بسهولة أكبر.",
           "multiple": "دفعات متعددة (الافتراضي)",
           "single": "دفعة واحدة"
+        },
+        "jsonOutput": {
+          "label": "Enable JSON Structured Output (Beta)",
+          "description": "Request JSON array format from AI for unambiguous response parsing. May improve accuracy but not all providers support it. Disabled by default."
         }
       },
       "multiProvider": {
@@ -1225,6 +1233,10 @@
         "contextSize": {
           "label": "حجم السياق",
           "description": "عدد الإدخالات المحيطة لتضمينها كسياق (1-10). الافتراضي: 3"
+        },
+        "mismatchRetries": {
+          "label": "Mismatch Retries",
+          "description": "When the AI returns a different number of subtitle entries than expected, retry the batch this many times before marking untranslated lines. (0-3, Default: 1)"
         }
       },
       "providerAdvanced": {
@@ -1812,44 +1824,6 @@
       "errors": {
         "saveFailed": "فشل حفظ الترجمة المتزامنة",
         "metaFetchFailed": "فشل جلب البيانات الوصفية"
-      }
-    }
-  },
-  "toolbox": {
-    "autoSubs": {
-      "steps": {
-        "singleBatch": "وضع دفعة واحدة",
-        "sendTimestamps": "إرسال الطوابع الزمنية إلى الذكاء الاصطناعي",
-        "providerLabel": "موفر الترجمة",
-        "providerModelLabel": "نموذج الترجمة",
-        "providerModelPlaceholder": "استخدم الإعداد الافتراضي للموفر",
-        "translationsEmpty": "لا توجد ترجمات بعد.",
-        "translationCardTitle": "ترجمة {lang}",
-        "translationCardFallback": "ترجمة الترجمة"
-      },
-      "actions": {
-        "downloadTranslation": "تحميل {lang}"
-      },
-      "status": {
-        "transcriptionDone": "اكتملت النسخة. جارٍ تجهيز التنزيلات...",
-        "failedPrefix": "فشل: "
-      },
-      "hash": {
-        "mismatch": "عدم تطابق الهاش: المرتبط {linked} مقابل الملصق {stream}. تم تعطيل رفع الذاكرة المؤقتة.",
-        "linked": "مرتبط: {linked} | البث: {stream}{cache}",
-        "waiting": "بانتظار هاش البث...",
-        "cacheDisabled": "تم تعطيل الذاكرة المؤقتة لهذه العملية."
-      },
-      "logs": {
-        "noStream": "ألصق رابط البث أولاً.",
-        "noTargets": "اختر لغة هدف واحدة على الأقل أو عطّل الترجمة.",
-        "sendingRequest": "جارٍ إرسال الطلب إلى Cloudflare Workers AI...",
-        "finished": "تم. التنزيلات جاهزة.",
-        "cacheSkipped": "تم تخطي الرفع إلى الذاكرة المؤقتة بسبب عدم تطابق الهاش.",
-        "errorPrefix": "خطأ: "
-      },
-      "providers": {
-        "missing": "لا يوجد موفر مُعد"
       }
     }
   }

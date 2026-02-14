@@ -112,6 +112,12 @@ function recordStreamActivity(payload) {
   } else {
     // Fill gaps from previous when the videoId matches but fields are missing
     if (keepPrevious && previous.videoId === incomingId) {
+      // Guard against degraded same-episode updates: if the incoming payload has
+      // no filename but carries a different hash, keep the previous authoritative
+      // hash. This prevents "id-only" hash drift from triggering false updates.
+      if (!incomingFilename && incomingHash && previous.filename && previous.videoHash && incomingHash !== previous.videoHash) {
+        effectiveHash = previous.videoHash;
+      }
       if (!effectiveFilename) effectiveFilename = previous.filename || '';
       if (!effectiveHash) effectiveHash = previous.videoHash || '';
       if (!effectiveStremioHash) effectiveStremioHash = previous.stremioHash || '';

@@ -32,16 +32,26 @@ if (CACHE_DISABLED) {
     log.info(() => '[Download Cache] DISABLED via DISABLE_DOWNLOAD_CACHE=true');
 }
 
+function normalizeVariant(variant) {
+    const raw = String(variant || 'default').trim().toLowerCase();
+    return raw.replace(/[^a-z0-9._-]/g, '_') || 'default';
+}
+
+function makeCacheKey(fileId, variant = 'default') {
+    return `download:${normalizeVariant(variant)}:${fileId}`;
+}
+
 /**
  * Get cached subtitle content if available
  * @param {string} fileId - Subtitle file ID
+ * @param {string} variant - Cache variant key to isolate output modes
  * @returns {string|undefined} Cached content or undefined if not in cache
  */
-function getCached(fileId) {
+function getCached(fileId, variant = 'default') {
     if (CACHE_DISABLED || !subtitleDownloadCache) {
         return undefined;
     }
-    const cacheKey = `download:${fileId}`;
+    const cacheKey = makeCacheKey(fileId, variant);
     return subtitleDownloadCache.get(cacheKey);
 }
 
@@ -49,9 +59,10 @@ function getCached(fileId) {
  * Save subtitle content to cache
  * @param {string} fileId - Subtitle file ID
  * @param {string} content - Subtitle content
+ * @param {string} variant - Cache variant key to isolate output modes
  * @returns {boolean} True if saved successfully
  */
-function saveCached(fileId, content) {
+function saveCached(fileId, content, variant = 'default') {
     if (CACHE_DISABLED || !subtitleDownloadCache) {
         return false;
     }
@@ -68,7 +79,7 @@ function saveCached(fileId, content) {
         return false;
     }
 
-    const cacheKey = `download:${fileId}`;
+    const cacheKey = makeCacheKey(fileId, variant);
     subtitleDownloadCache.set(cacheKey, content);
 
     const cacheStats = {

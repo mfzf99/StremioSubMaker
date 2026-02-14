@@ -24,6 +24,7 @@ class FilesystemStorageAdapter extends StorageAdapter {
       [StorageAdapter.CACHE_TYPES.BYPASS]: path.join(this.baseDir, 'translations_bypass'),
       [StorageAdapter.CACHE_TYPES.PARTIAL]: path.join(this.baseDir, 'translations_partial'),
       [StorageAdapter.CACHE_TYPES.SYNC]: path.join(this.baseDir, 'sync_cache'),
+      [StorageAdapter.CACHE_TYPES.AUTOSUB]: path.join(this.baseDir, 'autosub_cache'),
       [StorageAdapter.CACHE_TYPES.EMBEDDED]: path.join(this.baseDir, 'embedded_cache'),
       [StorageAdapter.CACHE_TYPES.SESSION]: path.join(process.cwd(), 'data'),
       [StorageAdapter.CACHE_TYPES.HISTORY]: path.join(this.baseDir, 'history'),

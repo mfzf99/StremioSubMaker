@@ -18,6 +18,7 @@ const { getTranslator } = require('../utils/i18n');
 const { deriveVideoHash } = require('../utils/videoHash');
 const { LRUCache } = require('lru-cache');
 const syncCache = require('../utils/syncCache');
+const autoSubCache = require('../utils/autoSubCache');
 const streamActivity = require('../utils/streamActivity');
 const embeddedCache = require('../utils/embeddedCache');
 const smdbCache = require('../utils/smdbCache');
@@ -64,7 +65,7 @@ function shortKey(v) {
     return crypto.createHash('sha1').update(String(v)).digest('hex').slice(0, 8);
   } catch (_) {
     const s = String(v || '');
-    return s.length > 12 ? s.slice(0, 12) + 'â€¦' : s;
+    return s.length > 12 ? s.slice(0, 12) + '...' : s;
   }
 }
 
@@ -2294,7 +2295,7 @@ function createSubtitleHandler(config) {
       }
 
       // Extract stream filename for matching
-      const streamFilename = extra?.filename || '';
+      const streamFilename = (extra?.filename || '').toString().trim();
       if (streamFilename) {
         log.debug(() => `[Subtitles] Stream filename for matching: ${streamFilename}`);
       }
@@ -2304,7 +2305,10 @@ function createSubtitleHandler(config) {
           ? config.__configHash
           : null;
         if (configHash) {
-          const videoHashForActivity = deriveVideoHash(streamFilename || '', id);
+          // Only derive an activity hash when a real filename is present.
+          // If filename is missing, keep hash empty so streamActivity can retain
+          // the previous authoritative hash for the same videoId.
+          const videoHashForActivity = streamFilename ? deriveVideoHash(streamFilename, id) : '';
           // Also record the real Stremio hash (from streaming addons like Torrentio)
           // so SMDB can use it for cross-source subtitle matching
           const realStremioHash = (extra?.videoHash && typeof extra.videoHash === 'string' && extra.videoHash.length > 0)
@@ -2385,10 +2389,12 @@ function createSubtitleHandler(config) {
         : 'default';
 
       const cacheIdComponent = getVideoCacheIdComponent(videoInfo);
+      const subtitleSearchRevisionKey = `${CACHE_PREFIXES.SUBTITLE_SEARCH_REV}${userHash}`;
+      const subtitleSearchRevision = Math.max(0, await getCounter(subtitleSearchRevisionKey));
       // Create user-scoped deduplication key based on video info, languages, and config hash
       // This ensures different users (or same user with different configs) get separate cached results
       // Cache automatically purges when user changes config (different hash = different cache key)
-      const dedupKey = `subtitle-search:${cacheIdComponent}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${allLanguages.join(',')}:${userHash}`;
+      const dedupKey = `subtitle-search:${cacheIdComponent}:${videoInfo.type}:${videoInfo.season || ''}:${videoInfo.episode || ''}:${allLanguages.join(',')}:${userHash}:rev=${subtitleSearchRevision}`;
 
       // Collect subtitles from all enabled providers with deduplication
       let openSubsAuthFailed = false; // track OpenSubtitles auth failures to append UX hint entries later
@@ -2809,13 +2815,20 @@ function createSubtitleHandler(config) {
       filteredFoundSubtitles = Array.from(limitedByLanguage.values()).flat();
       log.debug(() => `[Subtitles] Limited to ${MAX_SUBS_PER_LANGUAGE} subtitles per language (${filteredFoundSubtitles.length} total)`);
 
-      // Determine URL extension based on urlExtensionTest config (dev mode testing)
-      // Determine URL extension based on urlExtensionTest config (dev mode testing)
-      // 'srt' = default (.srt), 'sub' = Option A (.sub), 'none' = Option B (no extension)
+      // Determine URL behavior based on urlExtensionTest config (dev mode testing)
+      // 'srt' = default (.srt), 'sub' = Option A (.sub), 'none' = Option B (no extension),
+      // 'resolve' = Test C (resolver URL that redirects to detected typed URL on click)
       let urlExtension = '.srt';
+      let translationUrlExtension = '.srt';
+      let subtitleRouteBase = 'subtitle';
       if (config.urlExtensionTest === 'sub') {
         urlExtension = '.sub';
+        translationUrlExtension = '.sub';
       } else if (config.urlExtensionTest === 'none') {
+        urlExtension = '';
+        translationUrlExtension = '';
+      } else if (config.urlExtensionTest === 'resolve') {
+        subtitleRouteBase = 'subtitle-resolve';
         urlExtension = '';
       }
 
@@ -2843,7 +2856,7 @@ function createSubtitleHandler(config) {
           const subtitle = {
             id: `${sub.fileId}`,
             lang: displayLang,
-            url: `{{ADDON_URL}}/subtitle/${sub.fileId}/${sub.languageCode}${urlExtension}`
+            url: `{{ADDON_URL}}/${subtitleRouteBase}/${sub.fileId}/${sub.languageCode}${urlExtension}`
           };
 
           return subtitle;
@@ -2970,7 +2983,7 @@ function createSubtitleHandler(config) {
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
               lang: displayName, // Display as "Make Language" in Stremio UI
-              url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${urlExtension}${translateQuery}`
+              url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
           }
@@ -3010,9 +3023,11 @@ function createSubtitleHandler(config) {
       // Add xSync entries (synced subtitles from cache) - only for user-configured languages
       // Performance: Execute all sync cache lookups in parallel instead of sequential nested loops
       const xSyncEntries = [];
+      const autoEntries = [];
       const allowedLanguages = Array.from(expandedLangs).filter(Boolean);
       if (toolboxEnabled && videoHashes.length && allowedLanguages.length) {
         const seenSync = new Set();
+        const seenAuto = new Set();
         const buildLangCandidates = (lang) => {
           const canonical = canonicalSyncLanguageCode(lang);
           return canonical ? [canonical] : [];
@@ -3047,36 +3062,135 @@ function createSubtitleHandler(config) {
         for (const result of syncResults) {
           const key = `${result.hash}_${result.lang}`;
           if (!syncByHashLang.has(key)) {
-            syncByHashLang.set(key, { hash: result.hash, lang: result.lang, subs: [] });
+            syncByHashLang.set(key, { hash: result.hash, lang: result.lang, manualSubs: [], legacyAutoSubs: [] });
           }
           if (result.subs?.length) {
-            syncByHashLang.get(key).subs.push(...result.subs);
-          }
-        }
-
-        // Build xSync entries from aggregated results
-        for (const [, { hash, lang, subs: syncedSubs }] of syncByHashLang) {
-          if (syncedSubs && syncedSubs.length > 0) {
-            const langCandidates = buildLangCandidates(lang);
-            const langName = getLanguageName(lang) || getLanguageName(langCandidates[0]) || lang;
-            log.debug(() => `[Subtitles] Found ${syncedSubs.length} synced subtitle(s) for ${langName} (hash=${hash})`);
-
-            for (let i = 0; i < syncedSubs.length; i++) {
-              const syncedSub = syncedSubs[i];
-              const seenKey = syncedSub.cacheKey || `${hash}_${lang}_${i}`;
-              if (seenSync.has(seenKey)) continue;
-              seenSync.add(seenKey);
-              xSyncEntries.push({
-                id: `xsync_${seenKey}`,
-                lang: `xSync ${langName}${syncedSubs.length > 1 ? ` #${i + 1}` : ''}`,
-                url: `{{ADDON_URL}}/xsync/${hash}/${lang}/${syncedSub.sourceSubId}`
-              });
+            const bucket = syncByHashLang.get(key);
+            for (const sub of result.subs) {
+              const isLegacyAuto = String(sub?.metadata?.source || '').toLowerCase() === 'auto-subtitles';
+              if (isLegacyAuto) {
+                bucket.legacyAutoSubs.push(sub);
+              } else {
+                bucket.manualSubs.push(sub);
+              }
             }
           }
         }
 
+        // Build xSync entries: keep only the newest subtitle per language
+        const newestByLanguage = new Map();
+        for (const [, { hash, lang, manualSubs: syncedSubs }] of syncByHashLang) {
+          if (!syncedSubs || syncedSubs.length === 0) continue;
+          const canonicalLang = canonicalSyncLanguageCode(lang) || lang;
+          const newestForGroup = syncedSubs.reduce((acc, cur) => {
+            const accTs = acc?.timestamp || 0;
+            const curTs = cur?.timestamp || 0;
+            return curTs > accTs ? cur : acc;
+          }, null);
+          if (!newestForGroup) continue;
+          const current = newestByLanguage.get(canonicalLang);
+          const currentTs = current?.sub?.timestamp || 0;
+          const candidateTs = newestForGroup?.timestamp || 0;
+          if (!current || candidateTs > currentTs) {
+            newestByLanguage.set(canonicalLang, { hash, lang: canonicalLang, sub: newestForGroup });
+          }
+        }
+
+        for (const [, entry] of newestByLanguage) {
+          const syncedSub = entry.sub;
+          const langCode = entry.lang;
+          const seenKey = syncedSub.cacheKey || `${entry.hash}_${langCode}`;
+          if (seenSync.has(seenKey)) continue;
+          seenSync.add(seenKey);
+          const langName = getLanguageName(langCode) || langCode;
+          xSyncEntries.push({
+            id: `xsync_${seenKey}`,
+            lang: `xSync ${langName}`,
+            url: `{{ADDON_URL}}/xsync/${entry.hash}/${langCode}/${syncedSub.sourceSubId}`
+          });
+        }
+
         if (xSyncEntries.length > 0) {
           log.debug(() => `[Subtitles] Added ${xSyncEntries.length} xSync entries`);
+        }
+
+        // AUTO entries from dedicated AutoSubs cache (newest per language)
+        const autoLookups = [];
+        for (const hash of videoHashes) {
+          for (const lang of allowedLanguages) {
+            const langCandidates = buildLangCandidates(lang);
+            for (const candidate of langCandidates) {
+              autoLookups.push({ hash, lang, candidate });
+            }
+          }
+        }
+
+        const autoResults = await Promise.all(
+          autoLookups.map(({ hash, lang, candidate }) =>
+            autoSubCache.getAutoSubtitles(hash, candidate)
+              .then(subs => ({ hash, lang, candidate, subs: subs || [] }))
+              .catch(error => {
+                log.error(() => [`[Subtitles] Failed to get Auto entries for ${lang} (hash=${hash}):`, error.message]);
+                return { hash, lang, candidate, subs: [] };
+              })
+          )
+        );
+
+        const autoByHashLang = new Map();
+        for (const result of autoResults) {
+          const key = `${result.hash}_${result.lang}`;
+          if (!autoByHashLang.has(key)) {
+            autoByHashLang.set(key, { hash: result.hash, lang: result.lang, subs: [] });
+          }
+          if (result.subs?.length) {
+            autoByHashLang.get(key).subs.push(...result.subs);
+          }
+        }
+
+        // Legacy compatibility: include old AutoSubs entries that were previously saved in sync cache.
+        for (const [, { hash, lang, legacyAutoSubs }] of syncByHashLang) {
+          if (!legacyAutoSubs || legacyAutoSubs.length === 0) continue;
+          const key = `${hash}_${lang}`;
+          if (!autoByHashLang.has(key)) {
+            autoByHashLang.set(key, { hash, lang, subs: [] });
+          }
+          autoByHashLang.get(key).subs.push(...legacyAutoSubs);
+        }
+
+        const newestAutoByLanguage = new Map();
+        for (const [, { hash, lang, subs }] of autoByHashLang) {
+          if (!subs || subs.length === 0) continue;
+          const canonicalLang = canonicalSyncLanguageCode(lang) || lang;
+          const newestForGroup = subs.reduce((acc, cur) => {
+            const accTs = acc?.timestamp || 0;
+            const curTs = cur?.timestamp || 0;
+            return curTs > accTs ? cur : acc;
+          }, null);
+          if (!newestForGroup) continue;
+          const current = newestAutoByLanguage.get(canonicalLang);
+          const currentTs = current?.sub?.timestamp || 0;
+          const candidateTs = newestForGroup?.timestamp || 0;
+          if (!current || candidateTs > currentTs) {
+            newestAutoByLanguage.set(canonicalLang, { hash, lang: canonicalLang, sub: newestForGroup });
+          }
+        }
+
+        for (const [, entry] of newestAutoByLanguage) {
+          const sub = entry.sub;
+          const langCode = entry.lang;
+          const seenKey = sub.cacheKey || `${entry.hash}_${langCode}`;
+          if (seenAuto.has(seenKey)) continue;
+          seenAuto.add(seenKey);
+          const langName = getLanguageName(langCode) || langCode;
+          autoEntries.push({
+            id: `auto_${seenKey}`,
+            lang: `Auto ${langName}`,
+            url: `{{ADDON_URL}}/auto/${entry.hash}/${langCode}/${sub.sourceSubId}`
+          });
+        }
+
+        if (autoEntries.length > 0) {
+          log.debug(() => `[Subtitles] Added ${autoEntries.length} Auto entries`);
         }
       }
 
@@ -3181,6 +3295,7 @@ function createSubtitleHandler(config) {
         ...translationEntries,
         ...learnEntries,
         ...xSyncEntries,
+        ...autoEntries,
         ...xEmbedOriginalEntries,
         ...xEmbedEntries,
         ...smdbEntries
@@ -3233,7 +3348,7 @@ function createSubtitleHandler(config) {
       // Calculate total items for logging (AFTER all entries added including credential warning)
       const totalResponseItems = allSubtitles.length;
       const handlerDuration = Date.now() - handlerStartTime;
-      log.info(() => `[Subtitles] Response: ${totalResponseItems} items in ${handlerDuration}ms (${stremioSubtitles.length} subs, ${translationEntries.length} trans, ${xSyncEntries.length + xEmbedEntries.length} cached)`);
+      log.info(() => `[Subtitles] Response: ${totalResponseItems} items in ${handlerDuration}ms (${stremioSubtitles.length} subs, ${translationEntries.length} trans, ${xSyncEntries.length + autoEntries.length + xEmbedEntries.length} cached)`);
 
       return {
         subtitles: allSubtitles
@@ -3964,7 +4079,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
             // Valid cache entry with matching configHash
             // Check if this is a cached error
             if (bypassCached.isError === true) {
-              log.debug(() => ['[Translation] Cached error found (bypass) key=', cacheKey, 'â€” showing error and clearing cache']);
+              log.debug(() => ['[Translation] Cached error found (bypass) key=', cacheKey, ' - showing error and clearing cache']);
               const errorSrt = createTranslationErrorSubtitle(bypassCached.errorType, bypassCached.errorMessage, config.uiLanguage || 'en', bypassCached.errorProvider);
 
               // Delete the error cache so next click retries translation
@@ -3979,7 +4094,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
               return errorSrt;
             }
 
-            log.debug(() => ['[Translation] Cache hit (bypass) key=', cacheKey, 'userHash=', userHash, 'â€” serving cached translation']);
+            log.debug(() => ['[Translation] Cache hit (bypass) key=', cacheKey, 'userHash=', userHash, ' - serving cached translation']);
             cacheMetrics.hits++;
             cacheMetrics.estimatedCostSaved += 0.004;
             return bypassCached.content || bypassCached;
@@ -4017,7 +4132,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
 
     // Cache miss
     cacheMetrics.misses++;
-    log.debug(() => ['[Translation] Cache miss key=', cacheKey, 'â€” not cached']);
+    log.debug(() => ['[Translation] Cache miss key=', cacheKey, ' - not cached']);
 
     // === RACE CONDITION PROTECTION ===
     // Check if there's already an in-flight request for this exact key
@@ -4201,7 +4316,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
         sourceContent = embeddedSourceContent;
       } else {
         // Check download cache first
-        sourceContent = getDownloadCached(sourceFileId);
+        sourceContent = getDownloadCached(sourceFileId, 'translate_source');
 
         if (!sourceContent) {
           // Download from provider
@@ -4265,7 +4380,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
 
           // Save to download cache for subsequent operations
           try {
-            saveDownloadCached(sourceFileId, sourceContent);
+            saveDownloadCached(sourceFileId, sourceContent, 'translate_source');
           } catch (_) { }
         } else {
           log.debug(() => `[Translation] Pre-flight: using cached source (${sourceContent.length} bytes)`);
@@ -4404,7 +4519,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     } else {
       // Fallback: Fetch subtitle content, preferring 10min download cache first
       // This avoids re-downloading the same source when translating after a direct download
-      sourceContent = getDownloadCached(sourceFileId);
+      sourceContent = getDownloadCached(sourceFileId, 'translate_source');
       if (sourceContent) {
         log.debug(() => `[Translation] Using cached source subtitle for ${sourceFileId} (${sourceContent.length} bytes)`);
       } else {
@@ -4472,7 +4587,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
         // Save the freshly downloaded source to the 10min download cache for subsequent operations
         try {
-          saveDownloadCached(sourceFileId, sourceContent);
+          saveDownloadCached(sourceFileId, sourceContent, 'translate_source');
         } catch (_) { }
       }
 
@@ -4535,7 +4650,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     log.debug(() => '[Translation] Using unified translation engine');
 
     // Translate with smart partial delivery to reduce Redis I/O
-    // Strategy: 1st batch â†’ save, then next 3 â†’ save, then next 5 â†’ save, then every 5
+    // Strategy: 1st batch -> save, then next 3 -> save, then next 5 -> save, then every 5
     let translatedContent;
     let lastSavedBatch = 0;
     let lastStreamSequence = 0;

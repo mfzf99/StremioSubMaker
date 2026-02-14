@@ -131,6 +131,16 @@ const subtitleParamsSchema = Joi.object({
 });
 
 /**
+ * Sanitize and validate typed subtitle content parameters
+ */
+const subtitleContentParamsSchema = Joi.object({
+  config: configStringSchema,
+  fileId: fileIdSchema,
+  language: languageCodeSchema,
+  ext: Joi.string().valid('srt', 'sub', 'vtt', 'ass', 'ssa').required(),
+});
+
+/**
  * Sanitize and validate translation parameters
  */
 const translationParamsSchema = Joi.object({
@@ -171,6 +181,7 @@ module.exports = {
   subtitleContentSchema,
   configStringSchema,
   subtitleParamsSchema,
+  subtitleContentParamsSchema,
   translationParamsSchema,
   translationSelectorParamsSchema,
   fileTranslationBodySchema,

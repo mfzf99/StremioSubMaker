@@ -133,6 +133,7 @@ StorageAdapter.CACHE_TYPES = {
   BYPASS: 'bypass',                // Temporary user-scoped cache (10GB, 12h TTL)
   PARTIAL: 'partial',              // In-flight partial translations (10GB, 1h TTL)
   SYNC: 'sync',                    // Synced subtitles (50GB)
+  AUTOSUB: 'autosub',              // AutoSubs outputs (separate from manual sync cache)
   EMBEDDED: 'embedded',            // Extracted/translated embedded subtitles (50GB)
   SESSION: 'session',              // Session persistence (no limit)
   HISTORY: 'history',              // Translation history (1GB)
@@ -145,13 +146,14 @@ StorageAdapter.CACHE_TYPES = {
 // For filesystem storage, these are soft limits (enforced by cleanup routines)
 //
 // IMPORTANT: Total cache size should be LESS than Redis maxmemory setting
-// Default: 3GB total (fits in 4GB Redis with 1GB overhead for Redis internals)
+// Default: 3.5GB total (fits in 4GB Redis with ~0.5GB overhead for Redis internals)
 //
 // Environment variables to override:
 // - CACHE_LIMIT_TRANSLATION (default: 1.5GB)
 // - CACHE_LIMIT_BYPASS (default: 0.5GB)
 // - CACHE_LIMIT_PARTIAL (default: 0.5GB)
 // - CACHE_LIMIT_SYNC (default: 0.5GB)
+// - CACHE_LIMIT_AUTOSUB (default: 0.5GB)
 // - CACHE_LIMIT_EMBEDDED (default: 0.5GB)
 // - CACHE_LIMIT_HISTORY (default: 1GB)
 // - CACHE_LIMIT_PROVIDER_META (default: 250MB)
@@ -164,6 +166,7 @@ StorageAdapter.SIZE_LIMITS = {
   [StorageAdapter.CACHE_TYPES.BYPASS]: parseInt(process.env.CACHE_LIMIT_BYPASS) || (0.5 * 1024 * 1024 * 1024),           // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.PARTIAL]: parseInt(process.env.CACHE_LIMIT_PARTIAL) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.SYNC]: parseInt(process.env.CACHE_LIMIT_SYNC) || (0.5 * 1024 * 1024 * 1024),               // 0.5GB - was 2GB (for 16GB Redis)
+  [StorageAdapter.CACHE_TYPES.AUTOSUB]: parseInt(process.env.CACHE_LIMIT_AUTOSUB) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - AutoSubs cache
   [StorageAdapter.CACHE_TYPES.EMBEDDED]: parseInt(process.env.CACHE_LIMIT_EMBEDDED) || (0.5 * 1024 * 1024 * 1024),       // 0.5GB - mirrors sync cache
   [StorageAdapter.CACHE_TYPES.SESSION]: null,                                                                             // No limit
   [StorageAdapter.CACHE_TYPES.HISTORY]: parseInt(process.env.CACHE_LIMIT_HISTORY) || (1024 * 1024 * 1024),               // 1GB default
@@ -177,6 +180,7 @@ StorageAdapter.DEFAULT_TTL = {
   [StorageAdapter.CACHE_TYPES.BYPASS]: 12 * 60 * 60, // 12 hours
   [StorageAdapter.CACHE_TYPES.PARTIAL]: 60 * 60,     // 1 hour
   [StorageAdapter.CACHE_TYPES.SYNC]: null,            // No expiry
+  [StorageAdapter.CACHE_TYPES.AUTOSUB]: null,         // No expiry
   [StorageAdapter.CACHE_TYPES.EMBEDDED]: null,        // No expiry (shared cache across users)
   [StorageAdapter.CACHE_TYPES.SESSION]: null,         // No expiry
   [StorageAdapter.CACHE_TYPES.HISTORY]: 30 * 24 * 60 * 60, // 30 days

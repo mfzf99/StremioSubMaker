@@ -58,6 +58,7 @@ const { quickNavScript } = require('./src/utils/quickNav');
 const streamActivity = require('./src/utils/streamActivity');
 const { translateInParallel } = require('./src/utils/parallelTranslation');
 const syncCache = require('./src/utils/syncCache');
+const autoSubCache = require('./src/utils/autoSubCache');
 const { warmUpConnections, startKeepAlivePings, stopKeepAlivePings, getPoolStats } = require('./src/utils/httpAgents');
 const embeddedCache = require('./src/utils/embeddedCache');
 const { generateSubtitleSyncPage } = require('./src/utils/syncPageGenerator');
@@ -70,6 +71,7 @@ const { registerFileUploadRoutes } = require('./src/routes/fileUploadRoutes');
 const {
     validateRequest,
     subtitleParamsSchema,
+    subtitleContentParamsSchema,
     translationParamsSchema,
     translationSelectorParamsSchema,
     fileTranslationBodySchema,
@@ -80,6 +82,7 @@ const { getSessionManager, stripInternalFlags } = require('./src/utils/sessionMa
 const { runStartupValidation } = require('./src/utils/startupValidation');
 const { StorageUnavailableError } = require('./src/storage/errors');
 const { loadLocale, getTranslator, DEFAULT_LANG } = require('./src/utils/i18n');
+const { incrementCounter, CACHE_PREFIXES, CACHE_TTLS } = require('./src/utils/sharedCache');
 
 // Cache-buster path segment for temporary HA cache invalidation
 // Default to current package version so it auto-advances on releases
@@ -504,6 +507,31 @@ function normalizeAutoSubSrt(srt = '', opts = {}) {
             .sort((a, b) => (a.startMs - b.startMs) || (a.endMs - b.endMs));
 
         if (!entries.length) return stripSpeakerLabelsFromSrt(srt || '').trim();
+        if (opts && opts.preserveTiming === true) {
+            const minDurationMs = Number.isFinite(opts.minDurationMs) ? opts.minDurationMs : 120;
+            const maxLineLength = opts.maxLineLength || 42;
+            const maxLines = opts.maxLines || 2;
+            const preservedEntries = [];
+            let lastEndMs = 0;
+            entries.forEach((entry) => {
+                const safeText = wrapSrtText(entry.text, maxLineLength, maxLines);
+                if (!safeText) return;
+                let startMs = Math.max(0, entry.startMs || 0);
+                let endMs = Math.max(startMs + minDurationMs, entry.endMs || (startMs + minDurationMs));
+                if (startMs < lastEndMs) startMs = lastEndMs;
+                if (endMs <= startMs) endMs = startMs + minDurationMs;
+                preservedEntries.push({
+                    id: preservedEntries.length + 1,
+                    timecode: `${formatTimestamp(startMs / 1000)} --> ${formatTimestamp(endMs / 1000)}`,
+                    text: safeText
+                });
+                lastEndMs = endMs;
+            });
+            if (preservedEntries.length) {
+                return toSRT(preservedEntries).trim();
+            }
+            return stripSpeakerLabelsFromSrt(srt || '').trim();
+        }
 
         const merged = [];
         for (const entry of entries) {
@@ -1258,31 +1286,14 @@ function setNoStore(res) {
 
 // Helper: caching policy for subtitle payloads
 // - loading/partial/error responses stay no-store to avoid caching placeholders
-// - final subtitles get a private, short-lived cache so players (Android) don't keep reloading and resetting offsets
+// - final subtitle payloads also stay no-store to avoid stale subtitle reuse on some clients
 function setSubtitleCacheHeaders(res, mode = 'final') {
     if (mode === 'loading') {
         setNoStore(res);
         return;
     }
 
-    // Remove no-store style headers if they were set earlier in the pipeline
-    const headersToClear = [
-        'Pragma',
-        'Expires',
-        'Surrogate-Control',
-        'CF-Cache-Status',
-        'Cloudflare-CDN-Cache-Control',
-        'X-Accel-Expires',
-        'X-Cache-Buster'
-    ];
-    headersToClear.forEach((h) => res.removeHeader(h));
-
-    // Allow only private (device) caching; explicitly block shared/CDN caching
-    res.setHeader('Cache-Control', 'private, max-age=86400, s-maxage=0, stale-while-revalidate=300, no-transform');
-    res.setHeader('CDN-Cache-Control', 'private, max-age=0, s-maxage=0, no-store');
-    res.setHeader('Cloudflare-CDN-Cache-Control', 'private, max-age=0, s-maxage=0, no-store');
-    res.setHeader('CF-Cache-Status', 'BYPASS');
-    res.setHeader('Vary', 'Accept-Encoding');
+    setNoStore(res);
 }
 
 // Normalize subtitle route params to strip optional extensions (e.g., ".srt", ".vtt", ".sub") from :targetLang
@@ -1394,6 +1405,33 @@ function isStremioOrigin(origin) {
         return true;
     }
     return STREMIO_ORIGIN_PREFIXES.some(prefix => normalized.startsWith(prefix));
+}
+const COMMUNITY_V5_BLOCKED_HOSTS = [
+    'stremio.zarg.me',
+    'zaarrg.github.io'
+];
+function isBlockedCommunityV5Request(req) {
+    if (!req) return false;
+    const origin = req.get('origin') || '';
+    const referer = req.get('referer') || '';
+    const originHost = extractHostnameFromOrigin(origin);
+    const refererHost = extractHostnameFromOrigin(referer);
+    const normalizedOrigin = normalizeOrigin(origin);
+    const normalizedReferer = normalizeOrigin(referer);
+
+    const hostBlocked = COMMUNITY_V5_BLOCKED_HOSTS.some(host =>
+        originHost === host ||
+        refererHost === host ||
+        originHost.endsWith(`.${host}`) ||
+        refererHost.endsWith(`.${host}`)
+    );
+
+    // Backup fingerprint: their fallback UI URL path contains this slug.
+    const knownPathHint =
+        normalizedOrigin.includes('stremio-web-shell-fixes') ||
+        normalizedReferer.includes('stremio-web-shell-fixes');
+
+    return hostBlocked || knownPathHint;
 }
 function isStremioClient(req) {
     const origin = req.get('origin');
@@ -1964,6 +2002,33 @@ app.use((req, res, next) => {
     if (isAddonApiRoute) {
         const userAgent = req.headers['user-agent'] || '';
 
+        // Hard block known Stremio Community v5 web-shell origins/referers.
+        // This is a targeted deny that leaves null-origin and generic StremioShell
+        // handling intact for all other clients.
+        if (isBlockedCommunityV5Request(req)) {
+            const blockOrigin = origin || 'none';
+            const blockReferer = req.get('referer') || 'none';
+            log.error(() => `[Security] Blocked addon API request (community-v5 origin) - origin: ${blockOrigin}, referer: ${blockReferer}, user-agent: ${userAgent}, path: ${req.path}`);
+            sentry.captureMessage(
+                `[Security] Blocked addon API request (community-v5 origin) - origin: ${blockOrigin}, referer: ${blockReferer}, user-agent: ${userAgent}, path: ${req.path}`,
+                'error',
+                {
+                    module: 'SecurityMiddleware',
+                    blockReason: 'community_v5_origin_blocked',
+                    origin: blockOrigin,
+                    referer: blockReferer,
+                    userAgent,
+                    path: req.path,
+                    method: req.method,
+                    ip: req.ip,
+                    tags: { security: 'blocked_origin' }
+                }
+            );
+            return res.status(403).json({
+                error: t('server.errors.originNotAllowed', {}, 'Origin not allowed')
+            });
+        }
+
         // Allow requests with no origin (Stremio native) or "null" origin (Stremio web/sandboxed contexts)
         if (!origin || origin === 'null') {
             log.debug(() => `[Security] Allowed addon API request: origin=${origin || 'none'}, user-agent=${userAgent}`);
@@ -2099,9 +2164,12 @@ app.use('/addon/:config', (req, res, next) => {
         '/manifest.json',       // addon install
         '/subtitles',           // SDK subtitles handler
         '/subtitle/',           // custom subtitle download
+        '/subtitle-resolve/',   // test C subtitle resolver
+        '/subtitle-content/',   // test C typed subtitle content
         '/translate',           // translate + translate-selector
         '/learn',               // learn mode
         '/xsync',               // synced subtitles
+        '/auto/',               // automatic subtitles cache
         '/xembedded',           // embedded subtitles (xEmbed cache)
         '/error-subtitle',      // error subtitles
         '/file-translate',      // toolbox file translation
@@ -4133,6 +4201,15 @@ async function resolveConfigAsync(configStr, req) {
 // - .srt (default)
 // - .sub (Option A - generic subtitle extension)
 // - no extension (Option B - rely on Content-Type header)
+function detectSubtitlePayloadFormat(content) {
+    const trimmed = (content || '').trimStart();
+    const isVtt = trimmed.startsWith('WEBVTT');
+    const isAss = trimmed.includes('[Script Info]') && (trimmed.includes('[V4+ Styles]') || trimmed.includes('[V4 Styles]'));
+    const isSsa = trimmed.includes('[Script Info]') && trimmed.includes('[V4 Styles]') && !trimmed.includes('[V4+ Styles]');
+    const ext = isVtt ? 'vtt' : (isSsa ? 'ssa' : (isAss ? 'ass' : 'srt'));
+    return { isVtt, isAss, isSsa, ext };
+}
+
 const subtitleDownloadHandler = async (req, res) => {
     try {
         let t = res.locals?.t || getTranslatorFromRequest(req, res);
@@ -4155,6 +4232,12 @@ const subtitleDownloadHandler = async (req, res) => {
         }
         t = getTranslatorFromRequest(req, res, config);
         const configKey = ensureConfigHash(config, configStr);
+        const downloadCacheVariant = (config.convertAssToVtt === false && config.forceSRTOutput !== true)
+            ? 'download_raw_ass'
+            : 'download_converted';
+        const assHeaderTestMode = config.devMode === true
+            && config.convertAssToVtt === false
+            && config.forceSRTOutput !== true;
 
         // Language is already cleaned (extension stripped at handler entry)
         const langCode = language;
@@ -4163,7 +4246,7 @@ const subtitleDownloadHandler = async (req, res) => {
         const dedupKey = `download:${configKey}:${fileId}:${langCode}`;
 
         // STEP 1: Check download cache first (fastest path - shared with translation flow)
-        const cachedContent = getDownloadCached(fileId);
+        const cachedContent = getDownloadCached(fileId, downloadCacheVariant);
         if (cachedContent) {
             const cacheStats = getDownloadCacheStats();
             log.debug(() => `[Download Cache] HIT for ${fileId} in ${langCode} (${cachedContent.length} bytes) - Cache: ${cacheStats.size}/${cacheStats.max} entries, ${cacheStats.sizeMB}/${cacheStats.maxSizeMB}MB`);
@@ -4182,25 +4265,37 @@ const subtitleDownloadHandler = async (req, res) => {
             }
 
             // Decide headers based on content (serve VTT, ASS/SSA, or SRT with appropriate MIME types)
-            const trimmedCached = (cachedContent || '').trimStart();
-            const isVtt = trimmedCached.startsWith('WEBVTT');
-            const isAss = trimmedCached.includes('[Script Info]') && (trimmedCached.includes('[V4+ Styles]') || trimmedCached.includes('[V4 Styles]'));
-            const isSsa = trimmedCached.includes('[Script Info]') && trimmedCached.includes('[V4 Styles]') && !trimmedCached.includes('[V4+ Styles]');
+            const { isVtt, isAss, isSsa } = detectSubtitlePayloadFormat(cachedContent);
 
             if (isVtt) {
                 res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="${fileId}.vtt"`);
             } else if (isAss && !isSsa) {
                 // ASS format (Advanced SubStation Alpha)
-                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
-                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+                if (assHeaderTestMode) {
+                    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                    res.setHeader('Content-Disposition', `inline; filename="${fileId}.ass"`);
+                } else {
+                    res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                    res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+                }
             } else if (isSsa) {
                 // SSA format (SubStation Alpha v4)
-                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
-                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
+                if (assHeaderTestMode) {
+                    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                    res.setHeader('Content-Disposition', `inline; filename="${fileId}.ssa"`);
+                } else {
+                    res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                    res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
+                }
             } else {
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+            }
+            const requestExt = ((req.originalUrl || '').match(/\.(srt|sub|vtt|ass|ssa)(?:\?|$)/i)?.[1] || 'none').toLowerCase();
+            const payloadFormat = isVtt ? 'vtt' : isSsa ? 'ssa' : (isAss ? 'ass' : 'srt');
+            if ((requestExt === 'srt' || requestExt === 'sub') && (payloadFormat === 'ass' || payloadFormat === 'ssa')) {
+                log.debug(() => `[Download] Extension/payload mismatch file=${fileId} ext=${requestExt} payload=${payloadFormat} cache=hit`);
             }
             setSubtitleCacheHeaders(res, 'final');
             res.send(cachedContent);
@@ -4251,28 +4346,40 @@ const subtitleDownloadHandler = async (req, res) => {
         );
 
         // STEP 6: Save to cache for future requests (shared with translation flow)
-        saveDownloadCached(fileId, content);
+        saveDownloadCached(fileId, content, downloadCacheVariant);
 
         // Decide headers based on content (serve VTT, ASS/SSA, or SRT with appropriate MIME types)
-        const trimmedContent = (content || '').trimStart();
-        const isVtt = trimmedContent.startsWith('WEBVTT');
-        const isAss = trimmedContent.includes('[Script Info]') && (trimmedContent.includes('[V4+ Styles]') || trimmedContent.includes('[V4 Styles]'));
-        const isSsa = trimmedContent.includes('[Script Info]') && trimmedContent.includes('[V4 Styles]') && !trimmedContent.includes('[V4+ Styles]');
+        const { isVtt, isAss, isSsa } = detectSubtitlePayloadFormat(content);
 
         if (isVtt) {
             res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${fileId}.vtt"`);
         } else if (isAss && !isSsa) {
             // ASS format (Advanced SubStation Alpha)
-            res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+            if (assHeaderTestMode) {
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `inline; filename="${fileId}.ass"`);
+            } else {
+                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ass"`);
+            }
         } else if (isSsa) {
             // SSA format (SubStation Alpha v4)
-            res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
+            if (assHeaderTestMode) {
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `inline; filename="${fileId}.ssa"`);
+            } else {
+                res.setHeader('Content-Type', 'text/x-ssa; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
+            }
         } else {
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+        }
+        const requestExt = ((req.originalUrl || '').match(/\.(srt|sub|vtt|ass|ssa)(?:\?|$)/i)?.[1] || 'none').toLowerCase();
+        const payloadFormat = isVtt ? 'vtt' : isSsa ? 'ssa' : (isAss ? 'ass' : 'srt');
+        if ((requestExt === 'srt' || requestExt === 'sub') && (payloadFormat === 'ass' || payloadFormat === 'ssa')) {
+            log.debug(() => `[Download] Extension/payload mismatch file=${fileId} ext=${requestExt} payload=${payloadFormat} cache=miss`);
         }
         setSubtitleCacheHeaders(res, 'final');
         res.send(content);
@@ -4285,11 +4392,58 @@ const subtitleDownloadHandler = async (req, res) => {
     }
 };
 
+// Test C route: resolve unknown subtitle format at click time and redirect to a typed URL.
+const subtitleResolveHandler = async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr, fileId } = req.params;
+        let language = req.params.language || '';
+        language = language.replace(/\.(srt|sub|vtt|ass|ssa)$/i, '');
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Resolve] config', t);
+        if (!config) return;
+        if (isInvalidSessionConfig(config)) {
+            const errorSubtitle = createSessionTokenErrorSubtitle(null, null, config?.uiLanguage || 'en');
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename=\"session-token-not-found.srt\"');
+            setSubtitleCacheHeaders(res, 'loading');
+            return res.status(401).send(errorSubtitle);
+        }
+
+        const downloadCacheVariant = (config.convertAssToVtt === false && config.forceSRTOutput !== true)
+            ? 'download_raw_ass'
+            : 'download_converted';
+        let content = getDownloadCached(fileId, downloadCacheVariant);
+        if (!content) {
+            content = await handleSubtitleDownload(fileId, language, config);
+            saveDownloadCached(fileId, content, downloadCacheVariant);
+        }
+
+        const { ext } = detectSubtitlePayloadFormat(content);
+        const redirectUrl = `/addon/${encodeURIComponent(configStr)}/subtitle-content/${encodeURIComponent(fileId)}/${encodeURIComponent(language)}.${ext}`;
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        return res.redirect(302, redirectUrl);
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Resolve]', t)) return;
+        log.error(() => '[Resolve] Error:', error);
+        res.status(404).send(t('server.errors.subtitleNotFound', {}, 'Subtitle not found'));
+    }
+};
+
+// Typed content route for Test C. Reuse existing download path by re-injecting extension into :language.
+const subtitleContentHandler = async (req, res) => {
+    req.params.language = `${req.params.language}.${req.params.ext}`;
+    return subtitleDownloadHandler(req, res);
+};
+
 // Register subtitle download routes for all supported extensions
 // Route priority: Express matches routes in order of registration
 app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
 app.get('/addon/:config/subtitle/:fileId/:language.sub', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
 app.get('/addon/:config/subtitle/:fileId/:language', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
+app.get('/addon/:config/subtitle-resolve/:fileId/:language', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleResolveHandler);
+app.get('/addon/:config/subtitle-content/:fileId/:language.:ext', searchLimiter, validateRequest(subtitleContentParamsSchema, 'params'), subtitleContentHandler);
 
 // Custom route: Serve error subtitles for config errors (BEFORE SDK router to take precedence)
 app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
@@ -4653,9 +4807,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
             setSubtitleCacheHeaders(res, 'loading');
             log.debug(() => `[Translation] Set no-store headers for ${isPartialMessage ? 'partial message' : 'loading message'}`);
         } else {
-            // Final translations: allow private caching so Android players don't keep reloading and resetting offsets
+            // Final translations are no-store to avoid stale subtitle reuse in clients.
             setSubtitleCacheHeaders(res, 'final');
-            log.debug(() => `[Translation] Set private caching headers for final translation`);
+            log.debug(() => `[Translation] Set no-store headers for final translation`);
         }
 
         res.send(maybeConvertToSRT(subtitleContent, config));
@@ -4758,10 +4912,10 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
         }
 
         // Always obtain source content
-        let sourceContent = await getDownloadCached(sourceFileId);
+        let sourceContent = await getDownloadCached(sourceFileId, 'translate_source');
         if (!sourceContent) {
             sourceContent = await handleSubtitleDownload(sourceFileId, 'und', config);
-            saveDownloadCached(sourceFileId, sourceContent);
+            saveDownloadCached(sourceFileId, sourceContent, 'translate_source');
         }
 
         // Normalize source to SRT for pairing (handles VTT, ASS/SSA, and other formats)
@@ -5713,7 +5867,11 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
         const transcriptSrtRaw = (typeof transcriptPayload.srt === 'string' && transcriptPayload.srt.trim())
             ? transcriptPayload.srt
             : ((typeof req.body?.transcriptSrt === 'string' && req.body.transcriptSrt.trim()) ? req.body.transcriptSrt : '');
-        const transcriptSrt = normalizeAutoSubSrt(transcriptSrtRaw);
+        const preserveAutoSubTiming = engineKey === 'assemblyai'
+            || String(transcriptPayload.model || '').toLowerCase() === 'assemblyai'
+            || String(model || '').toLowerCase() === 'assemblyai';
+        const normalizeOpts = preserveAutoSubTiming ? { preserveTiming: true } : {};
+        const transcriptSrt = normalizeAutoSubSrt(transcriptSrtRaw, normalizeOpts);
         const transcriptLang = (transcriptPayload.languageCode || transcriptPayload.language || req.body?.transcriptLanguage || sourceLanguage || '').toString().trim();
         const cfStatus = Number.isFinite(transcriptPayload.cfStatus) ? transcriptPayload.cfStatus : (Number.isFinite(req.body?.cfStatus) ? req.body.cfStatus : null);
         const cfBody = (transcriptPayload.cfBody || req.body?.cfBody || '').toString();
@@ -5724,14 +5882,21 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
         const audioSource = transcriptPayload.audioSource || audioMeta.source || (engineKey === 'assemblyai' ? 'assemblyai-extension' : 'extension');
         const audioContentType = transcriptPayload.contentType || audioMeta.contentType || (engineKey === 'assemblyai' ? 'audio/wav' : 'audio/wav');
         const transcriptModel = transcriptPayload.model || model || '@cf/openai/whisper';
+        const requestedAssemblySpeechModel = (transcriptPayload.speechModel || req.body?.assemblySpeechModel || '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        const assemblySpeechModel = (requestedAssemblySpeechModel === 'universal-3-pro' || requestedAssemblySpeechModel === 'universal-2')
+            ? requestedAssemblySpeechModel
+            : 'universal-3-pro';
 
         if (engineKey === 'assemblyai' && transcriptSrt) {
             const transcriptBytes = Buffer.byteLength(transcriptSrt, 'utf8');
-            logStep(`Using client AssemblyAI transcript (${formatBytes(transcriptBytes)}) from ${audioSource}`, 'info');
+            logStep(`Using client AssemblyAI transcript (${formatBytes(transcriptBytes)}) from ${audioSource} (speech_model=${assemblySpeechModel})`, 'info');
             transcription = {
                 srt: transcriptSrt,
                 languageCode: transcriptLang || sourceLanguage || 'und',
-                model: 'assemblyai',
+                model: assemblySpeechModel,
                 assemblyId: transcriptPayload.assemblyId || null
             };
             transcriptDiagnostics.audioBytes = audioBytes;
@@ -5785,7 +5950,7 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                 logTrail
             });
         }
-        const originalSrt = normalizeAutoSubSrt((transcription && transcription.srt) ? transcription.srt : '');
+        const originalSrt = normalizeAutoSubSrt((transcription && transcription.srt) ? transcription.srt : '', normalizeOpts);
         if (!originalSrt || !originalSrt.trim()) {
             logStep('Transcription returned no content', 'error');
             return respond(500, {
@@ -5815,16 +5980,18 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
         if (transcriptDiagnostics.usedFullVideo) baseMetadata.usedFullVideo = true;
 
         let originalDownloadUrl = null;
+        let autoCacheUpdated = false;
         if (!cacheBlocked) {
             try {
-                await syncCache.saveSyncedSubtitle(videoHash, originalLang, originalSourceId, {
+                await autoSubCache.saveAutoSubtitle(videoHash, originalLang, originalSourceId, {
                     content: originalSrt,
                     originalSubId: originalSourceId,
                     metadata: baseMetadata
                 });
-                originalDownloadUrl = `/addon/${encodeURIComponent(configStr)}/xsync/${videoHash}/${originalLang}/${originalSourceId}`;
+                originalDownloadUrl = `/addon/${encodeURIComponent(configStr)}/auto/${videoHash}/${originalLang}/${originalSourceId}`;
+                autoCacheUpdated = true;
             } catch (error) {
-                log.warn(() => ['[Auto Subs API] Failed to persist original to xSync:', error.message]);
+                log.warn(() => ['[Auto Subs API] Failed to persist original to Auto cache:', error.message]);
             }
         }
 
@@ -5864,7 +6031,7 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                         let downloadUrl = null;
                         if (!cacheBlocked) {
                             try {
-                                await syncCache.saveSyncedSubtitle(videoHash, targetLang, sourceId, {
+                                await autoSubCache.saveAutoSubtitle(videoHash, targetLang, sourceId, {
                                     content: translated,
                                     originalSubId: originalSourceId,
                                     metadata: {
@@ -5874,9 +6041,10 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                                         targetLanguage: targetLang
                                     }
                                 });
-                                downloadUrl = `/addon/${encodeURIComponent(configStr)}/xsync/${videoHash}/${targetLang}/${sourceId}`;
+                                downloadUrl = `/addon/${encodeURIComponent(configStr)}/auto/${videoHash}/${targetLang}/${sourceId}`;
+                                autoCacheUpdated = true;
                             } catch (error) {
-                                log.warn(() => ['[Auto Subs API] Failed to persist translated subtitle:', error.message]);
+                                log.warn(() => ['[Auto Subs API] Failed to persist translated Auto subtitle:', error.message]);
                             }
                         }
                         translations.push({
@@ -5904,6 +6072,10 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
             (cacheBlocked ? ' [cache upload skipped due to hash mismatch]' : ''),
             cacheBlocked ? 'warn' : 'success'
         );
+
+        if (autoCacheUpdated) {
+            await bumpUserSubtitleSearchRevision(config);
+        }
 
         return respond(200, {
             success: true,
@@ -6011,17 +6183,8 @@ app.get('/subtitle-sync', async (req, res) => {
 
         log.debug(() => `[Subtitle Sync Page] Loading page for video ${videoId}`);
 
-        // Get available subtitles for this video
-        const subtitleHandler = createSubtitleHandler(config);
-        const subtitlesData = await subtitleHandler({
-            type: 'movie', id: videoId, extra: {
-                filename
-            }
-        });
-
         // Generate HTML page for subtitle syncing
-        const html = await generateSubtitleSyncPage(subtitlesData.subtitles ||
-            [], videoId, filename, configStr, config);
+        const html = await generateSubtitleSyncPage([], videoId, filename, configStr, config);
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
@@ -6075,6 +6238,97 @@ app.get('/addon/:config/xsync/:videoHash/:lang/:sourceSubId', async (req, res) =
     }
 });
 
+// Async subtitle list for /subtitle-sync page to avoid blocking first paint
+app.get('/api/subtitle-sync/subtitles', async (req, res) => {
+    setNoStore(res);
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr, videoId, filename } = req.query;
+        if (!configStr || !videoId) {
+            return res.status(400).json({
+                success: false,
+                error: t('server.errors.missingConfigOrVideo', {}, 'Missing config or videoId')
+            });
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Sync Subtitle List] config', t);
+        if (!config) return;
+        t = getTranslatorFromRequest(req, res, config);
+
+        const subtitleHandler = createSubtitleHandler(config);
+        const subtitlesData = await subtitleHandler({
+            type: 'movie',
+            id: videoId,
+            extra: { filename }
+        });
+
+        return res.json({
+            success: true,
+            subtitles: subtitlesData?.subtitles || []
+        });
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Sync Subtitle List]', t)) return;
+        log.error(() => '[Sync Subtitle List] Error:', error);
+        return res.status(500).json({
+            success: false,
+            error: t('server.errors.subtitleSyncPageFailed', {}, 'Failed to load subtitle sync page')
+        });
+    }
+});
+
+// API endpoint: Download Auto subtitle
+app.get('/addon/:config/auto/:videoHash/:lang/:sourceSubId', async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+
+        const { config: configStr, videoHash, lang, sourceSubId } = req.params;
+        const config = await resolveConfigGuarded(configStr, req, res, '[Auto Download] config', t);
+        if (!config) return;
+        if (!config || config.__sessionTokenError === true) {
+            log.warn(() => '[Auto Download] Rejected due to invalid/missing session token');
+            t = getTranslatorFromRequest(req, res, config);
+            setSubtitleCacheHeaders(res, 'loading');
+            return res.status(401).send(t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token'));
+        }
+        t = getTranslatorFromRequest(req, res, config);
+
+        const safeVideoHash = (typeof videoHash === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(videoHash)) ? videoHash : null;
+        const safeSourceSubId = (typeof sourceSubId === 'string' || typeof sourceSubId === 'number') && /^[a-zA-Z0-9._-]{1,120}$/.test(String(sourceSubId)) ? String(sourceSubId) : null;
+        const safeLang = (typeof lang === 'string' && /^[a-zA-Z0-9_-]{1,24}$/.test(lang)) ? lang.toLowerCase() : null;
+        if (!safeVideoHash || !safeSourceSubId || !safeLang) {
+            return res.status(400).send(t('server.errors.invalidEmbeddedParams', {}, 'Invalid embedded subtitle parameters'));
+        }
+
+        log.debug(() => `[Auto Download] Request for ${safeVideoHash}_${safeLang}_${safeSourceSubId}`);
+
+        let autoSub = await autoSubCache.getAutoSubtitle(safeVideoHash, safeLang, safeSourceSubId);
+        if (!autoSub || !autoSub.content) {
+            // Backward compatibility: older AutoSubs were stored in syncCache.
+            // Only serve fallback entries that explicitly came from AutoSubs.
+            const legacy = await syncCache.getSyncedSubtitle(safeVideoHash, safeLang, safeSourceSubId);
+            if (legacy?.content && String(legacy?.metadata?.source || '').toLowerCase() === 'auto-subtitles') {
+                autoSub = legacy;
+            }
+        }
+        if (!autoSub || !autoSub.content) {
+            log.debug(() => '[Auto Download] Not found in cache');
+            return res.status(404).send(t('server.errors.syncedSubtitleNotFound', {}, 'Synced subtitle not found'));
+        }
+
+        log.debug(() => '[Auto Download] Serving auto subtitle from cache');
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_auto.srt"`);
+        setSubtitleCacheHeaders(res, 'final');
+        res.send(maybeConvertToSRT(autoSub.content, config));
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Auto Download]', t)) return;
+        log.error(() => '[Auto Download] Error:', error);
+        res.status(500).send(t('server.errors.downloadSyncedFailed', {}, 'Failed to download synced subtitle'));
+    }
+});
+
 function normalizeSyncLanguageCode(raw) {
     const val = (raw || '').toString().trim().toLowerCase();
     if (!val) return '';
@@ -6085,6 +6339,18 @@ function normalizeSyncLanguageCode(raw) {
 
     // Fallback: return normalized value (avoid empty writes)
     return val;
+}
+
+async function bumpUserSubtitleSearchRevision(config) {
+    try {
+        const userHash = (config && typeof config.__configHash === 'string' && config.__configHash.length > 0)
+            ? config.__configHash
+            : 'default';
+        const key = `${CACHE_PREFIXES.SUBTITLE_SEARCH_REV}${userHash}`;
+        await incrementCounter(key, CACHE_TTLS.SUBTITLE_SEARCH_REV || (7 * 24 * 60 * 60));
+    } catch (error) {
+        log.warn(() => `[Subtitle Cache] Failed to bump search revision: ${error?.message || error}`);
+    }
 }
 
 // API endpoint: Save synced subtitle to cache
@@ -6127,6 +6393,9 @@ app.post('/api/save-synced-subtitle', userDataWriteLimiter, async (req, res) => 
                 normalizedLanguageCode: normalizedLanguage
             }
         });
+
+        // Invalidate user-scoped subtitle search cache so fresh xSync entries appear immediately.
+        await bumpUserSubtitleSearchRevision(config);
 
         res.json({ success: true, message: t('server.sync.saveSuccess', {}, 'Synced subtitle saved successfully') });
 
@@ -7338,7 +7607,10 @@ app.use('/addon/:config', (req, res, next) => {
     const requestPath = req.path || req.url || 'unknown';
     const isSubtitlesRequest = requestPath.includes('/subtitles/');
     const isManifestRequest = requestPath.includes('/manifest.json');
-    const isDownloadRequest = requestPath.includes('/subtitle/') || requestPath.includes('/translate/');
+    const isDownloadRequest = requestPath.includes('/subtitle/')
+        || requestPath.includes('/subtitle-resolve/')
+        || requestPath.includes('/subtitle-content/')
+        || requestPath.includes('/translate/');
 
     // REQUEST TRACE: Log all incoming addon requests (helps diagnose "Stremio not sending requests" issues)
     // This runs BEFORE any processing, so if this doesn't log, the request never reached the server
@@ -7780,7 +8052,7 @@ app.use((error, req, res, next) => {
     res.status(500).json({ error: t('server.errors.internalServerError', {}, 'Internal server error') });
 });
 
-// Initialize sync cache and session manager, then start server
+// Initialize caches and session manager, then start server
 (async () => {
     try {
         // Initialize sync cache
@@ -7788,6 +8060,13 @@ app.use((error, req, res, next) => {
         log.debug(() => '[Startup] Sync cache initialized successfully');
     } catch (error) {
         log.error(() => '[Startup] Failed to initialize sync cache:', error.message);
+    }
+    try {
+        // Initialize dedicated AutoSub cache
+        await autoSubCache.initAutoSubCache();
+        log.debug(() => '[Startup] AutoSub cache initialized successfully');
+    } catch (error) {
+        log.error(() => '[Startup] Failed to initialize AutoSub cache:', error.message);
     }
 
     // Warm up connections to subtitle providers in background

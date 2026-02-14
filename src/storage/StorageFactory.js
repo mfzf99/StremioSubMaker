@@ -142,6 +142,15 @@ class StorageFactory {
       }
     }, 60 * 60 * 1000);
 
+    // Cleanup auto-sub cache every hour
+    setInterval(async () => {
+      try {
+        await adapter.cleanup(StorageAdapter.CACHE_TYPES.AUTOSUB);
+      } catch (error) {
+        log.error(() => '[Cleanup] Failed to cleanup auto-sub cache:', error);
+      }
+    }, 60 * 60 * 1000);
+
     // Cleanup embedded cache every hour
     setInterval(async () => {
       try {

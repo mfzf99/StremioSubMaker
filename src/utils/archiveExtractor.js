@@ -572,6 +572,19 @@ function findEpisodeFileAnime(files, episode) {
 
     for (const filename of files) {
         const lowerName = filename.toLowerCase();
+        const targetEpisode = Number(episode);
+
+        // If filename has an explicit TV-style episode marker (SxxEyy / x format),
+        // only accept it when that episode actually matches the requested one.
+        const explicitEpisodeMatch =
+            lowerName.match(/\bs\d{1,3}[.\s_-]*e(\d{1,4})(?!\d)/i) ||
+            lowerName.match(/(?:^|[^a-z0-9])\d{1,3}x(\d{1,4})(?!\d)/i);
+        if (explicitEpisodeMatch) {
+            const explicitEpisode = parseInt(explicitEpisodeMatch[1], 10);
+            if (!Number.isNaN(explicitEpisode) && explicitEpisode !== targetEpisode) {
+                continue;
+            }
+        }
 
         // Skip resolution/year false positives
         if (/(?:720|1080|480|2160)p|(?:19|20)\d{2}/.test(lowerName)) {

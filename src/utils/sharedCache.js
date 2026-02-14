@@ -435,7 +435,10 @@ const CACHE_PREFIXES = {
     KEY_ROTATION: 'keyrotation:',
 
     // OpenSubtitles JWT token cache (cross-pod sharing)
-    OS_TOKEN: 'ostoken:'
+    OS_TOKEN: 'ostoken:',
+
+    // Per-user subtitle search cache revision (bumped after xSync and Auto subtitle writes)
+    SUBTITLE_SEARCH_REV: 'subtitle_search_rev:'
 };
 
 // TTL values in seconds
@@ -445,7 +448,8 @@ const CACHE_TTLS = {
     TMDB_POSITIVE: 24 * 60 * 60,   // 24 hours for successful lookups
     TMDB_NEGATIVE: 10 * 60,        // 10 minutes for failed lookups
     USER_CONCURRENCY: 30 * 60,     // 30 minutes (safety net for orphaned counts)
-    OS_TOKEN: 23 * 60 * 60         // 23 hours (token valid for 24h, 1h buffer)
+    OS_TOKEN: 23 * 60 * 60,        // 23 hours (token valid for 24h, 1h buffer)
+    SUBTITLE_SEARCH_REV: 7 * 24 * 60 * 60 // 7 days; refreshed on each xSync/Auto write
 };
 
 module.exports = {

@@ -453,8 +453,12 @@ function normalizeConfig(config) {
   // When forceSRTOutput is true, ASS conversion is always enabled (SRT output requires conversion)
   mergedConfig.convertAssToVtt = mergedConfig.forceSRTOutput === true || mergedConfig.convertAssToVtt !== false;
   // URL extension test mode: validate and default to 'srt'
-  // Only valid values are 'srt', 'sub', or 'none'
-  const validExtensions = ['srt', 'sub', 'none'];
+  // Valid values:
+  // - 'srt' (default)
+  // - 'sub' (Option A)
+  // - 'none' (Option B)
+  // - 'resolve' (Option C: resolver URL that redirects to detected typed URL)
+  const validExtensions = ['srt', 'sub', 'none', 'resolve'];
   mergedConfig.urlExtensionTest = validExtensions.includes(mergedConfig.urlExtensionTest)
     ? mergedConfig.urlExtensionTest
     : 'srt';
@@ -654,6 +658,14 @@ function normalizeConfig(config) {
   mergedConfig.autoSubs = mergedConfig.autoSubs || {};
   mergedConfig.autoSubs.defaultMode = allowedAutoModes.has(requestedMode) ? requestedMode : defaults.autoSubs.defaultMode;
   mergedConfig.autoSubs.sendFullVideoToAssembly = mergedConfig.autoSubs.sendFullVideoToAssembly === true;
+  const allowedAssemblySpeechModels = new Set(['universal-2', 'universal-3-pro']);
+  const requestedAssemblySpeechModel = (mergedConfig.autoSubs.assemblySpeechModel || defaults.autoSubs.assemblySpeechModel || 'universal-3-pro')
+    .toString()
+    .trim()
+    .toLowerCase();
+  mergedConfig.autoSubs.assemblySpeechModel = allowedAssemblySpeechModels.has(requestedAssemblySpeechModel)
+    ? requestedAssemblySpeechModel
+    : (defaults.autoSubs.assemblySpeechModel || 'universal-3-pro');
   mergedConfig.otherApiKeysEnabled = true;
 
   if (mergedConfig.multiProviderEnabled) {
@@ -975,7 +987,8 @@ function getDefaultConfig(modelName = null) {
     otherApiKeysEnabled: true,
     autoSubs: {
       defaultMode: 'cloudflare',
-      sendFullVideoToAssembly: false
+      sendFullVideoToAssembly: false,
+      assemblySpeechModel: 'universal-3-pro'
     },
     // Use effective model (from parameter, env variable, or default)
     geminiModel: effectiveModel,
@@ -1052,7 +1065,7 @@ function getDefaultConfig(modelName = null) {
     // If true, convert ASS/SSA subtitles to VTT format (default: enabled for backwards compatibility)
     // When false, original ASS/SSA styling is preserved (Stremio supports ASS natively)
     convertAssToVtt: true,
-    // URL extension test mode (dev mode only): 'srt' (default), 'sub' (Option A), 'none' (Option B)
+    // URL extension test mode (dev mode only): 'srt' (default), 'sub' (Option A), 'none' (Option B), 'resolve' (Option C)
     // Used to test different URL extensions for ASS/SSA subtitle compatibility with Stremio
     urlExtensionTest: 'srt',
     mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
