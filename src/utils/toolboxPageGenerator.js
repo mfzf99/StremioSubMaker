@@ -7965,7 +7965,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         let pingTimer = null;
         const MAX_PING_RETRIES = 5;
         const EXT_INSTALL_URL = (els.extLabel && els.extLabel.getAttribute('href')) || 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
-        const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+        const REQUIRED_XSYNC_VERSION = window.__SUBMAKER_REQUIRED_XSYNC_VERSION || '1.0.0';
         const VERSION_WARNING_TEMPLATE = tt(
           'toolbox.extension.versionOutdated',
           { detected: '{detected}', required: '{required}' },
@@ -9539,6 +9539,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
       current: ${JSON.stringify(t('toolbox.refresh.current', {}, 'Already latest'))}
     };
 
+    window.__SUBMAKER_REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
     const copy = ${safeJsonSerialize(copy)};
     (${autoSubsRuntime.toString()})(copy);
 
