@@ -37,7 +37,13 @@ const loginMutex = new Map();
 // We must serialize ALL login attempts globally in this process to prevent 429s.
 let _globalLoginQueue = Promise.resolve();
 let _globalLastLoginTime = 0;
-const LOGIN_MIN_INTERVAL_MS = 1200; // 1.2s buffer to be safe
+const LOGIN_MIN_INTERVAL_MS = 1100; // 1.1s local interval
+const DISTRIBUTED_LOGIN_COOLDOWN_MS = 1100; // 1.1s cooldown in Redis (refreshed AFTER login completes)
+// v1.4.58: Increased from 4/6s to handle cold-start scenarios with many unique users
+// With ~1.5s per login slot, 20 cycles allows queueing ~30 concurrent logins per pod
+// 45s timeout allows the queue to drain under heavy load without premature failures
+const MAX_LOCK_WAIT_CYCLES = 20; // Maximum number of wait cycles before giving up
+const TOTAL_LOCK_TIMEOUT_MS = 45000; // 45 second absolute timeout for entire lock acquisition process
 
 // ─── Token-bucket rate limiter ────────────────────────────────────────────────
 // OpenSubtitles enforces 5 req/sec/IP.  On shared-IP deployments every pod
@@ -478,60 +484,120 @@ class OpenSubtitlesService {
       // Serialize this request into the global queue
       let response;
       const performLoginTask = async () => {
-        // Ensure minimum interval since last login call
+        // 1. LOCAL THROTTLE: Ensure minimum interval since last login call IN THIS PROCESS
+        // This prevents bursts from concurrent requests within the same Node process
         const now = Date.now();
         const timeSinceLast = now - _globalLastLoginTime;
         if (timeSinceLast < LOGIN_MIN_INTERVAL_MS) {
           const waitMs = LOGIN_MIN_INTERVAL_MS - timeSinceLast;
+          log.debug(() => `[OpenSubtitles] Local rate limit: waiting ${waitMs}ms before login attempt`);
           await new Promise(r => setTimeout(r, waitMs));
         }
 
         // 2. DISTRIBUTED THROTTLE: Ensure minimum interval across ALL pods
-        // We race to acquire a "cooldown lock". If locked, it means another pod just logged in.
-        // We spin-wait until we can acquire the "right to login".
+        // Strategy: Use a Redis lock with TTL as a "cooldown marker"
+        // - Try to acquire lock (SET NX) with owner identification
+        // - If locked, wait for the remaining TTL + jitter, then retry
+        // - Use absolute timeout to prevent infinite waiting
         const LOCK_KEY = 'os_login_cooldown';
-        const LOCK_TTL = 1100; // 1.1s cooldown
-        const MAX_WAIT_TIME = 15000;
-        const startTime = Date.now();
+        const lockStartTime = Date.now();
 
-        // Lazy-load sharedCache to avoid circular dependencies (logger etc) inside services
-        const { tryAcquireLock } = require('../utils/sharedCache');
+        // Lazy-load sharedCache to avoid circular dependencies
+        const { tryAcquireLock, refreshLock, getLockTTL } = require('../utils/sharedCache');
 
-        while (true) {
-          // tryAcquireLock SETs the key with NX (only if not exists).
-          // If it returns true, WE successfully "reserved" this second.
-          // If false, someone else reserved it -> we wait.
-          const acquired = await tryAcquireLock(LOCK_KEY, LOCK_TTL);
+        // First attempt to acquire lock
+        let lockResult = await tryAcquireLock(LOCK_KEY, DISTRIBUTED_LOGIN_COOLDOWN_MS);
+        let acquired = lockResult.acquired;
+        let ownerId = lockResult.ownerId;
+        let waitCycles = 0;
 
-          if (acquired) {
-            break; // We got the lock! Proceed to login.
+        while (!acquired && waitCycles < MAX_LOCK_WAIT_CYCLES) {
+          // Check absolute timeout
+          if (Date.now() - lockStartTime > TOTAL_LOCK_TIMEOUT_MS) {
+            log.error(() => `[OpenSubtitles] Lock acquisition timed out after ${TOTAL_LOCK_TIMEOUT_MS}ms`);
+            throw new Error('OpenSubtitles login queue timeout: too many concurrent requests. Please try again.');
           }
 
-          if (Date.now() - startTime > MAX_WAIT_TIME) {
-            // Fail open or throw? Throwing is safer to preserve rate limit.
-            throw new Error('Timed out waiting for OpenSubtitles login slot (distributed rate limit)');
+          // Get remaining TTL on the lock
+          const remainingTTL = await getLockTTL(LOCK_KEY);
+
+          // If getLockTTL returns -1, Redis is unavailable mid-flow
+          // Fall back to local-only rate limiting (already handled above)
+          if (remainingTTL === -1) {
+            log.warn(() => '[OpenSubtitles] Redis unavailable for distributed lock, proceeding with local rate limiting only');
+            acquired = true;
+            ownerId = null; // No owner ID since we're not using Redis
+            break;
           }
 
-          // Wait a bit before retrying (randomized jitter to reduce contention)
-          await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+          if (remainingTTL > 0) {
+            // Add jitter (50-150ms) to prevent thundering herd when multiple pods wake simultaneously
+            const jitter = 50 + Math.floor(Math.random() * 100);
+            const waitMs = remainingTTL + jitter;
+            log.debug(() => `[OpenSubtitles] Distributed rate limit: waiting ${waitMs}ms (TTL: ${remainingTTL}ms + jitter: ${jitter}ms) [cycle ${waitCycles + 1}/${MAX_LOCK_WAIT_CYCLES}]`);
+            await new Promise(r => setTimeout(r, waitMs));
+          } else {
+            // Lock expired but we couldn't acquire - small delay before retry
+            await new Promise(r => setTimeout(r, 50 + Math.floor(Math.random() * 50)));
+          }
+
+          // Retry acquiring lock
+          lockResult = await tryAcquireLock(LOCK_KEY, DISTRIBUTED_LOGIN_COOLDOWN_MS);
+          acquired = lockResult.acquired;
+          ownerId = lockResult.ownerId;
+          waitCycles++;
+        }
+
+        if (!acquired) {
+          // After max wait cycles, still can't get lock - fail gracefully
+          const totalWaitTime = Date.now() - lockStartTime;
+          log.error(() => `[OpenSubtitles] Failed to acquire login slot after ${waitCycles} cycles (${totalWaitTime}ms) - queue congestion`);
+          throw new Error('OpenSubtitles login queue congestion: too many concurrent requests across pods. Please try again in a few seconds.');
+        }
+
+        const totalWaitTime = Date.now() - lockStartTime;
+        if (waitCycles > 0) {
+          log.debug(() => `[OpenSubtitles] Acquired distributed login lock after ${waitCycles} wait cycle(s) (${totalWaitTime}ms total)`);
+        } else {
+          log.debug(() => '[OpenSubtitles] Acquired distributed login lock immediately');
         }
 
         // Acquire general API rate-limit token (respects the 5 req/s global limit too)
         await acquireToken();
 
+        // Update local timestamp BEFORE the request to prevent same-process races
+        _globalLastLoginTime = Date.now();
+
         try {
           // Perform the actual POST
+          log.debug(() => '[OpenSubtitles] Executing login request...');
           const res = await this.client.post('/login', {
             username: username,
             password: password
           }, requestConfig);
 
-          // Update timestamp on completion
-          _globalLastLoginTime = Date.now();
+          // SUCCESS: Refresh the distributed cooldown lock (only if we own it)
+          // This ensures the full cooldown starts AFTER the request completes
+          if (ownerId) {
+            try {
+              const refreshed = await refreshLock(LOCK_KEY, DISTRIBUTED_LOGIN_COOLDOWN_MS, ownerId);
+              if (refreshed) {
+                log.debug(() => `[OpenSubtitles] Refreshed cooldown lock for ${DISTRIBUTED_LOGIN_COOLDOWN_MS}ms`);
+              } else {
+                // Lock was lost/stolen during our request - another pod took over
+                // This is fine, the other pod's cooldown will protect the rate limit
+                log.debug(() => '[OpenSubtitles] Lock was taken by another pod during request (acceptable)');
+              }
+            } catch (refreshErr) {
+              // Non-fatal: worst case another pod fires slightly early
+              log.debug(() => `[OpenSubtitles] Failed to refresh cooldown lock: ${refreshErr.message}`);
+            }
+          }
+
           return res;
         } catch (postErr) {
-          // Update timestamp even on failure (request was made)
-          _globalLastLoginTime = Date.now();
+          // Request failed but was still sent - the cooldown lock remains
+          // (it will auto-expire after DISTRIBUTED_LOGIN_COOLDOWN_MS)
           throw postErr;
         }
       };
@@ -701,10 +767,16 @@ class OpenSubtitlesService {
           authErr.authError = true;
           throw authErr;
         }
-        // For rate limits (429/503), return null to degrade gracefully
+        // For rate limits (429/503) and queue congestion, return null to degrade gracefully
         // The login will be retried on the next request after the rate limit window
         if (err && (err.type === 'rate_limit' || err.statusCode === 429 || err.statusCode === 503)) {
           log.warn(() => `[OpenSubtitles] Login mutex caught rate limit error: ${err.message}`);
+          return null;
+        }
+        // For queue congestion/timeout errors, also return null for graceful degradation
+        // These are transient issues that will resolve when the queue clears
+        if (err && err.message && (err.message.includes('queue timeout') || err.message.includes('queue congestion'))) {
+          log.warn(() => `[OpenSubtitles] Login mutex caught queue congestion: ${err.message}`);
           return null;
         }
         // For timeout/network errors, re-throw so they propagate with proper error type
@@ -1129,8 +1201,8 @@ class OpenSubtitlesService {
           if (hasCachedAuthFailure(this.credentialsCacheKey)) {
             throw new Error('OpenSubtitles authentication failed: invalid username/password');
           }
-          // Rate limit or other transient issue
-          throw new Error('OpenSubtitles authentication temporarily unavailable. Try again later.');
+          // Rate limit, queue congestion, or other transient issue
+          throw new Error('OpenSubtitles temporarily unavailable. Try again later.');
         }
       }
 

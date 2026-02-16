@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.57
+
+- **OpenSubtitles distributed rate limit hotfix:** Fixed v1.4.56 distributed lock not properly throttling across pods—replaced spin-wait polling with TTL-based waiting, added lock refresh after login completion (1.1s cooldown starts after request, not before), and removed redundant retry loop in credential validation endpoint.
+
 ## SubMaker v1.4.56
 
 - **Strict global rate limiting for OpenSubtitles login:** Implemented a serialized request queue that enforces a strict 1 request/1.2s limit for the `/login` endpoint across the entire process. This prevents the "429 Too Many Requests" errors caused by burst login attempts (e.g., from retries or concurrent users), ensuring compliance with OpenSubtitles' 1 req/sec limit.

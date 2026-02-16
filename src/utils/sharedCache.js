@@ -415,13 +415,17 @@ async function getRotationCounter(counterId) {
 // DISTRIBUTED LOCK (for rate limiting across pods)
 // ============================================================================
 
+// Generate a unique lock owner ID for this process instance
+// Used to identify who owns a lock for safe refresh operations
+const LOCK_OWNER_ID = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 /**
- * Try to acquire a distributed lock (set key if not exists)
+ * Try to acquire a distributed lock with owner identification
  * Used for strict rate limiting (e.g., OpenSubtitles login 1 req/sec global)
- * 
+ *
  * @param {string} lockKey - Key to lock
  * @param {number} ttlMs - Lock duration in milliseconds (default 5000)
- * @returns {Promise<boolean>} True if lock acquired (key was SET), False if already locked
+ * @returns {Promise<{acquired: boolean, ownerId: string|null}>} Object with acquisition result and owner ID if acquired
  */
 async function tryAcquireLock(lockKey, ttlMs = 5000) {
     try {
@@ -431,7 +435,7 @@ async function tryAcquireLock(lockKey, ttlMs = 5000) {
         // If Redis client is missing (using memory adapter or cache disabled),
         // we can't lock across pods. Return TRUE to degrade gracefully to per-instance locking.
         if (!adapter.client) {
-            return true;
+            return { acquired: true, ownerId: LOCK_OWNER_ID };
         }
 
         const fullKey = adapter._getKey(`lock:${lockKey}`, StorageAdapter.CACHE_TYPES.SESSION);
@@ -439,22 +443,105 @@ async function tryAcquireLock(lockKey, ttlMs = 5000) {
         // Redis SET resource_name value NX PX milliseconds
         // NX = Only set if not exists
         // PX = Expiry in milliseconds
+        // Use unique owner ID as value for safe refresh later
         // Returns 'OK' if key was set, null if key already existed
-        const result = await adapter.client.set(fullKey, '1', 'PX', ttlMs, 'NX');
+        const result = await adapter.client.set(fullKey, LOCK_OWNER_ID, 'PX', ttlMs, 'NX');
 
         const acquired = result === 'OK';
 
         if (acquired) {
-            log.debug(() => `[SharedCache] Acquired lock ${lockKey} (TTL: ${ttlMs}ms)`);
-        } else {
-            // log.debug(() => `[SharedCache] Failed to acquire lock ${lockKey} (locked by another instance)`);
+            log.debug(() => `[SharedCache] Acquired lock ${lockKey} (TTL: ${ttlMs}ms, owner: ${LOCK_OWNER_ID.slice(0, 12)}...)`);
         }
 
-        return acquired;
+        return { acquired, ownerId: acquired ? LOCK_OWNER_ID : null };
     } catch (error) {
         // If Redis errors, allow execution to proceed (fail open) rather than blocking all logins indefinitely
         // This means rate limits might be exceeded during Redis outages, but better than total downtime.
-        return handleCaughtError(error, `[SharedCache] acquireLock failed for ${lockKey}`, log, { fallbackValue: true });
+        handleCaughtError(error, `[SharedCache] acquireLock failed for ${lockKey}`, log);
+        return { acquired: true, ownerId: LOCK_OWNER_ID }; // Fail open
+    }
+}
+
+/**
+ * Safely refresh the TTL on a lock ONLY if we still own it (compare-and-swap)
+ * Uses Lua script for atomicity to prevent overwriting another pod's lock.
+ *
+ * @param {string} lockKey - Key to refresh (same as used with tryAcquireLock)
+ * @param {number} ttlMs - New TTL duration in milliseconds
+ * @param {string} ownerId - The owner ID returned from tryAcquireLock (must match to refresh)
+ * @returns {Promise<boolean>} True if refreshed successfully, false if lock was lost/stolen
+ */
+async function refreshLock(lockKey, ttlMs, ownerId) {
+    try {
+        const adapter = await getStorageAdapter();
+        const StorageAdapter = getStorageAdapterClass();
+
+        if (!adapter.client) {
+            return true; // No Redis, no distributed lock
+        }
+
+        if (!ownerId) {
+            log.warn(() => `[SharedCache] refreshLock called without ownerId for ${lockKey}`);
+            return false;
+        }
+
+        const fullKey = adapter._getKey(`lock:${lockKey}`, StorageAdapter.CACHE_TYPES.SESSION);
+
+        // Lua script for atomic compare-and-refresh:
+        // Only refresh if current value matches our owner ID
+        // This prevents overwriting another pod's lock if ours expired
+        const luaScript = `
+            local currentOwner = redis.call('get', KEYS[1])
+            if currentOwner == ARGV[1] then
+                redis.call('set', KEYS[1], ARGV[1], 'PX', ARGV[2])
+                return 1
+            else
+                return 0
+            end
+        `;
+
+        const result = await adapter.client.eval(luaScript, 1, fullKey, ownerId, ttlMs);
+
+        if (result === 1) {
+            log.debug(() => `[SharedCache] Refreshed lock ${lockKey} (TTL: ${ttlMs}ms)`);
+            return true;
+        } else {
+            log.warn(() => `[SharedCache] Failed to refresh lock ${lockKey} - lock was lost or stolen`);
+            return false;
+        }
+    } catch (error) {
+        return handleCaughtError(error, `[SharedCache] refreshLock failed for ${lockKey}`, log, { fallbackValue: false });
+    }
+}
+
+/**
+ * Get the remaining TTL on a lock in milliseconds.
+ * Used to know how long to wait before the lock expires.
+ *
+ * @param {string} lockKey - Key to check
+ * @returns {Promise<number>} Remaining TTL in ms, 0 if not locked or expired, -1 on error/Redis unavailable
+ */
+async function getLockTTL(lockKey) {
+    try {
+        const adapter = await getStorageAdapter();
+        const StorageAdapter = getStorageAdapterClass();
+
+        if (!adapter.client) {
+            return -1; // No Redis - signal to caller that distributed locking is unavailable
+        }
+
+        const fullKey = adapter._getKey(`lock:${lockKey}`, StorageAdapter.CACHE_TYPES.SESSION);
+
+        // PTTL returns TTL in milliseconds, -2 if key doesn't exist, -1 if no TTL
+        const ttl = await adapter.client.pttl(fullKey);
+
+        if (ttl < 0) {
+            return 0; // Key doesn't exist or has no TTL
+        }
+
+        return ttl;
+    } catch (error) {
+        return handleCaughtError(error, `[SharedCache] getLockTTL failed for ${lockKey}`, log, { fallbackValue: -1 });
     }
 }
 
@@ -529,6 +616,8 @@ module.exports = {
 
     // Distributed lock operations
     tryAcquireLock,
+    refreshLock,
+    getLockTTL,
 
     // For testing
     getStorageAdapter

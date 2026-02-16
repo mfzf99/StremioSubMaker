@@ -2970,8 +2970,8 @@ app.post('/api/validate-subdl', validationLimiter, async (req, res) => {
 });
 
 // API endpoint to validate OpenSubtitles credentials
-// Handles OpenSubtitles' aggressive per-API-key rate limiting on /login (1 req/sec)
-// by checking the token cache first and retrying with backoff on 429
+// Rate limiting is handled internally by the OpenSubtitlesService login() method
+// which uses distributed locking across pods to enforce 1 req/sec
 app.post('/api/validate-opensubtitles', async (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (user credentials in request body)
     setNoStore(res);
@@ -3003,27 +3003,9 @@ app.post('/api/validate-opensubtitles', async (req, res) => {
         }
 
         // No cached token — need to actually login
-        // Retry with backoff on rate limit (429)
+        // The login() method handles all rate limiting internally (local + distributed)
         const osService = new OpenSubtitlesService({ username, password });
-        const MAX_LOGIN_ATTEMPTS = 3;
-        let lastLoginError = null;
-        let token = null;
-
-        for (let attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
-            try {
-                token = await osService.login(15000);
-                break; // success or null
-            } catch (loginErr) {
-                lastLoginError = loginErr;
-                if ((loginErr.statusCode === 429 || loginErr.type === 'rate_limit') && attempt < MAX_LOGIN_ATTEMPTS) {
-                    const waitMs = 2000 * attempt; // 2s, 4s
-                    log.debug(() => `[Validate-OS] Rate limited, retrying in ${waitMs}ms (attempt ${attempt}/${MAX_LOGIN_ATTEMPTS})`);
-                    await new Promise(r => setTimeout(r, waitMs));
-                    continue;
-                }
-                throw loginErr; // non-retryable or exhausted retries
-            }
-        }
+        const token = await osService.login(20000); // 20s timeout to allow for queue wait
 
         if (token) {
             res.json({
@@ -3050,7 +3032,21 @@ app.post('/api/validate-opensubtitles', async (req, res) => {
                 error: t('server.errors.invalidRequestFormat', {}, 'Invalid request format')
             });
         } else if (apiError.statusCode === 429 || apiError.type === 'rate_limit') {
-            // All retries exhausted
+            res.json({
+                valid: false,
+                error: t('server.errors.opensubtitlesRateLimited', {},
+                    'OpenSubtitles login server is rate-limiting requests. This is a temporary server-side issue, not a credentials problem. Please wait 1-2 minutes and try again.')
+            });
+        } else if (apiError.message && (apiError.message.includes('queue timeout') || apiError.message.includes('queue congestion'))) {
+            // Handle internal queue congestion errors from our distributed lock system
+            // This is different from OpenSubtitles rate limiting - it's our internal queue being busy
+            res.json({
+                valid: false,
+                error: t('server.errors.loginQueueBusy', {},
+                    'Login queue is busy with multiple concurrent requests. Please wait a few seconds and try again.')
+            });
+        } else if (apiError.message && apiError.message.includes('rate limit')) {
+            // Legacy catch for any other rate limit messages
             res.json({
                 valid: false,
                 error: t('server.errors.opensubtitlesRateLimited', {},
