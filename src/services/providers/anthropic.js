@@ -59,21 +59,25 @@ class AnthropicProvider {
     }
   }
 
-  buildRequestBody(subtitleContent, targetLanguage, customPrompt = null, stream = false) {
+  buildRequestBody(subtitleContent, targetLanguage, customPrompt = null, stream = false, requestOptions = {}) {
     const { systemPrompt, userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
     const { maxTokens, thinkingBudget, thinkingEnabled } = this.buildTokenBudgets();
+    const forceTemperatureOne = requestOptions.forceTemperatureOne === true || thinkingEnabled;
+    const disableTopP = requestOptions.disableTopP === true || thinkingEnabled;
+    const disableJsonPrefill = requestOptions.disableJsonPrefill === true;
+    const effectiveTemperature = forceTemperatureOne ? 1 : this.temperature;
 
     const body = {
       model: this.model,
       max_tokens: maxTokens,
-      temperature: this.temperature,
+      temperature: effectiveTemperature,
       system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt }
       ]
     };
 
-    if (this.topP !== undefined) {
+    if (!disableTopP && this.topP !== undefined) {
       body.top_p = this.topP;
     }
     if (thinkingEnabled && thinkingBudget > 0) {
@@ -86,7 +90,7 @@ class AnthropicProvider {
     // JSON structured output: prefill assistant response with "[" to force JSON array output.
     // Anthropic doesn't have response_format like OpenAI, but assistant prefill is the
     // recommended approach. Skip when thinking is enabled (prefill conflicts with thinking).
-    if (this.enableJsonOutput && !thinkingEnabled) {
+    if (this.enableJsonOutput && !thinkingEnabled && !disableJsonPrefill) {
       body.messages.push({ role: 'assistant', content: '[' });
     }
 
@@ -173,12 +177,60 @@ class AnthropicProvider {
     }
   }
 
-  async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null) {
-    const { body } = this.buildRequestBody(subtitleContent, targetLanguage, customPrompt, false);
+  extractErrorMessage(error) {
+    return String(
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.message ||
+      error?.message ||
+      ''
+    ).toLowerCase();
+  }
 
+  isTopPTemperatureConflict(error) {
+    const status = error?.response?.status || error?.status || error?.statusCode || 0;
+    const msg = this.extractErrorMessage(error);
+    return status === 400 && msg.includes('temperature') && msg.includes('top_p') && msg.includes('cannot both');
+  }
+
+  isThinkingTemperatureConstraint(error) {
+    const status = error?.response?.status || error?.status || error?.statusCode || 0;
+    const msg = this.extractErrorMessage(error);
+    return status === 400
+      && msg.includes('thinking')
+      && msg.includes('temperature')
+      && (msg.includes('must be') || msg.includes('required'));
+  }
+
+  isPrefillUnsupported(error) {
+    const status = error?.response?.status || error?.status || error?.statusCode || 0;
+    const msg = this.extractErrorMessage(error);
+    return status === 400
+      && (msg.includes('assistant prefill') || msg.includes('prefill'))
+      && (msg.includes('not supported') || msg.includes('deprecated') || msg.includes('unsupported'));
+  }
+
+  isStreamingUnsupported(error) {
+    const status = error?.response?.status || error?.status || error?.statusCode || 0;
+    const msg = this.extractErrorMessage(error);
+    if (status === 404 || status === 405 || status === 501) return true;
+    if (status === 400 && (msg.includes('stream') || msg.includes('sse') || msg.includes('event-stream'))) return true;
+    return !!(error?.message && /stream/i.test(error.message));
+  }
+
+  async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, requestOptions = {}) {
     let lastError;
+    let disableTopP = requestOptions?.disableTopP === true;
+    let disableJsonPrefill = requestOptions?.disableJsonPrefill === true;
+    let forceTemperatureOne = requestOptions?.forceTemperatureOne === true;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
+        const { body } = this.buildRequestBody(
+          subtitleContent,
+          targetLanguage,
+          customPrompt,
+          false,
+          { disableTopP, disableJsonPrefill, forceTemperatureOne }
+        );
         const response = await axios.post(
           `${ANTHROPIC_API_URL}/messages`,
           body,
@@ -204,6 +256,22 @@ class AnthropicProvider {
         return this.cleanTranslatedSubtitle(fullText);
       } catch (error) {
         lastError = error;
+        if (!disableTopP && this.isTopPTemperatureConflict(error)) {
+          disableTopP = true;
+          log.warn(() => [`[${this.providerName}] Model rejected temperature+top_p together, retrying without top_p`]);
+          continue;
+        }
+        if (!forceTemperatureOne && this.isThinkingTemperatureConstraint(error)) {
+          forceTemperatureOne = true;
+          disableTopP = true;
+          log.warn(() => [`[${this.providerName}] Model requires temperature=1 with thinking, retrying with compliant settings`]);
+          continue;
+        }
+        if (this.enableJsonOutput && !disableJsonPrefill && this.isPrefillUnsupported(error)) {
+          disableJsonPrefill = true;
+          log.warn(() => [`[${this.providerName}] Assistant prefill unsupported on this model, retrying without prefill`]);
+          continue;
+        }
         if (attempt < this.maxRetries) {
           log.warn(() => [`[${this.providerName}] Retry ${attempt + 1}/${this.maxRetries} after error:`, error.message]);
           continue;
@@ -217,10 +285,8 @@ class AnthropicProvider {
     }
   }
 
-  async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null) {
-    const { body } = this.buildRequestBody(subtitleContent, targetLanguage, customPrompt, true);
-
-    const executeStream = async () => {
+  async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null, requestOptions = {}) {
+    const executeStream = async (body) => {
       const response = await axios.post(
         `${ANTHROPIC_API_URL}/messages`,
         body,
@@ -381,19 +447,56 @@ class AnthropicProvider {
 
     let lastError;
     let fallbackUsed = false;
+    let disableTopP = requestOptions?.disableTopP === true;
+    let disableJsonPrefill = requestOptions?.disableJsonPrefill === true;
+    let forceTemperatureOne = requestOptions?.forceTemperatureOne === true;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        return await executeStream();
+        const { body } = this.buildRequestBody(
+          subtitleContent,
+          targetLanguage,
+          customPrompt,
+          true,
+          { disableTopP, disableJsonPrefill, forceTemperatureOne }
+        );
+        return await executeStream(body);
       } catch (error) {
         lastError = error;
 
+        if (!disableTopP && this.isTopPTemperatureConflict(error)) {
+          disableTopP = true;
+          log.warn(() => [`[${this.providerName}] Model rejected temperature+top_p together (stream), retrying without top_p`]);
+          continue;
+        }
+        if (!forceTemperatureOne && this.isThinkingTemperatureConstraint(error)) {
+          forceTemperatureOne = true;
+          disableTopP = true;
+          log.warn(() => [`[${this.providerName}] Model requires temperature=1 with thinking (stream), retrying with compliant settings`]);
+          continue;
+        }
+        if (this.enableJsonOutput && !disableJsonPrefill && this.isPrefillUnsupported(error)) {
+          disableJsonPrefill = true;
+          log.warn(() => [`[${this.providerName}] Assistant prefill unsupported on this model (stream), retrying without prefill`]);
+          continue;
+        }
+
         const status = error?.response?.status;
-        const looksUnsupported = status === 400 || status === 404 || status === 405 || status === 501
-          || (error.message && /stream/i.test(error.message));
-        if (!fallbackUsed && looksUnsupported) {
+        const looksUnsupported = this.isStreamingUnsupported(error);
+        const shouldFallbackToNonStream = !fallbackUsed && (looksUnsupported || status === 400);
+        if (shouldFallbackToNonStream) {
           fallbackUsed = true;
-          log.warn(() => [`[${this.providerName}] Streaming not supported for this model/base, falling back to non-stream`]);
-          const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
+          if (looksUnsupported) {
+            log.warn(() => [`[${this.providerName}] Streaming not supported for this model/base, falling back to non-stream`]);
+          } else {
+            log.warn(() => [`[${this.providerName}] Stream request returned 400, retrying via non-stream path for better compatibility`]);
+          }
+          const full = await this.translateSubtitle(
+            subtitleContent,
+            sourceLanguage,
+            targetLanguage,
+            customPrompt,
+            { disableTopP, disableJsonPrefill, forceTemperatureOne }
+          );
           if (typeof onPartial === 'function') {
             try { await onPartial(full); } catch (_) { }
           }

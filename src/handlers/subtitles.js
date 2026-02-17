@@ -2818,18 +2818,33 @@ function createSubtitleHandler(config) {
       // Determine URL behavior based on urlExtensionTest config (dev mode testing)
       // 'srt' = default (.srt), 'sub' = Option A (.sub), 'none' = Option B (no extension),
       // 'resolve' = Test C (resolver URL that redirects to detected typed URL on click)
+      const androidSubtitleCompatMode = (() => {
+        const mode = String(config.androidSubtitleCompatMode || 'off').toLowerCase();
+        return (mode === 'safe' || mode === 'aggressive') ? mode : 'off';
+      })();
+      const compatEncodePaths = androidSubtitleCompatMode !== 'off';
+      const compatForceTypedSrt = androidSubtitleCompatMode !== 'off';
+      const toPathSegment = (value) => {
+        const raw = String(value || '');
+        return compatEncodePaths ? encodeURIComponent(raw) : raw;
+      };
+
       let urlExtension = '.srt';
       let translationUrlExtension = '.srt';
       let subtitleRouteBase = 'subtitle';
-      if (config.urlExtensionTest === 'sub') {
-        urlExtension = '.sub';
-        translationUrlExtension = '.sub';
-      } else if (config.urlExtensionTest === 'none') {
-        urlExtension = '';
-        translationUrlExtension = '';
-      } else if (config.urlExtensionTest === 'resolve') {
-        subtitleRouteBase = 'subtitle-resolve';
-        urlExtension = '';
+      if (!compatForceTypedSrt) {
+        if (config.urlExtensionTest === 'sub') {
+          urlExtension = '.sub';
+          translationUrlExtension = '.sub';
+        } else if (config.urlExtensionTest === 'none') {
+          urlExtension = '';
+          translationUrlExtension = '';
+        } else if (config.urlExtensionTest === 'resolve') {
+          subtitleRouteBase = 'subtitle-resolve';
+          urlExtension = '';
+        }
+      } else if (config.urlExtensionTest && config.urlExtensionTest !== 'srt') {
+        log.debug(() => `[Subtitles] Android compat mode (${androidSubtitleCompatMode}) overrides urlExtensionTest=${config.urlExtensionTest} -> forcing .srt direct URLs`);
       }
 
       // Convert to Stremio subtitle format
@@ -2856,7 +2871,7 @@ function createSubtitleHandler(config) {
           const subtitle = {
             id: `${sub.fileId}`,
             lang: displayLang,
-            url: `{{ADDON_URL}}/${subtitleRouteBase}/${sub.fileId}/${sub.languageCode}${urlExtension}`
+            url: `{{ADDON_URL}}/${subtitleRouteBase}/${toPathSegment(sub.fileId)}/${toPathSegment(sub.languageCode)}${urlExtension}`
           };
 
           return subtitle;
@@ -3106,7 +3121,7 @@ function createSubtitleHandler(config) {
           xSyncEntries.push({
             id: `xsync_${seenKey}`,
             lang: `xSync ${langName}`,
-            url: `{{ADDON_URL}}/xsync/${entry.hash}/${langCode}/${syncedSub.sourceSubId}`
+            url: `{{ADDON_URL}}/xsync/${toPathSegment(entry.hash)}/${toPathSegment(langCode)}/${toPathSegment(syncedSub.sourceSubId)}`
           });
         }
 
@@ -3185,7 +3200,7 @@ function createSubtitleHandler(config) {
           autoEntries.push({
             id: `auto_${seenKey}`,
             lang: `Auto ${langName}`,
-            url: `{{ADDON_URL}}/auto/${entry.hash}/${langCode}/${sub.sourceSubId}`
+            url: `{{ADDON_URL}}/auto/${toPathSegment(entry.hash)}/${toPathSegment(langCode)}/${toPathSegment(sub.sourceSubId)}`
           });
         }
 
@@ -3219,7 +3234,7 @@ function createSubtitleHandler(config) {
               xEmbedEntries.push({
                 id: `xembed_${entry.cacheKey}`,
                 lang: `xEmbed (${langName})`,
-                url: `{{ADDON_URL}}/xembedded/${hash}/${targetCode}/${entry.trackId}`
+                url: `{{ADDON_URL}}/xembedded/${toPathSegment(hash)}/${toPathSegment(targetCode)}/${toPathSegment(entry.trackId)}`
               });
             }
 
@@ -3238,7 +3253,7 @@ function createSubtitleHandler(config) {
               xEmbedOriginalEntries.push({
                 id: `xembed_orig_${entry.cacheKey}`,
                 lang: sourceCode,
-                url: `{{ADDON_URL}}/xembedded/${hash}/${sourceCode}/${entry.trackId}/original`
+                url: `{{ADDON_URL}}/xembedded/${toPathSegment(hash)}/${toPathSegment(sourceCode)}/${toPathSegment(entry.trackId)}/original`
               });
             }
           }
@@ -3278,7 +3293,7 @@ function createSubtitleHandler(config) {
             smdbEntries.push({
               id: `smdb_${sub.videoHash}_${sub.languageCode}`,
               lang: `SMDB (${langName})`,
-              url: `{{ADDON_URL}}/smdb/${sub.videoHash}/${sub.languageCode}.srt`
+              url: `{{ADDON_URL}}/smdb/${toPathSegment(sub.videoHash)}/${toPathSegment(sub.languageCode)}.srt`
             });
           }
           if (smdbEntries.length > 0) {

@@ -57,3 +57,5 @@ temp/
 temp
 .temp
 native/
+scripts/
+tests/

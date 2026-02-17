@@ -34,6 +34,11 @@ function getLanguageSelectionLimits() {
   };
 }
 
+function getDeepSeekDefaultMaxOutputTokens(modelName) {
+  const model = String(modelName || '').trim().toLowerCase();
+  return model.includes('reasoner') ? 65536 : 8192;
+}
+
 const PROVIDER_PARAMETER_DEFAULTS = {
   openai: {
     temperature: 0.4,
@@ -61,7 +66,8 @@ const PROVIDER_PARAMETER_DEFAULTS = {
   deepseek: {
     temperature: 0.4,
     topP: 0.95,
-    maxOutputTokens: 32768,
+    // deepseek-chat rejects max_tokens > 8192 (returns HTTP 400)
+    maxOutputTokens: 8192,
     translationTimeout: 60,
     maxRetries: 2
   },
@@ -125,7 +131,7 @@ function sanitizeReasoningEffort(value, fallback) {
   if (value === '' || value === null || value === undefined) {
     return undefined;
   }
-  const allowed = ['low', 'medium', 'high'];
+  const allowed = ['none', 'low', 'medium', 'high', 'xhigh'];
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return allowed.includes(normalized) ? normalized : fallback;
 }
@@ -400,6 +406,23 @@ function normalizeConfig(config) {
     }
   };
 
+  // Model-aware default for DeepSeek max output tokens:
+  // - deepseek-chat: 8k
+  // - deepseek-reasoner: 64k
+  // Keep explicit user overrides untouched.
+  const rawProviderParams = config.providerParameters || {};
+  const deepseekInputKey = Object.keys(rawProviderParams).find(k => String(k).toLowerCase() === 'deepseek');
+  const deepseekInput = deepseekInputKey ? rawProviderParams[deepseekInputKey] : null;
+  const deepseekMaxProvided =
+    deepseekInput &&
+    Object.prototype.hasOwnProperty.call(deepseekInput, 'maxOutputTokens') &&
+    deepseekInput.maxOutputTokens !== null &&
+    String(deepseekInput.maxOutputTokens).trim() !== '';
+  if (!deepseekMaxProvided && mergedConfig.providerParameters?.deepseek) {
+    const deepseekModel = mergedConfig.providers?.deepseek?.model || '';
+    mergedConfig.providerParameters.deepseek.maxOutputTokens = getDeepSeekDefaultMaxOutputTokens(deepseekModel);
+  }
+
   // Force Learn Mode placement to top-of-screen now that the UI no longer exposes this toggle
   mergedConfig.learnPlacement = 'top';
 
@@ -462,6 +485,15 @@ function normalizeConfig(config) {
   mergedConfig.urlExtensionTest = validExtensions.includes(mergedConfig.urlExtensionTest)
     ? mergedConfig.urlExtensionTest
     : 'srt';
+  // Android subtitle compatibility mode (dev mode only)
+  // - 'off': default behavior
+  // - 'safe': encoded URL segments + typed .srt URLs for subtitle entries
+  // - 'aggressive': safe + skip cache-buster redirects for subtitle routes + stricter SRT headers
+  const validAndroidCompatModes = ['off', 'safe', 'aggressive'];
+  const normalizedAndroidCompatMode = String(mergedConfig.androidSubtitleCompatMode || '').toLowerCase();
+  mergedConfig.androidSubtitleCompatMode = validAndroidCompatModes.includes(normalizedAndroidCompatMode)
+    ? normalizedAndroidCompatMode
+    : 'off';
   // Season packs enabled by default (backwards compatible) - only disabled when explicitly set to false
   mergedConfig.enableSeasonPacks = mergedConfig.enableSeasonPacks !== false;
   // Deduplication is enabled by default (only disabled if explicitly set to false)
@@ -1068,6 +1100,8 @@ function getDefaultConfig(modelName = null) {
     // URL extension test mode (dev mode only): 'srt' (default), 'sub' (Option A), 'none' (Option B), 'resolve' (Option C)
     // Used to test different URL extensions for ASS/SSA subtitle compatibility with Stremio
     urlExtensionTest: 'srt',
+    // Android subtitle compatibility mode (dev mode only): 'off' (default), 'safe', 'aggressive'
+    androidSubtitleCompatMode: 'off',
     mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
     singleBatchMode: false, // Translate whole file at once (streaming partials)
     // Minimum size for a subtitle file to be considered valid (bytes)

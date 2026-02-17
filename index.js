@@ -2122,7 +2122,7 @@ app.use((req, res, next) => {
 // Temporary cache-busting: add versioned path segment for addon routes
 // Redirect unversioned addon API routes to versioned equivalents to invalidate stale edge caches,
 // then strip the version segment before downstream routing so handlers remain unchanged.
-app.use('/addon/:config', (req, res, next) => {
+app.use('/addon/:config', async (req, res, next) => {
     // Defense-in-depth: force no-store BEFORE any redirects so proxies/CDNs never cache
     // user-specific addon paths (this was still a gap when only the destination response
     // had no-store headers).
@@ -2142,6 +2142,30 @@ app.use('/addon/:config', (req, res, next) => {
             req.url = req.url.replace(versionSegment, '');
         }
         return next();
+    }
+
+    // Android compatibility dev mode: allow direct subtitle paths (no 307 hop)
+    // for players that silently drop external subtitle URLs when a redirect is required.
+    const subtitleCompatBypassCandidate = [
+        '/subtitles',   // subtitle list JSON
+        '/subtitle/',   // provider subtitle downloads
+        '/xsync',       // synced subtitles
+        '/auto/',       // auto subtitles cache
+        '/xembedded',   // embedded subtitles cache
+        '/smdb/'        // SMDB subtitle downloads
+    ].some(fragment => req.path.includes(fragment));
+
+    if (subtitleCompatBypassCandidate) {
+        try {
+            const cfg = await resolveConfigAsync(req.params.config, req);
+            const mode = String(cfg?.androidSubtitleCompatMode || 'off').toLowerCase();
+            if (mode === 'aggressive') {
+                log.debug(() => `[CacheBuster] Android compat aggressive: bypass redirect for ${req.path.substring(0, 100)}`);
+                return next();
+            }
+        } catch (e) {
+            log.debug(() => `[CacheBuster] Android compat check failed, falling back to redirect logic: ${e.message}`);
+        }
     }
 
     // Only redirect addon API routes (skip bare /addon/:config redirect handler)
@@ -4219,6 +4243,8 @@ const subtitleDownloadHandler = async (req, res) => {
         const assHeaderTestMode = config.devMode === true
             && config.convertAssToVtt === false
             && config.forceSRTOutput !== true;
+        const androidCompatMode = String(config.androidSubtitleCompatMode || 'off').toLowerCase();
+        const strictSrtHeaders = androidCompatMode === 'aggressive';
 
         // Language is already cleaned (extension stripped at handler entry)
         const langCode = language;
@@ -4270,8 +4296,13 @@ const subtitleDownloadHandler = async (req, res) => {
                     res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
                 }
             } else {
-                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+                if (strictSrtHeaders) {
+                    res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+                    res.setHeader('Content-Disposition', `inline; filename="${fileId}.srt"`);
+                } else {
+                    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                    res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+                }
             }
             const requestExt = ((req.originalUrl || '').match(/\.(srt|sub|vtt|ass|ssa)(?:\?|$)/i)?.[1] || 'none').toLowerCase();
             const payloadFormat = isVtt ? 'vtt' : isSsa ? 'ssa' : (isAss ? 'ass' : 'srt');
@@ -4354,8 +4385,13 @@ const subtitleDownloadHandler = async (req, res) => {
                 res.setHeader('Content-Disposition', `attachment; filename="${fileId}.ssa"`);
             }
         } else {
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+            if (strictSrtHeaders) {
+                res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+                res.setHeader('Content-Disposition', `inline; filename="${fileId}.srt"`);
+            } else {
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+            }
         }
         const requestExt = ((req.originalUrl || '').match(/\.(srt|sub|vtt|ass|ssa)(?:\?|$)/i)?.[1] || 'none').toLowerCase();
         const payloadFormat = isVtt ? 'vtt' : isSsa ? 'ssa' : (isAss ? 'ass' : 'srt');
@@ -6205,9 +6241,14 @@ app.get('/addon/:config/xsync/:videoHash/:lang/:sourceSubId', async (req, res) =
         }
 
         log.debug(() => '[xSync Download] Serving synced subtitle from cache');
-
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${videoHash}_${lang}_synced.srt"`);
+        const strictSrtHeaders = String(config.androidSubtitleCompatMode || 'off').toLowerCase() === 'aggressive';
+        if (strictSrtHeaders) {
+            res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+            res.setHeader('Content-Disposition', `inline; filename="${videoHash}_${lang}_synced.srt"`);
+        } else {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${videoHash}_${lang}_synced.srt"`);
+        }
         setSubtitleCacheHeaders(res, 'final');
         res.send(maybeConvertToSRT(syncedSub.content, config));
 
@@ -6298,8 +6339,14 @@ app.get('/addon/:config/auto/:videoHash/:lang/:sourceSubId', async (req, res) =>
         }
 
         log.debug(() => '[Auto Download] Serving auto subtitle from cache');
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_auto.srt"`);
+        const strictSrtHeaders = String(config.androidSubtitleCompatMode || 'off').toLowerCase() === 'aggressive';
+        if (strictSrtHeaders) {
+            res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+            res.setHeader('Content-Disposition', `inline; filename="${safeVideoHash}_${safeLang}_auto.srt"`);
+        } else {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_auto.srt"`);
+        }
         setSubtitleCacheHeaders(res, 'final');
         res.send(maybeConvertToSRT(autoSub.content, config));
     } catch (error) {
@@ -6423,8 +6470,14 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId', async (req, res) =
             return res.status(404).send(t('server.errors.translatedEmbeddedMissing', {}, 'Translated embedded subtitle not found'));
         }
 
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_xembed.srt"`);
+        const strictSrtHeaders = String(config.androidSubtitleCompatMode || 'off').toLowerCase() === 'aggressive';
+        if (strictSrtHeaders) {
+            res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+            res.setHeader('Content-Disposition', `inline; filename="${safeVideoHash}_${safeLang}_xembed.srt"`);
+        } else {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_xembed.srt"`);
+        }
         setSubtitleCacheHeaders(res, 'final');
         res.send(maybeConvertToSRT(match.content, config));
     } catch (error) {
@@ -6470,8 +6523,14 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId/original', async (re
             return res.status(404).send(t('server.errors.originalEmbeddedMissing', {}, 'Original embedded subtitle not found'));
         }
 
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_original.srt"`);
+        const strictSrtHeaders = String(config.androidSubtitleCompatMode || 'off').toLowerCase() === 'aggressive';
+        if (strictSrtHeaders) {
+            res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+            res.setHeader('Content-Disposition', `inline; filename="${safeVideoHash}_${safeLang}_original.srt"`);
+        } else {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_original.srt"`);
+        }
         setSubtitleCacheHeaders(res, 'final');
         res.send(maybeConvertToSRT(match.content, config));
     } catch (error) {

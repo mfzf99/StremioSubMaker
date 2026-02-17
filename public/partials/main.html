@@ -1783,6 +1783,28 @@
                             </div>
                         </div>
 
+                        <!-- Android subtitle compatibility mode (Dev Mode only) -->
+                        <div class="form-group" id="androidSubtitleCompatModeGroup" style="display: none;">
+                            <label>
+                                <span style="font-weight: 600; color: #f59e0b;">Android Subtitle Compat Mode</span>
+                                <span class="label-description">Experimental Android/TV subtitle URL compatibility options. Keep OFF unless debugging subtitle click/download issues.</span>
+                            </label>
+                            <div style="margin-top: 8px; padding-left: 4px;">
+                                <label style="display: block; margin-bottom: 6px;">
+                                    <input type="radio" name="androidSubtitleCompatMode" value="off" checked>
+                                    <span><strong>Off</strong> (default) - Normal behavior</span>
+                                </label>
+                                <label style="display: block; margin-bottom: 6px;">
+                                    <input type="radio" name="androidSubtitleCompatMode" value="safe">
+                                    <span><strong>Safe</strong> - Encode URL path segments + force typed <code>.srt</code> subtitle URLs</span>
+                                </label>
+                                <label style="display: block; margin-bottom: 6px;">
+                                    <input type="radio" name="androidSubtitleCompatMode" value="aggressive">
+                                    <span><strong>Aggressive</strong> - Safe mode plus skip subtitle-route cache-buster redirects and force stricter SRT headers</span>
+                                </label>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

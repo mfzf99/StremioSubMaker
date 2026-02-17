@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.58
+
+- **OpenAI model compatibility hotfix (400 errors resolved):** Fixed OpenAI request shaping for modern GPT families. OpenAI chat requests now use `max_completion_tokens` (instead of `max_tokens`), and GPT-5-family requests no longer send unsupported sampling params (`temperature`/`top_p`) that were triggering `400 invalid_request_error` responses.
+
+- **GPT-5 Pro endpoint routing:** Added automatic routing for GPT-5 Pro variants to the OpenAI Responses API (`/v1/responses`) instead of Chat Completions, with provider-side extraction of translated text from Responses payloads.
+
+- **Reasoning effort compatibility hardening:** Expanded accepted reasoning-effort values (`none`, `low`, `medium`, `high`, `xhigh`) and added model-aware normalization so unsupported effort values are auto-adjusted before request dispatch.
+
+- **Streaming fallback behavior tightened:** Improved stream unsupported detection so non-stream fallback is only triggered for genuine stream/SSE incompatibility cases, reducing false fallbacks on other request validation errors.
+
+- **Cross-model OpenAI smoke test coverage:** Added `scripts/test-openai-compat.js` to validate translation behavior (capped to 30 subtitle entries per test request) across GPT-5/GPT-4.1/GPT-4o families and common dated model variants.
+
+- **DeepSeek max-token compatibility fix (400 invalid request resolved):** Fixed DeepSeek translation failures caused by oversized `max_tokens` values. The OpenAI-compatible provider now applies model-aware token ceilings for DeepSeek requests at runtime (`deepseek-chat` capped to `8192`, `deepseek-reasoner` capped to `65536`) before request dispatch.
+
+- **DeepSeek model-aware defaults in config normalization:** Added DeepSeek-specific defaulting so when users have not explicitly set `providerParameters.deepseek.maxOutputTokens`, normalized config now auto-selects `8192` for `deepseek-chat` and `65536` for `deepseek-reasoner` based on the configured DeepSeek model.
+
+- **DeepSeek baseline default adjusted:** Updated the DeepSeek provider parameter default (`PROVIDER_PARAMETER_DEFAULTS.deepseek.maxOutputTokens`) to `8192` so fresh configs are safe for `deepseek-chat` out of the box.
+
+- **Anthropic Claude 4.5 compatibility fix (400 invalid request resolved):** Fixed Anthropic request shaping for Claude 4.5 models that reject `temperature` + `top_p` together. The provider now auto-retries with model-compatible parameters (dropping `top_p` when required) instead of failing the batch.
+
+- **Anthropic stream-mode 400 fallback hardening:** Improved streaming error handling so generic `400` responses no longer get stuck in stream retry loops. Stream path now falls back once to non-stream translation flow, which applies compatibility retries and successfully completes more model/base combinations.
+
+- **Anthropic thinking-mode compatibility safeguards:** Added adaptive retry logic for thinking-related validation constraints (including model requirements around temperature settings when thinking is enabled), reducing configuration-sensitive request failures across Claude variants.
+
+- **Anthropic JSON prefill compatibility fallback:** Added retry downgrade when assistant prefill for JSON forcing is unsupported/deprecated on a given model, so translation can continue without manual config changes.
+
+- **Claude 4.5 verification coverage (30-entry capped tests):** Validated non-stream, stream, and JSON non-stream translation paths against `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, and alias forms (`claude-haiku-4-5`, `claude-sonnet-4-5`) with test payloads capped to 30 subtitle entries per request.
+
 ## SubMaker v1.4.57
 
 - **OpenSubtitles distributed rate limit hotfix:** Fixed v1.4.56 distributed lock not properly throttling across pods—replaced spin-wait polling with TTL-based waiting, added lock refresh after login completion (1.1s cooldown starts after request, not before), and removed redundant retry loop in credential validation endpoint.

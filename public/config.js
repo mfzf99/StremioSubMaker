@@ -745,6 +745,7 @@ Translate to {target_language}.`;
             enableSeasonPacks: true, // If true, show season pack subtitles in results (default: enabled for backwards compatibility)
             forceSRTOutput: false, // If true, convert all subtitle outputs to SRT format
             convertAssToVtt: true, // If true, convert ASS/SSA subtitles to VTT (default: enabled for backwards compatibility)
+            androidSubtitleCompatMode: 'off', // Dev mode only: 'off' | 'safe' | 'aggressive'
             mobileMode: false, // Opt-in: wait for full translation before responding (no automatic device detection)
             singleBatchMode: false, // Try translating whole file at once
             advancedSettings: {
@@ -2607,6 +2608,7 @@ Translate to {target_language}.`;
                 toggleOtherApiKeysSection();
                 toggleConvertAssToVttGroup();
                 toggleUrlExtensionTestGroup();
+                toggleAndroidSubtitleCompatModeGroup();
             });
         }
 
@@ -2631,6 +2633,15 @@ Translate to {target_language}.`;
             urlExtTestGroup.style.display = (devEnabled && assConversionDisabled) ? 'block' : 'none';
         }
 
+        // Function to show/hide Android subtitle compatibility mode group (dev mode only)
+        function toggleAndroidSubtitleCompatModeGroup() {
+            const group = document.getElementById('androidSubtitleCompatModeGroup');
+            if (!group) return;
+            const devModeEl = document.getElementById('devMode');
+            const devEnabled = devModeEl && devModeEl.checked;
+            group.style.display = devEnabled ? 'block' : 'none';
+        }
+
         // Wire convertAssToVtt to also toggle the test group
         const convertAssEl = document.getElementById('convertAssToVtt');
         if (convertAssEl) {
@@ -2642,6 +2653,7 @@ Translate to {target_language}.`;
         // Initial visibility check on load
         toggleConvertAssToVttGroup();
         toggleUrlExtensionTestGroup();
+        toggleAndroidSubtitleCompatModeGroup();
 
         const multiToggle = document.getElementById('enableMultiProviders');
         if (multiToggle) {
@@ -5552,11 +5564,21 @@ Translate to {target_language}.`;
             const assConversionDisabled = convertAssToVttEl ? !convertAssToVttEl.checked : false;
             urlExtTestGroup.style.display = (devEnabledAfterLoad && assConversionDisabled) ? 'block' : 'none';
         }
+        const androidCompatGroup = document.getElementById('androidSubtitleCompatModeGroup');
+        if (androidCompatGroup) {
+            androidCompatGroup.style.display = devEnabledAfterLoad ? 'block' : 'none';
+        }
         const selectedUrlExt = String(currentConfig.urlExtensionTest || 'srt');
         const urlExtRadio = document.querySelector(`input[name="urlExtensionTest"][value="${selectedUrlExt}"]`)
             || document.querySelector('input[name="urlExtensionTest"][value="srt"]');
         if (urlExtRadio) {
             urlExtRadio.checked = true;
+        }
+        const selectedCompatMode = String(currentConfig.androidSubtitleCompatMode || 'off');
+        const compatRadio = document.querySelector(`input[name="androidSubtitleCompatMode"][value="${selectedCompatMode}"]`)
+            || document.querySelector('input[name="androidSubtitleCompatMode"][value="off"]');
+        if (compatRadio) {
+            compatRadio.checked = true;
         }
         // Season packs default to enabled (true) for backwards compatibility
         const seasonPacksEnabled = currentConfig.enableSeasonPacks !== false;
@@ -5803,6 +5825,16 @@ Translate to {target_language}.`;
                     return selected ? selected.value : 'srt';
                 }
                 return 'srt'; // Default behavior
+            })(),
+            androidSubtitleCompatMode: (function () {
+                // Dev-mode-only debug mode for Android subtitle compatibility tests.
+                const devEl = document.getElementById('devMode');
+                if (devEl && devEl.checked) {
+                    const selected = document.querySelector('input[name="androidSubtitleCompatMode"]:checked');
+                    const value = selected ? String(selected.value || '').toLowerCase() : 'off';
+                    if (value === 'safe' || value === 'aggressive') return value;
+                }
+                return 'off';
             })(),
             sourceLanguages: currentConfig.sourceLanguages,
             targetLanguages: currentConfig.targetLanguages,
