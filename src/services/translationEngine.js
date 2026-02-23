@@ -1645,7 +1645,7 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using \\n
+4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
@@ -1653,6 +1653,8 @@ ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
+Example: <s id="1">[Translated line 1, max 42 chars]
+[Translated line 2, max 42 chars]</s><s id="2">[Short translation]</s>
 
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
@@ -1713,7 +1715,7 @@ CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
-4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using \\n
+4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
