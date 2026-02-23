@@ -1681,15 +1681,16 @@ TRANSLATION QUALITY:
 - "yg" → "yang"
 - "utk" → "untuk"
 - "tapi" → KEEP "tapi" (natural BM, acceptable)
+- "Hello" → keep as "Hello", NEVER "Helo"
 - "memang" → KEEP "memang" (natural BM, acceptable)
 - "boleh" → KEEP "boleh" (natural BM, acceptable)
 IMPORTANT: Correcting spelling does NOT mean using formal sentence structure. 
 Keep the sentence flow natural and conversational.
 21. LANGUAGE-SPECIFIC RULES (apply only when relevant):
 - Bahasa Melayu DIALOGUE only: use "saya/awak", never "aku/kamu/anda/kau"
-- Bahasa Melayu SONG LYRICS: ignore pronoun rules — keep natural lyrical flow
+- SONG LYRICS: ignore pronoun rules — keep natural lyrical flow
 - Other languages: apply equivalent natural spoken standards
-22. NEVER translate proper nouns — movie titles, song titles, character names, 
+22. NEVER translate proper nouns — movie titles, character names, 
     brand names, place names. Keep them in original language.
 23. KAMI vs KITA (Bahasa Melayu only):
 - "kita" = speaker + listener INCLUDED
@@ -1698,7 +1699,7 @@ Keep the sentence flow natural and conversational.
 - "kami" = speaker + others, listener EXCLUDED
   Use when the group does NOT include the person being spoken to
   Example: BF to GF → "kami pergi semalam" (me and the guys, you weren't there)
-- When in doubt, read the surrounding context before deciding
+- When in doubt, read all available context before deciding
  
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
