@@ -1647,7 +1647,7 @@ CRITICAL RULES:
 3. Return EXACTLY ${expectedCount} tagged entries
 4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
 5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
+6. Use professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms slightly if needed for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
@@ -1717,7 +1717,7 @@ CRITICAL RULES:
 3. Return EXACTLY ${expectedCount} entries
 4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
 5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
+6. Use professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms slightly if needed for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
