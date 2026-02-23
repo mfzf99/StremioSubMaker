@@ -1645,7 +1645,7 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Limit to max 2 lines per entry; max 42 characters per line
+4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using \\n
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
@@ -1713,7 +1713,7 @@ CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
-4. Limit to max 2 lines per entry; max 42 characters per line
+4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using \\n
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
@@ -1723,7 +1723,7 @@ Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
 
 YOUR RESPONSE MUST be a valid, machine-parseable JSON array containing objects with "id" (number) and "text" (string) fields only.
-Example: [{"id":1,"text":"[Translated text]\\n[Continued text]"},{"id":2,"text":"[Translated text]"}]
+Example: [{"id":1,"text":"[Translated line 1, max 42 chars]\\n[Translated line 2, max 42 chars]"},{"id":2,"text":"[Short translation]"}]
 FINAL REQUIREMENT: Return ONLY the valid JSON array containing EXACTLY ${expectedCount} entries. No preamble, no markdown, and no closing notes.
 
 INPUT (${expectedCount} entries):
