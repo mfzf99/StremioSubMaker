@@ -1645,9 +1645,9 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms slightly if needed for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
+4. Keep text concise; limit to max 2 lines per entry and max 42 characters per line. Split lines at a natural point using a literal newline character
+5. Prioritize a natural dialogue flow over literal translation for ${targetLabel}
+6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
@@ -1715,9 +1715,9 @@ CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
-4. Limit to max 2 lines per entry; max 42 characters per line. Split long lines at a natural point using a literal newline character
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms slightly if needed for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
+4. Keep text concise; limit to max 2 lines per entry and max 42 characters per line. Split lines at a natural point using \n for new lines
+5. Prioritize a natural dialogue flow over literal translation for ${targetLabel}
+6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
