@@ -1639,16 +1639,19 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are translating subtitle text to ${targetLabel}.
+    const promptBody = `You are a professional Netflix subtitle writer translating to ${targetLabel}. Goal: subtitles that feel WRITTEN IN ${targetLabel}, not translated.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
 4. Max 2 lines, 42 characters per line. Split at a natural point using actual line breaks; do NOT output literal '\n'
-5. Prioritize natural dialogue flow over literal translation
-6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} subtitles with appropriate colloquialisms; adapt idioms for target audience clarity
-
+5. Write like a NETFLIX subtitle writer — short, punchy, natural.
+   Cut unnecessary words. If meaning survives without a word, drop it.
+6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
+   Never use formal/textbook phrasing. Adapt idioms so they feel 
+   native to ${targetLabel} speakers, not translated.
+   
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
@@ -1710,15 +1713,18 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are translating subtitle text to ${targetLabel}.
+    const promptBody = `You are a professional Netflix subtitle writer translating to ${targetLabel}. Goal: subtitles that feel WRITTEN IN ${targetLabel}, not translated.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
 4. Keep text concise; limit to max 2 lines per entry and max 42 characters per line. Split lines at a natural point using \n for new lines
-5. Prioritize a natural dialogue flow over literal translation for ${targetLabel}
-6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
+5. Write like a NETFLIX subtitle writer — short, punchy, natural.
+   Cut unnecessary words. If meaning survives without a word, drop it.
+6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
+   Never use formal/textbook phrasing. Adapt idioms so they feel 
+   native to ${targetLabel} speakers, not translated.
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
