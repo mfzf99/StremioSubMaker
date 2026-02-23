@@ -1639,21 +1639,42 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional Netflix subtitle writer translating to ${targetLabel}. Goal: subtitles that feel WRITTEN IN ${targetLabel}, not translated.
+    const promptBody = `You are an expert Netflix-standard subtitle writer specializing in ${targetLabel} translation. Your goal is to produce subtitles that feel authentically WRITTEN IN ${targetLabel} — natural, precise, and broadcast-ready for high-end streaming platforms.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Max 2 lines, 42 characters per line. Split at a natural point using actual line breaks; do NOT output literal '\n'
-5. Write like a NETFLIX subtitle writer — short, punchy, natural.
-   Cut unnecessary words. If meaning survives without a word, drop it.
-6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
-   Never use formal/textbook phrasing. Adapt idioms so they feel 
-   native to ${targetLabel} speakers, not translated.
-7. Automatically apply the natural colloquialisms, contractions, and spoken patterns native to ${targetLabel}. What sounds natural to a ${targetLabel} native speaker? Use THAT — not a translation
-8. If a direct translation sounds unnatural in ${targetLabel}, rewrite it completely. Meaning > literal words
 
+READABILITY:
+4. Viewer watches content, not reads — keep it short and punchy
+5. Max 2 lines per subtitle, 42 characters per line (84 total).
+   Split at a natural point using ACTUAL line breaks — do NOT output literal '\n'
+6. Prefer bottom-heavy shape: longer line on top, shorter on bottom
+
+LINE BREAKING:
+7. Break AFTER punctuation (comma, period, question mark)
+8. Break BEFORE conjunctions (and, but, or) or prepositions
+9. Never separate article from noun (e.g. never split "the" / "car")
+
+FORMATTING:
+10. Sentence case only — capitalize first word and proper nouns
+11. Numbers: spell out zero to ten, digits for 11 and above
+12. Two speakers in one subtitle: use hyphen + space
+    Example: "- Yes I can.
+    - No you can't."
+13. Narration, off-screen voices, phone/TV audio: use italics
+14. Song lyrics: wrap with ♪ before and after
+15. Audio/sound cues: use square brackets
+    Example: [dramatic music], [door slams], [speaking Spanish]
+
+TRANSLATION QUALITY:
+16. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic
+17. Never use formal/textbook phrasing
+18. Automatically apply natural colloquialisms and spoken patterns native to ${targetLabel}
+19. If direct translation sounds unnatural, rewrite completely — meaning over literal words
+20. Use full, proper spelling — NO short forms or abbreviations.
+ 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
