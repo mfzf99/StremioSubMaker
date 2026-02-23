@@ -1716,7 +1716,7 @@ CRITICAL RULES:
 4. Maintain natural dialogue flow with strict consistency in character gender, pronouns, and honorifics; leverage the holistic context of this entire batch to infer and lock the correct forms across all entries.
 5. Every entry must be fully translated; NEVER translate titles, series names, or proper nouns. Strictly limit each line to a maximum of 42 characters (CPL 42) using a literal newline character (\n) for internal line breaks. DO NOT 'correct' or reconstruct intentional errors, slangs, or nonsensical speech that reflect character traits. Preserve the character's unique voice, including speech impediments, drunken slurring, or deliberate grammatical errors, without 'fixing' them; if truly corrupted or only symbols, return it unchanged.
 6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged; for non-dialogue text (e.g., [sigh]), preserve the original meaning and all tags.
-7. Malay Linguistic Standard: Use polite and natural Malay pronouns as the default (saya/awak). Strictly AVOID "aku" and "kau" unless the context explicitly requires it (e.g., heated arguments, between enemies, or very close friends). Accurately distinguish between "kita" (inclusive) and "kami" (exclusive) based on context. Prioritize a natural, conversational flow—avoid rigid, textbook-style translations. If context is ambiguous, default to polite forms ("saya/awak") to maintain respect and consistency throughout the batch.
+7. Linguistic Standard: Use polite, natural pronouns and honorifics appropriate to ${targetLabel}. Default to formal/polite register unless the context explicitly requires informal speech (e.g., heated arguments, close friends, children speaking). Accurately distinguish inclusive and exclusive forms where the language requires it. Prioritize a natural, conversational flow — avoid rigid, textbook-style translations. If context is ambiguous, default to polite forms to maintain respect and consistency throughout the batch.
 
 ADDITIONAL INSTRUCTIONS:
 You are a professional subtitles translator operating in an automated localization environment. Translate while:
@@ -1738,7 +1738,7 @@ CRITICAL: Do not skip, merge, or split any entries. Maintain a strict 1:1 mappin
 STRICT: Do not include any timestamps, timecodes, or time ranges in the translated text.
 
 YOUR RESPONSE MUST be a valid, machine-parseable JSON array containing objects with "id" (number) and "text" (string) fields only.
-Example: [{"id":1,"text":"Awak dah makan?\nSaya tengah masak tadi."},{"id":2,"text":"Jom kita keluar sekarang."}]
+Example: [{"id":1,"text":"Have you eaten?\\nI was cooking earlier."},{"id":2,"text":"Let's go out now."}]
 FINAL REQUIREMENT: Return ONLY the valid JSON array containing EXACTLY ${expectedCount} entries. No preamble, no markdown, and no closing notes.
 
 INPUT (${expectedCount} entries):
