@@ -1645,7 +1645,7 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Keep line breaks within each entry
+4. Limit to max 2 lines per entry; max 42 characters per line
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
@@ -1713,7 +1713,7 @@ CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
-4. Keep line breaks within each entry
+4. Limit to max 2 lines per entry; max 42 characters per line
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
