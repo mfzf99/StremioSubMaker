@@ -1653,12 +1653,12 @@ ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
-Example: <s id="1">[Translated line 1, max 42 chars]
-[Translated line 2, max 42 chars]</s><s id="2">[Short translation]</s>
 
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
 - Contain ONLY the XML-tagged translated entries
+- Example: <s id="1">[Translated line 1, max 42 chars]
+[Translated line 2, max 42 chars]</s><s id="2">[Short translation]</s>
 
 INPUT (${expectedCount} entries):
 
