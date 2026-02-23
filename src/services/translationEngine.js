@@ -1645,14 +1645,12 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Keep text concise; limit to max 2 lines per entry and max 42 characters per line. Split lines at a natural point using a literal newline character
-5. Prioritize a natural dialogue flow over literal translation for ${targetLabel}
-6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
+4. Max 2 lines, 42 characters per line. Split at a natural point using actual line breaks; do NOT output literal '\n'
+5. Prioritize natural dialogue flow over literal translation
+6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} subtitles with appropriate colloquialisms; adapt idioms for target audience clarity
 
-${customPromptText ? `ADDITIONAL INSTRUCTIONS:
-${customPromptText}
+${contextInfo ? `CONTEXT:\n${contextInfo}\n\n` : ''}${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 
-` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
@@ -1660,14 +1658,15 @@ Do not include any timestamps/timecodes.
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
 - Contain ONLY the XML-tagged translated entries
-- Example: <s id="1">[Translated line 1, max 42 chars]
-[Translated line 2, max 42 chars]</s><s id="2">[Short translation]</s>
+- Example:
+  <s id="1">Translated line 1 here
+Translated line 2 here</s><s id="2">Short translation</s>
 
 INPUT (${expectedCount} entries):
 
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
