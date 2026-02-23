@@ -1649,8 +1649,7 @@ CRITICAL RULES:
 5. Prioritize natural dialogue flow over literal translation
 6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} subtitles with appropriate colloquialisms; adapt idioms for target audience clarity
 
-${contextInfo ? `CONTEXT:\n${contextInfo}\n\n` : ''}${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
-
+${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
@@ -1721,7 +1720,7 @@ CRITICAL RULES:
 5. Prioritize a natural dialogue flow over literal translation for ${targetLabel}
 6. Analyze tone, slang, and emotion to provide professional, culturally adaptive ${targetLabel} with appropriate colloquialisms; adapt idioms for clarity.${context ? ' Use the provided context to ensure consistency.' : ''}
 
-${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
+${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
