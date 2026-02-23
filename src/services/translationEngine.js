@@ -1651,7 +1651,9 @@ CRITICAL RULES:
 6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
    Never use formal/textbook phrasing. Adapt idioms so they feel 
    native to ${targetLabel} speakers, not translated.
-   
+7. Automatically apply the natural colloquialisms, contractions, and spoken patterns native to ${targetLabel}. What sounds natural to a ${targetLabel} native speaker? Use THAT — not a translation
+8. If a direct translation sounds unnatural in ${targetLabel}, rewrite it completely. Meaning > literal words
+
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
@@ -1725,6 +1727,8 @@ CRITICAL RULES:
 6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
    Never use formal/textbook phrasing. Adapt idioms so they feel 
    native to ${targetLabel} speakers, not translated.
+7. Automatically apply the natural colloquialisms, contractions, and spoken patterns native to ${targetLabel}. What sounds natural to a ${targetLabel} native speaker? Use THAT — not a translation
+8. If a direct translation sounds unnatural in ${targetLabel}, rewrite it completely. Meaning > literal words${context ? '\n9. Use the provided context to ensure consistency.' : ''}
 
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
