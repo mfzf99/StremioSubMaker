@@ -1674,6 +1674,9 @@ TRANSLATION QUALITY:
 18. Automatically apply natural colloquialisms and spoken patterns native to ${targetLabel}
 19. If direct translation sounds unnatural, rewrite completely — meaning over literal words
 20. Use full, proper spelling — NO short forms or abbreviations.
+21. LANGUAGE-SPECIFIC RULES (apply only when relevant):
+- Bahasa Melayu: use "saya/awak" only, never "aku/kamu/anda".
+- Other languages: apply equivalent natural spoken standards
  
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
