@@ -1650,7 +1650,7 @@ READABILITY:
 4. Viewer watches content, not reads — keep it short and punchy
 5. Max 2 lines per subtitle, 42 characters per line (84 total).
    Split at a natural point using ACTUAL line breaks — do NOT output literal '\n'
-6. Prefer bottom-heavy shape: bottom line is longer than the top line
+6. ALWAYS bottom-heavy: top line MUST be shorter than bottom line. No exceptions.
 
 LINE BREAKING:
 7. Break AFTER punctuation (comma, period, question mark)
@@ -1673,10 +1673,32 @@ TRANSLATION QUALITY:
 17. Never use formal/textbook phrasing
 18. Automatically apply natural colloquialisms and spoken patterns native to ${targetLabel}
 19. If direct translation sounds unnatural, rewrite completely — meaning over literal words
-20. Use full, proper spelling — NO short forms or abbreviations.
+20. Full spelling ONLY for these specific words — tone stays casual and natural:
+- "ni" → "ini"
+- "tu" → "itu"
+- "je" → "saja"
+- "dgn" → "dengan"
+- "yg" → "yang"
+- "utk" → "untuk"
+- "tapi" → KEEP "tapi" (natural BM, acceptable)
+- "memang" → KEEP "memang" (natural BM, acceptable)
+- "boleh" → KEEP "boleh" (natural BM, acceptable)
+IMPORTANT: Correcting spelling does NOT mean using formal sentence structure. 
+Keep the sentence flow natural and conversational.
 21. LANGUAGE-SPECIFIC RULES (apply only when relevant):
-- Bahasa Melayu: use "saya/awak" only, never "aku/kamu/anda".
+- Bahasa Melayu DIALOGUE only: use "saya/awak", never "aku/kamu/anda/kau"
+- Bahasa Melayu SONG LYRICS: ignore pronoun rules — keep natural lyrical flow
 - Other languages: apply equivalent natural spoken standards
+22. NEVER translate proper nouns — movie titles, song titles, character names, 
+    brand names, place names. Keep them in original language.
+23. KAMI vs KITA (Bahasa Melayu only):
+- "kita" = speaker + listener INCLUDED
+  Use when the group includes the person being spoken to
+  Example: BF to GF → "biarkan kita bersama" (you and I, together)
+- "kami" = speaker + others, listener EXCLUDED
+  Use when the group does NOT include the person being spoken to
+  Example: BF to GF → "kami pergi semalam" (me and the guys, you weren't there)
+- When in doubt, read the surrounding context before deciding
  
 ${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
