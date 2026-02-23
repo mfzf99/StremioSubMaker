@@ -1650,7 +1650,7 @@ READABILITY:
 4. Viewer watches content, not reads — keep it short and punchy
 5. Max 2 lines per subtitle, 42 characters per line (84 total).
    Split at a natural point using ACTUAL line breaks — do NOT output literal '\n'
-6. Prefer bottom-heavy shape: longer line on top, shorter on bottom
+6. Prefer bottom-heavy shape: bottom line is longer than the top line
 
 LINE BREAKING:
 7. Break AFTER punctuation (comma, period, question mark)
