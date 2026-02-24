@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.62
+
+**Bug Fixes:**
+
+- **Fixed history cards always showing wrong provider and model tags:** The initial `historyEntry` object in `performTranslation()` hardcoded `provider: config.mainProvider` and `model: config.geminiModel` regardless of what was actually used. When `multiProviderEnabled` is `true` and `mainProvider` is anything other than Gemini, `config.geminiModel` is meaningless for the model field. Fixed the initial seed to use `resolveModelNameFromConfig(config)` (which correctly reads `config.geminiModel` for Gemini and `config.providers[provider].model` for all others) and to derive the provider from the actual `multiProviderEnabled` state. Additionally, `providerName` and `effectiveModel` are hoisted to function scope and returned inside `translationStats` from both the success path and the error path — so `Object.assign(historyEntry, extra)` in `updateHistory` always overwrites the initial placeholder values with the actual values used during translation.
+
+- **Fixed secondary provider chip never appearing for native provider fallbacks:** `translateBatchNative()` (used by DeepL and Google Translate as primary providers) had its own inline `try/catch` fallback that called `this.fallbackProvider.translateSubtitle()` but never set `this.translationStats.usedSecondaryProvider = true` or `this.translationStats.secondaryProviderName`. When a native primary provider failed and secondary handled the batch, the history card would show no secondary indicator at all. Fixed by adding the same stats update that the LLM `tryFallback` closure applies, including `primaryFailureReason`.
+
+- **Fixed embedded translation history cards missing all diagnostic fields:** The `/api/translate-embedded` endpoint in `index.js` creates a `TranslationEngine`, runs `engine.translateSubtitle()`, then calls `persistHistory('completed', {...})` — but `engine.translationStats` was never read. All secondary provider flags, error types, rate limit counts, batch details, and other diagnostics were silently discarded for embedded subtitle translation history cards. Fixed by spreading `...(engine.translationStats || {})` into the `persistHistory` call.
+
+**Improvements:**
+
+- **Primary failure reason now surfaced on secondary provider chip tooltip:** When the secondary provider is used as a fallback (in any batch), the engine now stores the primary provider's error message in `translationStats.primaryFailureReason`. The history card's "⚠ Secondary: {name}" chip tooltip now reads "Primary provider failed: {reason}. Secondary was used as fallback." instead of the generic message. The reason is truncated to 120 characters in the rendered tooltip. Both the LLM `tryFallback` closure and the native `translateBatchNative` fallback path record this field (first-occurrence-wins across batches).
+
+- **`primaryFailureReason` tracked through parallel translation:** Parallel worker engine clones now include `primaryFailureReason: ''` in their isolated `translationStats` objects, and the merge-back step propagates it to the main engine's stats using the same first-wins logic as `secondaryProviderName`.
+
+- **History cards now differentiate main vs. secondary provider errors with distinct color accents:** Main provider diagnostics are shown with a cyan/blue accent (`--provider-main`); secondary provider diagnostics with an amber/orange accent (`--provider-secondary`). Both colors are defined as CSS custom properties in all three themes (light, dark, true-dark).
+
+- **Main and secondary provider diagnostics grouped into labeled cluster rows:** Instead of a flat list of mixed chips, history cards now render separate `history-provider-group` rows — one for the main provider (rate-limit chip, key-rotation chip, error-type pills, mismatch chip) and one for the secondary provider (secondary chip, secondary error types, secondary failure chip). Each row is labeled with a tiny uppercase provider name pill and accented with its respective color border/background. Rows only appear when they contain at least one diagnostic chip.
+
+- **Secondary provider error types now tracked in stats (`secondaryErrorTypes[]`):** Previously, errors from the secondary provider were not captured individually — only the combined `MULTI_PROVIDER` label appeared. Now, when the secondary provider itself fails, its `error.translationErrorType` is pushed to `translationStats.secondaryErrorTypes[]`. Falls back to a generic `SECONDARY_FAILED` label if the error has no classification. Rendered as amber-tinted pills on the history card.
+
+- **Secondary provider failure reason now tracked in stats (`secondaryFailureReason`):** When the secondary provider also fails (both main and secondary exhausted), the secondary's error message is stored in `translationStats.secondaryFailureReason`. Rendered on the history card as a dark-orange "✕ Also failed: …" chip with the reason truncated to 48 characters (full reason on hover). This makes the "both providers failed" case explicitly visible rather than only showing the generic error div.
+
+- **Secondary provider failure tracked on both LLM (`tryFallback`) and native (`translateBatchNative`) fallback paths:** Both fallback code paths now populate `usedSecondaryProvider`, `secondaryProviderName`, `primaryFailureReason`, `secondaryFailureReason`, and `secondaryErrorTypes` consistently on secondary failure, mirroring the stats recorded on success.
+
+- **`EMPTY_STREAM` error type now tracked in stats:** When Gemini streaming returns no content and the engine silently retries without streaming, `'EMPTY_STREAM'` is pushed to `translationStats.errorTypes`. This makes previously invisible silent retries visible on the history card.
+
+- **Main provider tag accented when secondary was used:** When a secondary provider was involved, the main provider name tag on the history card gains a cyan/blue border and background to signal "this is the main provider that failed."
+
+- **`secondaryErrorTypes` and `secondaryFailureReason` propagated through parallel batch worker merge:** Parallel worker engines now initialize with `secondaryErrorTypes: []` and `secondaryFailureReason: ''`. The merge-back step aggregates `secondaryErrorTypes` (deduplicated union) and `secondaryFailureReason` (first-wins) from all worker batches into the main engine stats.
+
+- **Responsive styles for new provider group rows:** Provider group rows scale to smaller font and tighter padding on mobile (≤920px) viewport, consistent with existing chip/tag responsive behavior.
+
+- **Fixed translation history entries silently lost on multi-instance deployments:** `saveRequestToHistory` used a non-atomic read-modify-write cycle on a single aggregated store key (`histset__{hash}`). With two SubMaker pods running concurrently, both pods could read the store key at the same time, merge their respective new entries independently, then each overwrite the other's write — causing the entry from whichever pod wrote first to be permanently lost. Fixed by writing each history entry to its **own independent key** (`hist__{hash}__{id}`) as a pure atomic SET with no prior read. Concurrent pods now write to different keys and can never clobber each other. The aggregated store key is still updated as a best-effort read-cache immediately after the entry write so the history page fast-path stays warm.
+
+**Improvements:**
+
+- **History page reads now use a time-gated fast-path to avoid expensive Redis SCANs:** `getHistoryForUser` previously always performed a full Redis SCAN of per-entry keys on every history page load. With thousands of users this created unnecessary SCAN pressure on the Redis cluster. The function now checks the aggregated store key first: if it was refreshed within the last 15 seconds, the result is returned immediately from a single GET without touching SCAN. If the cache is stale or missing, the slow path runs a full SCAN, merges per-entry keys from all pods with any cached store entries (newest version of each entry wins), then rebuilds the store key so subsequent reads within the next 15 seconds use the fast path.
+
 ## SubMaker v1.4.61
 
 **Improvements:**

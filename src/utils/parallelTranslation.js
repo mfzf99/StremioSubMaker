@@ -146,6 +146,9 @@ async function executeParallelTranslation(engine, entries, targetLanguage, custo
                 recoveredEntries: 0,
                 usedSecondaryProvider: false,
                 secondaryProviderName: null,
+                primaryFailureReason: '',
+                secondaryFailureReason: '',
+                secondaryErrorTypes: [],
                 rateLimitErrors: 0,
                 keyRotationRetries: 0,
                 errorTypes: [],
@@ -190,6 +193,14 @@ async function executeParallelTranslation(engine, entries, targetLanguage, custo
                 if (ws.mismatchDetected) es.mismatchDetected = true;
                 if (ws.jsonXmlFallback) es.jsonXmlFallback = true;
                 if (ws.secondaryProviderName && !es.secondaryProviderName) es.secondaryProviderName = ws.secondaryProviderName;
+                if (ws.primaryFailureReason && !es.primaryFailureReason) es.primaryFailureReason = ws.primaryFailureReason;
+                // Merge secondary failure tracking (first-wins for reasons, deduplicated for types)
+                if (ws.secondaryFailureReason && !es.secondaryFailureReason) es.secondaryFailureReason = ws.secondaryFailureReason;
+                if (Array.isArray(ws.secondaryErrorTypes)) {
+                    for (const et of ws.secondaryErrorTypes) {
+                        if (!es.secondaryErrorTypes.includes(et)) es.secondaryErrorTypes.push(et);
+                    }
+                }
                 // Merge error types (deduplicated)
                 if (Array.isArray(ws.errorTypes)) {
                     for (const et of ws.errorTypes) {

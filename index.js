@@ -6991,7 +6991,10 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         persistHistory('completed', {
             provider: providerName || historyEntry?.provider || 'unknown',
             model: model || requestedModel || historyEntry?.model || workingConfig.geminiModel || 'default',
-            cached: false
+            cached: false,
+            // Spread engine translationStats so embedded history cards get full diagnostics
+            // (secondary provider use, error types, rate limits, batch details, etc.)
+            ...(engine.translationStats || {})
         });
 
         res.json({
