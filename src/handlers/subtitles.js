@@ -4043,8 +4043,8 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
         sourceLanguage: fallbackSourceLang, // Will update if detected
         targetLanguage: targetLanguage,
         createdAt: Date.now(),
-        provider: config.mainProvider || 'unknown',
-        model: config.geminiModel || 'default',
+        provider: (config.multiProviderEnabled === true ? config.mainProvider : 'gemini') || 'gemini',
+        model: resolveModelNameFromConfig(config) || 'default',
         subtitleSource: sourceFileId.startsWith('subdl_') ? 'SubDL'
           : sourceFileId.startsWith('subsource_') ? 'SubSource'
             : sourceFileId.startsWith('v3_') ? 'OpenSubtitles V3'
@@ -4550,6 +4550,9 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
  */
 async function performTranslation(sourceFileId, targetLanguage, config, { cacheKey, runtimeKey, baseKey, sharedInFlightKey = null }, userHash, allowPermanent, preDownloadedContent = null, embeddedSource = null) {
   let translationEngine = null;
+  // Hoisted so the catch block can include them in error translationStats for history correction
+  let providerName = '';
+  let effectiveModel = '';
   try {
     log.debug(() => `[Translation] Background translation started for ${sourceFileId} to ${targetLanguage}`);
     cacheMetrics.apiCalls++;
@@ -4665,8 +4668,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
 
     // Initialize translation provider (Gemini default, others when enabled)
-    const { provider, providerName, model, fallbackProviderName } = await createTranslationProvider(config);
-    const effectiveModel = model || config.geminiModel;
+    const { provider, providerName: _providerName, model, fallbackProviderName } = await createTranslationProvider(config);
+    providerName = _providerName;
+    effectiveModel = model || config.geminiModel;
     log.debug(() => `[Translation] Using provider=${providerName} model=${effectiveModel}`);
 
     // Initialize new Translation Engine (structure-first approach)
@@ -5038,14 +5042,18 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     log.debug(() => '[Translation] Translation cached and ready to serve');
 
     // Return translation diagnostics so the .then() handler can pass them to updateHistory
-    return { translationStats };
+    // Include actual provider and model so updateHistory corrects the initial placeholder values
+    return { translationStats: { ...translationStats, provider: providerName, model: effectiveModel } };
 
   } catch (error) {
     // Attach accumulated translation diagnostics to the error so the outer .catch() can pass them to history
     // Use translationEngine directly (not the local const) since translationEngine is always in scope
     const failedStats = translationEngine?.translationStats;
     if (failedStats && Object.keys(failedStats).length > 0) {
-      error.translationStats = failedStats;
+      // Include actual provider/model so updateHistory corrects the initial placeholder values even on failure
+      error.translationStats = { ...failedStats, provider: providerName, model: effectiveModel };
+    } else if (providerName || effectiveModel) {
+      error.translationStats = { provider: providerName, model: effectiveModel };
     }
     // Only log if not already logged by upstream handler
     if (!error._alreadyLogged) {
@@ -5739,35 +5747,47 @@ async function saveRequestToHistory(userHash, entry) {
       return;
     }
     const adapter = await getStorageAdapter();
-    const storeKey = buildHistoryStoreKey(normalizedHash);
     const ttlSeconds = StorageAdapter.DEFAULT_TTL[StorageAdapter.CACHE_TYPES.HISTORY];
 
-    // Load existing store (single hash per user)
-    let store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
-    let entries = {};
-    if (store && typeof store === 'object' && !Array.isArray(store)) {
-      entries = store.entries && typeof store.entries === 'object' ? store.entries : {};
-    }
+    // Atomic write: each entry gets its own independent key (hist__{hash}__{id}).
+    // This eliminates the read-modify-write race on the store key when multiple
+    // server instances run concurrently — no read needed, no clobbering.
+    const entryKey = buildHistoryKey(normalizedHash, entry.id);
+    const toStore = { ...entry };
+    if (!toStore.createdAt) toStore.createdAt = Date.now();
+    await adapter.set(entryKey, toStore, StorageAdapter.CACHE_TYPES.HISTORY, ttlSeconds);
 
-    const existing = entries[entry.id] || {};
-    const merged = { ...existing, ...entry };
-    if (!merged.createdAt) merged.createdAt = existing.createdAt || entry.createdAt || Date.now();
-    entries[entry.id] = merged;
-
-    // Prune and rebuild compact map
-    const pruned = pruneHistoryEntries(Object.values(entries));
-    const compactMap = Object.fromEntries(pruned.map(e => [e.id, e]));
-
-    await adapter.set(
-      storeKey,
-      { entries: compactMap, updatedAt: Date.now() },
-      StorageAdapter.CACHE_TYPES.HISTORY,
-      ttlSeconds
-    );
+    // Also refresh the store key (aggregated cache) so getHistoryForUser fast-path
+    // stays warm. Mark it as a cache so readers know to also check per-entry keys.
+    // This write is best-effort only — if it fails the SCAN fallback still works.
+    try {
+      const storeKey = buildHistoryStoreKey(normalizedHash);
+      const store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
+      let existingEntries = {};
+      if (store && typeof store === 'object' && !Array.isArray(store)) {
+        existingEntries = store.entries && typeof store.entries === 'object' ? store.entries : {};
+      }
+      const merged = { ...existingEntries };
+      merged[toStore.id] = { ...(merged[toStore.id] || {}), ...toStore };
+      const pruned = pruneHistoryEntries(Object.values(merged));
+      const compactMap = Object.fromEntries(pruned.map(e => [e.id, e]));
+      await adapter.set(
+        storeKey,
+        { entries: compactMap, updatedAt: Date.now(), isCacheOnly: true },
+        StorageAdapter.CACHE_TYPES.HISTORY,
+        ttlSeconds
+      );
+    } catch (_) { /* best-effort cache refresh */ }
   } catch (err) {
     log.warn(() => [`[History] Error saving history entry:`, err.message]);
   }
 }
+
+// How long to trust the aggregated store key before doing a full per-entry SCAN.
+// Within this window a history page load is just one Redis GET (fast path).
+// After the window, we scan per-entry keys written by all pods and rebuild the cache.
+// 15s means an entry from a sibling pod appears on the history page within 15s at most.
+const HISTORY_STORE_CACHE_TTL_MS = 15_000;
 
 async function getHistoryForUser(userHash) {
   try {
@@ -5775,38 +5795,73 @@ async function getHistoryForUser(userHash) {
     if (!normalizedHash) return [];
     const adapter = await getStorageAdapter();
     const storeKey = buildHistoryStoreKey(normalizedHash);
-    const store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
-    const storeEntries = (store && store.entries && typeof store.entries === 'object') ? store.entries : {};
-    const storeArray = pruneHistoryEntries(Object.values(storeEntries));
-    if (storeArray.length > 0) {
-      return storeArray.slice(0, MAX_HISTORY_ITEMS);
-    }
+    const ttlSeconds = StorageAdapter.DEFAULT_TTL[StorageAdapter.CACHE_TYPES.HISTORY];
 
-    // Legacy fallback: scan individual entry keys, then migrate into store
+    // --- FAST PATH ---
+    // If the aggregated store key was refreshed recently, trust it and skip the SCAN.
+    // This is the common case (99% of history page loads).
+    try {
+      const store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
+      if (store && typeof store === 'object' && !Array.isArray(store)) {
+        const age = store.updatedAt ? (Date.now() - store.updatedAt) : Infinity;
+        const storeEntries = (store.entries && typeof store.entries === 'object') ? store.entries : {};
+        if (age < HISTORY_STORE_CACHE_TTL_MS && Object.keys(storeEntries).length > 0) {
+          return pruneHistoryEntries(Object.values(storeEntries)).slice(0, MAX_HISTORY_ITEMS);
+        }
+      }
+    } catch (_) { /* fall through to slow path */ }
+
+    // --- SLOW PATH ---
+    // Store key is missing, empty, or stale. Scan all per-entry keys from any pod,
+    // merge with whatever the store key had, then rebuild the store key cache.
+
+    // Scan per-entry keys (hist__{hash}__{id}) across all pods
     const patterns = buildHistoryPatterns(normalizedHash);
     const keySets = await Promise.all(patterns.map(p => adapter.list(StorageAdapter.CACHE_TYPES.HISTORY, p)));
-    const keys = Array.from(new Set((keySets || []).flat().filter(Boolean)));
+    const perEntryKeys = Array.from(new Set((keySets || []).flat().filter(Boolean)));
 
-    if (!keys || keys.length === 0) return [];
+    // Re-read the store key (may have changed since fast-path check)
+    let storeEntries = {};
+    try {
+      const store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
+      if (store && typeof store === 'object' && !Array.isArray(store)) {
+        storeEntries = (store.entries && typeof store.entries === 'object') ? store.entries : {};
+      }
+    } catch (_) { /* best-effort */ }
 
-    const fetched = await Promise.all(
-      keys.map(k => adapter.get(k, StorageAdapter.CACHE_TYPES.HISTORY))
-    );
+    // Fetch all per-entry keys in parallel
+    const perEntryFetched = perEntryKeys.length > 0
+      ? await Promise.all(perEntryKeys.map(k => adapter.get(k, StorageAdapter.CACHE_TYPES.HISTORY)))
+      : [];
 
-    const deduped = pruneHistoryEntries(fetched);
+    // Merge: per-entry keys are authoritative; store entries fill in the rest.
+    // Newest version of each entry wins (highest completedAt / createdAt).
+    const mergedMap = { ...storeEntries };
+    for (const fetched of perEntryFetched) {
+      if (fetched && fetched.id) {
+        const existing = mergedMap[fetched.id];
+        if (!existing ||
+          (fetched.completedAt || fetched.createdAt || 0) >= (existing.completedAt || existing.createdAt || 0)) {
+          mergedMap[fetched.id] = fetched;
+        }
+      }
+    }
+
+    const deduped = pruneHistoryEntries(Object.values(mergedMap));
     const result = deduped.slice(0, MAX_HISTORY_ITEMS);
 
+    // Rebuild the store key so the next read hits the fast path.
     try {
       if (deduped.length > 0) {
         const compactMap = Object.fromEntries(deduped.map(e => [e.id, e]));
         await adapter.set(
           storeKey,
-          { entries: compactMap, updatedAt: Date.now() },
+          { entries: compactMap, updatedAt: Date.now(), isCacheOnly: true },
           StorageAdapter.CACHE_TYPES.HISTORY,
-          StorageAdapter.DEFAULT_TTL[StorageAdapter.CACHE_TYPES.HISTORY]
+          ttlSeconds
         );
       }
-    } catch (_) { /* best-effort migration */ }
+    } catch (_) { /* best-effort */ }
 
     return result;
   } catch (err) {

@@ -312,18 +312,43 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
 
     // --- Translation diagnostics (Tier 1-3) ---
     // Tier 1: Critical diagnostics
-    const secondaryChip = entry.usedSecondaryProvider === true
-      ? `<span class="history-chip warning" title="Primary provider failed, secondary was used">⚠ Secondary: ${escapeHtml(entry.secondaryProviderName || 'fallback')}</span>`
-      : '';
+    //
+    // Main provider diagnostics
     const rateLimitChip = (typeof entry.rateLimitErrors === 'number' && entry.rateLimitErrors > 0)
-      ? `<span class="history-chip danger" title="Rate limit (429) errors encountered">429 × ${entry.rateLimitErrors}</span>`
+      ? `<span class="history-chip danger" title="Rate limit (429) errors encountered during main provider retries">429 ×${entry.rateLimitErrors}</span>`
       : '';
     const keyRotationChip = (typeof entry.keyRotationRetries === 'number' && entry.keyRotationRetries > 0)
-      ? `<span class="history-tag info" title="API key rotations during translation">🔑 ${entry.keyRotationRetries} rotation${entry.keyRotationRetries > 1 ? 's' : ''}</span>`
+      ? `<span class="history-tag" style="border-color:var(--provider-main-border);color:var(--provider-main);background:var(--provider-main-bg)" title="API key rotations during translation">🔑 ${entry.keyRotationRetries} rotation${entry.keyRotationRetries > 1 ? 's' : ''}</span>`
       : '';
     const errorTypePills = Array.isArray(entry.errorTypes) && entry.errorTypes.length > 0
-      ? entry.errorTypes.map(et => `<span class="history-tag error-type">${escapeHtml(et)}</span>`).join('')
+      ? entry.errorTypes.map(et => `<span class="history-tag error-type" title="Error type encountered on the main provider">${escapeHtml(et)}</span>`).join('')
       : '';
+    // Whether main provider had any diagnostic chips worth grouping
+    const hasMainDiagnostics = !!(rateLimitChip || keyRotationChip || errorTypePills);
+
+    // Secondary provider diagnostics
+    const hasSecondary = entry.usedSecondaryProvider === true;
+    const secondaryName = escapeHtml(entry.secondaryProviderName || 'fallback');
+    const secondaryChip = hasSecondary
+      ? (() => {
+        const primaryReason = entry.primaryFailureReason
+          ? `: ${escapeHtml(String(entry.primaryFailureReason).slice(0, 120))}`
+          : '';
+        return `<span class="history-chip secondary-warning" title="Primary provider failed${primaryReason}. Secondary (${secondaryName}) was used as fallback.">⚠ Secondary: ${secondaryName}</span>`;
+      })()
+      : '';
+    // Secondary error types (errors from the secondary provider itself)
+    const secondaryErrorTypePills = Array.isArray(entry.secondaryErrorTypes) && entry.secondaryErrorTypes.length > 0
+      ? entry.secondaryErrorTypes.map(et => `<span class="history-tag secondary-error-type" title="Error type encountered on the secondary provider">${escapeHtml(et)}</span>`).join('')
+      : '';
+    // Secondary provider failure reason (shown only when secondary also failed)
+    const secondaryFailedChip = entry.secondaryFailureReason
+      ? (() => {
+        const reason = escapeHtml(String(entry.secondaryFailureReason).slice(0, 120));
+        return `<span class="history-chip secondary-danger" title="Secondary provider also failed: ${reason}">✕ Also failed: ${escapeHtml(String(entry.secondaryFailureReason).slice(0, 48))}${entry.secondaryFailureReason.length > 48 ? '…' : ''}</span>`;
+      })()
+      : '';
+    const hasSecondaryDiagnostics = !!(secondaryErrorTypePills || secondaryFailedChip);
 
     // Tier 2: Quality/performance
     const mismatchChip = entry.mismatchDetected === true
@@ -418,20 +443,33 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
           <span>${dateStr}</span>
         </div>
         <div class="history-details">
-          <span class="history-tag">${providerLabel}</span>
+          ${/* Main provider tag — always shown, styled with main accent when secondary was also invoked */''}
+          <span class="history-tag" style="${hasSecondary ? 'border-color:var(--provider-main-border);color:var(--provider-main);background:var(--provider-main-bg);font-weight:600' : ''}">${providerLabel}</span>
           <span class="history-tag">${modelLabel}</span>
           ${cacheLabel}
-          ${secondaryChip}
-          ${rateLimitChip}
-          ${keyRotationChip}
-          ${errorTypePills}
-          ${mismatchChip}
           ${entryCountTag}
           ${durationTag}
           ${subtitleSourceTag}
           ${retranslateBtn}
           ${downloadLink}
         </div>
+        ${/* Main provider diagnostic cluster — only shown when there are main-side errors/warnings */''}
+        ${hasMainDiagnostics || mismatchChip ? `
+        <div class="history-provider-group main">
+          <span class="history-provider-label main" title="Diagnostics from the main translation provider">${providerLabel}</span>
+          ${rateLimitChip}
+          ${keyRotationChip}
+          ${errorTypePills}
+          ${mismatchChip}
+        </div>` : ''}
+        ${/* Secondary provider diagnostic cluster — only shown when secondary was involved */''}
+        ${hasSecondary ? `
+        <div class="history-provider-group secondary">
+          <span class="history-provider-label secondary" title="Secondary provider was used as fallback">${secondaryName}</span>
+          ${secondaryChip}
+          ${hasSecondaryDiagnostics ? secondaryErrorTypePills : ''}
+          ${hasSecondaryDiagnostics ? secondaryFailedChip : ''}
+        </div>` : ''}
         ${tier3Html ? `<div class="history-config">${tier3Html}</div>` : ''}
         ${entry.error ? `<div class="history-error">${escapeHtml(entry.error)}</div>` : ''}
       </div>
@@ -505,6 +543,13 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
       --shadow-color: rgba(0, 0, 0, 0.08);
       --glow: rgba(8, 164, 213, 0.25);
       --theme-toggle-size: 48px;
+      /* Provider accent colors for history card differentiation */
+      --provider-main: #08A4D5;          /* Main provider — cyan/blue */
+      --provider-main-bg: rgba(8, 164, 213, 0.08);
+      --provider-main-border: rgba(8, 164, 213, 0.3);
+      --provider-secondary: #f59e0b;     /* Secondary provider — amber */
+      --provider-secondary-bg: rgba(245, 158, 11, 0.08);
+      --provider-secondary-border: rgba(245, 158, 11, 0.3);
     }
     
     [data-theme="dark"] {
@@ -521,6 +566,12 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
       --shadow: rgba(0, 0, 0, 0.3);
       --shadow-color: rgba(0, 0, 0, 0.3);
       --glow: rgba(8, 164, 213, 0.35);
+      --provider-main: #33B9E1;
+      --provider-main-bg: rgba(51, 185, 225, 0.1);
+      --provider-main-border: rgba(51, 185, 225, 0.25);
+      --provider-secondary: #fbbf24;
+      --provider-secondary-bg: rgba(251, 191, 36, 0.1);
+      --provider-secondary-border: rgba(251, 191, 36, 0.25);
     }
 
     [data-theme="true-dark"] {
@@ -537,6 +588,12 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
       --shadow: rgba(0, 0, 0, 0.8);
       --shadow-color: rgba(0, 0, 0, 0.8);
       --glow: rgba(8, 164, 213, 0.45);
+      --provider-main: #33B9E1;
+      --provider-main-bg: rgba(51, 185, 225, 0.07);
+      --provider-main-border: rgba(51, 185, 225, 0.2);
+      --provider-secondary: #fbbf24;
+      --provider-secondary-bg: rgba(251, 191, 36, 0.07);
+      --provider-secondary-border: rgba(251, 191, 36, 0.2);
     }
 
     body {
@@ -788,9 +845,68 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
     }
 
     .history-tag.error-type {
-      border-color: var(--error);
-      color: var(--error);
+      border-color: var(--provider-main-border);
+      color: var(--provider-main);
       font-weight: 600;
+      background: var(--provider-main-bg);
+    }
+
+    /* Provider-attributed diagnostic clusters */
+    .history-provider-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 8px;
+      border: 1px solid transparent;
+    }
+    .history-provider-group.main {
+      border-color: var(--provider-main-border);
+      background: var(--provider-main-bg);
+    }
+    .history-provider-group.secondary {
+      border-color: var(--provider-secondary-border);
+      background: var(--provider-secondary-bg);
+    }
+    /* Provider label pill inside the group */
+    .history-provider-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .history-provider-label.main {
+      color: var(--provider-main);
+      background: var(--provider-main-bg);
+      border: 1px solid var(--provider-main-border);
+    }
+    .history-provider-label.secondary {
+      color: var(--provider-secondary);
+      background: var(--provider-secondary-bg);
+      border: 1px solid var(--provider-secondary-border);
+    }
+    /* Secondary-colored chips */
+    .history-chip.secondary-warning {
+      background: var(--provider-secondary);
+      color: #0b2336;
+    }
+    .history-chip.secondary-danger {
+      background: #e87822;
+      color: #0b2336;
+    }
+    .history-tag.secondary-error-type {
+      border-color: var(--provider-secondary-border);
+      color: var(--provider-secondary);
+      font-weight: 600;
+      background: var(--provider-secondary-bg);
+    }
+    .history-tag.secondary-info {
+      border-color: var(--provider-secondary-border);
+      color: var(--provider-secondary);
     }
 
     .history-retranslate {
@@ -885,6 +1001,8 @@ function generateHistoryPage(configStr, historyEntries, config, videoId, filenam
       .history-meta { flex-wrap: wrap; }
       .history-details { gap: 0.35rem; font-size: 0.8rem; }
       .history-tag, .history-chip { font-size: 0.78rem; }
+      .history-provider-group { padding: 0.2rem 0.4rem; gap: 0.3rem; font-size: 0.78rem; }
+      .history-provider-label { font-size: 0.68rem; }
     }
 
     @media (max-width: 768px) {

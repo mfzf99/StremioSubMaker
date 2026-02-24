@@ -276,9 +276,12 @@ class TranslationEngine {
       // Tier 1: Critical diagnostics
       usedSecondaryProvider: false,
       secondaryProviderName: '',
+      primaryFailureReason: '',
+      secondaryFailureReason: '',   // Error message from secondary provider when it also fails
+      secondaryErrorTypes: [],       // Error types encountered on the secondary provider side
       rateLimitErrors: 0,
       keyRotationRetries: 0,
-      errorTypes: [],
+      errorTypes: [],               // Error types from main provider retry chain
       // Tier 2: Quality/performance
       mismatchDetected: false,
       missingEntries: 0,
@@ -1115,8 +1118,28 @@ class TranslationEngine {
         // Stats: secondary provider was used
         this.translationStats.usedSecondaryProvider = true;
         this.translationStats.secondaryProviderName = this.fallbackProviderName || 'secondary';
+        // Bug 4 fix: store primary failure reason so history card can surface it as a tooltip
+        if (!this.translationStats.primaryFailureReason) {
+          this.translationStats.primaryFailureReason = primaryError?.message || String(primaryError);
+        }
         return { handled: true, text: translated };
       } catch (fallbackError) {
+        // Stats: secondary provider also failed — capture its error details for the history card.
+        // We always flag usage even on failure so the card knows the secondary was attempted.
+        this.translationStats.usedSecondaryProvider = true;
+        this.translationStats.secondaryProviderName = this.fallbackProviderName || 'secondary';
+        if (!this.translationStats.primaryFailureReason) {
+          this.translationStats.primaryFailureReason = primaryError?.message || String(primaryError);
+        }
+        // Capture secondary failure reason (truncated — full message goes on the combined error)
+        if (!this.translationStats.secondaryFailureReason) {
+          this.translationStats.secondaryFailureReason = fallbackError?.message || String(fallbackError);
+        }
+        // Track the secondary provider's classified error type (if any), otherwise tag generically
+        const secondaryErrType = fallbackError?.translationErrorType || 'SECONDARY_FAILED';
+        if (!this.translationStats.secondaryErrorTypes.includes(secondaryErrType)) {
+          this.translationStats.secondaryErrorTypes.push(secondaryErrType);
+        }
         const combined = new Error(`Primary (${this.providerName}) failed: ${primaryError.message || primaryError}\nSecondary (${this.fallbackProviderName || 'fallback'}) failed: ${fallbackError.message || fallbackError}`);
         combined.translationErrorType = 'MULTI_PROVIDER';
         combined.primaryError = primaryError;
@@ -1361,6 +1384,10 @@ class TranslationEngine {
           error.message.includes('No content returned from stream')
         );
         if (streamingRequested && noStreamContent) {
+          // Stats: record that streaming returned empty content and a non-streaming retry is being attempted
+          if (!this.translationStats.errorTypes.includes('EMPTY_STREAM')) {
+            this.translationStats.errorTypes.push('EMPTY_STREAM');
+          }
           await this._rotateToNextKey(`empty-stream retry for batch ${batchIndex + 1}`);
           log.warn(() => `[TranslationEngine] Stream returned no content for batch ${batchIndex + 1}, retrying without streaming with next key`);
           try {
@@ -1583,7 +1610,29 @@ class TranslationEngine {
         log.warn(() => `[TranslationEngine] Native provider ${this.providerName} failed, trying fallback: ${error.message}`);
         try {
           translatedText = await this.fallbackProvider.translateSubtitle(srtContent, 'detected', targetLanguage, null);
+          // Bug 3 fix: set secondary stats (previously missing from native provider fallback path)
+          this.translationStats.usedSecondaryProvider = true;
+          this.translationStats.secondaryProviderName = this.fallbackProviderName || 'secondary';
+          if (!this.translationStats.primaryFailureReason) {
+            this.translationStats.primaryFailureReason = error?.message || String(error);
+          }
+          log.info(() => `[TranslationEngine] Native fallback provider ${this.fallbackProviderName || 'secondary'} succeeded after primary ${this.providerName} failed`);
         } catch (fallbackError) {
+          // Stats: secondary provider also failed — mirror tryFallback tracking for native path
+          this.translationStats.usedSecondaryProvider = true;
+          this.translationStats.secondaryProviderName = this.fallbackProviderName || 'secondary';
+          if (!this.translationStats.primaryFailureReason) {
+            this.translationStats.primaryFailureReason = error?.message || String(error);
+          }
+          if (!this.translationStats.secondaryFailureReason) {
+            this.translationStats.secondaryFailureReason = fallbackError?.message || String(fallbackError);
+          }
+          const secondaryErrType = fallbackError?.translationErrorType;
+          if (secondaryErrType && !this.translationStats.secondaryErrorTypes.includes(secondaryErrType)) {
+            this.translationStats.secondaryErrorTypes.push(secondaryErrType);
+          } else if (!secondaryErrType && !this.translationStats.secondaryErrorTypes.includes('SECONDARY_FAILED')) {
+            this.translationStats.secondaryErrorTypes.push('SECONDARY_FAILED');
+          }
           const combined = new Error(`Primary (${this.providerName}) failed: ${error.message}\nSecondary (${this.fallbackProviderName || 'fallback'}) failed: ${fallbackError.message}`);
           combined.translationErrorType = 'MULTI_PROVIDER';
           throw combined;
