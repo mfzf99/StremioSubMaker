@@ -1639,77 +1639,17 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are an expert localizer and professional subtitle translator specializing in ${targetLabel} subtitle translation. Your goal is to produce natural, precise, broadcast-ready subtitles that feel authentically written in ${targetLabel} for high-end streaming platforms.
+    const promptBody = `You are translating subtitle text to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use appropriate colloquialisms for ${targetLabel}${context ? '\\n7. Use the provided context to ensure consistency' : ''}
 
-READABILITY:
-4. Viewer watches content, not reads — keep it SHORT and PUNCHY
-5. Max 2 lines per subtitle, 42 characters per line (CPL).
-   Split at a natural point using ACTUAL line breaks — do NOT output literal '\n'.
-   ALWAYS use bottom-heavy pyramid shape. NO exceptions.
-
-LINE BREAKING:
-6. Break AFTER punctuation (comma, period, question mark)
-7. Break BEFORE conjunctions (and, but, or) or prepositions
-8. Never separate article from noun (e.g. never split "the" / "car")
-
-FORMATTING:
-9. Sentence case only — capitalize first word and proper nouns
-10. Numbers: spell out zero to ten, digits for 11 and above
-11. Two speakers in one subtitle: use hyphen + space
-    Example: "- Yes I can.
-    - No you can't."
-12. Song lyrics: wrap with ♪ before and after
-13. Audio/sound cues: use square brackets
-    Example: [dramatic music], [door slams], [speaking Spanish]
-
-TRANSLATION QUALITY:
-14. PRIORITIZE and MAINTAIN natural colloquialisms and spoken 
-    patterns native to ${targetLabel} — including modern slang 
-    and loanwords commonly used in everyday speech.
-15. NEVER use formal/textbook phrasing
-16. If direct translation sounds unnatural, rewrite completely — meaning over literal words
-17. Full spelling ONLY for these specific words — tone stays casual and natural:
-- "ni" → "ini"
-- "tu" → "itu"
-- "je" → "saja"
-- "dgn" → "dengan"
-- "yg" → "yang"
-- "utk" → "untuk"
-- "tapi" → KEEP "tapi" (natural BM, acceptable)
-- "Hello" → keep as "Hello", NEVER "Helo"
-- "memang" → KEEP "memang" (natural BM, acceptable)
-- "boleh" → KEEP "boleh" (natural BM, acceptable)
-IMPORTANT: Correcting spelling does NOT mean using formal sentence structure. 
-Keep the sentence flow natural and conversational.
-18. LANGUAGE-SPECIFIC RULES (apply only when relevant):
-- Bahasa Melayu DIALOGUE only: use "saya/awak", never "aku/kamu/anda/kau"
-- For song lyrics: IGNORE pronoun rules — keep natural lyrical flow
-- Bahasa Melayu: embrace common Malay slang naturally:
-  "free" instead of "lapang" (are you free?)
-  "confirm" instead of "pasti"
-  "power" instead of "hebat"
-  "relax" instead of "santai"
-  "boring" instead of "membosankan"
-  "stress" instead of "tertekan"
-  "excited" instead of "teruja"
-- Other languages: apply equivalent natural spoken standards
-19. NEVER translate proper nouns — movie titles, character names, 
-    brand names, place names. Keep them in original language.
-20. KAMI vs KITA (Bahasa Melayu only):
-- "kita" = speaker + listener INCLUDED
-  Use when the group includes the person being spoken to
-  Example: BF to GF → "biarkan kita bersama" (you and I, together)
-- "kami" = speaker + others, listener EXCLUDED
-  Use when the group does NOT include the person being spoken to
-  Example: BF to GF → "kami pergi semalam" (me and the guys, you weren't there)
-- If the context is ambiguous (e.g., "we" in English could mean either), default to "kita" unless the context clearly excludes the listener.
- 
-${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
+${customPromptText ? `ADDITIONAL INSTRUCTIONS:\\n${customPromptText}\\n\\n` : ''}
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
@@ -1717,15 +1657,12 @@ Do not include any timestamps/timecodes.
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
 - Contain ONLY the XML-tagged translated entries
-- Example:
-  <s id="1">Translated line 1 here
-Translated line 2 here</s><s id="2">Short translation</s>
 
 INPUT (${expectedCount} entries):
 
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
@@ -1770,29 +1707,38 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional Netflix subtitle writer translating to ${targetLabel}. Goal: subtitles that feel WRITTEN IN ${targetLabel}, not translated.
+    const promptBody = `You are translating subtitle text to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}
+2. Preserve the "id" field exactly as given with no modification
 3. Return EXACTLY ${expectedCount} entries
-4. Keep text concise; limit to max 2 lines per entry and max 42 characters per line. Split lines at a natural point using \n for new lines
-5. Write like a NETFLIX subtitle writer — short, punchy, natural.
-   Cut unnecessary words. If meaning survives without a word, drop it.
-6. Match tone exactly: casual=casual, angry=angry, sarcastic=sarcastic.
-   Never use formal/textbook phrasing. Adapt idioms so they feel 
-   native to ${targetLabel} speakers, not translated.
-7. Automatically apply the natural colloquialisms, contractions, and spoken patterns native to ${targetLabel}. What sounds natural to a ${targetLabel} native speaker? Use THAT — not a translation
-8. If a direct translation sounds unnatural in ${targetLabel}, rewrite it completely. Meaning > literal words${context ? '\n9. Use the provided context to ensure consistency.' : ''}
+4. Maintain natural dialogue flow with strict and explicit consistency in character gender, pronouns, speech level, and honorifics throughout the batch; If not obvious or explicitly stated in the source text, do your best to get the genders right. If gender is ambiguous, use neutral forms or maintain consistency with context or previous entries.
+5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, people, places, brands). If the source text appears corrupted, nonsensical, or contains only symbols/numbers, return it unchanged
+6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged
 
-${customPromptText ? `ADDITIONAL INSTRUCTIONS:\n${customPromptText}\n\n` : ''}
+ADDITIONAL INSTRUCTIONS:
+You are a professional subtitles translator operating in an automated localization environment. Translate while:
+1. Maintaining perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with a backslash (e.g., \\" ) and use \\n for line breaks within the text field, and ensure no trailing commas after the last entry
+2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
+3. Using concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
+4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
+5. Preserving any existing formatting tags${context ? '\n6. Use the provided context to ensure consistency' : ''}
+
+${customPromptText ? `CUSTOM INSTRUCTIONS:
+${customPromptText}
+
+` : ''}This is an automatic system, DO NOT make any explanations or comments - simply output the translated content.
+Return ONLY the translated content, nothing else. NEVER output markdown.
+Translate to ${targetLabel}.
+
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries.
 Do not include any timestamps/timecodes.
 
-YOUR RESPONSE MUST be a valid, machine-parseable JSON array containing objects with "id" (number) and "text" (string) fields only.
-Example: [{"id":1,"text":"[Translated line 1, max 42 chars]\\n[Translated line 2, max 42 chars]"},{"id":2,"text":"[Short translation]"}]
-FINAL REQUIREMENT: Return ONLY the valid JSON array containing EXACTLY ${expectedCount} entries. No preamble, no markdown, and no closing notes.
+YOUR RESPONSE MUST be a JSON array of objects with "id" (number, 1-indexed) and "text" (string) fields.
+Example: [{"id":1,"text":"translated text"},{"id":2,"text":"translated text"}]
+Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
 
 INPUT (${expectedCount} entries):
 
@@ -2603,4 +2549,3 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 }
 
 module.exports = TranslationEngine;
-
