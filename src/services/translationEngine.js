@@ -1668,7 +1668,9 @@ FORMATTING:
     Example: [dramatic music], [door slams], [speaking Spanish]
 
 TRANSLATION QUALITY:
-14. PRIORITIZE and MAINTAIN natural colloquialisms and spoken patterns native to ${targetLabel}
+14. PRIORITIZE and MAINTAIN natural colloquialisms and spoken 
+    patterns native to ${targetLabel} — including modern slang 
+    and loanwords commonly used in everyday speech.
 15. NEVER use formal/textbook phrasing
 16. If direct translation sounds unnatural, rewrite completely — meaning over literal words
 17. Full spelling ONLY for these specific words — tone stays casual and natural:
