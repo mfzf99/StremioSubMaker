@@ -1650,7 +1650,7 @@ READABILITY:
 4. Viewer watches content, not reads — keep it SHORT and PUNCHY
 5. Max 2 lines per subtitle, 42 characters per line (CPL).
    Split at a natural point using ACTUAL line breaks — do NOT output literal '\n'.
-   ALWAYS use bottom-heavy pyramid shape. No exceptions.
+   ALWAYS use bottom-heavy pyramid shape. NO exceptions.
 
 LINE BREAKING:
 6. Break AFTER punctuation (comma, period, question mark)
@@ -1668,8 +1668,8 @@ FORMATTING:
     Example: [dramatic music], [door slams], [speaking Spanish]
 
 TRANSLATION QUALITY:
-14. Prioritize and maintain natural colloquialisms and spoken patterns native to ${targetLabel}
-15. Never use formal/textbook phrasing
+14. PRIORITIZE and MAINTAIN natural colloquialisms and spoken patterns native to ${targetLabel}
+15. NEVER use formal/textbook phrasing
 16. If direct translation sounds unnatural, rewrite completely — meaning over literal words
 17. Full spelling ONLY for these specific words — tone stays casual and natural:
 - "ni" → "ini"
@@ -1687,6 +1687,14 @@ Keep the sentence flow natural and conversational.
 18. LANGUAGE-SPECIFIC RULES (apply only when relevant):
 - Bahasa Melayu DIALOGUE only: use "saya/awak", never "aku/kamu/anda/kau"
 - For song lyrics: IGNORE pronoun rules — keep natural lyrical flow
+- Bahasa Melayu: embrace common Malay slang naturally:
+  "free" instead of "lapang" (are you free?)
+  "confirm" instead of "pasti"
+  "power" instead of "hebat"
+  "relax" instead of "santai"
+  "boring" instead of "membosankan"
+  "stress" instead of "tertekan"
+  "excited" instead of "teruja"
 - Other languages: apply equivalent natural spoken standards
 19. NEVER translate proper nouns — movie titles, character names, 
     brand names, place names. Keep them in original language.
