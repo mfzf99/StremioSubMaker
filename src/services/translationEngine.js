@@ -1768,9 +1768,9 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Max 2 lines, 42 CPL. ACTUAL line breaks only, DO NOT output the literal string "\\n".
+4. Max 2 lines, 42 CPL. ACTUAL line breaks only, NO "\\n".
 5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms and nuance for ${targetLabel}
+6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
 7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
