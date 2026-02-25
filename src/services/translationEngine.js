@@ -1768,14 +1768,14 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Keep line breaks within each entry
+4. Max 2 lines, 42 CPL. ACTUAL line breaks only, no '\n'.
 5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms for ${targetLabel}
+6. Use appropriate colloquialisms and nuance for ${targetLabel}
 7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
+Do NOT skip, merge, or split entries. NEVER output markdown.
+Do NOT include any timestamps/timecodes.
 
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
@@ -1829,25 +1829,21 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry into ${targetLabel}
 2. Preserve the "id" field exactly as given with no modification
 3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
-5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
-6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
-
-TRANSLATION STYLE:
-1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
-3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
-4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
-5. Preserve any existing formatting tags
+4. Maintain natural dialogue flow for ${targetLabel}
+5. Use appropriate colloquialisms for ${targetLabel}
+6. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
+7. Max 2 lines per subtitle, 42 characters per line (CPL). Split at a natural spoken pause using actual line break character — NEVER output literal backslash-n. Top line MUST be shorter than bottom line. No exceptions
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
 
 YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
 Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
