@@ -1832,18 +1832,17 @@ CONTEXT PROVIDED:
     const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the "id" field exactly as given with no modification
+1. Translate ONLY the "text" field of each entry
+2. PRESERVE the JSON structure exactly: {"id": N, "text": "translated text"}
 3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow for ${targetLabel}
-5. Use appropriate colloquialisms for ${targetLabel}
-6. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-7. Max 2 lines per subtitle, 42 characters per line (CPL). Split at a natural spoken pause using actual line break character — NEVER output literal backslash-n. Top line MUST be shorter than bottom line. No exceptions
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
+4. Max 2 lines, 42 CPL. Use \\n for line breaks; do NOT use actual line breaks in the JSON string.
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
+7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to maintain coherence' : ''}
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
+Do NOT add acknowledgements, explanations, notes, or commentary
+Do NOT skip, merge, or split entries. NEVER output markdown
+Do NOT include any timestamps/timecodes
 
 YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
 Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
