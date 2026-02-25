@@ -1845,6 +1845,7 @@ TRANSLATION STYLE:
 3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
 4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
 5. Preserve any existing formatting tags
+6. Max 2 lines per subtitle, 42 characters per line (CPL). Split at a natural spoken pause using actual line break character — NEVER output literal backslash-n. Top line MUST be shorter than bottom line. No exceptions
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. NEVER output markdown.
