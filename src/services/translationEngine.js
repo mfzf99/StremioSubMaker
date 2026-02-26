@@ -1772,7 +1772,8 @@ CRITICAL RULES:
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
+8. Never translate titles, series names, brands, or proper nouns
+9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
 Do NOT skip, merge, or split entries. NEVER output markdown
@@ -1840,7 +1841,8 @@ CRITICAL RULES:
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
+8. Never translate titles, series names, brands, or proper nouns
+9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
 Do NOT skip, merge, or split entries. NEVER output markdown
