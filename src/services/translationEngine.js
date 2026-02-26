@@ -1831,8 +1831,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are an ELITE subtitle localization expert and master scriptwriter. Translate to ${targetLabel}.
-${contextInstructions}
+    const promptBody = `You are an ELITE linguist, subtitle localization expert, and master scriptwriter. Translate to ${targetLabel}
 
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry.
