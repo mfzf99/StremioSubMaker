@@ -1833,20 +1833,28 @@ CONTEXT PROVIDED:
 
     const promptBody = `You are an ELITE subtitle localization expert and master scriptwriter. Translate to ${targetLabel}.
 ${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry
-2. PRESERVE the JSON structure exactly: {"id": N, "text": "translated text"}
-3. Return EXACTLY ${expectedCount} entries
-4. Max 2 lines, 42 CPL. Use \\n for line breaks; do NOT use actual line breaks in the JSON string.
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate nuance for ${targetLabel}
-7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
-8. Never translate titles, series names, brands, or proper nouns — excluding honorifics for ${targetLabel}
-9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain coherence' : ''}
 
-Do NOT add acknowledgements, explanations, notes, or commentary
-Do NOT skip, merge, or split entries. NEVER output markdown
-Do NOT include any timestamps/timecodes
+CRITICAL RULES:
+1. Translate ONLY the "text" field of each entry.
+2. PRESERVE the JSON structure EXACTLY: {"id": N, "text": "translated text"}
+3. Return EXACTLY ${expectedCount} entries.
+4. Max 2 lines, 42 CPL. MUST USE \\n for line breaks. STRICTLY PROHIBITED: Do NOT use ACTUAL PHYSICAL line breaks inside the JSON string.
+5. Maintain natural dialogue flow for ${targetLabel}.
+6. Use appropriate nuance for ${targetLabel} (capture the exact emotion, tone, and intent).
+7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
+8. NEVER translate titles, series names, brands, or proper nouns — EXCEPT honorifics (MUST TRANSLATE honorifics/titles like 'Miss Zheng' to 'Cik Zheng').
+9. Preserve any existing formatting tags.${context ? '\n10. CONTEXT: Use the provided context to maintain coherence.' : ''}
+
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do NOT skip, merge, or split entries. NEVER output markdown (NO \`\`\`json tags).
+Do NOT include any timestamps/timecodes.
+
+=== EXAMPLES ===
+Input:
+[{"id": 1, "text": "Miss Zheng, I think we should\\ngo to Starbucks."}]
+Output:
+[{"id": 1, "text": "Cik Zheng, saya rasa kita patut\\npergi ke Starbucks."}]
+=== END OF EXAMPLES ===
 
 YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
 Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
@@ -1855,7 +1863,7 @@ INPUT (${expectedCount} entries):
 
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
+OUTPUT (EXACTLY ${expectedCount} entries as JSON array. STRICTLY NO PHYSICAL LINE BREAKS INSIDE STRINGS):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
