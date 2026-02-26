@@ -1771,7 +1771,7 @@ CRITICAL RULES:
 4. Max 2 lines, 42 CPL. Use actual line breaks; do NOT output the literal characters '\n'
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
-7. Use standard Malay pronouns: 'saya' (I/me), 'awak' (you), and correctly distinguish 'kita' (inclusive) from 'kami' (exclusive)
+7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
 8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
@@ -1839,7 +1839,7 @@ CRITICAL RULES:
 4. Max 2 lines, 42 CPL. Use \\n for line breaks; do NOT use actual line breaks in the JSON string.
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
-7. Use standard Malay pronouns: 'saya' (I/me), 'awak' (you), and correctly distinguish 'kita' (inclusive) from 'kami' (exclusive)
+7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
 8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
