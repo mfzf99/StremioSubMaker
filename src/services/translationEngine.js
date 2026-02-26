@@ -1838,8 +1838,8 @@ CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry.
 2. PRESERVE the JSON structure EXACTLY: {"id": N, "text": "translated text"}. NEVER alter, reorder, or invent the "id" integers.
 3. Return EXACTLY ${expectedCount} entries. NEVER skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. DO NOT DELETE IT.
-4. Max 2 lines, 42 CPL. MUST USE \\n for line breaks. STRICTLY PROHIBITED: Do NOT use ACTUAL PHYSICAL line breaks inside the JSON string for ${targetLabel}.
-5. Maintain natural dialogue flow for ${targetLabel}.
+4. Max 2 lines, 42 CPL. MUST USE \\n for line breaks. STRICTLY PROHIBITED: Do NOT use ACTUAL PHYSICAL line breaks inside the JSON string.
+5. CONCISENESS: Maintain natural, punchy dialogue for ${targetLabel}. Condense wordy phrasing to be as short as the English original without losing the core meaning.
 6. Use appropriate nuance for ${targetLabel} (capture the exact emotion, tone, and intent).
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
 8. NEVER translate titles, series names, brands, or proper nouns — EXCEPT honorifics (MUST TRANSLATE honorifics/titles like 'Miss Zheng' to 'Cik Zheng').
