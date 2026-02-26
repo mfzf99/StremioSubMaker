@@ -1843,7 +1843,7 @@ CRITICAL RULES:
 6. Use appropriate nuance for ${targetLabel} (capture the exact emotion, tone, and intent).
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
 8. NEVER translate titles, series names, brands, or proper nouns — EXCEPT honorifics (MUST TRANSLATE honorifics/titles like 'Miss Zheng' to 'Cik Zheng').
-9. Preserve any existing formatting tags.${context ? '\n10. CONTEXT: Use the provided context to maintain coherence.' : ''}
+9. CLEAN FORMATTING: Preserve ONLY basic tags like <i> and <b>. STRIP OUT and REMOVE any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. CONTEXT: Use the provided context to maintain coherence.' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do NOT skip, merge, or split entries. NEVER output markdown (NO \`\`\`json tags).
@@ -1851,9 +1851,14 @@ Do NOT include any timestamps/timecodes.
 
 === EXAMPLES ===
 Input:
-[{"id": 1, "text": "Miss Zheng, I think we should\\ngo to Starbucks."}]
+[{"id": 1, "text": "Miss Zheng, I think we should\\ngo to Starbucks.</i>"}]
 Output:
-[{"id": 1, "text": "Cik Zheng, saya rasa kita patut\\npergi ke Starbucks."}]
+[{"id": 1, "text": "Cik Zheng, saya rasa kita patut\\npergi ke Starbucks.</i>"}]
+
+Input:
+[{"id": 2, "text": "(What should I do now?)lp"}]
+Output:
+[{"id": 2, "text": "(Apa saya patut buat sekarang?)"}]
 === END OF EXAMPLES ===
 
 YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
