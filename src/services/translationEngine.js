@@ -1762,7 +1762,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+    const promptBody = `You are an ELITE subtitle localization expert and master scriptwriter. Translate to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
@@ -1831,7 +1831,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+    const promptBody = `You are an ELITE subtitle localization expert and master scriptwriter. Translate to ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry
