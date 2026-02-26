@@ -1836,8 +1836,8 @@ ${contextInstructions}
 
 CRITICAL RULES:
 1. Translate ONLY the "text" field of each entry.
-2. PRESERVE the JSON structure EXACTLY: {"id": N, "text": "translated text"}
-3. Return EXACTLY ${expectedCount} entries.
+2. PRESERVE the JSON structure EXACTLY: {"id": N, "text": "translated text"}. NEVER alter, reorder, or invent the "id" integers.
+3. Return EXACTLY ${expectedCount} entries. NEVER skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. DO NOT DELETE IT.
 4. Max 2 lines, 42 CPL. MUST USE \\n for line breaks. STRICTLY PROHIBITED: Do NOT use ACTUAL PHYSICAL line breaks inside the JSON string.
 5. Maintain natural dialogue flow for ${targetLabel}.
 6. Use appropriate nuance for ${targetLabel} (capture the exact emotion, tone, and intent).
@@ -1859,6 +1859,11 @@ Input:
 [{"id": 2, "text": "(What should I do now?)lp"}]
 Output:
 [{"id": 2, "text": "(Apa saya patut buat sekarang?)"}]
+
+Input:
+[{"id": 3, "text": "..."}]
+Output:
+[{"id": 3, "text": "..."}]
 === END OF EXAMPLES ===
 
 YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
