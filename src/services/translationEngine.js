@@ -1771,7 +1771,8 @@ CRITICAL RULES:
 4. Max 2 lines, 42 CPL. Use actual line breaks; do NOT output the literal characters '\n'
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
-7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to maintain coherence' : ''}
+7. Use polite pronouns: 'saya' for 'I/me', 'awak' for 'you'
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
 Do NOT skip, merge, or split entries. NEVER output markdown
@@ -1838,7 +1839,8 @@ CRITICAL RULES:
 4. Max 2 lines, 42 CPL. Use \\n for line breaks; do NOT use actual line breaks in the JSON string.
 5. Maintain natural dialogue flow for ${targetLabel}
 6. Use appropriate colloquialisms, nuance, and slang for ${targetLabel}
-7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to maintain coherence' : ''}
+7. Use polite pronouns: 'saya' for 'I/me', 'awak' for 'you'
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to maintain coherence' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
 Do NOT skip, merge, or split entries. NEVER output markdown
