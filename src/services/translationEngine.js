@@ -1838,7 +1838,7 @@ CRITICAL RULES:
 1. Translate only the "text" field of each entry.
 2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}. Never alter, reorder, or invent the "id" integers.
 3. Return exactly ${expectedCount} entries. Never skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. Do not delete it.
-4. Maximum 2 lines, 42 charaters per line. Must use \\n for line breaks. Do not use actual physical line breaks inside the JSON string.
+4. Maximum 2 lines, 42 characters per line. Must use \\n for line breaks. Do not use actual physical line breaks inside the JSON string.
 5. Maintain natural dialogue flow for ${targetLabel}.
 6. Use accurate nuance for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
