@@ -1762,28 +1762,28 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
+    const promptBody = `<system_instructions>
+  <role>
+    You are an expert subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
+  </role>
+
+  <guidelines>
+    1. Tone & Flow: The dialogue must sound like real people talking, not a textbook translation.
+    2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
+    3. Localization: Translate personal titles and honorifics to their natural equivalents (e.g., translate 'Miss' to 'Cik', 'Mr.' to 'Encik').
+    4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
+  </guidelines>
+
+  <constraints>
+    - DO NOT translate show titles, brand names, or geographical locations.
+    - DO NOT output any conversational filler, acknowledgments, or explanations.
+    - DO NOT alter the requested XML output structure.
+  </constraints>
+</system_instructions>
+
 ${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. Return EXACTLY ${expectedCount} tagged entries
-4. Max 2 lines per subtitle, 42 characters per line
-5. Use 'saya' for 'I/me' and 'awak' for 'you' for ${targetLabel}
-6. Use accurate nuance for ${targetLabel}
-7. Never translate titles, brands, places, except honorifics for ${targetLabel}
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure coherence and character consistency throughout the scene' : ''}
-
-Do NOT add acknowledgements, explanations, notes, or commentary
-Do NOT skip, merge, or split entries. NEVER output markdown
-Do NOT include any timestamps/timecodes
-
-YOUR RESPONSE MUST:
-- Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain ONLY the XML-tagged translated entries
 
 INPUT (${expectedCount} entries):
-
 ${batchText}
 
 OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
