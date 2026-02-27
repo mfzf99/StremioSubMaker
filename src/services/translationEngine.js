@@ -1843,7 +1843,7 @@ CRITICAL RULES:
 6. Use accurate nuance for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
 8. Never translate titles, series names, brands, or proper nouns — except honorifics.
-9. Preserve only basic tags like <i> and <b>. Strip out and remove any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. Use the provided context to maintain coherence.' : ''}
+9. Preserve only basic tags like <i> and <b>. Strip out and remove any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. Use the provided context to maintain character and coherence.' : ''}
 
 Do not add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. Never output markdown (no \`\`\`json tags).
