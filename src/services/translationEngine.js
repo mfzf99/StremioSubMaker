@@ -131,7 +131,7 @@ function getBatchSizeForModel(model) {
   }
 
   // Default batch size for unknown models
-  return 100;
+  return 30;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -1762,30 +1762,30 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator specializing in Movies, Drama, and Anime.
-Translate the following English subtitles into natural, conversational ${targetLabel}.
-
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 ${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Max 2 lines. 42 characters per line. Keep line breaks within each entry
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use accurate nuance for ${targetLabel}
+7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure character and coherence consistency' : ''}
 
-CRITICAL TRANSLATION RULES:
-1.  **Natural Flow & Coherence:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Ensure the dialogue flows logically and smoothly from the provided context entries.
-2.  **Character Voice:** Adapt the tone, slang, and vocabulary to fit the speaker's personality, age, and relationship. Use 'saya/awak' for formal/neutral settings, but 'aku/kau' for close friends, rivals, or aggressive dialogue.
-3.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
-4.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
-5.  **Preservation:** Never translate names, brands, or titles. Keep honorifics (e.g., -san, -kun) if translating from Anime context.
-6.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
-    Format: <s id="N">Line 1\nLine 2</s>
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
 
-TECHNICAL RULES:
-- No acknowledgments, no markdown code blocks, no explanations.
-- Output MUST start with the correct <s id="N"> sequence and end with </s>.
-- Do not include timestamps or original English text in output.
+YOUR RESPONSE MUST:
+- Start with <s id="1"> and end with </s> after entry ${expectedCount}
+- Contain ONLY the XML-tagged translated entries
 
-Input (${expectedCount} entries):
+INPUT (${expectedCount} entries):
+
 ${batchText}
 
-Output (exactly ${expectedCount} XML-tagged entries):`;
-
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
@@ -1829,49 +1829,34 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
 ${contextInstructions}
-
 CRITICAL RULES:
-1. Translate only the "text" field of each entry.
-2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}. Never alter, reorder, or invent the "id" integers.
-3. Return exactly ${expectedCount} entries. Never skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. Do not delete it.
-4. Maximum 2 lines, 42 characters per line. Must use \\n for line breaks. Do not use actual physical line breaks inside the JSON string.
-5. Maintain natural dialogue flow for ${targetLabel}.
-6. Use accurate nuance for ${targetLabel}
-7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
-8. Never translate titles, series names, brands, or proper nouns — except honorifics.
-9. Preserve only basic tags like <i> and <b>. Strip out and remove any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. Use the provided context to maintain character and coherence.' : ''}
+1. Translate ONLY the "text" field of each entry into ${targetLabel}
+2. Preserve the "id" field exactly as given with no modification
+3. Return EXACTLY ${expectedCount} entries
+4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
+5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
+6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
 
-Do not add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. Never output markdown (no \`\`\`json tags).
-Do not include any timestamps/timecodes.
+TRANSLATION STYLE:
+1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
+2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
+3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
+4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
+5. Preserve any existing formatting tags
 
-=== EXAMPLES ===
-Input:
-[{"id": 1, "text": "Miss Zheng, I think we should\\ngo to Starbucks.</i>"}]
-Output:
-[{"id": 1, "text": "Cik Zheng, saya rasa kita patut\\npergi ke Starbucks.</i>"}]
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
 
-Input:
-[{"id": 2, "text": "(What should I do now?)lp"}]
-Output:
-[{"id": 2, "text": "(Apa saya patut buat sekarang?)"}]
+YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
+Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
 
-Input:
-[{"id": 3, "text": "..."}]
-Output:
-[{"id": 3, "text": "..."}]
-=== END OF EXAMPLES ===
-
-Your response must be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return only the JSON array with exactly ${expectedCount} entries, no other text.
-
-Input (${expectedCount} entries):
+INPUT (${expectedCount} entries):
 
 ${batchText}
 
-Output (exactly ${expectedCount} entries as JSON array. Strictly no physical line breaks inside strings):`;
+OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
