@@ -1768,10 +1768,10 @@ CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
-4. Max 2 lines per subtitle, 42 CPL.
+4. Max 2 lines per subtitle, 42 characters per line
 5. Use 'saya' for 'I/me' and 'awak' for 'you' for ${targetLabel}
 6. Use accurate nuance for ${targetLabel}
-7. Never translate titles, brands, places for ${targetLabel}
+7. Never translate titles, brands, places, except honorifics for ${targetLabel}
 8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure coherence and character consistency throughout the scene' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
