@@ -112,26 +112,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 30;
+    return 50;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 30;
+    return 50;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 30;
+    return 50;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 30;
+    return 50;
   }
 
   // Default batch size for unknown models
-  return 30;
+  return 50;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -196,7 +196,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 30;
+    const JSON_MAX_BATCH_SIZE = 50;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
@@ -1770,8 +1770,8 @@ CONTEXT PROVIDED:
   <guidelines>
     1. Tone & Flow: The dialogue must sound like real people talking, not a textbook translation.
     2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
-    3. Localization: Translate personal titles and honorifics to their natural equivalents (e.g., translate 'Miss' to 'Cik', 'Mr.' to 'Encik').
-    4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
+    3. Localization: Translate personal titles and honorifics to their natural equivalents.
+    4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle.
   </guidelines>
 
   <constraints>
