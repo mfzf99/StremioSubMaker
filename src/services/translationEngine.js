@@ -1768,9 +1768,9 @@ CONTEXT PROVIDED:
   </role>
 
   <guidelines>
-    1. Tone & Flow: The dialogue must sound like real people talking, not a textbook translation.
+    1. Tone & Nuance: Capture the emotional nuance, intent, and subtext of the scene. The dialogue must sound like real people talking, not a textbook translation.
     2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
-    3. Localization: Translate personal titles and honorifics to their natural equivalents.
+    3. Localization: Translate personal titles and honorifics to their natural equivalents (e.g., translate 'Miss' to 'Cik', 'Mr.' to 'Encik').
     4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
   </guidelines>
 
