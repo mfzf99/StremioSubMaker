@@ -112,26 +112,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 400;
+    return 100;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 200;
+    return 100;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 200;
+    return 100;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 250;
+    return 100;
   }
 
   // Default batch size for unknown models
-  return 250;
+  return 100;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -1762,32 +1762,33 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are an ELITE subtitle localization expert and master scriptwriter. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 ${contextInstructions}
+
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. Return EXACTLY ${expectedCount} tagged entries
-4. Max 2 lines, 42 CPL. Use actual line breaks; do NOT output the literal characters '\n'
+2. Preserve the XML tags exactly: <s id="N">translated text</s>
+3. Return exactly ${expectedCount} tagged entries
+4. Maximum 2 lines, 42 characters per line. Use actual line breaks; do not output the literal characters '\n'
 5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate nuance for ${targetLabel}
+6. Use accurate nuance for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
 8. Never translate titles, series names, brands, or proper nouns — excluding honorifics for ${targetLabel}
-9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain coherence' : ''}
+9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain character and coherence' : ''}
 
-Do NOT add acknowledgements, explanations, notes, or commentary
-Do NOT skip, merge, or split entries. NEVER output markdown
-Do NOT include any timestamps/timecodes
+Do not add acknowledgements, explanations, notes, or commentary
+Do not skip, merge, or split entries. Never output markdown
+Do not include any timestamps/timecodes
 
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain ONLY the XML-tagged translated entries
+- Contain only the XML-tagged translated entries
 
-INPUT (${expectedCount} entries):
+Input (${expectedCount} entries):
 
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+Output (exactly ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
