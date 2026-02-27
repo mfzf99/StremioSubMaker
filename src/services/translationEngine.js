@@ -1777,7 +1777,7 @@ CRITICAL TRANSLATION RULES:
 
 TECHNICAL RULES:
 - No acknowledgments, no markdown code blocks, no explanations.
-- Output MUST start with <s id="${firstId}"> and end with </s>.
+- Output MUST start with the correct <s id="N"> sequence and end with </s>.
 - Do not include timestamps or original English text in output.
 
 Input (${expectedCount} entries):
