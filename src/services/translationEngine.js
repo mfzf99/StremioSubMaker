@@ -1831,23 +1831,23 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are an ELITE linguist, subtitle localization expert, and master scriptwriter. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 ${contextInstructions}
 
 CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry.
-2. PRESERVE the JSON structure EXACTLY: {"id": N, "text": "translated text"}. NEVER alter, reorder, or invent the "id" integers.
-3. Return EXACTLY ${expectedCount} entries. NEVER skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. DO NOT DELETE IT.
-4. Max 2 lines, 42 CPL. MUST USE \\n for line breaks. STRICTLY PROHIBITED: Do NOT use ACTUAL PHYSICAL line breaks inside the JSON string.
-5. CONCISENESS: Maintain natural, punchy dialogue for ${targetLabel}. Condense wordy phrasing to be as short as the English original without losing the core meaning.
-6. ACCURATE NUANCE: Use accurate nuance for ${targetLabel} (capture the exact emotion, tone, and intent).
+1. Translate only the "text" field of each entry.
+2. Preserve the JSON structure exactly: {"id": N, "text": "translated text"}. Never alter, reorder, or invent the "id" integers.
+3. Return exactly ${expectedCount} entries. Never skip, drop, or combine entries. If a line is short, empty, or just symbols (e.g., "...", "Oh"), translate it or keep it as-is. Do not delete it.
+4. Maximum 2 lines, 42 charaters per line. Must use \\n for line breaks. Do not use actual physical line breaks inside the JSON string.
+5. Maintain natural dialogue flow for ${targetLabel}.
+6. Use accurate nuance for ${targetLabel}
 7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}.
-8. NEVER translate titles, series names, brands, or proper nouns — EXCEPT honorifics (MUST TRANSLATE honorifics/titles like 'Miss Zheng' to 'Cik Zheng').
-9. CLEAN FORMATTING: Preserve ONLY basic tags like <i> and <b>. STRIP OUT and REMOVE any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. CONTEXT: Use the provided context to maintain coherence.' : ''}
+8. Never translate titles, series names, brands, or proper nouns — except honorifics.
+9. Preserve only basic tags like <i> and <b>. Strip out and remove any other weird codes, symbols, or broken HTML tags (e.g., </p>, \\N, lp).${context ? '\n10. Use the provided context to maintain coherence.' : ''}
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do NOT skip, merge, or split entries. NEVER output markdown (NO \`\`\`json tags).
-Do NOT include any timestamps/timecodes.
+Do not add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. Never output markdown (no \`\`\`json tags).
+Do not include any timestamps/timecodes.
 
 === EXAMPLES ===
 Input:
@@ -1866,14 +1866,14 @@ Output:
 [{"id": 3, "text": "..."}]
 === END OF EXAMPLES ===
 
-YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
+Your response must be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
+Return only the JSON array with exactly ${expectedCount} entries, no other text.
 
-INPUT (${expectedCount} entries):
+Input (${expectedCount} entries):
 
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array. STRICTLY NO PHYSICAL LINE BREAKS INSIDE STRINGS):`;
+Output (exactly ${expectedCount} entries as JSON array. Strictly no physical line breaks inside strings):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
