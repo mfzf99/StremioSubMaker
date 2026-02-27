@@ -112,26 +112,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 50;
+    return 30;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 50;
+    return 30;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 30;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 50;
+    return 30;
   }
 
   // Default batch size for unknown models
-  return 50;
+  return 30;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -1771,7 +1771,7 @@ CONTEXT PROVIDED:
     1. Tone & Flow: The dialogue must sound like real people talking, not a textbook translation.
     2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
     3. Localization: Translate personal titles and honorifics to their natural equivalents.
-    4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle.
+    4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
   </guidelines>
 
   <constraints>
