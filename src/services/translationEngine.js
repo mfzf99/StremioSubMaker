@@ -1762,33 +1762,29 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator specializing in Movies, Drama, and Anime.
+Translate the following English subtitles into natural, conversational ${targetLabel}.
+
 ${contextInstructions}
 
-CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag
-2. Preserve the XML tags exactly: <s id="N">translated text</s>
-3. Return exactly ${expectedCount} tagged entries
-4. Maximum 2 lines, 42 characters per line. Use actual line breaks; do not output the literal characters '\n'
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use accurate nuance for ${targetLabel}
-7. Use 'saya' (I/me) and 'awak' (you) for ${targetLabel}
-8. Never translate titles, series names, brands, or proper nouns — excluding honorifics for ${targetLabel}
-9. Preserve any existing formatting tags${context ? '\n10. Use the provided context to maintain character and coherence' : ''}
+CRITICAL TRANSLATION RULES:
+1.  **Natural Flow:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Use 'saya/awak' for formal/neutral settings, but 'aku/kau' for close friends, rivals, or aggressive dialogue.
+2.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
+3.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
+4.  **Preservation:** Never translate names, brands, or titles. Keep honorifics (e.g., -san, -kun) if translating from Anime context.
+5.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
+    Format: <s id="N">Line 1\nLine 2</s>
 
-Do not add acknowledgements, explanations, notes, or commentary
-Do not skip, merge, or split entries. Never output markdown
-Do not include any timestamps/timecodes
-
-YOUR RESPONSE MUST:
-- Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain only the XML-tagged translated entries
+TECHNICAL RULES:
+- No acknowledgments, no markdown code blocks, no explanations.
+- Output MUST start with <s id="${firstId}"> and end with </s>.
+- Do not include timestamps or original English text in output.
 
 Input (${expectedCount} entries):
-
 ${batchText}
 
 Output (exactly ${expectedCount} XML-tagged entries):`;
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
