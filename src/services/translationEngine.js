@@ -1771,11 +1771,12 @@ CRITICAL RULES:
 4. Max 2 lines per subtitle, 42 CPL. Split at natural spoken pause using ACTUAL line break — NEVER output literal '\n'
 5. Maintain natural dialogue flow for ${targetLabel}. Use 'saya' for 'I/me' and 'awak' for 'you'
 6. Use accurate nuance for ${targetLabel}
-7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency of the character and coherence throughout the scene' : ''}
+7. Never translate titles, brands, places for ${targetLabel}
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure coherence and character consistency throughout the scene' : ''}
 
 Do NOT add acknowledgements, explanations, notes, or commentary
-Do not skip, merge, or split entries. NEVER output markdown
-Do not include any timestamps/timecodes
+Do NOT skip, merge, or split entries. NEVER output markdown
+Do NOT include any timestamps/timecodes
 
 YOUR RESPONSE MUST:
 - Start with <s id="1"> and end with </s> after entry ${expectedCount}
