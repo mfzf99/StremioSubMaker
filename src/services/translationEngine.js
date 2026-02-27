@@ -1768,11 +1768,12 @@ Translate the following English subtitles into natural, conversational ${targetL
 ${contextInstructions}
 
 CRITICAL TRANSLATION RULES:
-1.  **Natural Flow:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Use 'saya/awak' for formal/neutral settings, but 'aku/kau' for close friends, rivals, or aggressive dialogue.
-2.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
-3.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
-4.  **Preservation:** Never translate names, brands, or titles. Keep honorifics (e.g., -san, -kun) if translating from Anime context.
-5.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
+1.  **Natural Flow & Coherence:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Ensure the dialogue flows logically and smoothly from the provided context entries.
+2.  **Character Voice:** Adapt the tone, slang, and vocabulary to fit the speaker's personality, age, and relationship. Use 'saya/awak' for formal/neutral settings, but 'aku/kau' for close friends, rivals, or aggressive dialogue.
+3.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
+4.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
+5.  **Preservation:** Never translate names, brands, or titles. Keep honorifics (e.g., -san, -kun) if translating from Anime context.
+6.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
     Format: <s id="N">Line 1\nLine 2</s>
 
 TECHNICAL RULES:
