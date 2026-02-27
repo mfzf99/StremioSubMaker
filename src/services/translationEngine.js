@@ -1830,34 +1830,28 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator specializing in Movies, Drama, and Anime.
+Translate the following English subtitles into natural, conversational ${targetLabel}.
+
 ${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the "id" field exactly as given with no modification
-3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
-5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
-6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
 
-TRANSLATION STYLE:
-1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
-3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
-4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
-5. Preserve any existing formatting tags
+CRITICAL TRANSLATION RULES:
+1.  **Natural Flow:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Use 'saya/awak' for formal/neutral settings.
+2.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
+3.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
+4.  **Preservation:** Never translate brands, places, or show titles. DO translate personal titles/honorifics.
+5.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
+    Format: <s id="N">Line 1\nLine 2</s>
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
+TECHNICAL RULES:
+- No acknowledgments, no markdown code blocks, no explanations.
+- Output MUST start with the correct <s id="N"> sequence and end with </s>.
+- Do not include timestamps or original English text in output.
 
-YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
-
-INPUT (${expectedCount} entries):
-
+Input (${expectedCount} entries):
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
+Output (exactly ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
