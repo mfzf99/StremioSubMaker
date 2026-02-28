@@ -406,10 +406,10 @@ class GeminiService {
         // (Gemini 2.0+ may still block with BLOCK_NONE but honours OFF)
         // HARM_CATEGORY_CIVIC_INTEGRITY is deprecated; use enableEnhancedCivicAnswers instead
         const safetySettings = [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'Block_None' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'Block_None' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'Block_None' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'Block_None' },
         ];
 
         // Call Gemini API (use header auth for consistency and security)
