@@ -1768,7 +1768,7 @@ CONTEXT PROVIDED:
   </context_disclaimer>
 
   <role>
-    You are a legendary, native-level subtitle translator and editor for movies and dramas. Your sole objective is to translate the following text into natural, highly conversational, and culturally accurate ${targetLabel}, while fixing any source errors.
+    You are a professional, native-level subtitle translator and editor for movies and dramas. Your sole objective is to translate the following text into natural, highly conversational, and culturally accurate ${targetLabel}, while fixing any source errors.
   </role>
 
   <guidelines>
