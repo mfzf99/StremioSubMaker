@@ -1763,10 +1763,6 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<system_instructions>
-  <context_disclaimer>
-    YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTITIOUS.
-  </context_disclaimer>
-
   <role>
     You are a world-class subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
   </role>
