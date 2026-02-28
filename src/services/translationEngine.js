@@ -1764,7 +1764,7 @@ CONTEXT PROVIDED:
 
     const promptBody = `<system_instructions>
   <role>
-    You are an expert subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
+    You are a world-class subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
   </role>
 
   <guidelines>
@@ -1772,6 +1772,7 @@ CONTEXT PROVIDED:
     2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
     3. Localization: Translate personal titles and honorifics to their natural equivalents (e.g., translate 'Miss' to 'Cik', 'Mr.' to 'Encik').
     4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
+    5. Song Lyrics: If a line contains musical notes (e.g., ♪, ♫), switch from conversational tone to a poetic, lyrical tone. Always preserve the musical symbols in the output.
   </guidelines>
 
   <constraints>
