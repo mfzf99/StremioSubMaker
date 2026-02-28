@@ -866,38 +866,8 @@ class TranslationEngine {
 
     const fullBatchText = this.prepareBatchContent(entries, null);
 
-    const promptForCache = this.createPromptForWorkflow(fullBatchText, targetLanguage, customPrompt, entries.length, null, 0, 1);
-
-    let actualTokenCount = null;
-    try {
-      actualTokenCount = await this.gemini.countTokensForTranslation(fullBatchText, targetLanguage, promptForCache);
-    } catch (err) {
-      log.debug(() => ['[TranslationEngine] Single-batch token count failed, using estimate:', err.message]);
-    }
-
-    let estimatedTokens = actualTokenCount;
-    if (!estimatedTokens) {
-      try {
-        const { userPrompt } = this.gemini.buildUserPrompt(fullBatchText, targetLanguage, promptForCache);
-        estimatedTokens = this.safeEstimateTokens(userPrompt);
-      } catch (estimateErr) {
-        log.debug(() => ['[TranslationEngine] Single-batch prompt estimation failed, falling back:', estimateErr.message]);
-        estimatedTokens = this.safeEstimateTokens(fullBatchText + (promptForCache || ''));
-      }
-    }
-
-    // Dynamic chunk sizing: keep each chunk comfortably under the max token limit
-    const softLimit = Math.max(1000, SINGLE_BATCH_TOKEN_SOFT_LIMIT);
-    let chunkCount = Math.max(1, Math.ceil(estimatedTokens / softLimit));
-    // Never create more chunks than entries (prevents empty chunks on tiny files)
-    chunkCount = Math.min(chunkCount, Math.max(1, entries.length));
-
-    if (chunkCount > 1) {
-      const basis = actualTokenCount ? 'actual' : 'estimated';
-      log.info(() => `[TranslationEngine] Single-batch token split: ${estimatedTokens} tokens (${basis}) -> ${chunkCount} chunks (limit ~${SINGLE_BATCH_MAX_TOKENS_PER_CHUNK}/chunk)`);
-    }
-
-    const chunks = chunkCount > 1 ? this.splitIntoChunks(entries, chunkCount) : [entries];
+    // Use configured batchSize for chunking (same as standard batch mode)
+    const chunks = this.createBatches(entries, this.batchSize);
     // Stats: update actual chunk count (may differ from the initial batchCount=1 set by caller)
     this.translationStats.batchCount = chunks.length;
     const translatedEntries = [];
