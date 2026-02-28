@@ -112,26 +112,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 30;
+    return 400;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 30;
+    return 200;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 30;
+    return 200;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 30;
+    return 250;
   }
 
   // Default batch size for unknown models
-  return 30;
+  return 250;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -196,7 +196,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 30;
+    const JSON_MAX_BATCH_SIZE = 200;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
@@ -866,8 +866,38 @@ class TranslationEngine {
 
     const fullBatchText = this.prepareBatchContent(entries, null);
 
-    // Use configured batchSize for chunking (same as standard batch mode)
-    const chunks = this.createBatches(entries, this.batchSize);
+    const promptForCache = this.createPromptForWorkflow(fullBatchText, targetLanguage, customPrompt, entries.length, null, 0, 1);
+
+    let actualTokenCount = null;
+    try {
+      actualTokenCount = await this.gemini.countTokensForTranslation(fullBatchText, targetLanguage, promptForCache);
+    } catch (err) {
+      log.debug(() => ['[TranslationEngine] Single-batch token count failed, using estimate:', err.message]);
+    }
+
+    let estimatedTokens = actualTokenCount;
+    if (!estimatedTokens) {
+      try {
+        const { userPrompt } = this.gemini.buildUserPrompt(fullBatchText, targetLanguage, promptForCache);
+        estimatedTokens = this.safeEstimateTokens(userPrompt);
+      } catch (estimateErr) {
+        log.debug(() => ['[TranslationEngine] Single-batch prompt estimation failed, falling back:', estimateErr.message]);
+        estimatedTokens = this.safeEstimateTokens(fullBatchText + (promptForCache || ''));
+      }
+    }
+
+    // Dynamic chunk sizing: keep each chunk comfortably under the max token limit
+    const softLimit = Math.max(1000, SINGLE_BATCH_TOKEN_SOFT_LIMIT);
+    let chunkCount = Math.max(1, Math.ceil(estimatedTokens / softLimit));
+    // Never create more chunks than entries (prevents empty chunks on tiny files)
+    chunkCount = Math.min(chunkCount, Math.max(1, entries.length));
+
+    if (chunkCount > 1) {
+      const basis = actualTokenCount ? 'actual' : 'estimated';
+      log.info(() => `[TranslationEngine] Single-batch token split: ${estimatedTokens} tokens (${basis}) -> ${chunkCount} chunks (limit ~${SINGLE_BATCH_MAX_TOKENS_PER_CHUNK}/chunk)`);
+    }
+
+    const chunks = chunkCount > 1 ? this.splitIntoChunks(entries, chunkCount) : [entries];
     // Stats: update actual chunk count (may differ from the initial batchCount=1 set by caller)
     this.translationStats.batchCount = chunks.length;
     const translatedEntries = [];
@@ -1801,28 +1831,34 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator specializing in Movies, Drama, and Anime.
-Translate the following English subtitles into natural, conversational ${targetLabel}.
-
+    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
 ${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the "text" field of each entry into ${targetLabel}
+2. Preserve the "id" field exactly as given with no modification
+3. Return EXACTLY ${expectedCount} entries
+4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
+5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
+6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
 
-CRITICAL TRANSLATION RULES:
-1.  **Natural Flow:** Use 'Bahasa Melayu Sembang' (Conversational Malay). Use 'saya/awak' for formal/neutral settings.
-2.  **Character Limit:** Max 42 characters per line. If the Malay translation is too long, PARAPHRASE. Do not sacrifice meaning, but keep it concise.
-3.  **Line Breaks:** Max 2 lines per tag. Use a physical line break (Enter key) to separate lines within the <s> tag.
-4.  **Preservation:** Never translate brands, places, or show titles. DO translate personal titles/honorifics.
-5.  **XML Integrity:** Return EXACTLY ${expectedCount} entries.
-    Format: <s id="N">Line 1\nLine 2</s>
+TRANSLATION STYLE:
+1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
+2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
+3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
+4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
+5. Preserve any existing formatting tags
 
-TECHNICAL RULES:
-- No acknowledgments, no markdown code blocks, no explanations.
-- Output MUST start with the correct <s id="N"> sequence and end with </s>.
-- Do not include timestamps or original English text in output.
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
 
-Input (${expectedCount} entries):
+YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
+Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
+
+INPUT (${expectedCount} entries):
+
 ${batchText}
 
-Output (exactly ${expectedCount} XML-tagged entries):`;
+OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
