@@ -1768,8 +1768,8 @@ CONTEXT PROVIDED:
   </role>
 
   <guidelines>
-    1. Tone & Nuance: Capture the emotional nuance, intent, and subtext of the scene. The dialogue must sound like real people talking, not a textbook translation.
-    2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you'.
+    1. Tone, Nuance & Controlled Slang: Capture the emotional nuance and intent. Use everyday colloquial Malay (Bahasa Pasar) and natural conversational slang (e.g., 'dah', 'nak', 'kat', 'jom', 'lah', 'kan') to completely eliminate textbook stiffness. STRICTLY AVOID extreme internet, 'rempit', or overly aggressive slang.
+    2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you' in spoken dialogue. EXCEPTION: For song lyrics (♪), you may use poetic pronouns (e.g., 'aku/kau', 'diriku/dirimu').
     3. Localization: Translate personal titles and honorifics to their natural equivalents (e.g., translate 'Miss' to 'Cik', 'Mr.' to 'Encik').
     4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
     5. Song Lyrics: If a line contains musical notes (e.g., ♪, ♫), switch from conversational tone to a poetic, lyrical tone. Always preserve the musical symbols in the output.
