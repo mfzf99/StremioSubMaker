@@ -1764,11 +1764,11 @@ CONTEXT PROVIDED:
 
     const promptBody = `<system_instructions>
   <role>
-    You are a world-class subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
+    You are a legendary subtitle translator. Translate the following text into natural and conversational ${targetLabel}.
   </role>
 
   <guidelines>
-    1. Tone, Nuance & Controlled Slang: Capture the emotional nuance and intent. Use everyday colloquial Malay (Bahasa Pasar) and natural conversational slang to completely eliminate textbook stiffness.
+    1. Tone, Nuance & Slang: Capture the emotional nuance and intent. Use everyday colloquial and natural conversational slang to completely eliminate textbook stiffness.
     2. Pronouns: Strictly use 'saya' for 'I/me' and 'awak' for 'you' in spoken dialogue. EXCEPTION: For song lyrics, you may use poetic pronouns.
     3. Localization: Translate personal titles and honorifics to their natural equivalents.
     4. Formatting: Maximum 42 characters per line. Maximum 2 lines per subtitle. Use a physical line break (Enter) to separate lines. Paraphrase concisely if needed.
