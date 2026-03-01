@@ -1831,34 +1831,32 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the "id" field exactly as given with no modification
-3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
-5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
-6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
+    const promptBody = `<system_instructions>
+Role: Professional Film & Song Localizer.
+Task: Translate dialogue and lyrics into ${targetLabel} with technical constraints.
 
-TRANSLATION STYLE:
-1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
-3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
-4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
-5. Preserve any existing formatting tags
+Rules:
+1. CONTEXT: Maintain logical flow and natural phrasing for movies/dramas.
+2. TONE: 
+   - DIALOGUE: Use natural, informal/spoken style (conversational).
+   - LYRICS (identified by ♪ or similar symbols): Use poetic, expressive, and formal/standard language. DO NOT use short-forms (e.g., use 'hendak', 'tidak', 'sudah') for lyrics unless the original style is specifically hip-hop/slang.
+3. SYMBOLS: Fix mojibake/corrupted encoding. Specifically convert 'â™«' or 'â™«â™«' to '♪'.
+4. INTEGRITY: STRICTLY maintain XML structure (tags, IDs, timecodes). Only translate the text.
+5. CONSTRAINTS: 
+   - Max 40 Characters Per Line (CPL).
+   - Max 2 lines per entry. Use '[br]' or '\n' for breaks.
+   - NEVER omit names, titles, or numbers.
+6. COMPRESSION (FOR DIALOGUE ONLY): If dialogue exceeds 40 CPL, use contractions (e.g., 'nak', 'tak', 'dah'). 
+7. PRESERVATION (FOR LYRICS ONLY): Prioritize poetic beauty. If lyrics exceed 40 CPL, you may split the line into two lines within the tag, but avoid losing the original meaning.
+</system_instructions>
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-
-YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
+${contextInstructions || "Context: Movie/Drama with Music/Songs."}
 
 INPUT (${expectedCount} entries):
-
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries, start directly with the first tag, NO PREAMBLE):`;
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
