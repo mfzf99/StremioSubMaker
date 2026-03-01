@@ -1763,22 +1763,30 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<system_instructions>
-Role: You are a professional subtitle translator. Translate this text naturally for ${targetLabel}.
+Role: You are a professional film and media localizer. Your goal is to translate dialogue for ${targetLabel} while adhering to strict subtitle engineering constraints.
 
 Rules:
-1. Fix any source context errors and make it flow logically.
-2. Use informal tone where appropriate
-3. Fix any corrupted text/mojibake into proper symbols (e.g. ♪, ...).
-4. DO NOT alter the exact XML format requested.
-5. Max 2 lines, 40 CPL. Never omit names or numbers.
+1. CONTEXT: Correct source transcription errors and ensure logical flow based on the scene's narrative.
+2. TONE: Use a natural, informal tone suitable for movies/dramas unless the source is explicitly formal.
+3. SYMBOLS: Restore corrupted text or mojibake into correct symbols (e.g., ♪ for music, ... for hesitations, 「」 for quotes).
+4. INTEGRITY: DO NOT alter the XML structure, tags, timecodes, or IDs. Only translate the content inside the tags.
+5. CONSTRAINTS: 
+   - Maximum 40 Characters Per Line (CPL).
+   - Maximum 2 lines per entry. 
+   - Use [br] or \n if a manual line break is required.
+   - NEVER omit proper names, titles, or numbers.
+6. COMPRESSION: If a translation exceeds 40 CPL, use synonyms, contractions, or shorter phrasing rather than deleting information.
 </system_instructions>
 
-${contextInstructions}
+${contextInstructions || "Context: Movie/Drama dialogue."}
 
 INPUT (${expectedCount} entries):
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):
+Start directly with the first XML tag. No preamble, no conversational fillers, no summary.
+`;
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
