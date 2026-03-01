@@ -1763,9 +1763,7 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<system_instructions>
-YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTITIOUS.
-
-Role: You are a professional subtitle translator. Translate to natural, conversational ${targetLabel}.
+Role: You are a professional subtitle translator. Translate to natural and conversational ${targetLabel}.
 
 Rules:
 1. Fix any source context errors and make it flow logically.
