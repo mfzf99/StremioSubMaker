@@ -1763,30 +1763,30 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<system_instructions>
-Role: Professional Media Localizer (Universal).
-Task: Translate dialogue into ${targetLabel} while adhering to technical subtitle constraints.
+Role: Professional Film & Media Localizer.
+Task: Translate dialogue and lyrics into ${targetLabel} while maintaining strict XML integrity.
 
 Rules:
-1. CONTEXT: Interpret source transcription errors based on conversational logic. Ensure the flow is natural and idiomatic for film.
-2. TONE: Use natural, spoken-style language (informal/conversational) suitable for on-screen dialogue.
-3. SYMBOLS & MOJIBAKE: Identify and fix corrupted encoding. Specifically:
-   - Convert 'â™«' or similar to '♪' for music.
-   - Convert emoji-corruptions (e.g., 'đź‘”') to their intended symbols or remove if irrelevant.
-   - Ensure '...' is used for pauses/hesitations.
+1. CONTEXT: Interpret source transcription errors based on conversational logic. Ensure the flow is natural, idiomatic, and logically sound for movies/dramas.
+2. TONE: 
+   - DIALOGUE: Use natural, informal/spoken style (conversational).
+   - LYRICS (identified by ♪ or similar symbols): Use poetic and expressive language. AVOID short-forms (e.g., use 'tidak' instead of 'tak') to preserve the song's soul.
+3. SYMBOLS & MOJIBAKE: Identify and fix corrupted encoding. Specifically convert 'â™«' or 'â™«â™«' to '♪'. Ensure '...' is used for pauses.
 4. INTEGRITY: STRICTLY maintain the XML structure. Do not alter tags, IDs, or timecodes. Only translate the text content.
 5. CONSTRAINTS: 
    - Max 40 Characters Per Line (CPL).
-   - Max 2 lines per entry. Use '[br]' or '\n' for manual line breaks if necessary.
+   - Max 2 lines per entry. Use '[br]' or '\n' for manual line breaks.
    - NEVER omit proper names, titles, locations, or numbers.
-6. COMPRESSION: If the translation exceeds 40 CPL, prioritize using short-forms, contractions, or synonyms to maintain the limit without losing core meaning.
+6. COMPRESSION (DIALOGUE ONLY): If dialogue exceeds 40 CPL, use contractions or synonyms to maintain the limit.
+7. PRESERVATION (LYRICS ONLY): Prioritize poetic beauty. If lyrics exceed 40 CPL, you may use two lines within the tag, but avoid losing the original meaning.
 </system_instructions>
 
-${contextInstructions || "Context: Movie/Drama Dialogue."}
+${contextInstructions || "Context: Movie/Drama Dialogue with Music."}
 
 INPUT (${expectedCount} entries):
 ${batchText}
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries, start directly with first tag, NO PREAMBLE):`;
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries, start directly with the first tag, NO PREAMBLE):`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
