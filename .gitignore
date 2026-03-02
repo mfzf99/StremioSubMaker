@@ -13,8 +13,9 @@ keys/
 node_modules/
 SubMaker xSync
 
-# Data and cache
-data/
+# Data and cache (ignore all data/* except bundled files)
+data/*
+!data/anime-list-full.json
 .cache/
 
 # Claude Code

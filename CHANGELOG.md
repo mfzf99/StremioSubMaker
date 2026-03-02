@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.65
+
+**Bug Fixes:**
+
+- **Fixed AnimeIdResolver crash on read-only filesystems (Docker/containers):** The anime ID resolver attempted to download `anime-list-full.json` at startup if the bundled file was missing, failing with `EROFS: read-only file system` in containerized environments. The file is now committed to git (via `.gitignore` negation: `!data/anime-list-full.json`) and bundled with Docker builds. Additionally, the resolver now gracefully handles read-only filesystems: it detects `EROFS`, `EPERM`, and `EACCES` errors, sets a `_readOnlyFilesystem` flag, skips all download/refresh attempts, and logs an informative message when using bundled data. Weekly refresh scheduling is also disabled on read-only filesystems to avoid futile retries.
+
+- **Fixed Sentry events not being flushed on forced shutdown:** When Kubernetes sends SIGTERM and the server takes longer than 5 seconds to close gracefully, the force-exit timeout was calling `process.exit()` without first flushing pending Sentry events. This caused errors and crash reports to be lost when pods were forcefully terminated. Added `sentry.flush(2000)` to the force-exit path in `sessionManager.js` to ensure error reports are sent before the process exits.
+
 ## SubMaker v1.4.64
 
 **Improvements:**

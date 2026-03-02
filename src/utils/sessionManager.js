@@ -2145,8 +2145,10 @@ class SessionManager extends EventEmitter {
                 });
 
                 // Force exit after 5 seconds if server close hangs
-                const forceExitTimeout = setTimeout(() => {
+                const forceExitTimeout = setTimeout(async () => {
                     log.warn(() => '[SessionManager] Forcefully exiting after server close timeout');
+                    // Flush Sentry before force exit
+                    await sentry.flush(2000);
                     // Close logger before exit
                     shutdownLogger();
                     process.exit(saveFailed ? 1 : 0);

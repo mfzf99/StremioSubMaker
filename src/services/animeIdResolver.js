@@ -47,6 +47,7 @@ let _ready = false;
 let _entryCount = 0;
 let _loadedAt = 0;
 let _refreshTimer = null;
+let _readOnlyFilesystem = false; // Detected when write fails
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -104,7 +105,15 @@ function buildMaps(entries) {
 function ensureDataDir() {
     try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
-    } catch (_) { /* already exists */ }
+        return true;
+    } catch (err) {
+        if (err.code === 'EROFS' || err.code === 'EPERM' || err.code === 'EACCES') {
+            _readOnlyFilesystem = true;
+            log.debug(() => '[AnimeIdResolver] Read-only filesystem detected, will use bundled data only');
+            return false;
+        }
+        return true; // Directory might already exist
+    }
 }
 
 /**
@@ -112,7 +121,16 @@ function ensureDataDir() {
  * @returns {Promise<boolean>} true on success
  */
 async function downloadList() {
-    ensureDataDir();
+    // Skip download attempt if filesystem is read-only
+    if (_readOnlyFilesystem) {
+        log.debug(() => '[AnimeIdResolver] Skipping download - read-only filesystem');
+        return false;
+    }
+
+    if (!ensureDataDir()) {
+        return false;
+    }
+
     try {
         log.info(() => '[AnimeIdResolver] Downloading anime-list-full.json from GitHub…');
         const resp = await axios.get(REMOTE_URL, {
@@ -128,6 +146,12 @@ async function downloadList() {
         log.info(() => `[AnimeIdResolver] Downloaded anime-list-full.json (${sizeMB} MB)`);
         return true;
     } catch (err) {
+        // Detect read-only filesystem errors
+        if (err.code === 'EROFS' || err.code === 'EPERM' || err.code === 'EACCES') {
+            _readOnlyFilesystem = true;
+            log.info(() => '[AnimeIdResolver] Read-only filesystem detected, will use bundled data only');
+            return false;
+        }
         log.error(() => [`[AnimeIdResolver] Download failed:`, err.message]);
         return false;
     }
@@ -272,19 +296,26 @@ async function hasNewerRemoteUpdate() {
 async function initialize() {
     if (_ready) return;
 
-    // Try loading from disk first (instant)
+    // Try loading from disk first (instant) - this includes bundled data
     if (!loadFromDisk()) {
-        // No local file — download then load
+        // No local file — try to download then load
         const ok = await downloadList();
-        if (ok) loadFromDisk();
+        if (ok) {
+            loadFromDisk();
+        } else if (!_ready) {
+            // Download failed and no bundled data - warn but don't crash
+            log.warn(() => '[AnimeIdResolver] No anime-list data available. Anime ID resolution will be disabled.');
+        }
     }
 
-    // Schedule periodic refresh
-    if (!_refreshTimer) {
+    // Schedule periodic refresh (only if filesystem is writable)
+    if (!_refreshTimer && !_readOnlyFilesystem) {
         _refreshTimer = setInterval(refresh, REFRESH_INTERVAL_MS);
         // Ensure the timer doesn't prevent process exit
         if (_refreshTimer.unref) _refreshTimer.unref();
         log.debug(() => `[AnimeIdResolver] Weekly refresh scheduled (every ${REFRESH_INTERVAL_MS / (1000 * 60 * 60)} hours)`);
+    } else if (_readOnlyFilesystem && _ready) {
+        log.info(() => '[AnimeIdResolver] Using bundled anime-list data (read-only filesystem, refresh disabled)');
     }
 }
 
@@ -293,6 +324,12 @@ async function initialize() {
  * Multi-instance safe: uses Redis leader lock.
  */
 async function refresh() {
+    // Skip refresh on read-only filesystems
+    if (_readOnlyFilesystem) {
+        log.debug(() => '[AnimeIdResolver] Skipping refresh - read-only filesystem');
+        return;
+    }
+
     log.debug(() => '[AnimeIdResolver] Starting refresh cycle');
 
     // Check if another pod already refreshed recently
