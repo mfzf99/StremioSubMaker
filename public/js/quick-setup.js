@@ -64,6 +64,52 @@
 
     function $(id) { return document.getElementById(id); }
 
+    /** Quick Setup translation helper — wraps window.t() for the config.quickSetup namespace */
+    function tQs(key, vars, fallback) {
+        const fullKey = 'config.quickSetup.' + key;
+        if (typeof window.t === 'function') return window.t(fullKey, vars, fallback);
+        return fallback || key;
+    }
+
+    /** Re-apply data-i18n attributes inside the Quick Setup overlay (called after partials load and on language change) */
+    function applyQsTranslations() {
+        const container = $('quickSetupOverlay');
+        if (!container || typeof window.t !== 'function') return;
+
+        // Handle data-i18n → textContent (or innerHTML if value contains HTML tags)
+        container.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (!key) return;
+            const fallback = el.textContent;
+            const value = window.t(key, null, fallback);
+            if (value && value !== key) {
+                if (/<[a-z][\s\S]*>/i.test(value)) {
+                    el.innerHTML = value;
+                } else {
+                    el.textContent = value;
+                }
+            }
+        });
+
+        // Handle data-i18n-placeholder → placeholder attribute
+        container.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (!key) return;
+            const fallback = el.getAttribute('placeholder') || '';
+            const value = window.t(key, null, fallback);
+            if (value && value !== key) el.setAttribute('placeholder', value);
+        });
+
+        // Handle data-i18n-title → title attribute
+        container.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            if (!key) return;
+            const fallback = el.getAttribute('title') || '';
+            const value = window.t(key, null, fallback);
+            if (value && value !== key) el.setAttribute('title', value);
+        });
+    }
+
     function show(el) {
         if (typeof el === 'string') el = $(el);
         if (el) el.style.display = '';
@@ -98,6 +144,9 @@
 
     async function init() {
         await waitForPartials();
+
+        // Apply i18n to the Quick Setup overlay after partials are injected
+        applyQsTranslations();
 
         // Always show the full Quick Setup banner
         const banner = $('quickSetupBanner');
@@ -324,7 +373,7 @@
         // Update step indicator text
         const indicator = $('qsStepIndicator');
         if (indicator) {
-            indicator.textContent = `Step ${idx + 1} of ${total}`;
+            indicator.textContent = tQs('stepOf', { current: idx + 1, total }, `Step ${idx + 1} of ${total}`);
         }
     }
 
@@ -347,9 +396,9 @@
                 // Update button text based on next step
                 const next = getNextStep(step);
                 if (next === TOTAL_STEPS) {
-                    nextBtn.innerHTML = 'Review & Install →';
+                    nextBtn.textContent = tQs('reviewInstall', null, 'Review & Install →');
                 } else {
-                    nextBtn.innerHTML = 'Next →';
+                    nextBtn.textContent = tQs('next', null, 'Next →');
                 }
             }
         }
@@ -505,7 +554,7 @@
                 const password = ($('qsOpenSubsPassword') || {}).value?.trim();
                 const statusEl = $('qsOpenSubsStatus');
                 if (!username || !password) {
-                    showQsStatus(statusEl, 'Please enter username and password', 'error');
+                    showQsStatus(statusEl, tQs('status.enterCredentials', null, 'Please enter username and password'), 'error');
                     return;
                 }
                 await runQsValidation(osBtn, statusEl, '/api/validate-opensubtitles', { username, password });
@@ -519,7 +568,7 @@
                 const apiKey = ($('qsSubdlApiKey') || {}).value?.trim();
                 const statusEl = $('qsSubDLStatus');
                 if (!apiKey) {
-                    showQsStatus(statusEl, 'Please enter an API key', 'error');
+                    showQsStatus(statusEl, tQs('status.enterKey', null, 'Please enter an API key'), 'error');
                     return;
                 }
                 await runQsValidation(subdlBtn, statusEl, '/api/validate-subdl', { apiKey });
@@ -533,7 +582,7 @@
                 const apiKey = ($('qsSubsourceApiKey') || {}).value?.trim();
                 const statusEl = $('qsSubSourceStatus');
                 if (!apiKey) {
-                    showQsStatus(statusEl, 'Please enter an API key', 'error');
+                    showQsStatus(statusEl, tQs('status.enterKey', null, 'Please enter an API key'), 'error');
                     return;
                 }
                 await runQsValidation(ssBtn, statusEl, '/api/validate-subsource', { apiKey });
@@ -561,11 +610,11 @@
             validateBtn.addEventListener('click', async () => {
                 const key = keyInput ? keyInput.value.trim() : '';
                 if (!key) {
-                    showKeyStatus('Please enter an API key', 'error');
+                    showKeyStatus(tQs('status.enterKey', null, 'Please enter an API key'), 'error');
                     return;
                 }
 
-                showKeyStatus('Validating...', 'validating');
+                showKeyStatus(tQs('status.validating', null, 'Validating...'), 'validating');
                 validateBtn.disabled = true;
 
                 try {
@@ -578,12 +627,12 @@
 
                     if (result.valid) {
                         state.geminiKeyValid = true;
-                        showKeyStatus('✓ API key is valid!', 'success');
+                        showKeyStatus(tQs('status.keyValid', null, '✓ API key is valid!'), 'success');
                     } else {
-                        showKeyStatus('✗ ' + (result.error || 'Invalid API key — please double-check'), 'error');
+                        showKeyStatus(tQs('status.keyInvalidPrefix', null, '✗') + ' ' + (result.error || tQs('status.keyInvalidDefault', null, 'Invalid API key — please double-check')), 'error');
                     }
                 } catch (err) {
-                    showKeyStatus('✗ Network error — try again', 'error');
+                    showKeyStatus(tQs('status.networkError', null, '✗ Network error — try again'), 'error');
                 } finally {
                     validateBtn.disabled = false;
                 }
@@ -617,8 +666,8 @@
         const origIcon = iconEl ? iconEl.textContent : '✓';
         const origText = textEl ? textEl.textContent : '';
         if (iconEl) iconEl.textContent = '⟳';
-        if (textEl) textEl.textContent = 'Testing...';
-        showQsStatus(statusEl, 'Validating...', 'validating');
+        if (textEl) textEl.textContent = tQs('status.testingBtn', null, 'Testing...');
+        showQsStatus(statusEl, tQs('status.validating', null, 'Validating...'), 'validating');
 
         try {
             const resp = await fetch(endpoint, {
@@ -634,7 +683,7 @@
             if (result.valid) {
                 btn.classList.add('valid');
                 if (iconEl) iconEl.textContent = '✓';
-                if (textEl) textEl.textContent = 'Valid';
+                if (textEl) textEl.textContent = tQs('status.validBtn', null, 'Valid');
                 let msg = result.message || 'Valid!';
                 if (result.resultsCount !== undefined) {
                     msg += ` (${result.resultsCount} test results)`;
@@ -648,8 +697,8 @@
             } else {
                 btn.classList.add('invalid');
                 if (iconEl) iconEl.textContent = '✗';
-                if (textEl) textEl.textContent = 'Failed';
-                showQsStatus(statusEl, '✗ ' + (result.error || 'Validation failed'), 'error');
+                if (textEl) textEl.textContent = tQs('status.failedBtn', null, 'Failed');
+                showQsStatus(statusEl, tQs('status.keyInvalidPrefix', null, '✗') + ' ' + (result.error || tQs('status.validationFailed', null, 'Validation failed')), 'error');
                 setTimeout(() => {
                     btn.classList.remove('invalid');
                     if (iconEl) iconEl.textContent = origIcon;
@@ -661,7 +710,7 @@
             btn.disabled = false;
             if (iconEl) iconEl.textContent = origIcon;
             if (textEl) textEl.textContent = origText;
-            showQsStatus(statusEl, '✗ Network error — try again', 'error');
+            showQsStatus(statusEl, tQs('status.networkError', null, '✗ Network error — try again'), 'error');
         }
     }
 
@@ -708,11 +757,11 @@
         const title = $('qsLangTitle');
         const subtitle = $('qsLangSubtitle');
         if (state.mode === 'fetch') {
-            if (title) title.textContent = 'Choose Subtitle Languages';
-            if (subtitle) subtitle.textContent = 'What languages do you want to fetch subtitles in?';
+            if (title) title.textContent = tQs('step4.titleFetch', null, 'Choose Subtitle Languages');
+            if (subtitle) subtitle.textContent = tQs('step4.subtitleFetch', null, 'What languages do you want to fetch subtitles in?');
         } else {
-            if (title) title.textContent = 'Choose Your Target Language';
-            if (subtitle) subtitle.textContent = 'What language do you want your subtitles translated to?';
+            if (title) title.textContent = tQs('step4.titleTranslate', null, 'Choose Your Target Language');
+            if (subtitle) subtitle.textContent = tQs('step4.subtitleTranslate', null, 'What language do you want your subtitles translated to?');
         }
 
         // Show/hide source language info (only relevant in translate mode)
@@ -732,7 +781,7 @@
         grid.innerHTML = '';
 
         if (!languagesLoaded) {
-            grid.innerHTML = '<div class="qs-lang-loading">Loading languages...</div>';
+            grid.innerHTML = `<div class="qs-lang-loading">${tQs('step4.loading', null, 'Loading languages...')}</div>`;
             // Retry after a short delay
             setTimeout(renderLangGrid, 500);
             return;
@@ -814,7 +863,7 @@
         if (!container) return;
 
         if (state.selectedLanguages.length === 0) {
-            container.innerHTML = '<span style="color: #64748b; font-size: 0.82rem;">No languages selected yet</span>';
+            container.innerHTML = `<span style="color: #64748b; font-size: 0.82rem;">${tQs('step4.noSelection', null, 'No languages selected yet')}</span>`;
             return;
         }
 
@@ -967,7 +1016,7 @@
         if (!container) return;
 
         if (state.learnTargetLanguages.length === 0) {
-            container.innerHTML = '<span style="color: #64748b; font-size: 0.82rem;">No learn languages selected yet</span>';
+            container.innerHTML = `<span style="color: #64748b; font-size: 0.82rem;">${tQs('step6.noSelection', null, 'No learn languages selected yet')}</span>`;
             return;
         }
 
@@ -1025,39 +1074,39 @@
         const items = [
             {
                 icon: state.mode === 'translate' ? '🌐' : '📥',
-                label: 'Mode',
-                value: state.mode === 'translate' ? 'Translate Subtitles' : 'Just Fetch Subtitles',
+                label: tQs('summary.mode', null, 'Mode'),
+                value: state.mode === 'translate' ? tQs('summary.modeTranslate', null, 'Translate Subtitles') : tQs('summary.modeFetch', null, 'Just Fetch Subtitles'),
                 cls: 'qs-on'
             },
             {
                 icon: '🎬',
                 label: 'OpenSubtitles',
-                value: state.openSubsAuth ? 'Auth (logged in)' : 'V3 (no login)',
+                value: state.openSubsAuth ? tQs('summary.opensubsAuth', null, 'Auth (logged in)') : tQs('summary.opensubsV3', null, 'V3 (no login)'),
                 cls: 'qs-on'
             }
         ];
 
         // Source providers
         if (state.subdlEnabled) {
-            items.push({ icon: '📥', label: 'SubDL', value: 'Enabled', cls: 'qs-on' });
+            items.push({ icon: '📥', label: 'SubDL', value: tQs('summary.enabled', null, 'Enabled'), cls: 'qs-on' });
         }
         if (state.subsourceEnabled) {
-            items.push({ icon: '📡', label: 'SubSource', value: 'Enabled', cls: 'qs-on' });
+            items.push({ icon: '📡', label: 'SubSource', value: tQs('summary.enabled', null, 'Enabled'), cls: 'qs-on' });
         }
         if (state.scsEnabled) {
-            items.push({ icon: '🌐', label: 'Stremio Community Subs', value: 'Enabled (30s timeout)', cls: 'qs-on' });
+            items.push({ icon: '🌐', label: 'Stremio Community Subs', value: tQs('summary.scsTimeout', null, 'Enabled (30s timeout)'), cls: 'qs-on' });
         }
         if (state.wyzieEnabled) {
             const activeSources = Object.entries(state.wyzieSources).filter(([, v]) => v).map(([k]) => k);
-            items.push({ icon: '🔍', label: 'Wyzie Subs', value: `Enabled (${activeSources.length} sources)`, cls: 'qs-on' });
+            items.push({ icon: '🔍', label: 'Wyzie Subs', value: tQs('summary.wyzieSources', { count: activeSources.length }, `Enabled (${activeSources.length} sources)`), cls: 'qs-on' });
         }
 
         // AI
         if (state.mode === 'translate') {
             items.push({
                 icon: '✨',
-                label: 'AI Translation',
-                value: state.geminiApiKey ? 'Gemini 3.0 Flash' : 'Not configured',
+                label: tQs('summary.aiTranslation', null, 'AI Translation'),
+                value: state.geminiApiKey ? tQs('summary.aiConfigured', null, 'Gemini 3.0 Flash') : tQs('summary.aiNotConfigured', null, 'Not configured'),
                 cls: state.geminiApiKey ? 'qs-on' : 'qs-off'
             });
         }
@@ -1069,8 +1118,8 @@
         });
         items.push({
             icon: '🗣️',
-            label: state.mode === 'translate' ? 'Target Languages' : 'Subtitle Languages',
-            value: langNames.join(', ') || 'None',
+            label: state.mode === 'translate' ? tQs('summary.targetLanguages', null, 'Target Languages') : tQs('summary.subtitleLanguages', null, 'Subtitle Languages'),
+            value: langNames.join(', ') || tQs('summary.none', null, 'None'),
             cls: langNames.length > 0 ? 'qs-on' : 'qs-off'
         });
 
@@ -1078,20 +1127,20 @@
         items.push({
             icon: '🧰',
             label: 'Sub Toolbox',
-            value: state.subToolbox ? 'Enabled' : 'Disabled',
+            value: state.subToolbox ? tQs('summary.enabled', null, 'Enabled') : tQs('summary.disabled', null, 'Disabled'),
             cls: state.subToolbox ? 'qs-on' : 'qs-off'
         });
         items.push({
             icon: '📦',
-            label: 'Season Packs',
-            value: state.seasonPacks ? 'Enabled' : 'Disabled',
+            label: tQs('summary.seasonPacks', null, 'Season Packs'),
+            value: state.seasonPacks ? tQs('summary.enabled', null, 'Enabled') : tQs('summary.disabled', null, 'Disabled'),
             cls: state.seasonPacks ? 'qs-on' : 'qs-off'
         });
         if (state.hideSDH) {
             items.push({
                 icon: '🔇',
-                label: 'Hide SDH/HI',
-                value: 'Enabled',
+                label: tQs('summary.hideSdh', null, 'Hide SDH/HI'),
+                value: tQs('summary.enabled', null, 'Enabled'),
                 cls: 'qs-on'
             });
         }
@@ -1104,8 +1153,8 @@
             });
             items.push({
                 icon: '📖',
-                label: 'Learn Languages',
-                value: learnNames.join(', ') || 'None',
+                label: tQs('summary.learnLanguages', null, 'Learn Languages'),
+                value: learnNames.join(', ') || tQs('summary.none', null, 'None'),
                 cls: learnNames.length > 0 ? 'qs-on' : 'qs-off'
             });
         }
@@ -1192,7 +1241,7 @@
                 defaultMode: 'cloudflare',
                 sendFullVideoToAssembly: false
             },
-            geminiModel: 'gemini-3-flash-preview',
+            geminiModel: 'gemini-flash-latest',
             betaModeEnabled: false,
             devMode: false,
             multiProviderEnabled: false,
@@ -1256,7 +1305,7 @@
             forceSRTOutput: false,
             convertAssToVtt: true,
             mobileMode: false,
-            singleBatchMode: true,
+            singleBatchMode: false,
             advancedSettings: {
                 enabled: false,
                 geminiModel: '',
@@ -1281,7 +1330,7 @@
         const saveBtn = $('qsSaveInstallBtn');
 
         if (statusEl) {
-            statusEl.textContent = 'Saving configuration...';
+            statusEl.textContent = tQs('status.saving', null, 'Saving configuration...');
             statusEl.className = 'qs-install-status saving';
         }
         if (saveBtn) saveBtn.disabled = true;
@@ -1436,7 +1485,7 @@
 
             // Show success
             if (statusEl) {
-                statusEl.textContent = '✓ Configuration saved successfully!';
+                statusEl.textContent = tQs('status.savedOk', null, '✓ Configuration saved successfully!');
                 statusEl.className = 'qs-install-status success';
             }
 
@@ -1456,7 +1505,7 @@
             // Transform save button into install button
             const saveBtnEl = $('qsSaveInstallBtn');
             if (saveBtnEl) {
-                saveBtnEl.innerHTML = '<span class="qs-btn-icon">📥</span> Install on Stremio';
+                saveBtnEl.innerHTML = `<span class="qs-btn-icon">📥</span> <span>${tQs('step7.installOnStremio', null, 'Install on Stremio')}</span>`;
                 const newInstallBtn = saveBtnEl.cloneNode(true);
                 saveBtnEl.parentNode.replaceChild(newInstallBtn, saveBtnEl);
                 newInstallBtn.addEventListener('click', () => handleInstallStremio());
@@ -1482,7 +1531,7 @@
         navigator.clipboard.writeText(url).then(() => {
             const statusEl = $('qsInstallStatus');
             if (statusEl) {
-                statusEl.textContent = '✓ Install URL copied to clipboard!';
+                statusEl.textContent = tQs('status.copiedOk', null, '✓ Install URL copied to clipboard!');
                 statusEl.className = 'qs-install-status success';
             }
         }).catch(() => {
@@ -1504,7 +1553,7 @@
 
         const statusEl = $('qsInstallStatus');
         if (statusEl) {
-            statusEl.textContent = 'Opening Stremio...';
+            statusEl.textContent = tQs('status.openingStremio', null, 'Opening Stremio...');
             statusEl.className = 'qs-install-status saving';
         }
     }

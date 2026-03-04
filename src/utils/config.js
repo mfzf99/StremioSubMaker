@@ -216,8 +216,7 @@ const DEPRECATED_MODEL_NAMES = [
   'gemini-2.5-flash-latest',
   'gemini-pro-latest',
   'gemini-2.5-pro-latest',
-  'gemini-2.5-flash-preview-09-2025', // Renamed to gemini-2.5-flash
-  'gemini-flash-lite-latest'          // Renamed to gemini-2.5-flash-lite
+  'gemini-2.5-flash-preview-09-2025' // Renamed to gemini-2.5-flash
 ];
 
 /**
@@ -362,7 +361,7 @@ function normalizeConfig(config) {
   }
 
   // Determine the model to use (from config or default)
-  const configModel = config.geminiModel || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  const configModel = config.geminiModel || process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
   // Get model-specific defaults based on the selected model
   const defaults = getDefaultConfig(configModel);
@@ -933,6 +932,18 @@ const MODEL_SPECIFIC_DEFAULTS = {
     thinkingBudget: -1,     // Dynamic thinking for flash model
     temperature: 0.5        // Lower temperature for consistency
   },
+  'gemini-3.1-flash-lite-preview': {
+    thinkingBudget: 0,      // No thinking for lite model
+    temperature: 0.8        // Higher temperature for creativity
+  },
+  'gemini-flash-lite-latest': {
+    thinkingBudget: 0,      // No thinking for lite model (latest alias)
+    temperature: 0.8        // Higher temperature for creativity
+  },
+  'gemini-flash-latest': {
+    thinkingBudget: -1,     // Dynamic thinking for flash model (latest alias)
+    temperature: 0.5        // Lower temperature for consistency
+  },
   'gemini-2.5-pro': {
     thinkingBudget: 1000,   // Fixed thinking budget for pro model
     temperature: 0.5        // Lower temperature for consistency
@@ -962,8 +973,8 @@ function getModelSpecificDefaults(modelName) {
  */
 function getDefaultConfig(modelName = null) {
   // Determine the model to use for defaults
-  // Default to gemini-3-flash-preview as the primary recommended model
-  const effectiveModel = modelName || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  // Default to gemini-flash-latest as the primary recommended model
+  const effectiveModel = modelName || process.env.GEMINI_MODEL || 'gemini-flash-latest';
   const modelDefaults = getModelSpecificDefaults(effectiveModel);
 
   // Read advanced settings from environment variables with fallback to model-specific defaults

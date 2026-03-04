@@ -1942,6 +1942,23 @@ const sessionCreationLimiter = rateLimit({
     }
 });
 
+// Security: Rate limiting for session updates (more permissive than creation)
+// Updates are the normal save flow and should not share the strict creation limit.
+// The creation limiter (10/hour) was previously applied here, causing saves to
+// exhaust the creation quota and lock users out with 429 after ~10 saves.
+const sessionUpdateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 60, // 60 session updates per hour per IP
+    message: 'Too many session update requests from this IP. Please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: createRateLimitRedisStore('rl:sessupdate:'),
+    passOnStoreError: true,
+    keyGenerator: (req) => {
+        return `session-update:${ipKeyGenerator(req.ip)}`;
+    }
+});
+
 // Security: Rate limiting for stats endpoint (prevents abuse and monitoring)
 const statsLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
@@ -3540,8 +3557,9 @@ app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize
 });
 
 // API endpoint to update an existing session
-// Apply rate limiting to prevent session flooding attacks (update can create new sessions)
-app.post('/api/update-session/:token', sessionCreationLimiter, enforceConfigPayloadSize, async (req, res) => {
+// Uses sessionUpdateLimiter (60/hour) instead of sessionCreationLimiter (10/hour)
+// because updates are the normal save flow and should not exhaust the creation quota
+app.post('/api/update-session/:token', sessionUpdateLimiter, enforceConfigPayloadSize, async (req, res) => {
     try {
         setNoStore(res); // prevent any caching of session tokens
         const { token } = req.params;

@@ -572,6 +572,22 @@ Translate to {target_language}.`;
             thinkingBudget: -1,
             temperature: 0.5
         },
+        'gemini-3-flash-preview': {
+            thinkingBudget: -1,
+            temperature: 0.5
+        },
+        'gemini-3.1-flash-lite-preview': {
+            thinkingBudget: 0,
+            temperature: 0.8
+        },
+        'gemini-flash-lite-latest': {
+            thinkingBudget: 0,
+            temperature: 0.8
+        },
+        'gemini-flash-latest': {
+            thinkingBudget: -1,
+            temperature: 0.5
+        },
         'gemini-2.5-pro': {
             thinkingBudget: 1000,
             temperature: 0.5
@@ -654,7 +670,7 @@ Translate to {target_language}.`;
         return merged;
     }
 
-    function getDefaultConfig(modelName = 'gemini-3-flash-preview') {
+    function getDefaultConfig(modelName = 'gemini-flash-latest') {
         const modelDefaults = getModelSpecificDefaults(modelName);
 
         return {
@@ -881,7 +897,7 @@ Translate to {target_language}.`;
         if (!currentConfig) {
             currentConfig = getDefaultConfig();
         }
-        const defaults = getDefaultConfig(currentConfig.geminiModel || 'gemini-3-flash-preview').autoSubs;
+        const defaults = getDefaultConfig(currentConfig.geminiModel || 'gemini-flash-latest').autoSubs;
         currentConfig.autoSubs = {
             ...defaults,
             ...(currentConfig.autoSubs || {})
@@ -1809,7 +1825,7 @@ Translate to {target_language}.`;
         if (!isBetaModeEnabled()) return false;
         // Get the currently selected base model to determine model-specific defaults
         const geminiModelEl = document.getElementById('geminiModel');
-        const currentBaseModel = geminiModelEl ? geminiModelEl.value : 'gemini-3-flash-preview';
+        const currentBaseModel = geminiModelEl ? geminiModelEl.value : 'gemini-flash-latest';
         const defaults = getDefaultConfig(currentBaseModel).advancedSettings;
 
         const advModelEl = document.getElementById('advancedModel');
@@ -4955,6 +4971,7 @@ Translate to {target_language}.`;
         // Define hardcoded multi-model options
         const hardcodedModels = [
 
+            { name: 'gemini-3.1-flash-lite-preview', displayName: 'Gemini 3.1 Flash Lite' },
             { name: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite' },
             { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
             { name: 'gemini-3-flash-preview', displayName: 'Gemini 3.0 Flash (beta)' },
@@ -5497,7 +5514,7 @@ Translate to {target_language}.`;
 
         // Load Gemini model
         const modelSelect = document.getElementById('geminiModel');
-        let modelToUse = currentConfig.geminiModel || 'gemini-3-flash-preview';
+        let modelToUse = currentConfig.geminiModel || 'gemini-flash-latest';
 
         // Migrate old Pro preview model ID to new stable ID
         if (modelToUse === 'gemini-2.5-pro-preview-05-06') {
@@ -5992,7 +6009,7 @@ Translate to {target_language}.`;
             },
             // Save the selected model from the dropdown
             // Advanced settings can override this if enabled
-            geminiModel: document.getElementById('geminiModel')?.value || 'gemini-3-flash-preview',
+            geminiModel: document.getElementById('geminiModel')?.value || 'gemini-flash-latest',
             promptStyle: promptStyle,
             translationPrompt: translationPrompt,
             betaModeEnabled: isBetaModeEnabled(),

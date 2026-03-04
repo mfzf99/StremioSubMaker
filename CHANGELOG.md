@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.70
+
+**Improvements:**
+
+- **Added Gemini 3.1 Flash Lite as the new default translation model:** Added `gemini-3.1-flash-lite-preview` ("Gemini 3.1 Flash Lite") to the model dropdown in the config page and set as default.
+
+- **Switched all hardcoded model fallbacks to `gemini-flash-latest` alias:** All `|| 'fallback'` patterns across the codebase — `GeminiService` constructor, `normalizeConfig()`, `getDefaultConfig()`, `ensureAutoSubsDefaults()`, `areAdvancedSettingsModified()`, `loadSettings()`, `collectConfig()`, and Quick Setup `buildConfigObject()` — now use `gemini-flash-latest` instead of a pinned model version. This `-latest` alias always resolves server-side to Google's current Flash model, making fallbacks future-proof without code changes when new model versions are released.
+
+- **Full localization of the Quick Setup wizard:** Translated the entire Quick Setup wizard into all 5 supported locales (English, Spanish, Brazilian Portuguese, European Portuguese, and Arabic). Added 123 translation keys per locale under `config.quickSetup` covering all 7 wizard steps — mode selection, subtitle sources, AI translation, language selection, extras, learn language selection, and summary/install — plus navigation, validation messages, and status indicators.
+
+- **Quick Setup no longer enables Single Batch Mode by default:** The `buildConfigObject()` in the Quick Setup wizard previously set `singleBatchMode: true`, causing new users to start with single-batch translation enabled. Changed the default to `false` so new setups use the standard multi-batch translation mode.
+
+**Bug Fixes:**
+
+- **Fixed "Too many session creation requests" error after ~10 config saves:** The `/api/update-session/:token` endpoint was incorrectly using `sessionCreationLimiter` (10/hour, IP-based) — the same strict rate limiter meant only for new session creation. Every config save (even updates to an existing session) counted against the 10/hour creation quota, locking users out with a 429 error after approximately 10 saves in an hour. Created a separate `sessionUpdateLimiter` (60/hour) with its own Redis key prefix (`rl:sessupdate:`) for the update endpoint.
+
 ## SubMaker v1.4.69
 
 **Improvements:**
