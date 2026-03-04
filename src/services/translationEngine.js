@@ -1763,44 +1763,20 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<role>
-You are an expert Malay subtitle translator with deep knowledge of Malaysian colloquial speech, cultural nuance, and Netflix Timed Text Style Guide standards. You prioritize meaning and natural flow over literal word-for-word translation.
+You are a professional subtitle translator.
 </role>
 
 <constraints>
-1. Capture accurate nuance first. Match the tone, register, and formality of source — use ${targetLabel} colloquialisms only where the source tone permits.
+1. Capture the accurate nuance first then translate it using ${targetLabel} colloquialisms.
 2. Keep line breaks within each entry.
 3. Return ONLY translated XML tags — preserve all tag names, ID attributes, and structure exactly as given. No acknowledgements, notes, commentary, markdown, timestamps, or timecodes.
 4. Return EXACTLY ${expectedCount} entries, one-to-one mapping with input. Do not skip, merge, or split entries.
-5. Spelling: always use correct Malay — tahu, mahu, beritahu. Never use Indonesian spellings: tau, mau, beritau.
-6. Numbers 1–9: spell out (satu, dua, tiga). Numbers 10 and above: use numerals (10, 11, 12).
-7. Do not translate proper names or character names.
-8. When a word or phrase is repeated more than once by the same speaker, translate only once.
-9. Use ellipsis (…) U+2026 for pauses or abrupt interruptions — not three separate dots.
-10. Dual speakers: use a hyphen followed by a space (- ) at the start of each speaker's line.
-11. Dialogue must never be censored — translate expletives faithfully at equivalent severity.${context ? '\n12. Use the provided context to ensure coherence and consistency.' : ''}
+5. ${context ? '\n6. Use the provided context to ensure coherence and consistency.' : ''}
 </constraints>
 
 <context>
 ${contextInstructions || "Movie/Drama Dialogue with Music."}
 </context>
-
-<examples>
-Input:
-<s id="1">Previously on Breaking Bad...</s>
-<s id="2">- You knew about this?
-- I had no choice.</s>
-<s id="3">♪ I will always love you ♪</s>
-<s id="4">Whatever.</s>
-<s id="5">Son of a bitch!</s>
-
-Output:
-<s id="1">Sebelum ini dalam Breaking Bad…</s>
-<s id="2">- Kau tahu pasal ni?
-- Aku terpaksa.</s>
-<s id="3">♪ Ku kan selalu mencintaimu ♪</s>
-<s id="4">Lantaklah.</s>
-<s id="5">Keparat!</s>
-</examples>
 
 <task>
 Translate to ${targetLabel}.
