@@ -112,26 +112,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 50;
+    return 60;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 50;
+    return 60;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 60;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 50;
+    return 60;
   }
 
   // Default batch size for unknown models
-  return 50;
+  return 60;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -160,7 +160,7 @@ class TranslationEngine {
 
     // Context settings (disabled by default)
     this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
-    this.contextSize = parseInt(this.advancedSettings.contextSize) || 8;
+    this.contextSize = parseInt(this.advancedSettings.contextSize) || 10;
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
@@ -196,7 +196,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 50;
+    const JSON_MAX_BATCH_SIZE = 60;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
