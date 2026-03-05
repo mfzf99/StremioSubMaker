@@ -1767,12 +1767,11 @@ You are a professional subtitle translator.
 </role>
 
 <constraints>
-1. Capture the accurate nuance first then translate it using ${targetLabel} colloquialisms.
+1. Capture the accurate nuance first then translate it using appropriate ${targetLabel} colloquialisms.
 2. Keep line breaks within each entry.
 3. Return ONLY translated XML tags — preserve all tag names, ID attributes, and structure exactly as given. No acknowledgements, notes, commentary, markdown, timestamps, or timecodes.
 4. Return EXACTLY ${expectedCount} entries, one-to-one mapping with input. Do not skip, merge, or split entries.
-6. Always use "saya" and "awak" for all character dialogue — never use "aku" or "kau" under any circumstances.
-7. ${context ? '\n8. Use the provided context to ensure coherence and consistency.' : ''}
+5. ${context ? '\n6. Use the provided context to ensure coherence and consistency across all characters.' : ''}
 </constraints>
 
 <context>
