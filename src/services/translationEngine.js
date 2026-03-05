@@ -1779,13 +1779,13 @@ Input:
 
 Output:
 <s id="1">Sebelum ini dalam Breaking Bad…</s>
-<s id="2">- Awak tahu pasal ni?
+<s id="2">- Awak tahu pasal ini?
 - Saya terpaksa.</s>
 <s id="3">Lantaklah.</s>
 </examples>
 
 <task>
-Translate into natural, colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
+Translate into natural, colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never split or merge.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
