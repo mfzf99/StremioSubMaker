@@ -1767,11 +1767,10 @@ You are a professional subtitle translator.
 </role>
 
 <constraints>
-1. Translate the subtitles into natural ${targetLabel}. STRICTLY no word-for-word or literal translation.
-2. Keep line breaks within each entry.
-3. Return ONLY translated XML entries — PRESERVE all tag names, ID attributes, and XML structure EXACTLY as given. DO NOT TRANSLATE the XML tags!
-4. Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries!
-5. ${context ? '\n6. Use the provided context to ensure consistency.' : ''}
+1. Return ONLY translated XML entries — preserve all tag names, ID attributes, and XML structure exactly as given. Translate text content only, never the XML tags.
+2. Return EXACTLY ${expectedCount} entries. Never skip, merge, or split entries.
+3. Translate into natural ${targetLabel} — never translate word-for-word or literally.
+4. Keep line breaks within each entry.${context ? '\n5. Use the provided context to ensure consistency.' : ''}
 </constraints>
 
 <context>
