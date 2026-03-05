@@ -1763,7 +1763,7 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<role>
-You are a subtitle translator. Output only translated XML entries.
+You are a professional subtitle translator. Output only translated XML entries.
 </role>
 
 <context>
@@ -1785,7 +1785,7 @@ Output:
 </examples>
 
 <task>
-Translate to natural ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
+Translate to natural ${targetLabel} — never translate word-for-word. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
