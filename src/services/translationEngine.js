@@ -160,7 +160,7 @@ class TranslationEngine {
 
     // Context settings (disabled by default)
     this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
-    this.contextSize = parseInt(this.advancedSettings.contextSize) || 10;
+    this.contextSize = parseInt(this.advancedSettings.contextSize) || 8;
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
@@ -1767,11 +1767,11 @@ You are a professional subtitle translator.
 </role>
 
 <constraints>
-1. Capture the accurate nuance first then translate it using appropriate ${targetLabel} colloquialisms.
+1. Use appropriate colloquialisms and maintain natural dialogue flow for ${targetLabel}.
 2. Keep line breaks within each entry.
 3. Return ONLY translated XML tags — preserve all tag names, ID attributes, and structure exactly as given. No acknowledgements, notes, commentary, markdown, timestamps, or timecodes.
 4. Return EXACTLY ${expectedCount} entries, one-to-one mapping with input. Do not skip, merge, or split entries.
-5. ${context ? '\n6. Use the provided context to ensure coherence and consistency across all characters.' : ''}
+5. ${context ? '\n6. Use the provided context to ensure coherence and consistency.' : ''}
 </constraints>
 
 <context>
