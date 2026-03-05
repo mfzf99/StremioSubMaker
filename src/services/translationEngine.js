@@ -1767,7 +1767,7 @@ You are a professional subtitle translator.
 </role>
 
 <constraints>
-1. Use appropriate colloquialisms and maintain natural dialogue flow for ${targetLabel}.
+1. Grasp the accurate nuance first, then translate using appropriate colloquialisms while maintaining natural dialogue flow for ${targetLabel}.
 2. Keep line breaks within each entry.
 3. Return ONLY translated XML tags — preserve all tag names, ID attributes, and structure exactly as given. No acknowledgements, notes, commentary, markdown, timestamps, or timecodes.
 4. Return EXACTLY ${expectedCount} entries, one-to-one mapping with input. Do not skip, merge, or split entries.
