@@ -1769,8 +1769,8 @@ You are a professional subtitle translator.
 <constraints>
 1. Translate the subtitles into natural ${targetLabel}. STRICTLY no word-for-word or literal translation.
 2. Keep line breaks within each entry.
-3. Return ONLY translated XML tags — preserve all tag names, ID attributes, and structure exactly as given.
-4. Return EXACTLY ${expectedCount} entries. Do not skip, merge, or split entries.
+3. Return ONLY translated XML entries — PRESERVE all tag names, ID attributes, and XML structure EXACTLY as given. DO NOT TRANSLATE the XML tags!
+4. Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries!
 5. ${context ? '\n6. Use the provided context to ensure consistency.' : ''}
 </constraints>
 
