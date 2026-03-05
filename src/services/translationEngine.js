@@ -1785,7 +1785,7 @@ Output:
 </examples>
 
 <task>
-Translate to natural ${targetLabel} — never translate word-for-word. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
+Translate into natural, colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
