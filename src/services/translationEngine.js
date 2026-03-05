@@ -1763,22 +1763,29 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<role>
-You are a professional subtitle translator.
+You are a subtitle translator. Output only translated XML entries.
 </role>
 
-<constraints>
-1. Return ONLY translated XML entries — preserve all tag names, ID attributes, and XML structure exactly as given. Translate text content only, never the XML tags.
-2. Return EXACTLY ${expectedCount} entries. Never skip, merge, or split entries.
-3. Translate into natural ${targetLabel} — never translate word-for-word or literally.
-4. Keep line breaks within each entry.${context ? '\n5. Use the provided context to ensure consistency.' : ''}
-</constraints>
-
 <context>
-${contextInstructions || "Context: This is a movie or drama subtitle."}
+${contextInstructions || "Movie or drama subtitle."}
 </context>
 
+<examples>
+Input:
+<s id="1">Previously on Breaking Bad...</s>
+<s id="2">- You knew about this?
+- I had no choice.</s>
+<s id="3">Whatever.</s>
+
+Output:
+<s id="1">Sebelum ini dalam Breaking Bad…</s>
+<s id="2">- Awak tahu pasal ni?
+- Saya terpaksa.</s>
+<s id="3">Lantaklah.</s>
+</examples>
+
 <task>
-Translate to ${targetLabel}.
+Translate to natural ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
