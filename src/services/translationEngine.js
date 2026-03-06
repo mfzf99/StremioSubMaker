@@ -1843,14 +1843,14 @@ ${contextInstructions || "Movie or drama subtitle."}
 
 <examples>
 Input:
-[{"id":1,"text":"Previously on Breaking Bad..."},{"id":2,"text":"- You knew about this?\n- I had no choice."},{"id":3,"text":"Whatever."}]
+[{"id":1,"text":"Previously on Breaking Bad..."},{"id":2,"text":"- You knew about this?\\n- I had no choice."},{"id":3,"text":"Whatever."}]
 
 Output:
-[{"id":1,"text":"Sebelum ini dalam Breaking Bad…"},{"id":2,"text":"- Awak tahu pasal ini?\n- Saya terpaksa."},{"id":3,"text":"Lantaklah."}]
+[{"id":1,"text":"Sebelum ini dalam Breaking Bad…"},{"id":2,"text":"- Awak tahu pasal ini?\\n- Saya terpaksa."},{"id":3,"text":"Lantaklah."}]
 </examples>
 
 <task>
-Translate into natural, colloquial ${targetLabel}. Preserve all JSON keys and structure exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+Translate into natural, colloquial ${targetLabel}. Preserve all JSON keys, structure, and \\n line breaks exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
