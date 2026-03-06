@@ -1785,7 +1785,7 @@ Output:
 </examples>
 
 <task>
-Translate into natural, colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+Translate into colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
