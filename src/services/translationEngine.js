@@ -1864,7 +1864,7 @@ Output:
 ]
 
 [INPUT DATA]
-${batchTextJSON}`;
+${batchText}`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
