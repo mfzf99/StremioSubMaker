@@ -1833,34 +1833,28 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the "id" field exactly as given with no modification
-3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
-5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
-6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
+    const promptBody = `<role>
+You are a professional subtitle translator.
+</role>
 
-TRANSLATION STYLE:
-1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
-3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
-4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
-5. Preserve any existing formatting tags
+<context>
+${contextInstructions || "Movie or drama subtitle."}
+</context>
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
+<examples>
+Input:
+[{"id":1,"text":"Previously on Breaking Bad..."},{"id":2,"text":"- You knew about this?\n- I had no choice."},{"id":3,"text":"Whatever."}]
 
-YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
+Output:
+[{"id":1,"text":"Sebelum ini dalam Breaking Bad…"},{"id":2,"text":"- Awak tahu pasal ini?\n- Saya terpaksa."},{"id":3,"text":"Lantaklah."}]
+</examples>
 
-INPUT (${expectedCount} entries):
+<task>
+Translate into natural, colloquial ${targetLabel}. Preserve all JSON keys and structure exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+</task>
 
 ${batchText}
-
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
+[{"id":`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
