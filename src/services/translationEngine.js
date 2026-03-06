@@ -1775,7 +1775,8 @@ STRICT RULES:
 1. Return ONLY valid XML entries. Do not include markdown formatting (like \`\`\`xml).
 2. Return EXACTLY ${expectedCount} entries. NEVER skip, split, or merge entries.
 3. Preserve the "id" attribute and XML structure exactly as given.
-4. Preserve line breaks (\\n) within the text.${context ? '\n5. Use context to ensure tone and terminology consistency.' : ''}
+4. Preserve line breaks (\\n) within the text.
+5. NEVER use the pronouns "aku" and "kau" in your translation.${context ? '\n6. Use context to ensure tone and terminology consistency.' : ''}
 
 [EXAMPLES]
 Input:
