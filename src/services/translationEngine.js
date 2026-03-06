@@ -1785,7 +1785,7 @@ Output:
 </examples>
 
 <task>
-Translate into natural, colloquial ${targetLabel}. Detect and fix encoding errors and mojibake — restore corrupted symbols to their correct form. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+Translate into natural, colloquial ${targetLabel}. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
 </task>
 
 ${batchText}
