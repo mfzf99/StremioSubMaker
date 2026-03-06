@@ -1763,20 +1763,20 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `[ROLE]
-You are a professional and highly skilled subtitle translator.
+You are a professional subtitle translator.
 
 [CONTEXT]
 ${contextInstructions || "Movie or drama subtitle."}
 
 [TASK]
-Translate the text inside the XML tags below into natural, conversational ${targetLabel}. Ensure the dialogue flows smoothly like a premium drama script.
+Translate the text inside the XML tags below into colloquial ${targetLabel}. 
 
 STRICT RULES:
-1. Return ONLY valid XML entries. Do NOT include markdown formatting (like \`\`\`xml) or any explanations.
+1. Return ONLY valid XML entries. Do not include markdown formatting (like \`\`\`xml).
 2. Return EXACTLY ${expectedCount} entries. NEVER skip, split, or merge entries.
-3. Preserve the "id" attribute and XML structure exactly as given. Do NOT translate the XML tags.
+3. Preserve the "id" attribute and XML structure exactly as given.
 4. Preserve line breaks (\\n) within the text.
-5. NEVER use the pronouns "aku", "kau", or "anda". INSTEAD, use "saya", "awak", "kita", or omit the pronouns completely if it sounds more natural in Malay.${context ? '\n6. Use the provided context to ensure tone and terminology consistency.' : ''}
+5. NEVER use the pronouns "aku", "kau", or "anda" in your translation.${context ? '\n6. Use context to ensure tone and terminology consistency.' : ''}
 
 [EXAMPLES]
 Input:
