@@ -1833,28 +1833,38 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `<role>
+    const promptBody = `[ROLE]
 You are a professional subtitle translator.
-</role>
 
-<context>
+[CONTEXT]
 ${contextInstructions || "Movie or drama subtitle."}
-</context>
 
-<examples>
+[TASK]
+Translate the "text" values in the JSON array below into colloquial ${targetLabel}. 
+
+STRICT RULES:
+1. Return ONLY a valid JSON array. Do not include markdown formatting (like \`\`\`json).
+2. Return EXACTLY ${expectedCount} objects. NEVER skip, split, or merge entries.
+3. Preserve the "id" value exactly as given.
+4. Preserve line breaks (\\n) within the text.${context ? '\n5. Use context to ensure tone and terminology consistency.' : ''}
+
+[EXAMPLES]
 Input:
-[{"id":1,"text":"Previously on Breaking Bad..."},{"id":2,"text":"- You knew about this?\\n- I had no choice."},{"id":3,"text":"Whatever."}]
+[
+  {"id": "1", "text": "Previously on Breaking Bad..."},
+  {"id": "2", "text": "- You knew about this?\\n- I had no choice."},
+  {"id": "3", "text": "Whatever."}
+]
 
 Output:
-[{"id":1,"text":"Sebelum ini dalam Breaking Bad…"},{"id":2,"text":"- Awak tahu pasal ini?\\n- Saya terpaksa."},{"id":3,"text":"Lantaklah."}]
-</examples>
+[
+  {"id": "1", "text": "Sebelum ini dalam Breaking Bad..."},
+  {"id": "2", "text": "- Awak tahu pasal ini?\\n- Saya terpaksa."},
+  {"id": "3", "text": "Lantaklah."}
+]
 
-<task>
-Translate into natural, colloquial ${targetLabel}. Preserve all JSON keys, structure, and \\n line breaks exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
-</task>
-
-${batchText}
-[{"id":`;
+[INPUT DATA]
+${batchTextJSON}`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
