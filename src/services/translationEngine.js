@@ -1764,35 +1764,34 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `[ROLE]
+    const promptBody = `<role>
 You are a professional subtitle translator.
+</role>
 
-[CONTEXT]
+<context>
 ${contextInstructions || "Movie or drama subtitle."}
+</context>
 
-[TASK]
-Translate the text inside the XML tags below into colloquial ${targetLabel}. 
-
-STRICT RULES:
-1. Return ONLY valid XML entries. Do not include markdown formatting (like \`\`\`xml).
-2. Return EXACTLY ${expectedCount} entries. NEVER skip, split, or merge entries.
-3. Preserve the "id" attribute and XML structure exactly as given.
-4. Use "saya" and "awak" for general dialogue.
-5. Preserve line breaks (\\n) within the text.${context ? '\n6. Use context to ensure consistency.' : ''}
-
-[EXAMPLES]
+<examples>
 Input:
 <s id="1">Previously on Breaking Bad...</s>
-<s id="2">- You knew about this?\\n- I had no choice.</s>
+<s id="2">- You knew about this?
+- I had no choice.</s>
 <s id="3">Whatever.</s>
 
 Output:
-<s id="1">Sebelum ini dalam Breaking Bad...</s>
-<s id="2">- Awak tahu pasal ini?\\n- Saya terpaksa.</s>
+<s id="1">Sebelum ini dalam Breaking Bad…</s>
+<s id="2">- Awak tahu pasal ini?
+- Saya terpaksa.</s>
 <s id="3">Lantaklah.</s>
+</examples>
 
-[INPUT DATA]
-${batchText}`;
+<task>
+Translate the text inside the XML tags below into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+</task>
+
+${batchText}
+<s id="`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
