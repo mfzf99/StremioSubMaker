@@ -161,6 +161,8 @@ class TranslationEngine {
     // Context settings (disabled by default)
     this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
     this.contextSize = parseInt(this.advancedSettings.contextSize) || 8;
+    // CCTV BOSS FAIZ: Cek nombor masuk tak dari website
+    console.log(`🔥 [CCTV BOSS FAIZ] Context Enabled: ${this.enableBatchContext} | Size: ${this.contextSize}`);
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
