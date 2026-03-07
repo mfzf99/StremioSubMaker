@@ -1778,16 +1778,19 @@ Input:
 <s id="2">- You knew about this?
 - I had no choice.</s>
 <s id="3">Whatever.</s>
+<s id="4">During dinner just now, didn't I ask if you wanted to talk to him?</s>
 
 Output:
 <s id="1">Sebelum ini dalam Breaking Bad…</s>
 <s id="2">- Awak tahu pasal ini?
 - Saya terpaksa.</s>
 <s id="3">Lantaklah.</s>
+<s id="4">Masa kita makan tadi, bukankah saya tanya
+kalau awak nak cakap dengan dia?</s>
 </examples>
 
 <task>
-Translate the text inside the XML tags below into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. If a translated line exceeds 42 characters, split it into two balanced lines using a line break. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context to ensure consistency.' : ''}
+Translate the text inside the XML tags below into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. If a translated line exceeds 42 characters, split it into two balanced lines using a line break. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
