@@ -1775,7 +1775,8 @@ STRICT RULES:
 1. Return ONLY valid XML entries. Do not include markdown formatting (like \`\`\`xml).
 2. Return EXACTLY ${expectedCount} entries. NEVER skip, split, or merge entries.
 3. Preserve the "id" attribute and XML structure exactly as given.
-4. Preserve line breaks (\\n) within the text.${context ? '\n5. Use context to ensure consistency.' : ''}
+4. Use "saya" and "awak" for general dialogue.
+5. Preserve line breaks (\\n) within the text.${context ? '\n6. Use context to ensure consistency.' : ''}
 
 [EXAMPLES]
 Input:
