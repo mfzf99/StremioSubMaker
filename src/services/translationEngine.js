@@ -1787,7 +1787,7 @@ Output:
 </examples>
 
 <task>
-Translate the text inside the XML tags below into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context for consistency.' : ''}
+Translate the text inside the XML tags below into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — one-to-one mapping, never skip, split, or merge.${context ? ' Use context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
