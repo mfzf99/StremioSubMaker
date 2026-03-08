@@ -768,6 +768,7 @@
       },
       "quickSetup": {
         "title": "Quick Setup",
+        "entryDesc": "New here? Get started in under a minute",
         "close": "Close",
         "back": "← Back",
         "next": "Next →",

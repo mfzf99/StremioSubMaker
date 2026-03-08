@@ -768,6 +768,7 @@
       },
       "quickSetup": {
         "title": "Configuração Rápida",
+        "entryDesc": "Novo por aqui? Comece em menos de um minuto",
         "close": "Fechar",
         "back": "← Voltar",
         "next": "Seguinte →",

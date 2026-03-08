@@ -5884,6 +5884,129 @@ async function getHistoryForUser(userHash) {
   }
 }
 
+/**
+ * Background enrichment for history entries with missing titles/metadata.
+ * Called fire-and-forget AFTER the HTML response has been sent.
+ * Parallelizes resolveHistoryTitle() calls and batches storage writes.
+ */
+async function enrichHistoryEntriesBackground(entries, userHash, fallbackVideoId, fallbackFilename, config) {
+  try {
+    const normalizedHash = normalizeHistoryUserHash(userHash);
+    if (!normalizedHash || !Array.isArray(entries) || entries.length === 0) return;
+
+    const isPlaceholder = (val) => {
+      const v = (val || '').toString().trim().toLowerCase();
+      return !v || v === 'unknown' || v === 'stream and refresh' || v === 'unknown title' || v === 'streamandrefresh';
+    };
+    const pickBest = (...candidates) => {
+      for (const c of candidates) {
+        if (c === undefined || c === null) continue;
+        const str = c.toString().trim();
+        if (!str || isPlaceholder(str)) continue;
+        return str;
+      }
+      return '';
+    };
+
+    const fbVideoId = pickBest(fallbackVideoId, config?.videoId, config?.lastStream?.videoId);
+    const fbFilename = pickBest(fallbackFilename, config?.lastStream?.filename, config?.streamFilename);
+
+    // Filter entries that need enrichment
+    const toEnrich = entries.filter(entry => {
+      const needsVideo = !entry.videoId || entry.videoId === 'unknown';
+      const needsTitle = !entry.title || entry.title === 'unknown' || entry.title === entry.filename;
+      const needsFilename = !entry.filename || entry.filename === 'unknown' || isPlaceholder(entry.filename);
+      return needsVideo || needsTitle || needsFilename;
+    });
+
+    if (toEnrich.length === 0) return;
+
+    log.debug(() => `[History BG] Enriching ${toEnrich.length} entries in background`);
+
+    // Resolve all titles in parallel
+    const results = await Promise.allSettled(
+      toEnrich.map(async (entry) => {
+        const effectiveVideoId = (!entry.videoId || entry.videoId === 'unknown')
+          ? pickBest(fbVideoId, entry.videoId) : entry.videoId;
+        const effectiveFilename = (!entry.filename || entry.filename === 'unknown' || isPlaceholder(entry.filename))
+          ? pickBest(fbFilename, entry.filename, entry.title) : entry.filename;
+        const meta = await resolveHistoryTitle(
+          effectiveVideoId || entry.videoId || '',
+          effectiveFilename || entry.title || entry.filename || ''
+        );
+        return { entry, meta, effectiveVideoId, effectiveFilename };
+      })
+    );
+
+    // Apply resolved metadata and collect entries that changed
+    const changed = [];
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const { entry, meta, effectiveVideoId, effectiveFilename } = result.value;
+      const oldTitle = entry.title;
+      const oldVideoId = entry.videoId;
+
+      entry.videoId = pickBest(effectiveVideoId, meta.videoId, entry.videoId) || 'unknown';
+      entry.filename = pickBest(effectiveFilename, entry.filename, meta.title) || 'unknown';
+      entry.title = pickBest(meta.title, entry.title, entry.filename) || 'Unknown title';
+      if (meta.season != null) entry.season = meta.season;
+      if (meta.episode != null) entry.episode = meta.episode;
+      if (!entry.videoHash || entry.videoHash === 'unknown') {
+        entry.videoHash = deriveVideoHash(entry.filename || entry.title || '', entry.videoId);
+      }
+
+      // Only save if something actually changed
+      if (entry.title !== oldTitle || entry.videoId !== oldVideoId) {
+        changed.push(entry);
+      }
+    }
+
+    if (changed.length === 0) return;
+
+    log.debug(() => `[History BG] ${changed.length} entries enriched, writing batch update`);
+
+    // Batch write: write individual entry keys in parallel, then one store-key update
+    const adapter = await getStorageAdapter();
+    const ttlSeconds = StorageAdapter.DEFAULT_TTL[StorageAdapter.CACHE_TYPES.HISTORY];
+
+    // Write individual entry keys in parallel (atomic, no read needed)
+    await Promise.allSettled(
+      changed.map(entry => {
+        const entryKey = buildHistoryKey(normalizedHash, entry.id);
+        const toStore = { ...entry };
+        if (!toStore.createdAt) toStore.createdAt = Date.now();
+        return adapter.set(entryKey, toStore, StorageAdapter.CACHE_TYPES.HISTORY, ttlSeconds);
+      })
+    );
+
+    // Single store-key refresh (one read-modify-write instead of N)
+    try {
+      const storeKey = buildHistoryStoreKey(normalizedHash);
+      const store = await adapter.get(storeKey, StorageAdapter.CACHE_TYPES.HISTORY);
+      let existingEntries = {};
+      if (store && typeof store === 'object' && !Array.isArray(store)) {
+        existingEntries = (store.entries && typeof store.entries === 'object') ? store.entries : {};
+      }
+      const merged = { ...existingEntries };
+      for (const entry of changed) {
+        merged[entry.id] = { ...(merged[entry.id] || {}), ...entry };
+      }
+      const pruned = pruneHistoryEntries(Object.values(merged));
+      const compactMap = Object.fromEntries(pruned.map(e => [e.id, e]));
+      await adapter.set(
+        storeKey,
+        { entries: compactMap, updatedAt: Date.now(), isCacheOnly: true },
+        StorageAdapter.CACHE_TYPES.HISTORY,
+        ttlSeconds
+      );
+    } catch (_) { /* best-effort store-key refresh */ }
+
+    log.debug(() => `[History BG] Background enrichment complete for ${changed.length} entries`);
+  } catch (err) {
+    log.debug(() => [`[History BG] Background enrichment failed:`, err.message]);
+  }
+}
+
 // Re-export everything properly
 module.exports = {
   createSubtitleHandler,
@@ -5930,7 +6053,8 @@ module.exports = {
   resolveHistoryUserHash,
   getHistoryForUser,
   saveRequestToHistory,
-  resolveHistoryTitle
+  resolveHistoryTitle,
+  enrichHistoryEntriesBackground
 };
 
 // Append the complex object methods to module.exports since they were defined inline

@@ -51,7 +51,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, maybeConvertToSRT } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, getAvailableSubtitlesForTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -5656,49 +5656,14 @@ app.get('/sub-history', async (req, res) => {
 
         const history = await getHistoryForUser(historyUserHash);
 
-        const isPlaceholder = (val) => {
-            const v = (val || '').toString().trim().toLowerCase();
-            return !v || v === 'unknown' || v === 'stream and refresh' || v === 'streamandrefresh';
-        };
-        const pickBest = (...candidates) => {
-            for (const c of candidates) {
-                if (c === undefined || c === null) continue;
-                const str = c.toString().trim();
-                if (!str || isPlaceholder(str)) continue;
-                return str;
-            }
-            return '';
-        };
-
-        // Opportunistic enrichment: use provided/query metadata to fill missing titles/videoIds/filenames
-        const fallbackVideoId = pickBest(videoId, config?.videoId, config?.lastStream?.videoId);
-        const fallbackFilename = pickBest(filename, config?.lastStream?.filename, config?.streamFilename);
-        for (const entry of history) {
-            const needsVideo = !entry.videoId || entry.videoId === 'unknown';
-            const needsTitle = !entry.title || entry.title === 'unknown' || entry.title === entry.filename;
-            const needsFilename = !entry.filename || entry.filename === 'unknown' || isPlaceholder(entry.filename);
-            if (!needsVideo && !needsTitle && !needsFilename) continue;
-            try {
-                const effectiveVideoId = !needsVideo ? entry.videoId : pickBest(fallbackVideoId, entry.videoId);
-                const effectiveFilename = !needsFilename ? entry.filename : pickBest(fallbackFilename, entry.filename, entry.title);
-                const meta = await resolveHistoryTitle(effectiveVideoId || entry.videoId || '', effectiveFilename || entry.title || entry.filename || '');
-                entry.videoId = pickBest(effectiveVideoId, meta.videoId, entry.videoId) || 'unknown';
-                entry.filename = pickBest(effectiveFilename, entry.filename, meta.title) || 'unknown';
-                entry.title = pickBest(meta.title, entry.title, entry.filename) || 'Unknown title';
-                if (meta.season != null) entry.season = meta.season;
-                if (meta.episode != null) entry.episode = meta.episode;
-                if (!entry.videoHash || entry.videoHash === 'unknown') {
-                    entry.videoHash = deriveVideoHash(entry.filename || entry.title || '', entry.videoId);
-                }
-                await saveRequestToHistory(historyUserHash, entry);
-            } catch (e) {
-                log.debug(() => [`[Sub History Page] Enrichment skipped:`, e.message]);
-            }
-        }
+        // Render immediately — don't block on enrichment
         const html = generateHistoryPage(configStr, history, config, videoId, filename);
-
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
+
+        // Fire-and-forget: enrich missing titles in background for next page load
+        enrichHistoryEntriesBackground(history, historyUserHash, videoId, filename, config)
+            .catch(e => log.debug(() => ['[Sub History Page] Background enrichment error:', e.message]));
     } catch (error) {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         if (respondStorageUnavailable(res, error, '[Sub History Page]', t)) return;

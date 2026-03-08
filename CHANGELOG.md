@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.71
+
+**Improvements:**
+
+- **Translation history page now loads instantly:** The `/sub-history` page previously blocked on a sequential enrichment loop that called external APIs (Cinemeta/Kitsu, 7.5s timeout each) and performed 3 Redis round-trips per entry — all before sending any HTML. With 20 history entries this could take 4–20+ seconds. The page now renders immediately after fetching history data, with enrichment running in the background (fire-and-forget after `res.send()`). Missing titles are resolved in parallel via `Promise.allSettled` and storage writes are batched into a single store-key update instead of per-entry read-modify-write cycles. Entries that already have titles (the common case — titles are resolved at translation time) display normally; entries still showing "unknown" are enriched in the background for the next page load.
+
 ## SubMaker v1.4.70
 
 **Improvements:**
