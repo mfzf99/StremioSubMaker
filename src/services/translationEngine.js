@@ -1762,30 +1762,41 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. Return EXACTLY ${expectedCount} tagged entries
-4. Keep line breaks within each entry
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms for ${targetLabel}
-7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
+    const promptBody = `<role>
+You are a professional subtitle translator for movies and TV dramas.
+</role>
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
+<context>
+${contextInstructions || "Movie or drama subtitle."}
+</context>
 
-YOUR RESPONSE MUST:
-- Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain ONLY the XML-tagged translated entries
+<examples>
+Input:
+<s id="1">Previously on Breaking Bad...</s>
+<s id="2">- You knew about this?
+- I had no choice.</s>
+<s id="3">Whatever.</s>
+<s id="4">During dinner just now, didn't I ask if you wanted to talk to him?</s>
+<s id="5">Pick up the phone when I call.</s>
+<s id="6">I answered that last time.</s>
 
-INPUT (${expectedCount} entries):
+Output:
+<s id="1">Sebelum ini dalam Breaking Bad…</s>
+<s id="2">- Awak tahu pasal ini?
+- Saya terpaksa.</s>
+<s id="3">Lantaklah.</s>
+<s id="4">Masa kita makan tadi, bukankah saya ada tanya
+kalau awak nak cakap dengan dia?</s>
+<s id="5">Angkat telefon bila saya call.</s>
+<s id="6">Saya dah jawab dah haritu.</s>
+</examples>
+
+<task>
+Translate the text inside the XML tags into ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. For lines longer than 42 characters, use a newline to wrap the text naturally within the same entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, reorder, or create extra entries.${context ? ' Use provided context to ensure consistency.' : ''}
+</task>
 
 ${batchText}
-
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+<s id="`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
