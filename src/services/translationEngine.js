@@ -1762,41 +1762,32 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `<role>
-You are a professional subtitle translator for movies and TV dramas.
-</role>
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+${contextInstructions}
 
-<context>
-${contextInstructions || "Movie or drama subtitle."}
-</context>
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Maintain natural dialogue flow and 100% accuracy of the original meaning and emotion
+6. Use appropriate colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue
+7. Naturally incorporate common English loanwords as used by Malaysians in everyday speech
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
 
-<examples>
-Input:
-<s id="1">Previously on Breaking Bad...</s>
-<s id="2">- You knew about this?
-- I had no choice.</s>
-<s id="3">Whatever.</s>
-<s id="4">During dinner just now, didn't I ask if you wanted to talk to him?</s>
-<s id="5">Pick up the phone when I call.</s>
-<s id="6">I answered that last time.</s>
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
 
-Output:
-<s id="1">Sebelum ini dalam Breaking Bad…</s>
-<s id="2">- Awak tahu pasal ini?
-- Saya terpaksa.</s>
-<s id="3">Lantaklah.</s>
-<s id="4">Masa kita makan tadi, bukankah saya ada tanya
-kalau awak nak cakap dengan dia?</s>
-<s id="5">Angkat telefon bila saya call.</s>
-<s id="6">Saya dah jawab dah haritu.</s>
-</examples>
+YOUR RESPONSE MUST:
+- Start with <s id="1"> and end with </s> after entry ${expectedCount}
+- Contain ONLY the XML-tagged translated entries
 
-<task>
-Translate the text inside the XML tags into natural colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use provided context to ensure consistency.' : ''}
-</task>
+INPUT (${expectedCount} entries):
 
 ${batchText}
-<s id="`;
+
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
