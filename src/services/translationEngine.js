@@ -1792,7 +1792,7 @@ kalau awak nak cakap dengan dia?</s>
 </examples>
 
 <task>
-Translate the text inside the XML tags into ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. For lines longer than 42 characters, use a newline to wrap the text naturally within the same entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, reorder, or create extra entries.${context ? ' Use provided context to ensure consistency.' : ''}
+Translate the text inside the XML tags into ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, reorder, or create extra entries.${context ? ' Use provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
