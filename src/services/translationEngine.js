@@ -1766,25 +1766,31 @@ CONTEXT PROVIDED:
 ${contextInstructions}
 
 CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. Return EXACTLY ${expectedCount} tagged entries
-4. Keep line breaks within each entry
-5. Maintain natural dialogue flow and 100% accuracy of the original meaning and emotion
-6. Use appropriate colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue
-7. Naturally incorporate common English loanwords as used by Malaysians in everyday speech
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
+1. Translate ONLY the text content inside each <s id="N">...</s> tag.
+2. PRESERVE the XML structure exactly: <s id="N">translated text</s>.
+3. Return EXACTLY ${expectedCount} tagged entries, with all IDs preserved in order.
+4. Do not skip, merge, split, reorder, or renumber entries.
+5. Keep original line breaks within each entry.
+6. Preserve meaning, tone, emotion, and natural dialogue flow with high accuracy.
+7. Use natural colloquial ${targetLabel} suitable for subtitles, but maintain polite Malay register.
+8. For general dialogue, use "saya" and "awak".
+9. NEVER use "aku/kau".
+10. Naturally incorporate common English loanwords only where they are genuinely common in Malaysian daily usage.
+11. Preserve any existing inline formatting tags exactly (e.g., <i>, <b>, <u>) and keep their positions.
+12. Do not add or remove punctuation emphasis unless required for natural target-language readability.
+13. Preserve proper nouns (names, places, brands) unless there is a standard established local form.
+14. Preserve numbers, URLs, emails, and identifiers exactly unless translation is explicitly required by context.
+15. XML safety: escape special characters in text nodes when needed (& as &amp;, < as &lt;, > as &gt;).
+${context ? '16. Use the provided context to ensure term consistency, pronoun consistency, and scene continuity.' : ''}
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
-
-YOUR RESPONSE MUST:
-- Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain ONLY the XML-tagged translated entries
+STRICT OUTPUT CONSTRAINTS:
+- Output ONLY XML-tagged entries. No acknowledgements, no explanations, no notes, no commentary.
+- Do NOT output markdown.
+- Do NOT include timestamps/timecodes.
+- Start exactly with <s id="1"> and end exactly with </s> for entry ${expectedCount}.
+- Final output must contain EXACTLY ${expectedCount} <s id="N">...</s> entries.
 
 INPUT (${expectedCount} entries):
-
 ${batchText}
 
 OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
