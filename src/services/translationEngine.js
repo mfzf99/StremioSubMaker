@@ -1775,7 +1775,7 @@ ${contextInstructions || "Movie or drama subtitle."}
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries.
 4. Keep line breaks within each entry.
-5. Translate into colloquial ${targetLabel}, maintaining 100% accuracy of the original meaning and emotion. Use "saya" and "awak" for general dialogue.
+5. Translate into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
 6. Naturally incorporate common English loanwords as used by Malaysians in everyday speech.
 7. Preserve any existing formatting tags.${context ? '\n8. Use the provided context to ensure consistency.' : ''}
 </critical_rules>
