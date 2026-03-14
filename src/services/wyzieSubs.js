@@ -229,7 +229,7 @@ class WyzieSubsService {
             // IMPORTANT: By default, Wyzie only queries OpenSubtitles!
             // We must explicitly request sources to search multiple providers.
             // Build source list from user config (UI now defaults to all disabled for new users)
-            const allSources = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho'];
+            const allSources = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho', 'kitsunekko', 'jimaku', 'yify'];
             const enabledSources = allSources.filter(src => {
                 // Source is enabled if: no sources config provided (edge case), OR source is explicitly true
                 // Note: UI sends false for unchecked sources, so sources[src] !== false correctly handles this

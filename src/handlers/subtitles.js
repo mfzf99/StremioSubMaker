@@ -4374,53 +4374,62 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
           const sourceLanguageHint = options.sourceLanguage
             || (Array.isArray(config.sourceLanguages) && config.sourceLanguages[0])
             || null;
+          // ASS passthrough: pass skipAssConversion to preserve original ASS/SSA for translation
+          const skipAssConversion = config.convertAssToVtt === false && config.forceSRTOutput !== true;
 
           if (sourceFileId.startsWith('subdl_')) {
             if (!config.subtitleProviders?.subdl?.enabled) {
               throw new Error('SubDL provider is disabled');
             }
             const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
-            sourceContent = await subdl.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await subdl.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else if (sourceFileId.startsWith('subsource_')) {
             if (!config.subtitleProviders?.subsource?.enabled) {
               throw new Error('SubSource provider is disabled');
             }
             const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
-            sourceContent = await subsource.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await subsource.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else if (sourceFileId.startsWith('v3_')) {
             if (!config.subtitleProviders?.opensubtitles?.enabled) {
               throw new Error('OpenSubtitles provider is disabled');
             }
             const opensubtitlesV3 = new OpenSubtitlesV3Service();
-            sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else if (sourceFileId.startsWith('scs_')) {
             // Stremio Community Subtitles
             if (!config.subtitleProviders?.scs?.enabled) {
               throw new Error('SCS provider is disabled');
             }
             const scs = new StremioCommunitySubtitlesService();
-            sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''), { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''), { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else if (sourceFileId.startsWith('wyzie_')) {
             // Wyzie Subs (free aggregator)
             if (!config.subtitleProviders?.wyzie?.enabled) {
               throw new Error('Wyzie Subs provider is disabled');
             }
             const wyzie = new WyzieSubsService();
-            sourceContent = await wyzie.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await wyzie.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else if (sourceFileId.startsWith('subsro_')) {
             // Subs.ro subtitle (Romanian subtitle database)
             if (!config.subtitleProviders?.subsro?.enabled) {
               throw new Error('Subs.ro provider is disabled');
             }
             const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
-            sourceContent = await subsro.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await subsro.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
           } else {
             // OpenSubtitles subtitle (Auth implementation - default fallback)
             if (!config.subtitleProviders?.opensubtitles?.enabled) {
               throw new Error('OpenSubtitles provider is disabled');
             }
             const opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
-            sourceContent = await opensubtitles.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint });
+            sourceContent = await opensubtitles.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, languageHint: sourceLanguageHint, skipAssConversion });
+          }
+
+          // Handle object returns from providers when skipAssConversion is enabled
+          // Providers return { content, format } instead of a string for ASS/SSA
+          if (sourceContent && typeof sourceContent === 'object' && sourceContent.content) {
+            log.debug(() => `[Translation] Pre-flight: received original ${(sourceContent.format || 'ass').toUpperCase()} subtitle (conversion disabled)`);
+            sourceContent = sourceContent.content;
           }
 
           // Save to download cache for subsequent operations
@@ -4585,6 +4594,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
         // Fixed download timeout (independent of search timeout config)
         const downloadTimeoutMs = 18000;
+        // ASS passthrough: pass skipAssConversion to preserve original ASS/SSA for translation
+        const skipAssConversion = config.convertAssToVtt === false && config.forceSRTOutput !== true;
 
         if (sourceFileId.startsWith('subdl_')) {
           // SubDL subtitle
@@ -4593,7 +4604,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           }
 
           const subdl = new SubDLService(config.subtitleProviders.subdl.apiKey);
-          sourceContent = await subdl.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await subdl.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
         } else if (sourceFileId.startsWith('subsource_')) {
           // SubSource subtitle
           if (!config.subtitleProviders?.subsource?.enabled) {
@@ -4601,7 +4612,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           }
 
           const subsource = new SubSourceService(config.subtitleProviders.subsource.apiKey);
-          sourceContent = await subsource.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await subsource.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
         } else if (sourceFileId.startsWith('v3_')) {
           // OpenSubtitles V3 subtitle
           if (!config.subtitleProviders?.opensubtitles?.enabled) {
@@ -4609,7 +4620,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           }
 
           const opensubtitlesV3 = new OpenSubtitlesV3Service();
-          sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await opensubtitlesV3.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
         } else if (sourceFileId.startsWith('scs_')) {
           // Stremio Community Subtitles
           if (!config.subtitleProviders?.scs?.enabled) {
@@ -4617,21 +4628,21 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           }
           const scs = new StremioCommunitySubtitlesService();
           // Remove scs_ prefix to get the actual comm_ ID
-          sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''), { timeout: downloadTimeoutMs });
+          sourceContent = await scs.downloadSubtitle(sourceFileId.replace('scs_', ''), { timeout: downloadTimeoutMs, skipAssConversion });
         } else if (sourceFileId.startsWith('wyzie_')) {
           // Wyzie Subs (free aggregator)
           if (!config.subtitleProviders?.wyzie?.enabled) {
             throw new Error('Wyzie Subs provider is disabled');
           }
           const wyzie = new WyzieSubsService();
-          sourceContent = await wyzie.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await wyzie.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
         } else if (sourceFileId.startsWith('subsro_')) {
           // Subs.ro subtitle (Romanian subtitle database)
           if (!config.subtitleProviders?.subsro?.enabled) {
             throw new Error('Subs.ro provider is disabled');
           }
           const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
-          sourceContent = await subsro.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await subsro.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
         } else {
           // OpenSubtitles subtitle (Auth implementation - default fallback)
           if (!config.subtitleProviders?.opensubtitles?.enabled) {
@@ -4639,7 +4650,14 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           }
 
           const opensubtitles = new OpenSubtitlesService(config.subtitleProviders.opensubtitles);
-          sourceContent = await opensubtitles.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs });
+          sourceContent = await opensubtitles.downloadSubtitle(sourceFileId, { timeout: downloadTimeoutMs, skipAssConversion });
+        }
+
+        // Handle object returns from providers when skipAssConversion is enabled
+        // Providers return { content, format } instead of a string for ASS/SSA
+        if (sourceContent && typeof sourceContent === 'object' && sourceContent.content) {
+          log.debug(() => `[Translation] Received original ${(sourceContent.format || 'ass').toUpperCase()} subtitle for translation (conversion disabled)`);
+          sourceContent = sourceContent.content;
         }
 
         // Save the freshly downloaded source to the 10min download cache for subsequent operations
@@ -4669,9 +4687,37 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       } catch (_) { }
     }
 
-    // Convert non-SRT formats (VTT, ASS/SSA) to SRT for translation
-    // This handles all formats centrally: ASS/SSA → VTT → SRT, VTT → SRT, SRT passthrough
-    sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
+    // ASS-aware translation: when ASS passthrough is enabled, extract dialogue text
+    // from the ASS file and build a temporary SRT for the translation engine.
+    // The original ASS structure (Script Info, Styles, tags) is preserved and
+    // translated text is re-injected after translation completes.
+    const assPassthroughEnabled = config.convertAssToVtt === false && config.forceSRTOutput !== true;
+    let assTranslationData = null;
+
+    // Detect if content is actually ASS/SSA format (works regardless of download source)
+    const isASSContent = assPassthroughEnabled && sourceContent &&
+      sourceContent.includes('[Script Info]') &&
+      (sourceContent.includes('[V4+ Styles]') || sourceContent.includes('[V4 Styles]'));
+
+    if (isASSContent) {
+      // ASS-aware translation path: parse ASS, build temp SRT, preserve structure
+      const { parseASSForTranslation, buildSRTFromASSDialogue } = require('../utils/assTranslationHelper');
+      assTranslationData = parseASSForTranslation(sourceContent);
+      if (assTranslationData && assTranslationData.dialogueEntries.filter(e => e.isDialogue).length > 0) {
+        const tempSRT = buildSRTFromASSDialogue(assTranslationData.dialogueEntries);
+        log.debug(() => `[Translation] ASS-aware mode: extracted ${assTranslationData.dialogueEntries.filter(e => e.isDialogue).length} dialogue entries, built temp SRT (${tempSRT.length} chars)`);
+        sourceContent = tempSRT;
+      } else {
+        // Fallback: can't parse ASS dialogues, convert to SRT normally
+        log.warn(() => '[Translation] ASS parsing failed or no dialogues found, falling back to SRT conversion');
+        sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
+        assTranslationData = null;
+      }
+    } else {
+      // Standard path: convert non-SRT formats (VTT, ASS/SSA) to SRT for translation
+      // This handles all formats centrally: ASS/SSA → VTT → SRT, VTT → SRT, SRT passthrough
+      sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
+    }
 
     // Get language names for better translation context
     const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
@@ -4915,6 +4961,13 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       );
 
       log.debug(() => '[Translation] Translation completed successfully');
+
+      // ASS-aware translation: reassemble the translated text back into the original ASS structure
+      if (assTranslationData && translatedContent) {
+        const { reassembleASS } = require('../utils/assTranslationHelper');
+        translatedContent = reassembleASS(assTranslationData, translatedContent);
+        log.debug(() => `[Translation] ASS reassembly complete (${translatedContent.length} chars)`);
+      }
 
     } catch (error) {
       // Only log if not already logged by upstream handler

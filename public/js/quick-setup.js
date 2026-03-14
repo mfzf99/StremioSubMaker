@@ -38,7 +38,7 @@
         subsourceApiKey: '',
         scsEnabled: false,
         wyzieEnabled: false,
-        wyzieSources: { subf2m: true, podnapisi: true, gestdown: true, animetosho: true, opensubs: false, subdl: false },
+        wyzieSources: { subf2m: true, podnapisi: true, gestdown: true, animetosho: true, opensubs: false, subdl: false, kitsunekko: false, jimaku: false, yify: false },
         // AI (translate mode only)
         geminiApiKey: '',
         geminiKeyValid: false,
@@ -462,7 +462,10 @@
                         gestdown: !!($('qsWyzieGestdown') || {}).checked,
                         animetosho: !!($('qsWyzieAnimetosho') || {}).checked,
                         opensubs: !!($('qsWyzieOpensubs') || {}).checked,
-                        subdl: !!($('qsWyzieSubdl') || {}).checked
+                        subdl: !!($('qsWyzieSubdl') || {}).checked,
+                        kitsunekko: !!($('qsWyzieKitsunekko') || {}).checked,
+                        jimaku: !!($('qsWyzieJimaku') || {}).checked,
+                        yify: !!($('qsWyzieYify') || {}).checked
                     };
                 }
                 break;
@@ -1795,7 +1798,7 @@
 
         // Wyzie sub-sources
         if (state.wyzieEnabled && state.wyzieSources) {
-            const ids = { subf2m: 'qsWyzieSubf2m', podnapisi: 'qsWyziePodnapisi', gestdown: 'qsWyzieGestdown', animetosho: 'qsWyzieAnimetosho', opensubs: 'qsWyzieOpensubs', subdl: 'qsWyzieSubdl' };
+            const ids = { subf2m: 'qsWyzieSubf2m', podnapisi: 'qsWyziePodnapisi', gestdown: 'qsWyzieGestdown', animetosho: 'qsWyzieAnimetosho', opensubs: 'qsWyzieOpensubs', subdl: 'qsWyzieSubdl', kitsunekko: 'qsWyzieKitsunekko', jimaku: 'qsWyzieJimaku', yify: 'qsWyzieYify' };
             for (const [key, id] of Object.entries(ids)) {
                 const el = $(id);
                 if (el) el.checked = !!state.wyzieSources[key];

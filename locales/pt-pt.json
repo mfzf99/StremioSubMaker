@@ -1326,8 +1326,8 @@
           "description": "Converter todas as saídas de legenda para formato SRT para máxima compatibilidade com leitores."
         },
         "convertAssToVtt": {
-          "label": "Converter ASS/SSA para VTT",
-          "description": "Converter legendas ASS/SSA para formato VTT para compatibilidade. Desative para enviar legendas ASS/SSA tal como estão para o Stremio. (Traduções convertem sempre automaticamente)"
+          "label": "Passthrough ASS/SSA",
+          "description": "Ative para enviar legendas ASS/SSA tal como estão para o Stremio. Desative para converter para VTT. (Traduções convertem sempre automaticamente)"
         },
         "betaMode": {
           "label": "Modo Avançado",

@@ -4906,8 +4906,10 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
                     }
                     if (typeof bypassCached.content === 'string' && bypassCached.content.length > 0) {
                         log.debug(() => `[Translation] Found bypass cache result for ${sourceFileId} (${bypassCached.content.length} chars)`);
-                        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-                        res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.srt"`);
+                        const { isAss: bIsAss, isSsa: bIsSsa } = detectSubtitlePayloadFormat(bypassCached.content);
+                        const bExt = bIsSsa ? 'ssa' : (bIsAss ? 'ass' : 'srt');
+                        res.setHeader('Content-Type', (bIsAss || bIsSsa) ? 'text/x-ssa; charset=utf-8' : 'text/plain; charset=utf-8');
+                        res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.${bExt}"`);
                         setSubtitleCacheHeaders(res, 'final');
                         return res.send(bypassCached.content);
                     }
@@ -4933,8 +4935,10 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
                     }
                     if (typeof permanentCached.content === 'string' && permanentCached.content.length > 0) {
                         log.debug(() => `[Translation] Found permanent cache result for ${sourceFileId} (${permanentCached.content.length} chars)`);
-                        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-                        res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.srt"`);
+                        const { isAss: pIsAss, isSsa: pIsSsa } = detectSubtitlePayloadFormat(permanentCached.content);
+                        const pExt = pIsSsa ? 'ssa' : (pIsAss ? 'ass' : 'srt');
+                        res.setHeader('Content-Type', (pIsAss || pIsSsa) ? 'text/x-ssa; charset=utf-8' : 'text/plain; charset=utf-8');
+                        res.setHeader('Content-Disposition', `attachment; filename="translated_${targetLang}.${pExt}"`);
                         setSubtitleCacheHeaders(res, 'final');
                         return res.send(permanentCached.content);
                     }
@@ -4984,9 +4988,11 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
         log.debug(() => `[Translation] Serving ${isLoadingMessage ? 'loading message' : (isPartialMessage ? 'partial content' : 'translated content')} for ${sourceFileId} (was duplicate: ${isAlreadyInFlight})`);
         log.debug(() => `[Translation] Content length: ${subtitleContent.length} characters, first 200 chars: ${subtitleContent.substring(0, 200)}`);
 
-        // Always use 'attachment' header for Android compatibility
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${(isLoadingMessage || isPartialMessage) ? 'translating' : 'translated'}_${targetLang}.srt"`);
+        // Detect payload format for correct headers (ASS/SSA or SRT)
+        const { isAss: tIsAss, isSsa: tIsSsa } = detectSubtitlePayloadFormat(subtitleContent);
+        const tExt = tIsSsa ? 'ssa' : (tIsAss ? 'ass' : 'srt');
+        res.setHeader('Content-Type', (tIsAss || tIsSsa) ? 'text/x-ssa; charset=utf-8' : 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${(isLoadingMessage || isPartialMessage) ? 'translating' : 'translated'}_${targetLang}.${tExt}"`);
 
         // Disable caching for loading/partial messages so Stremio can poll for updates
         if (isLoadingMessage || isPartialMessage) {
@@ -5129,7 +5135,10 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
                 sourceLanguage: 'und',
                 from: 'learn'
             });
-            const vtt = srtPairToWebVTT(sourceContent, translatedSrt, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'), { learnItalic: config.learnItalic, learnItalicTarget: config.learnItalicTarget });
+            // handleTranslation may return ASS content when ASS passthrough is enabled
+            // srtPairToWebVTT requires SRT input, so ensure conversion
+            const translatedSrtForPairing = ensureSRTForTranslation(translatedSrt, '[Learn Mode]');
+            const vtt = srtPairToWebVTT(sourceContent, translatedSrtForPairing, (config.learnOrder || 'source-top'), (config.learnPlacement || 'stacked'), { learnItalic: config.learnItalic, learnItalicTarget: config.learnItalicTarget });
             const output = maybeConvertToSRT(vtt, config);
             const isSrt = config.forceSRTOutput;
             res.setHeader('Content-Type', isSrt ? 'text/plain; charset=utf-8' : 'text/vtt; charset=utf-8');

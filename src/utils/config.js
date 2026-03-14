@@ -476,6 +476,11 @@ function normalizeConfig(config) {
   // ASS/SSA conversion enabled by default (backwards compatible) - only disabled when explicitly set to false
   // When forceSRTOutput is true, ASS conversion is always enabled (SRT output requires conversion)
   mergedConfig.convertAssToVtt = mergedConfig.forceSRTOutput === true || mergedConfig.convertAssToVtt !== false;
+  // When ASS passthrough is active, force no URL extension to avoid extension/payload mismatch
+  // (Stremio would request .srt but receive ASS content — this causes player confusion)
+  if (mergedConfig.convertAssToVtt === false) {
+    mergedConfig.urlExtensionTest = 'none';
+  }
   // URL extension test mode: validate and default to 'srt'
   // Valid values:
   // - 'srt' (default)

@@ -4,6 +4,32 @@ const { findISO6391ByName, toISO6391 } = require('../../utils/languages');
 const { httpAgent, httpsAgent } = require('../../utils/httpAgents');
 const log = require('../../utils/logger');
 
+// Maximum characters per Google Translate request.
+// The free endpoint returns HTTP 400 when the URL-encoded payload exceeds ~15-20K chars.
+// Even with POST, Google recommends ≤5K chars per request for reliability.
+// We use ~6K as a generous-but-safe limit per the project owner's preference.
+const MAX_CHARS_PER_REQUEST = 6000;
+
+// Exponential backoff base delay (ms) and cap for retries
+const BACKOFF_BASE_MS = 4000;
+const BACKOFF_MAX_MS = 8000;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculate exponential backoff delay with jitter.
+ * @param {number} attempt - Zero-based attempt number (0 = first retry)
+ * @returns {number} - Delay in milliseconds
+ */
+function backoffDelay(attempt) {
+  const base = Math.min(BACKOFF_BASE_MS * Math.pow(2, attempt), BACKOFF_MAX_MS);
+  // Add ±25% jitter to prevent thundering herd
+  const jitter = base * 0.25 * (Math.random() * 2 - 1);
+  return Math.max(0, Math.round(base + jitter));
+}
+
 // Unofficial, keyless Google Translate provider using the public web endpoint.
 // This mirrors the "google-translate-api-browser" behavior (join with a delimiter,
 // single request, then split back into entries). Because it relies on the free
@@ -90,21 +116,53 @@ class GoogleTranslateProvider {
     return { type: 'raw', entries: [{ index: 0, text: content }] };
   }
 
-  buildRequestPayload(text) {
-    return {
-      client: 'gtx',
-      sl: 'auto',
-      tl: this.targetCode,
-      dt: 't',
-      q: text
-    };
+  /**
+   * Sanitize text before sending to the Google Translate API.
+   * Strips characters that can cause HTTP 400 errors even with proper
+   * URL encoding — null bytes, BOM markers, and C0/C1 control characters
+   * that sometimes appear in subtitle files from various encodings.
+   * @param {string} text
+   * @returns {string}
+   */
+  sanitizeText(text) {
+    if (!text) return '';
+    return String(text)
+      // Strip BOM (UTF-8, UTF-16 LE/BE)
+      .replace(/^\uFEFF/, '')
+      .replace(/\uFFFE/g, '')
+      // Strip null bytes
+      .replace(/\0/g, '')
+      // Strip C0 control characters (except \n \r \t which are meaningful)
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      // Strip C1 control characters (U+0080–U+009F)
+      .replace(/[\u0080-\u009F]/g, '')
+      // Normalize whitespace — collapse runs of spaces/tabs but preserve newlines
+      .replace(/[ \t]+/g, ' ');
   }
 
+  /**
+   * Call the Google Translate API using POST to avoid URL length limits.
+   * The free endpoint accepts application/x-www-form-urlencoded POST bodies,
+   * which removes the ~15K char query-string ceiling that caused HTTP 400
+   * errors on larger subtitle batches (Issue #93).
+   * @param {string} text - Text to translate
+   * @returns {Promise<string>} - Translated text
+   */
   async callTranslate(text) {
-    const payload = this.buildRequestPayload(text);
-    const response = await axios.get(this.baseUrl, {
-      params: payload,
-      headers: { 'User-Agent': 'SubMaker/1.0' },
+    const sanitized = this.sanitizeText(text);
+    const params = new URLSearchParams();
+    params.append('client', 'gtx');
+    params.append('sl', 'auto');
+    params.append('tl', this.targetCode);
+    params.append('dt', 't');
+    params.append('q', sanitized);
+
+    const response = await axios.post(this.baseUrl, params.toString(), {
+      headers: {
+        'User-Agent': 'SubMaker/1.0',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
       timeout: this.translationTimeout,
       httpAgent,
       httpsAgent
@@ -161,6 +219,55 @@ class GoogleTranslateProvider {
       .join('\n\n');
   }
 
+  /**
+   * Split entry texts into chunks that respect MAX_CHARS_PER_REQUEST.
+   * Each chunk is an array of { originalIndex, text } so we can reassemble in order.
+   * Splitting is done on entry boundaries — entries are never split mid-text.
+   * @param {string[]} texts - Array of entry texts
+   * @returns {Array<Array<{originalIndex: number, text: string}>>} - Array of chunks
+   */
+  chunkTexts(texts) {
+    const delimLen = ` ${this.delimiter} `.length;
+    const chunks = [];
+    let currentChunk = [];
+    let currentLen = 0;
+
+    for (let i = 0; i < texts.length; i++) {
+      const textLen = texts[i].length;
+      const addedLen = currentChunk.length > 0 ? delimLen + textLen : textLen;
+
+      if (currentLen + addedLen > MAX_CHARS_PER_REQUEST && currentChunk.length > 0) {
+        // Current chunk is full, start a new one
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentLen = 0;
+      }
+
+      currentChunk.push({ originalIndex: i, text: texts[i] });
+      currentLen += currentChunk.length === 1 ? textLen : delimLen + textLen;
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Translate a single chunk of texts (joined with delimiter).
+   * @param {Array<{originalIndex: number, text: string}>} chunk
+   * @returns {Promise<string[]>} - Array of translated texts in chunk order
+   */
+  async translateChunk(chunk) {
+    const texts = chunk.map(c => c.text);
+    const joined = texts.join(` ${this.delimiter} `);
+
+    const translatedJoined = await this.callTranslate(joined);
+    const parts = this.splitResult(translatedJoined, texts.length);
+    return parts.map(p => this.cleanTranslatedText(p));
+  }
+
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage) {
     const targetCode = this.normalizeLanguage(targetLanguage);
     if (!targetCode) {
@@ -176,6 +283,15 @@ class GoogleTranslateProvider {
     const texts = entries.map(e => e.text);
     const joined = texts.join(` ${this.delimiter} `);
 
+    // Decide whether we need to chunk: if the joined text fits in a single
+    // request, send it as-is (fast path). Otherwise split into chunks.
+    const needsChunking = joined.length > MAX_CHARS_PER_REQUEST;
+
+    if (needsChunking) {
+      return this._translateChunked(texts, type, entries);
+    }
+
+    // Fast path: single request for the joined text
     let lastError;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
@@ -185,8 +301,18 @@ class GoogleTranslateProvider {
         return this.rebuildOutput(type, entries, cleaned);
       } catch (error) {
         lastError = error;
+
+        // If we get a payload-too-large error on what we thought was a small
+        // payload, fall through to chunked mode instead of retrying
+        if (this._isPayloadTooLargeError(error)) {
+          log.warn(() => [`[${this.providerName}] Payload too large for single request, falling back to chunked mode`]);
+          return this._translateChunked(texts, type, entries);
+        }
+
         if (attempt < this.maxRetries) {
-          log.warn(() => [`[${this.providerName}] Retry ${attempt + 1}/${this.maxRetries} after error:`, error.message]);
+          const delay = backoffDelay(attempt);
+          log.warn(() => [`[${this.providerName}] Retry ${attempt + 1}/${this.maxRetries} after error (backoff ${delay}ms):`, error.message]);
+          await sleep(delay);
           continue;
         }
         error.translationErrorType = 'PROVIDER_ERROR';
@@ -195,6 +321,70 @@ class GoogleTranslateProvider {
     }
     if (lastError) throw lastError;
     throw new Error('Google Translate failed');
+  }
+
+  /**
+   * Translate entries in chunks when the total payload exceeds MAX_CHARS_PER_REQUEST.
+   * Each chunk is translated in a separate API call; results are merged in order.
+   * @param {string[]} texts - All entry texts
+   * @param {string} type - Entry type ('srt', 'numbered', 'raw')
+   * @param {Array} entries - Original entries for rebuild
+   * @returns {Promise<string>} - Translated output
+   */
+  async _translateChunked(texts, type, entries) {
+    const chunks = this.chunkTexts(texts);
+    log.info(() => `[${this.providerName}] Translating ${texts.length} entries in ${chunks.length} chunks (payload was ${texts.join(` ${this.delimiter} `).length} chars, limit ${MAX_CHARS_PER_REQUEST})`);
+
+    // Translate each chunk sequentially to avoid rate limiting
+    const allTranslated = new Array(texts.length);
+
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      let lastError;
+
+      for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+        try {
+          const translated = await this.translateChunk(chunk);
+          // Place results at their original indices
+          for (let j = 0; j < chunk.length; j++) {
+            allTranslated[chunk[j].originalIndex] = translated[j];
+          }
+          break; // Success, move to next chunk
+        } catch (error) {
+          lastError = error;
+          if (attempt < this.maxRetries) {
+            const delay = backoffDelay(attempt);
+            log.warn(() => [`[${this.providerName}] Chunk ${ci + 1}/${chunks.length} retry ${attempt + 1}/${this.maxRetries} (backoff ${delay}ms):`, error.message]);
+            await sleep(delay);
+            continue;
+          }
+          error.translationErrorType = 'PROVIDER_ERROR';
+          throw error;
+        }
+      }
+    }
+
+    // Fill any gaps (shouldn't happen but be safe)
+    for (let i = 0; i < allTranslated.length; i++) {
+      if (allTranslated[i] === undefined) {
+        allTranslated[i] = entries[i]?.text || '';
+      }
+    }
+
+    return this.rebuildOutput(type, entries, allTranslated);
+  }
+
+  /**
+   * Check if an error indicates the request payload was too large.
+   * Google returns 400 (Bad Request) or 413 (Payload Too Large) when the
+   * query string or body exceeds server-side limits.
+   * @param {Error} error
+   * @returns {boolean}
+   */
+  _isPayloadTooLargeError(error) {
+    if (!error) return false;
+    const status = error.response?.status || 0;
+    return status === 400 || status === 413 || status === 414;
   }
 
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null) {

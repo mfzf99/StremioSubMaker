@@ -2,9 +2,8 @@ const { getDefaultProviderParameters, mergeProviderParameters } = require('./con
 const { getLanguageName, buildLanguageLookupMaps } = require('./languages');
 const { allLanguages } = require('./allLanguages');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
-const { version: appVersion } = require('../../package.json');
+const { version: appVersion, xsyncMinVersion: REQUIRED_XSYNC_VERSION } = require('../../package.json');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
-const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function safeLanguageMaps() {
     try {

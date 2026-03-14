@@ -1161,10 +1161,19 @@ async function generateSmdbPage(configStr, videoId, filename, config = {}) {
 
     async function handleStreamLinked(data) {
       if (!data || !data.videoId) return;
-      // If stream is already locked, ignore further updates
-      if (streamLocked) return;
-      // Ignore stale cached entries from before this page load / reset
-      if (data.updatedAt && data.updatedAt < PAGE_LOAD_TIME) return;
+      // If stream is already locked and the incoming event is for the same videoId,
+      // silently ignore it — this prevents ghost re-linking of the same stream
+      // when Stremio sends multiple subtitle requests with slightly different metadata.
+      if (streamLocked) {
+        if (linkedStream && linkedStream.videoId === data.videoId) return;
+        // Different videoId while locked: still ignore (user must use Reset Link)
+        return;
+      }
+      // Ignore stale cached entries from before this page load / reset.
+      // Use firstSeenAt (when stream was actually first detected) instead of updatedAt
+      // (which gets refreshed by heartbeats and could make old entries look fresh).
+      const entryTimestamp = data.firstSeenAt || data.updatedAt || 0;
+      if (entryTimestamp && entryTimestamp < PAGE_LOAD_TIME) return;
       linkedStream = data;
       streamLocked = true;
 

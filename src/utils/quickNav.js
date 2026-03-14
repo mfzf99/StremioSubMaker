@@ -381,6 +381,11 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
 
 function quickNavScript() {
   return `
+    // Capture page load time for stream staleness guards.
+    // initStreamWatcher uses this to suppress toasts for streams first detected
+    // before this page was opened (prevents phantom notifications from stale cache).
+    window.__SUBMAKER_PAGE_LOAD_TIME = window.__SUBMAKER_PAGE_LOAD_TIME || Date.now();
+
     function quickNavTranslate(customT) {
       const base = (typeof customT === 'function') ? customT : (typeof window !== 'undefined' && typeof window.t === 'function' ? window.t : null);
       return function(key, vars, fallback) {
@@ -844,6 +849,13 @@ function quickNavScript() {
           latestLooseSig = payloadLooseSig || latestLooseSig;
           latestTs = ts || Date.now();
           if (matchesCurrent) return;
+          // Staleness guard: if the stream was first detected before this page
+          // loaded, absorb it silently as baseline without showing a toast.
+          // This catches stale data from the polling fallback that bypasses the
+          // server-side SSE snapshot age check.
+          var pageLoadTime = Number(window.__SUBMAKER_PAGE_LOAD_TIME || 0);
+          var firstSeen = Number(payload.firstSeenAt || payload.updatedAt || 0);
+          if (pageLoadTime && firstSeen && firstSeen < pageLoadTime) return;
           showToast(payload);
           return;
         }

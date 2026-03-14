@@ -1706,16 +1706,15 @@
 
                             <hr class="v2-section-sep">
 
-                            <!-- Convert ASS/SSA (dev only) -->
-                            <div class="v2-form-group" id="convertAssToVttGroup" style="display:none;">
+                            <!-- ASS/SSA Passthrough -->
+                            <div class="v2-form-group" id="convertAssToVttGroup">
                                 <label class="v2-label-inline">
-                                    <input type="checkbox" id="convertAssToVtt" checked>
+                                    <input type="checkbox" id="convertAssToVtt">
                                     <div>
-                                        <span data-i18n="config.otherSettings.convertAssToVtt.label">Convert ASS/SSA to
-                                            VTT</span>
+                                        <span data-i18n="config.otherSettings.convertAssToVtt.label">ASS/SSA Passthrough</span>
                                         <div class="v2-label-desc"
                                             data-i18n="config.otherSettings.convertAssToVtt.description">
-                                            Converts ASS/SSA subtitles to VTT format for compatibility.</div>
+                                            Enable to send ASS/SSA subtitles as-is to Stremio. Disable to convert to VTT. (Translations always convert automatically)</div>
                                     </div>
                                 </label>
                             </div>

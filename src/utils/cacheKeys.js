@@ -32,7 +32,12 @@ function normalizeUserHash(rawHash) {
  * @returns {boolean} .allowPermanent - Whether permanent cache reads/writes are allowed (requires userHash)
  */
 function generateCacheKeys(config, sourceFileId, targetLang) {
-  const baseKey = `${sourceFileId}_${targetLang}`;
+  // When ASS passthrough is enabled, append format discriminator to prevent
+  // ASS-format cached translations from being served to users expecting SRT
+  const assPassthrough = config.convertAssToVtt === false && config.forceSRTOutput !== true;
+  const baseKey = assPassthrough
+    ? `${sourceFileId}_${targetLang}_ass`
+    : `${sourceFileId}_${targetLang}`;
 
   // Determine bypass mode
   const bypass = config.bypassCache === true;

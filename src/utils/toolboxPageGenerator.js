@@ -3,11 +3,10 @@ const { getLanguageName, languageMap, buildLanguageLookupMaps } = require('./lan
 const { allLanguages } = require('./allLanguages');
 const { deriveVideoHash } = require('./videoHash');
 const { parseStremioId } = require('./subtitle');
-const { version: appVersion } = require('../../package.json');
+const { version: appVersion, xsyncMinVersion: REQUIRED_XSYNC_VERSION } = require('../../package.json');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
 const { resolveHistoryTitle } = require('../handlers/subtitles');
-const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function escapeHtml(value) {
   if (value === undefined || value === null) return '';
