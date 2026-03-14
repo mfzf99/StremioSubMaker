@@ -1767,7 +1767,7 @@ You are a professional subtitle translator. Translate to ${targetLabel}.
 </system_role>
 
 <context>
-${contextInstructions || "Film, TV series, anime, or drama subtitle translation."}
+${contextInstructions || "Movie or drama subtitle."}
 </context>
 
 <critical_rules>
@@ -1794,11 +1794,17 @@ Input:
 <s id="1">Previously on Breaking Bad...</s>
 <s id="2">- You knew about this?\\n- I had no choice.</s>
 <s id="3">Whatever.</s>
+<s id="4">During dinner just now, didn't I ask if you wanted to talk to him?</s>
+<s id="5">Pick up the phone when I call.</s>
+<s id="6">I answered that last time.</s>
 
 Output:
-<s id="1">Sebelum ini dalam Breaking Bad...</s>
+<s id="1">Sebelum ini dalam Breaking Bad…</s>
 <s id="2">- Awak tahu pasal ini?\\n- Saya terpaksa.</s>
 <s id="3">Lantaklah.</s>
+<s id="4">Masa kita makan tadi, bukankah saya dah tanya awak kalau awak nak cakap dengan dia atau tak?</s>
+<s id="5">Angkat telefon bila saya call.</s>
+<s id="6">Saya dah jawab dah haritu.</s>
 </examples>
 
 <input_data>
