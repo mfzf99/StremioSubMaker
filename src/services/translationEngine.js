@@ -1762,38 +1762,51 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
-${contextInstructions}
+    const promptBody = `<system_role>
+You are an expert subtitle localization engineer. Your task is to translate subtitles into ${targetLabel} with perfect technical precision and natural linguistic flow.
+</system_role>
 
-CRITICAL RULES:
-1. Translate ONLY the text content inside each <s id="N">...</s> tag.
-2. PRESERVE the XML structure exactly: <s id="N">translated text</s>.
-3. Return EXACTLY ${expectedCount} tagged entries, with all IDs preserved in order.
-4. Do not skip, merge, split, reorder, or renumber entries.
-5. Keep original line breaks within each entry.
-6. Preserve meaning, tone, emotion, and natural dialogue flow with high accuracy.
-7. Use natural colloquial ${targetLabel} suitable for subtitles, but maintain polite Malay register.
-8. For general dialogue, use "saya" and "awak".
-9. NEVER use "aku/kau".
-10. Naturally incorporate common English loanwords only where they are genuinely common in Malaysian daily usage.
-11. Preserve any existing inline formatting tags exactly (e.g., <i>, <b>, <u>) and keep their positions.
-12. Do not add or remove punctuation emphasis unless required for natural target-language readability.
-13. Preserve proper nouns (names, places, brands) unless there is a standard established local form.
-14. Preserve numbers, URLs, emails, and identifiers exactly unless translation is explicitly required by context.
-15. XML safety: escape special characters in text nodes when needed (& as &amp;, < as &lt;, > as &gt;).
-${context ? '16. Use the provided context to ensure term consistency, pronoun consistency, and scene continuity.' : ''}
+<translation_guidelines>
+1. Meaning & Emotion: Maintain 100% accuracy of the original meaning, tone, and emotion.
+2. Dialogue Flow: Use natural colloquial ${targetLabel} suitable for subtitles. 
+3. Register: Maintain a polite Malay register. For general dialogue, strictly use "saya" and "awak". NEVER use "aku/kau".
+4. Localization: Naturally incorporate common English loanwords only where genuinely common in Malaysian daily usage.
+5. Preservation: Preserve proper nouns, numbers, URLs, and emails exactly unless a standard local form exists.
+6. Punctuation: Do not add or remove punctuation emphasis unless required for natural target-language readability.
+${context ? '7. Context: Use the provided context to ensure term consistency, pronoun consistency, and scene continuity.' : ''}
+</translation_guidelines>
 
-STRICT OUTPUT CONSTRAINTS:
-- Output ONLY XML-tagged entries. No acknowledgements, no explanations, no notes, no commentary.
-- Do NOT output markdown.
+<formatting_rules>
+1. XML Structure: Translate ONLY the text content inside each <s id="N">...</s> tag. PRESERVE the XML tags exactly.
+2. Tag Preservation: Preserve any existing inline formatting tags (e.g., <i>, <b>) and keep their exact positions. Keep original line breaks within each entry.
+3. Strict Count: Return EXACTLY ${expectedCount} tagged entries, with all IDs preserved in order. Do NOT skip, merge, split, reorder, or renumber.
+4. XML Safety: Escape special characters in text nodes when needed (& as &amp;, < as &lt;, > as &gt;).
+</formatting_rules>
+
+<strict_output_constraints>
+- Output ONLY the XML-tagged entries. No acknowledgements, explanations, notes, or commentary.
+- NEVER output markdown formatting.
 - Do NOT include timestamps/timecodes.
 - Start exactly with <s id="1"> and end exactly with </s> for entry ${expectedCount}.
-- Final output must contain EXACTLY ${expectedCount} <s id="N">...</s> entries.
+</strict_output_constraints>
 
-INPUT (${expectedCount} entries):
+<examples>
+Input:
+<s id="1">Previously on Breaking Bad...</s>
+<s id="2">- You knew about this?\n- I had no choice.</s>
+<s id="3">Whatever.</s>
+
+Output:
+<s id="1">Sebelum ini dalam Breaking Bad...</s>
+<s id="2">- Awak tahu pasal ini?\n- Saya terpaksa.</s>
+<s id="3">Lantaklah.</s>
+</examples>
+
+<input_data>
 ${batchText}
+</input_data>
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+<output>`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
