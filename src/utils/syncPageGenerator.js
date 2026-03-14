@@ -13,10 +13,9 @@ const axios = require('axios');
 const { getLanguageName, getAllLanguages, buildLanguageLookupMaps } = require('./languages');
 const { deriveVideoHash } = require('./videoHash');
 const { parseStremioId } = require('./subtitle');
-const { version: appVersion } = require('../../package.json');
+const { version: appVersion, xsyncMinVersion: REQUIRED_XSYNC_VERSION } = require('../../package.json');
 const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = require('./quickNav');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
-const { REQUIRED_XSYNC_VERSION } = require('./xsyncVersionPolicy');
 
 function escapeHtml(text) {
     if (!text) return '';

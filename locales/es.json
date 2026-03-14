@@ -1326,8 +1326,8 @@
           "description": "Convertir todas las salidas de subtítulos a formato SRT para máxima compatibilidad con reproductores."
         },
         "convertAssToVtt": {
-          "label": "Convertir ASS/SSA a VTT",
-          "description": "Convertir subtítulos ASS/SSA a formato VTT para compatibilidad. Desactiva para enviar subtítulos ASS/SSA tal cual a Stremio. (Las traducciones siempre convierten automáticamente)"
+          "label": "Passthrough ASS/SSA",
+          "description": "Activa para enviar subtítulos ASS/SSA tal cual a Stremio. Desactiva para convertir a VTT. (Las traducciones siempre convierten automáticamente)"
         },
         "betaMode": {
           "label": "Modo Avanzado",

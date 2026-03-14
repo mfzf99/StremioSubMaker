@@ -116,7 +116,7 @@ async function incrementCounter(key, ttlSeconds = 1800) {
 
         // Access the raw Redis client for atomic operations
         if (!adapter.client) {
-            log.warn(() => `[SharedCache] No Redis client available for counter increment`);
+            log.debug(() => `[SharedCache] No Redis client available for counter increment`);
             return -1;
         }
 
@@ -150,7 +150,7 @@ async function decrementCounter(key) {
         const StorageAdapter = getStorageAdapterClass();
 
         if (!adapter.client) {
-            log.warn(() => `[SharedCache] No Redis client available for counter decrement`);
+            log.debug(() => `[SharedCache] No Redis client available for counter decrement`);
             return -1;
         }
 
@@ -225,7 +225,7 @@ async function recordKeyError(apiKey) {
         const StorageAdapter = getStorageAdapterClass();
 
         if (!adapter.client) {
-            log.warn(() => `[SharedCache] No Redis client for key health tracking`);
+            log.debug(() => `[SharedCache] No Redis client for key health tracking`);
             return { count: 0, coolingDown: false };
         }
 
@@ -366,7 +366,7 @@ async function getNextRotationIndex(counterId, keyCount) {
         const StorageAdapter = getStorageAdapterClass();
 
         if (!adapter.client) {
-            log.warn(() => `[SharedCache] No Redis client for rotation counter`);
+            log.debug(() => `[SharedCache] No Redis client for rotation counter`);
             return -1;
         }
 

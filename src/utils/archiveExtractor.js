@@ -609,37 +609,48 @@ function findEpisodeFileAnime(files, episode) {
  * @param {boolean} options.isSeasonPack - Whether this is a season pack
  * @param {number} options.season - Season number (for season packs)
  * @param {number} options.episode - Episode number (for season packs)
+ * @param {boolean} options.skipAssConversion - When true, prefer ASS/SSA files over SRT
  * @returns {{filename: string|null, isSrt: boolean}}
  */
 function findSubtitleFile(entries, options = {}) {
-    const { isSeasonPack, season, episode } = options;
+    const { isSeasonPack, season, episode, skipAssConversion = false } = options;
 
-    log.debug(() => `[ArchiveExtractor] findSubtitleFile: searching ${entries.length} entries, isSeasonPack=${isSeasonPack}, season=${season}, episode=${episode}`);
+    log.debug(() => `[ArchiveExtractor] findSubtitleFile: searching ${entries.length} entries, isSeasonPack=${isSeasonPack}, season=${season}, episode=${episode}, preferAss=${skipAssConversion}`);
 
     // Filter by extension type
     const srtFiles = entries.filter(f => f.toLowerCase().endsWith('.srt'));
+    const assFiles = entries.filter(f => {
+        const lower = f.toLowerCase();
+        return lower.endsWith('.ass') || lower.endsWith('.ssa');
+    });
     const altFiles = entries.filter(f => {
         const lower = f.toLowerCase();
         return lower.endsWith('.vtt') || lower.endsWith('.ass') || lower.endsWith('.ssa') || lower.endsWith('.sub');
     });
 
-    log.debug(() => `[ArchiveExtractor] findSubtitleFile: found ${srtFiles.length} SRT files, ${altFiles.length} alternate format files`);
+    log.debug(() => `[ArchiveExtractor] findSubtitleFile: found ${srtFiles.length} SRT files, ${assFiles.length} ASS/SSA files, ${altFiles.length} alternate format files`);
+
+    // When ASS passthrough is enabled, prefer ASS/SSA files; otherwise prefer SRT
+    const primaryFiles = skipAssConversion ? assFiles : srtFiles;
+    const primaryLabel = skipAssConversion ? 'ASS/SSA' : 'SRT';
+    const secondaryFiles = skipAssConversion ? srtFiles : altFiles;
+    const secondaryLabel = skipAssConversion ? 'SRT' : 'alternate format';
 
     if (isSeasonPack && season && episode) {
         log.debug(() => `[ArchiveExtractor] findSubtitleFile: searching for S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')} in season pack`);
 
         // Season pack: find specific episode
-        // Try SRT files first with anime patterns, then TV patterns
-        let target = findEpisodeFileAnime(srtFiles, episode);
+        // Try preferred format first with anime patterns, then TV patterns
+        let target = findEpisodeFileAnime(primaryFiles, episode);
         if (target) {
-            log.debug(() => `[ArchiveExtractor] findSubtitleFile: found SRT via anime pattern: ${target}`);
-            return { filename: target, isSrt: true };
+            log.debug(() => `[ArchiveExtractor] findSubtitleFile: found ${primaryLabel} via anime pattern: ${target}`);
+            return { filename: target, isSrt: target.toLowerCase().endsWith('.srt') };
         }
 
-        target = findEpisodeFile(srtFiles, season, episode);
+        target = findEpisodeFile(primaryFiles, season, episode);
         if (target) {
-            log.debug(() => `[ArchiveExtractor] findSubtitleFile: found SRT via TV pattern: ${target}`);
-            return { filename: target, isSrt: true };
+            log.debug(() => `[ArchiveExtractor] findSubtitleFile: found ${primaryLabel} via TV pattern: ${target}`);
+            return { filename: target, isSrt: target.toLowerCase().endsWith('.srt') };
         }
 
         // Try any format with anime patterns, then TV patterns
@@ -658,14 +669,14 @@ function findSubtitleFile(entries, options = {}) {
         log.warn(() => `[ArchiveExtractor] findSubtitleFile: episode not found in season pack. Available files: ${entries.join(', ')}`);
         return { filename: null, isSrt: false };
     } else {
-        // Not a season pack: find first subtitle file
-        if (srtFiles.length > 0) {
-            log.debug(() => `[ArchiveExtractor] findSubtitleFile: using first SRT: ${srtFiles[0]}`);
-            return { filename: srtFiles[0], isSrt: true };
+        // Not a season pack: find first subtitle file (prefer ASS/SSA when passthrough enabled)
+        if (primaryFiles.length > 0) {
+            log.debug(() => `[ArchiveExtractor] findSubtitleFile: using first ${primaryLabel}: ${primaryFiles[0]}`);
+            return { filename: primaryFiles[0], isSrt: primaryFiles[0].toLowerCase().endsWith('.srt') };
         }
-        if (altFiles.length > 0) {
-            log.debug(() => `[ArchiveExtractor] findSubtitleFile: using first alternate format: ${altFiles[0]}`);
-            return { filename: altFiles[0], isSrt: false };
+        if (secondaryFiles.length > 0) {
+            log.debug(() => `[ArchiveExtractor] findSubtitleFile: using first ${secondaryLabel}: ${secondaryFiles[0]}`);
+            return { filename: secondaryFiles[0], isSrt: secondaryFiles[0].toLowerCase().endsWith('.srt') };
         }
         log.warn(() => `[ArchiveExtractor] findSubtitleFile: no subtitle files found`);
         return { filename: null, isSrt: false };
@@ -1095,7 +1106,7 @@ async function extractSubtitleFromArchive(buffer, options = {}) {
 
     // Find target subtitle file
     log.debug(() => `[${providerName}] Searching for subtitle file in ${entries.length} entries...`);
-    const { filename, isSrt } = findSubtitleFile(entries, { isSeasonPack, season, episode });
+    const { filename, isSrt } = findSubtitleFile(entries, { isSeasonPack, season, episode, skipAssConversion });
 
     if (!filename) {
         if (isSeasonPack && season && episode) {

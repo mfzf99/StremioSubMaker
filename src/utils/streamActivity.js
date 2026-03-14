@@ -7,8 +7,16 @@ const latestByConfig = new LRUCache({
   max: parseInt(process.env.STREAM_ACTIVITY_MAX || '5000', 10),
   // Default: keep recent items for 6h to avoid unbounded growth for many unique configs
   ttl: parseInt(process.env.STREAM_ACTIVITY_TTL_MS || `${6 * 60 * 60 * 1000}`, 10),
-  updateAgeOnGet: true
+  // NOTE: updateAgeOnGet intentionally NOT set (defaults to false).
+  // Previously this was true, which meant every SSE connect / heartbeat / page refresh
+  // reset the 6h TTL — old entries essentially *never* expired as long as a toolbox tab
+  // was open, causing phantom "New stream detected" toasts for titles streamed days ago.
 });
+
+// Maximum age (ms) of a cached entry to serve on a fresh SSE subscribe.
+// Entries older than this are considered stale and omitted from the initial snapshot,
+// so newly opened toolbox/SMDB pages don't instantly fire a toast for an old stream.
+const SUBSCRIBE_SNAPSHOT_MAX_AGE_MS = parseInt(process.env.STREAM_ACTIVITY_SNAPSHOT_MAX_AGE_MS || `${30 * 60 * 1000}`, 10);
 
 // Heartbeat cadence (default 40s to keep SSE warm)
 const HEARTBEAT_MS = parseInt(process.env.STREAM_ACTIVITY_HEARTBEAT_MS || `${40 * 1000}`, 10);
@@ -112,11 +120,24 @@ function recordStreamActivity(payload) {
   } else {
     // Fill gaps from previous when the videoId matches but fields are missing
     if (keepPrevious && previous.videoId === incomingId) {
-      // Guard against degraded same-episode updates: if the incoming payload has
-      // no filename but carries a different hash, keep the previous authoritative
-      // hash. This prevents "id-only" hash drift from triggering false updates.
-      if (!incomingFilename && incomingHash && previous.filename && previous.videoHash && incomingHash !== previous.videoHash) {
-        effectiveHash = previous.videoHash;
+      // Guard against hash drift for same-episode updates.
+      // When the previous entry already has an authoritative filename+hash pair,
+      // keep them stable unless the incoming payload is *strictly more complete*
+      // (i.e. it also carries a non-empty filename). This prevents both:
+      //  - "id-only" hash drift (no filename + different derived hash)
+      //  - "re-encoded filename" drift (different filename string → different MD5 hash)
+      if (previous.filename && previous.videoHash) {
+        if (!incomingFilename) {
+          // Incoming has no filename — always keep previous authoritative pair
+          effectiveFilename = previous.filename;
+          effectiveHash = previous.videoHash;
+        } else if (incomingHash && incomingHash !== previous.videoHash) {
+          // Incoming has a filename AND a different hash — this is likely the same
+          // stream reported with a slightly different filename string (URL-encoded,
+          // different addon, etc.).  Keep the original authoritative pair.
+          effectiveFilename = previous.filename;
+          effectiveHash = previous.videoHash;
+        }
       }
       if (!effectiveFilename) effectiveFilename = previous.filename || '';
       if (!effectiveHash) effectiveHash = previous.videoHash || '';
@@ -128,30 +149,44 @@ function recordStreamActivity(payload) {
   const hasMeaningfulPayload = Boolean((effectiveId && !isPlaceholderId(effectiveId)) || effectiveFilename || effectiveHash);
   if (!hasMeaningfulPayload && !previous) return;
 
+  const now = Date.now();
   const entry = {
     videoId: effectiveId,
     filename: effectiveFilename,
     videoHash: effectiveHash,
     stremioHash: effectiveStremioHash,
-    updatedAt: Date.now()
+    // firstSeenAt: timestamp of when this stream was *first detected* for this config.
+    // Preserved across heartbeat/enrichment updates so clients can distinguish
+    // "stream started 3 hours ago" from "entry was refreshed 10 seconds ago".
+    firstSeenAt: (previous && previous.videoId === effectiveId) ? (previous.firstSeenAt || now) : now,
+    updatedAt: now
   };
 
-  const changed = !previous ||
-    previous.videoId !== entry.videoId ||
+  // Determine if this is a genuinely *new* stream vs. field enrichment for the same one.
+  // A real change requires the videoId to differ, OR the entry to be brand new.
+  // Field-enrichment for the same videoId (e.g. '' → 'hash', '' → 'filename') is stored
+  // silently without firing notifications — this prevents ghost toasts when Stremio sends
+  // a second subtitle request for the same episode with slightly more/different metadata.
+  const isNewEntry = !previous;
+  const videoIdChanged = previous && previous.videoId !== entry.videoId;
+  const isFieldEnrichment = previous && previous.videoId === entry.videoId && (
     previous.filename !== entry.filename ||
     previous.videoHash !== entry.videoHash ||
-    previous.stremioHash !== entry.stremioHash;
+    previous.stremioHash !== entry.stremioHash
+  );
 
   latestByConfig.set(payload.configHash, entry);
 
-  if (changed) {
+  if (isNewEntry || videoIdChanged) {
     const shortHash = payload.configHash.slice(0, 8);
-    log.info(() => `[StreamActivity] New stream ping for ${shortHash} -> videoId=${entry.videoId || 'n/a'}, filename=${entry.filename || 'n/a'}, hash=${entry.videoHash || 'n/a'}`);
+    log.info(() => `[StreamActivity] New stream for ${shortHash} -> videoId=${entry.videoId || 'n/a'}, filename=${entry.filename || 'n/a'}, hash=${entry.videoHash || 'n/a'}`);
 
     _notifyLocalListeners(payload.configHash, entry);
 
     // Broadcast to other instances via Redis pub/sub
     _publishStreamEvent(payload.configHash, entry);
+  } else if (isFieldEnrichment) {
+    log.debug(() => `[StreamActivity] Enriched fields for existing stream ${payload.configHash.slice(0, 8)} (no notification)`);
   } else {
     log.debug(() => `[StreamActivity] Refreshed activity for existing stream ${payload.configHash.slice(0, 8)}`);
   }
@@ -197,13 +232,28 @@ function _handleRemoteStreamEvent(message) {
     if (data.instanceId === INSTANCE_ID) return;
     if (!data.configHash || !data.entry) return;
 
-    // Update local LRU so polling fallback also works
+    // Apply the same change-detection logic as recordStreamActivity:
+    // only notify local listeners if the videoId actually changed.
+    // This prevents a remote instance's field-enrichment or heartbeat
+    // from triggering ghost notifications on this instance.
+    const previous = latestByConfig.get(data.configHash);
+    const isNewEntry = !previous;
+    const videoIdChanged = previous && previous.videoId !== data.entry.videoId;
+
+    // Preserve firstSeenAt from local entry when remote event is for the same stream
+    if (previous && !isNewEntry && !videoIdChanged && previous.firstSeenAt) {
+      data.entry.firstSeenAt = previous.firstSeenAt;
+    }
+
+    // Always update local LRU so polling fallback stays current
     latestByConfig.set(data.configHash, data.entry);
 
-    // Notify local SSE listeners
-    _notifyLocalListeners(data.configHash, data.entry);
+    // Only notify local listeners on a genuinely new stream
+    if (isNewEntry || videoIdChanged) {
+      _notifyLocalListeners(data.configHash, data.entry);
+    }
 
-    log.debug(() => `[StreamActivity] Received remote stream event for ${data.configHash.slice(0, 8)} from instance ${data.instanceId.slice(0, 6)}`);
+    log.debug(() => `[StreamActivity] Received remote stream event for ${data.configHash.slice(0, 8)} from instance ${data.instanceId.slice(0, 6)} (notify=${isNewEntry || videoIdChanged})`);
   } catch (err) {
     log.debug(() => `[StreamActivity] Failed to process remote stream event: ${err.message}`);
   }
@@ -314,7 +364,16 @@ function subscribe(configHash, res) {
   sendEvent(configHash, listener, 'ready', { ok: true, ts: Date.now() });
   const latest = getLatestStreamActivity(configHash);
   if (latest) {
-    sendEvent(configHash, listener, 'episode', latest);
+    // Only send the cached snapshot if the stream was first detected recently.
+    // This prevents newly opened toolbox/SMDB pages from receiving a stale entry
+    // for a stream that was watched hours/days ago, which would trigger a
+    // phantom "New stream detected" toast.
+    const entryAge = Date.now() - (latest.firstSeenAt || latest.updatedAt || 0);
+    if (entryAge < SUBSCRIBE_SNAPSHOT_MAX_AGE_MS) {
+      sendEvent(configHash, listener, 'episode', latest);
+    } else {
+      log.debug(() => `[StreamActivity] Suppressed stale snapshot for ${(configHash || '').slice(0, 8)} (age=${Math.round(entryAge / 1000)}s)`);
+    }
   }
 
   let set = listeners.get(configHash);

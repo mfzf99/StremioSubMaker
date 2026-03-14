@@ -818,6 +818,9 @@ Translate to {target_language}.`;
     let instructionsAutoMinimizeTimer = null;
     let instructionsInteracted = false;
     let betaModeLastState = null;
+    const VALID_URL_EXTENSION_TEST_VALUES = ['srt', 'sub', 'none', 'resolve'];
+    let lastUrlExtensionTestChoice = 'srt';
+    let urlExtensionTestForcedByAssPassthrough = false;
 
     // localStorage cache keys
     const CACHE_KEY = 'submaker_config_cache';
@@ -1059,6 +1062,57 @@ Translate to {target_language}.`;
         }
         const devToggle = document.getElementById('devMode');
         return devToggle ? devToggle.checked === true : false;
+    }
+
+    function normalizeUrlExtensionTestValue(value, fallback = 'srt') {
+        const normalized = String(value || '').toLowerCase();
+        return VALID_URL_EXTENSION_TEST_VALUES.includes(normalized) ? normalized : fallback;
+    }
+
+    function isAssPassthroughEnabledInForm() {
+        const convertAssEl = document.getElementById('convertAssToVtt');
+        return convertAssEl ? convertAssEl.checked === true : false;
+    }
+
+    function syncUrlExtensionTestModeUi(options = {}) {
+        const { rememberCheckedSelection = false } = options;
+        const radios = Array.from(document.querySelectorAll('input[name="urlExtensionTest"]'));
+        if (!radios.length) return;
+
+        if (rememberCheckedSelection) {
+            const checkedRadio = radios.find((radio) => radio.checked);
+            if (checkedRadio && (checkedRadio.value !== 'none' || !urlExtensionTestForcedByAssPassthrough)) {
+                lastUrlExtensionTestChoice = normalizeUrlExtensionTestValue(checkedRadio.value, lastUrlExtensionTestChoice);
+            }
+        }
+
+        const assPassthroughEnabled = isAssPassthroughEnabledInForm();
+        let nextValue;
+        if (assPassthroughEnabled) {
+            nextValue = 'none';
+        } else if (urlExtensionTestForcedByAssPassthrough) {
+            nextValue = normalizeUrlExtensionTestValue(lastUrlExtensionTestChoice, 'srt');
+        } else {
+            nextValue = normalizeUrlExtensionTestValue(currentConfig?.urlExtensionTest, lastUrlExtensionTestChoice);
+        }
+
+        const targetValue = normalizeUrlExtensionTestValue(nextValue, 'srt');
+        const targetRadio = radios.find((radio) => radio.value === targetValue)
+            || radios.find((radio) => radio.value === 'srt');
+
+        radios.forEach((radio) => {
+            radio.disabled = assPassthroughEnabled && radio.value !== 'none';
+            radio.checked = targetRadio ? radio.value === targetRadio.value : radio.value === 'srt';
+        });
+
+        if (!assPassthroughEnabled) {
+            lastUrlExtensionTestChoice = targetRadio ? targetRadio.value : 'srt';
+        }
+        urlExtensionTestForcedByAssPassthrough = assPassthroughEnabled;
+
+        if (currentConfig) {
+            currentConfig.urlExtensionTest = targetRadio ? targetRadio.value : 'srt';
+        }
     }
 
     function hasActiveMultiProviderState(config) {
@@ -2730,18 +2784,18 @@ Translate to {target_language}.`;
                 toggleOtherApiKeysSection();
                 toggleConvertAssToVttGroup();
                 toggleUrlExtensionTestGroup();
+                syncUrlExtensionTestModeUi();
                 toggleAndroidSubtitleCompatModeGroup();
                 toggleParallelBatchesGroup();
             });
         }
 
-        // Function to show/hide Convert ASS/SSA to VTT option (dev mode only)
+        // Function to show/hide Convert ASS/SSA to VTT option (user-facing since Phase 1)
         function toggleConvertAssToVttGroup() {
             const convertAssGroup = document.getElementById('convertAssToVttGroup');
             if (!convertAssGroup) return;
-            const devModeEl = document.getElementById('devMode');
-            const devEnabled = devModeEl && devModeEl.checked;
-            convertAssGroup.style.display = devEnabled ? 'block' : 'none';
+            // Always visible - no longer gated by devMode
+            convertAssGroup.style.display = 'block';
         }
 
         // Function to show/hide URL extension test group (requires devMode AND convertAssToVtt unchecked)
@@ -2751,7 +2805,8 @@ Translate to {target_language}.`;
             const devModeEl = document.getElementById('devMode');
             const convertAssEl = document.getElementById('convertAssToVtt');
             const devEnabled = devModeEl && devModeEl.checked;
-            const assConversionDisabled = convertAssEl && !convertAssEl.checked;
+            // Inverted UI: checked = passthrough (ASS conversion OFF)
+            const assConversionDisabled = convertAssEl && convertAssEl.checked;
             // Show only when devMode is ON and ASS conversion is OFF (raw ASS mode)
             urlExtTestGroup.style.display = (devEnabled && assConversionDisabled) ? 'block' : 'none';
         }
@@ -2778,9 +2833,21 @@ Translate to {target_language}.`;
         const convertAssEl = document.getElementById('convertAssToVtt');
         if (convertAssEl) {
             convertAssEl.addEventListener('change', () => {
+                syncUrlExtensionTestModeUi({ rememberCheckedSelection: true });
                 toggleUrlExtensionTestGroup();
             });
         }
+
+        document.querySelectorAll('input[name="urlExtensionTest"]').forEach((radio) => {
+            if (radio.__urlExtensionTestListenerBound) return;
+            radio.addEventListener('change', (e) => {
+                const value = normalizeUrlExtensionTestValue(e.target.value, 'srt');
+                currentConfig.urlExtensionTest = value;
+                lastUrlExtensionTestChoice = value;
+                syncUrlExtensionTestModeUi();
+            });
+            radio.__urlExtensionTestListenerBound = true;
+        });
 
         // Initial visibility check on load
         toggleConvertAssToVttGroup();
@@ -5316,7 +5383,8 @@ Translate to {target_language}.`;
                         // default to ALL sources enabled (preserves their previous behavior)
                         newConfig.subtitleProviders.wyzie.sources = {
                             opensubtitles: true, subf2m: true, subdl: true,
-                            podnapisi: true, gestdown: true, animetosho: true
+                            podnapisi: true, gestdown: true, animetosho: true,
+                            kitsunekko: true, jimaku: true, yify: true
                         };
                     }
                 }
@@ -5633,9 +5701,9 @@ Translate to {target_language}.`;
         }
         // Default all sources to DISABLED if not specified (user must opt-in)
         const wyzieSourceConfig = currentConfig.subtitleProviders?.wyzie?.sources || {
-            opensubtitles: false, subf2m: false, subdl: false, podnapisi: false, gestdown: false, animetosho: false
+            opensubtitles: false, subf2m: false, subdl: false, podnapisi: false, gestdown: false, animetosho: false, kitsunekko: false, jimaku: false, yify: false
         };
-        const sourceIds = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho'];
+        const sourceIds = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho', 'kitsunekko', 'jimaku', 'yify'];
         sourceIds.forEach(src => {
             const el = document.getElementById('wyzieSource' + src.charAt(0).toUpperCase() + src.slice(1));
             if (el) el.checked = wyzieSourceConfig[src] === true; // Default to false for new users
@@ -5696,14 +5764,14 @@ Translate to {target_language}.`;
         const forceSRTElNoTranslation = document.getElementById('forceSRTOutputNoTranslation');
         if (forceSRTEl) forceSRTEl.checked = currentConfig.forceSRTOutput === true;
         if (forceSRTElNoTranslation) forceSRTElNoTranslation.checked = currentConfig.forceSRTOutput === true;
-        // Convert ASS/SSA defaults to enabled (true) for backwards compatibility
+        // Inverted UI: checked = passthrough (convertAssToVtt false), unchecked = convert (true)
         const convertAssToVttEl = document.getElementById('convertAssToVtt');
         if (convertAssToVttEl) {
-            convertAssToVttEl.checked = currentConfig.convertAssToVtt !== false;
+            convertAssToVttEl.checked = currentConfig.convertAssToVtt === false;
             // Disable ASS/SSA toggle when Force SRT is enabled (they conflict)
             if (forceSRTEl && forceSRTEl.checked) {
                 convertAssToVttEl.disabled = true;
-                convertAssToVttEl.checked = true; // Force SRT implies conversion
+                convertAssToVttEl.checked = false; // Force SRT implies conversion → passthrough OFF
             }
         }
         // Force SRT <-> ASS/SSA toggle sync is handled by syncForceSRT listener below
@@ -5712,11 +5780,12 @@ Translate to {target_language}.`;
         const devEnabledAfterLoad = currentConfig.devMode === true;
         const convertAssGroup = document.getElementById('convertAssToVttGroup');
         if (convertAssGroup) {
-            convertAssGroup.style.display = devEnabledAfterLoad ? 'block' : 'none';
+            // Always visible - no longer gated by devMode (Phase 1: user-facing setting)
+            convertAssGroup.style.display = 'block';
         }
         const urlExtTestGroup = document.getElementById('urlExtensionTestGroup');
         if (urlExtTestGroup) {
-            const assConversionDisabled = convertAssToVttEl ? !convertAssToVttEl.checked : false;
+            const assConversionDisabled = convertAssToVttEl ? convertAssToVttEl.checked : false;
             urlExtTestGroup.style.display = (devEnabledAfterLoad && assConversionDisabled) ? 'block' : 'none';
         }
         const androidCompatGroup = document.getElementById('androidSubtitleCompatModeGroup');
@@ -5727,12 +5796,8 @@ Translate to {target_language}.`;
         if (parallelBatchesGroupEl) {
             parallelBatchesGroupEl.style.display = devEnabledAfterLoad ? 'block' : 'none';
         }
-        const selectedUrlExt = String(currentConfig.urlExtensionTest || 'srt');
-        const urlExtRadio = document.querySelector(`input[name="urlExtensionTest"][value="${selectedUrlExt}"]`)
-            || document.querySelector('input[name="urlExtensionTest"][value="srt"]');
-        if (urlExtRadio) {
-            urlExtRadio.checked = true;
-        }
+        lastUrlExtensionTestChoice = normalizeUrlExtensionTestValue(currentConfig.urlExtensionTest, 'srt');
+        syncUrlExtensionTestModeUi();
         const selectedCompatMode = String(currentConfig.androidSubtitleCompatMode || 'off');
         const compatRadio = document.querySelector(`input[name="androidSubtitleCompatMode"][value="${selectedCompatMode}"]`)
             || document.querySelector('input[name="androidSubtitleCompatMode"][value="off"]');
@@ -5915,16 +5980,18 @@ Translate to {target_language}.`;
             if (forceSRTToggleNoTranslation && forceSRTToggleNoTranslation.checked !== currentConfig.forceSRTOutput) {
                 forceSRTToggleNoTranslation.checked = currentConfig.forceSRTOutput;
             }
-            // Force SRT implies ASS/SSA conversion
+            // Force SRT implies ASS/SSA conversion → passthrough OFF
             const convertAssEl = document.getElementById('convertAssToVtt');
             if (convertAssEl) {
                 if (currentConfig.forceSRTOutput) {
                     convertAssEl.disabled = true;
-                    convertAssEl.checked = true;
+                    convertAssEl.checked = false; // Force SRT → passthrough OFF
                 } else {
                     convertAssEl.disabled = false;
                 }
             }
+            syncUrlExtensionTestModeUi({ rememberCheckedSelection: true });
+            toggleUrlExtensionTestGroup();
         };
         if (forceSRTToggle) {
             forceSRTToggle.addEventListener('change', (e) => syncForceSRT(e.target.checked));
@@ -6015,11 +6082,16 @@ Translate to {target_language}.`;
             betaModeEnabled: isBetaModeEnabled(),
             devMode: (function () { const el = document.getElementById('devMode'); return el ? el.checked : false; })(),
             urlExtensionTest: (function () {
-                // Only include if devMode is enabled and convertAssToVtt is disabled.
+                // When ASS passthrough is enabled, force 'none' to avoid extension/payload mismatch
+                const convertAssEl = document.getElementById('convertAssToVtt');
+                const assPassthroughEnabled = convertAssEl && convertAssEl.checked; // Inverted UI: checked = passthrough
+                if (assPassthroughEnabled) {
+                    return 'none'; // ASS content can't use .srt extension
+                }
+                // Only include dev extension test if devMode is enabled.
                 // Supported values: srt (default), sub (A), none (B), resolve (C).
                 const devEl = document.getElementById('devMode');
-                const convertAssEl = document.getElementById('convertAssToVtt');
-                if (devEl && devEl.checked && convertAssEl && !convertAssEl.checked) {
+                if (devEl && devEl.checked) {
                     const selected = document.querySelector('input[name="urlExtensionTest"]:checked');
                     return selected ? selected.value : 'srt';
                 }
@@ -6075,7 +6147,10 @@ Translate to {target_language}.`;
                         subdl: document.getElementById('wyzieSourceSubdl')?.checked === true,
                         podnapisi: document.getElementById('wyzieSourcePodnapisi')?.checked === true,
                         gestdown: document.getElementById('wyzieSourceGestdown')?.checked === true,
-                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked === true
+                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked === true,
+                        kitsunekko: document.getElementById('wyzieSourceKitsunekko')?.checked === true,
+                        jimaku: document.getElementById('wyzieSourceJimaku')?.checked === true,
+                        yify: document.getElementById('wyzieSourceYify')?.checked === true
                     }
                 },
                 subsro: {
@@ -6114,8 +6189,9 @@ Translate to {target_language}.`;
             })(),
             convertAssToVtt: (function () {
                 const el = document.getElementById('convertAssToVtt');
+                // Inverted UI: checked = passthrough (false), unchecked = convert (true)
                 // Default to true if element not found (backwards compatible)
-                return el ? el.checked : (currentConfig?.convertAssToVtt !== false);
+                return el ? !el.checked : (currentConfig?.convertAssToVtt !== false);
             })(),
             subToolboxEnabled: (function () {
                 const el = document.getElementById('subToolboxEnabledNoTranslation') || document.getElementById('subToolboxEnabled');
