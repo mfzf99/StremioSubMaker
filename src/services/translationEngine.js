@@ -181,7 +181,7 @@ class TranslationEngine {
       this.translationWorkflow = 'ai';
       this.sendTimestampsToAI = true;
     } else {
-      this.translationWorkflow = 'original';
+      this.translationWorkflow = 'xml';
       this.sendTimestampsToAI = false;
     }
 
@@ -2667,4 +2667,3 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 }
 
 module.exports = TranslationEngine;
-
