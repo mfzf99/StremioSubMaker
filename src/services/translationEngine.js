@@ -1762,32 +1762,37 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
-${contextInstructions}
+    const promptBody = <system_role>
+You are a professional subtitle translator.
+</system_role>
 
-CRITICAL RULES:
+<context>
+${contextInstructions || "Movie or drama subtitle."}
+</context>
+
+<critical_rules>
 1. Translate ONLY the text inside each <s id="N"> tag
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. Return EXACTLY ${expectedCount} tagged entries
 4. Keep line breaks within each entry
-5. Maintain natural dialogue flow and 100% accuracy of the original meaning and emotion
-6. Use appropriate colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue
-7. Naturally incorporate common English loanwords as used by Malaysians in everyday speech
-8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
+5. Translate the text inside the XML tags into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue
+6. Naturally incorporate common English loanwords as used by Malaysians in everyday speech
+7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
+</critical_rules>
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
+<strict_constraints>
+- Do NOT add acknowledgements, explanations, notes, or commentary.
+- Do not skip, merge, or split entries. NEVER output markdown.
+- Do not include any timestamps/timecodes.
+- YOUR RESPONSE MUST start with <s id="1"> and end with </s> after entry ${expectedCount}.
+- Contain ONLY the XML-tagged translated entries.
+</strict_constraints>
 
-YOUR RESPONSE MUST:
-- Start with <s id="1"> and end with </s> after entry ${expectedCount}
-- Contain ONLY the XML-tagged translated entries
-
-INPUT (${expectedCount} entries):
-
+<input_data>
 ${batchText}
+</input_data>
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
+<output>;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
