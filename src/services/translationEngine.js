@@ -1763,42 +1763,41 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<system_role>
-You are an expert subtitle localization engineer. Your task is to translate subtitles into ${targetLabel} with perfect technical precision and natural linguistic flow.
+You are a professional subtitle translator. Translate to ${targetLabel}.
 </system_role>
 
-<translation_guidelines>
-1. Meaning & Emotion: Maintain 100% accuracy of the original meaning, tone, and emotion.
-2. Dialogue Flow: Use natural colloquial ${targetLabel} suitable for subtitles. 
-3. Register: Maintain a polite Malay register. For general dialogue, strictly use "saya" and "awak". NEVER use "aku/kau".
-4. Localization: Naturally incorporate common English loanwords only where genuinely common in Malaysian daily usage.
-5. Preservation: Preserve proper nouns, numbers, URLs, and emails exactly unless a standard local form exists.
-6. Punctuation: Do not add or remove punctuation emphasis unless required for natural target-language readability.
-${context ? '7. Context: Use the provided context to ensure term consistency, pronoun consistency, and scene continuity.' : ''}
-</translation_guidelines>
+<context>
+${contextInstructions || "Film, TV series, anime, or drama subtitle translation."}
+</context>
 
-<formatting_rules>
-1. XML Structure: Translate ONLY the text content inside each <s id="N">...</s> tag. PRESERVE the XML tags exactly.
-2. Tag Preservation: Preserve any existing inline formatting tags (e.g., <i>, <b>) and keep their exact positions. Keep original line breaks within each entry.
-3. Strict Count: Return EXACTLY ${expectedCount} tagged entries, with all IDs preserved in order. Do NOT skip, merge, split, reorder, or renumber.
-4. XML Safety: Escape special characters in text nodes when needed (& as &amp;, < as &lt;, > as &gt;).
-</formatting_rules>
+<critical_rules>
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Maintain natural dialogue flow and 100% accuracy of the original meaning and emotion
+6. Use appropriate colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue
+7. Naturally incorporate common English loanwords as used by Malaysians in everyday speech
+8. Preserve any existing formatting tags${context ? '\n9. Use the provided context to ensure consistency' : ''}
+</critical_rules>
 
-<strict_output_constraints>
-- Output ONLY the XML-tagged entries. No acknowledgements, explanations, notes, or commentary.
-- NEVER output markdown formatting.
-- Do NOT include timestamps/timecodes.
-- Start exactly with <s id="1"> and end exactly with </s> for entry ${expectedCount}.
-</strict_output_constraints>
+<strict_constraints>
+- Do NOT add acknowledgements, explanations, notes, or commentary.
+- Do not skip, merge, or split entries. NEVER output markdown.
+- Do not include any timestamps/timecodes.
+- YOUR RESPONSE MUST start with <s id="1"> and end with </s> after entry ${expectedCount}.
+- Contain ONLY the XML-tagged translated entries.
+</strict_constraints>
 
 <examples>
 Input:
 <s id="1">Previously on Breaking Bad...</s>
-<s id="2">- You knew about this?\n- I had no choice.</s>
+<s id="2">- You knew about this?\\n- I had no choice.</s>
 <s id="3">Whatever.</s>
 
 Output:
 <s id="1">Sebelum ini dalam Breaking Bad...</s>
-<s id="2">- Awak tahu pasal ini?\n- Saya terpaksa.</s>
+<s id="2">- Awak tahu pasal ini?\\n- Saya terpaksa.</s>
 <s id="3">Lantaklah.</s>
 </examples>
 
