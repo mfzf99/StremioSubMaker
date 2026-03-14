@@ -25,6 +25,8 @@ const { handleCaughtError } = require('../utils/errorClassifier');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 const { recordKeyError: recordKeyErrorRedis, isKeyCoolingDown: isKeyCoolingDownRedis, getNextRotationIndex, resetKeyHealth } = require('../utils/sharedCache');
 const { executeParallelTranslation } = require('../utils/parallelTranslation');
+// 🛑 BINA PEDAL BREK ANGIN (1.5 SAAT)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
@@ -816,6 +818,13 @@ class TranslationEngine {
           if (batchIndex === 0 || batchIndex === batches.length - 1 || progress % 25 === 0) {
             log.info(() => `[TranslationEngine] Progress: ${progress}% (${translatedEntries.length}/${entries.length} entries, batch ${batchIndex + 1}/${batches.length})`);
           }
+
+          // 🛑 INJECT BREK 1.5 SAAT DI SINI
+          if (batchIndex < batches.length - 1) {
+            log.debug(() => `[⏳ RATE LIMIT] Brek angin 1.5 saat sebelum batch seterusnya...`);
+            await sleep(1500);
+          }
+
         } catch (error) {
           // Only log if not already logged by upstream handler
           if (!error._alreadyLogged) {
@@ -987,7 +996,14 @@ class TranslationEngine {
           log.warn(() => ['[TranslationEngine] Progress callback error (single-batch):', err.message]);
         }
       }
-    }
+
+      // 🛑 INJECT BREK 1.5 SAAT DI SINI (UNTUK CHUNKING)
+      if (batchIndex < chunks.length - 1) {
+        log.debug(() => `[⏳ RATE LIMIT] Brek angin 1.5 saat sebelum chunk seterusnya...`);
+        await sleep(1500);
+      }
+
+    } // <-- Ini kurungan yang tutup gelung 'for'
 
     if (translatedEntries.length !== entries.length) {
       log.warn(() => `[TranslationEngine] Single-batch entry count mismatch: expected ${entries.length}, got ${translatedEntries.length}`);
