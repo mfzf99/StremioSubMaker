@@ -3004,6 +3004,13 @@ function createSubtitleHandler(config) {
           const displayName = `Make ${baseName}`;
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
+          // 🛡️ INJECT PERISAI KUOTA (DUDUK NO.1 DALAM LIST)
+          translationEntries.push({
+            id: `shield_dummy_${targetLang}`,
+            lang: displayName, // Wajib guna nama sama supaya masuk folder sama
+            url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
+          });
+
           for (const sourceSub of sourceSubtitles) {
             // Cache source metadata for later history enrichment (Stremio may drop query params)
             try {
