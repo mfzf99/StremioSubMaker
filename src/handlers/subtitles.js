@@ -3944,20 +3944,28 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
   try {
     log.debug(() => `[Translation] Handling translation request for ${sourceFileId} to ${targetLanguage}`);
 
-    // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU
+    // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU (COMPACT MODE)
     if (sourceFileId.startsWith('dummy_shield')) {
       const parts = sourceFileId.split('__');
       const radarArray = parts[1] ? parts[1].split('_') : [];
       
       let radarText = '';
       if (radarArray.length > 0) {
-        radarText = '\n--- SENARAI VARIANT DI BAWAH ---\n';
+        radarText = '\n\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
+        
+        // Kumpul semua variant dalam bentuk ringkas (Cth: V2:ENG-SubDL)
+        const chunks = [];
         radarArray.forEach((item, idx) => {
-          radarText += `Variant ${idx + 2} = [ ${item.replace('-', ' | ')} ]\n`;
+          chunks.push(`V${idx + 2}: ${item.replace('-', '|')}`); 
         });
+
+        // Susun 3 variant dalam 1 baris supaya tak penuh skrin
+        for (let i = 0; i < chunks.length; i += 3) {
+          radarText += chunks.slice(i, i + 3).join('  •  ') + '\n';
+        }
       }
 
-      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n[PERISAI KUOTA SUBMAKER]\nSistem auto-play telah dihalang.${radarText}`;
+      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA SUBMAKER] 🛡️\nSistem auto-play telah dihalang.${radarText}`;
       return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
     }
 
