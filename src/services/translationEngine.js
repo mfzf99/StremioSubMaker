@@ -819,10 +819,10 @@ class TranslationEngine {
             log.info(() => `[TranslationEngine] Progress: ${progress}% (${translatedEntries.length}/${entries.length} entries, batch ${batchIndex + 1}/${batches.length})`);
           }
 
-          // 🛑 INJECT BREK 1.5 SAAT DI SINI
+          // 🛑 INJECT BREK 2.0 SAAT DI SINI
           if (batchIndex < batches.length - 1) {
-            log.debug(() => `[⏳ RATE LIMIT] Brek angin 1.5 saat sebelum batch seterusnya...`);
-            await sleep(1500);
+            log.debug(() => `[⏳ RATE LIMIT] Brek angin 2.0 saat sebelum batch seterusnya...`);
+            await sleep(2000);
           }
 
         } catch (error) {
