@@ -5031,15 +5031,32 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (BOT NOTIFICATION)
+    // 📱 INJECT PENGGERA TELEGRAM (AUDIT REPORT MODE)
     try {
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       
+      // Ambil data audit dari enjin
+      const stats = translationStats || {};
+      const total = stats.totalEntries || 0;
+      const success = stats.successfulEntries || 0;
+      const failed = stats.failedEntries || 0;
+      const mismatch = stats.mismatchRetries || 0;
+      const finalStatus = (success === total && total > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️';
+
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
-      const teleMsg = `✅ *Subtitle Translation Completed!* 🎬\n\n📊 *Status:* 100% Translated\n🌐 *Target:* ${targetLanguage.toUpperCase()}\n🔑 *Provider:* ${providerName}\n🧠 *Engine:* ${effectiveModel}\n\n🍿 *Your subtitle is now ready to stream.*`;
+      const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
+                      `📊 *Status:* ${finalStatus}\n` +
+                      `🏁 *Total Entries:* ${total}\n` +
+                      `✅ *Successful:* ${success}\n` +
+                      `❌ *Failed:* ${failed}\n` +
+                      `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
+                      `🌐 *Target:* ${targetLanguage.toUpperCase()}\n` +
+                      `🔑 *Provider:* ${providerName}\n` +
+                      `🧠 *Engine:* ${effectiveModel}\n\n` +
+                      `🍿 *Ready to stream!*`;
       
-      const axios = require('axios'); // Pastikan axios diload
+      const axios = require('axios');
       axios.post(teleUrl, {
         chat_id: chatId,
         text: teleMsg,
