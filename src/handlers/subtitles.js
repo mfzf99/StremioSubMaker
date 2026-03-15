@@ -3008,6 +3008,7 @@ function createSubtitleHandler(config) {
           translationEntries.push({
             id: `shield_dummy_${targetLang}`,
             lang: displayName, // Wajib guna nama sama supaya masuk folder sama
+            title: `Dummy`, // 🌟 INJECT TITLE YANG ULTRA RINGKAS
             url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
