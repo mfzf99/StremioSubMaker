@@ -2997,19 +2997,23 @@ function createSubtitleHandler(config) {
 
         log.debug(() => `[Subtitles] Found ${sourceSubtitles.length} source language subtitles for translation (providers + embedded)`);
 
-        // For each target language, create a translation entry for each source subtitle
         // Translation entries are created from the already-limited source subtitles (16 per source language)
         // For each target language, create a translation entry for each source subtitle
         for (const targetLang of targetLangsForTranslation) {
           const baseName = getLanguageName(targetLang) || targetLang;
-          const displayName = `Make ${baseName}`;
+          const displayName = `Make ${baseName}`; // Akan jadi "Make Malay"
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // Set untuk pastikan Dummy dibuat sekali je untuk setiap kategori bahasa
-          const addedDummies = new Set();
+          // 🛡️ INJECT SATU PERISAI DUMMY SAHAJA DI ATAS SEKALI UNTUK KATEGORI INI
+          translationEntries.push({
+            id: `shield_dummy_${targetLang}`,
+            lang: displayName, // Tetap guna "Make Malay" supaya tak overwrite
+            title: `Dummy`, 
+            url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
+          });
 
           for (const sourceSub of sourceSubtitles) {
-            // Cache source metadata for later history enrichment (Stremio may drop query params)
+            // Cache source metadata for later history enrichment
             try {
               const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceSub.fileId}`;
               translationSourceMeta.set(metaKey, {
@@ -3019,26 +3023,13 @@ function createSubtitleHandler(config) {
               });
             } catch (_) { /* ignore */ }
 
-            // 🌟 SUNTIKAN BAHASA SUMBER KE DALAM KATEGORI (Sebab Stremio ignore 'title')
             const sourceLangLabel = (sourceSub.languageCode || '').toUpperCase();
-            const categoryName = `${displayName} [${sourceLangLabel}]`;
-
-            // 🛡️ INJECT PERISAI UNTUK SETIAP KATEGORI BAHASA BARU
-            if (!addedDummies.has(categoryName)) {
-              translationEntries.push({
-                id: `shield_dummy_${targetLang}_${sourceLangLabel}`,
-                lang: categoryName,
-                title: `Dummy`, // Letak juga untuk kekemasan dalam data
-                url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
-              });
-              addedDummies.add(categoryName); // Tanda dummy dah masuk untuk kategori ni
-            }
 
             // Entry sarikata sebenar
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
-              lang: categoryName, // 🌟 Guna kategori baru yang dah ada [CHI] atau [ENG]
-              title: sourceSub.name || sourceSub.provider, // Paparkan nama original fail
+              lang: displayName, // SEMUA kumpul bawah "Make Malay" supaya Android keluarkan semua fail
+              title: `[${sourceLangLabel}] ${sourceSub.name || sourceSub.provider}`, // Desktop akan tunjuk tag [CHI]/[ENG] dengan jelas!
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
