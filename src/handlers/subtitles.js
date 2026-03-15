@@ -5031,6 +5031,23 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
+    // 📱 INJECT PENGGERA TELEGRAM (BOT NOTIFICATION)
+    try {
+      const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
+      const chatId = '310452904'; 
+      
+      const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const teleMsg = `✅ *Subtitle Translation Completed!* 🎬\n\n📊 *Status:* 100% Translated\n🌐 *Target:* ${targetLanguage.toUpperCase()}\n🔑 *Provider:* ${providerName}\n🧠 *Engine:* ${effectiveModel}\n\n🍿 *Your subtitle is now ready to stream.*`;
+      
+      const axios = require('axios'); // Pastikan axios diload
+      axios.post(teleUrl, {
+        chat_id: chatId,
+        text: teleMsg,
+        parse_mode: 'Markdown'
+      }).catch(e => log.debug(() => `[Telegram] Gagal hantar notif: ${e.message}`));
+    } catch (err) { 
+      log.debug(() => `[Telegram] Ralat sistem penggera: ${err.message}`);
+    }
 
     // Cache the translation (disk-only, permanent by default)
     const cacheConfig = config.translationCache || { enabled: true, duration: 0, persistent: true };
