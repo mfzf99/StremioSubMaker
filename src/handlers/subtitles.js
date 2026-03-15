@@ -3951,7 +3951,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       
       let radarText = '';
       if (radarArray.length > 0) {
-        radarText = '\n\n--- SENARAI VARIANT DI BAWAH ---\n';
+        radarText = '\n--- SENARAI VARIANT DI BAWAH ---\n';
         radarArray.forEach((item, idx) => {
           radarText += `Variant ${idx + 2} = [ ${item.replace('-', ' | ')} ]\n`;
         });
