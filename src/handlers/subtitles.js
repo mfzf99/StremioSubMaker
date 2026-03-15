@@ -3944,9 +3944,20 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
   try {
     log.debug(() => `[Translation] Handling translation request for ${sourceFileId} to ${targetLanguage}`);
 
-    // 🛡️ INJECT SISTEM PERISAI KUOTA
-    if (sourceFileId === 'dummy_shield') {
-      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n[PERISAI KUOTA SUBMAKER]\nSistem auto-play Stremio telah dihalang.\nSila pilih variant sarikata (Make Malay) yang betul di bawah untuk mula translate.`;
+    // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU
+    if (sourceFileId.startsWith('dummy_shield')) {
+      const parts = sourceFileId.split('__');
+      const radarArray = parts[1] ? parts[1].split('_') : [];
+      
+      let radarText = '';
+      if (radarArray.length > 0) {
+        radarText = '\n\n--- SENARAI VARIANT DI BAWAH ---\n';
+        radarArray.forEach((item, idx) => {
+          radarText += `Variant ${idx + 2} = [ ${item.replace('-', ' | ')} ]\n`;
+        });
+      }
+
+      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n[PERISAI KUOTA SUBMAKER]\nSistem auto-play telah dihalang.${radarText}`;
       return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
     }
 
