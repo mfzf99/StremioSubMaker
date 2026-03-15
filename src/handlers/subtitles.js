@@ -2999,18 +2999,14 @@ function createSubtitleHandler(config) {
 
         // For each target language, create a translation entry for each source subtitle
         // Translation entries are created from the already-limited source subtitles (16 per source language)
+        // For each target language, create a translation entry for each source subtitle
         for (const targetLang of targetLangsForTranslation) {
           const baseName = getLanguageName(targetLang) || targetLang;
           const displayName = `Make ${baseName}`;
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // 🛡️ INJECT PERISAI KUOTA (DUDUK NO.1 DALAM LIST)
-          translationEntries.push({
-            id: `shield_dummy_${targetLang}`,
-            lang: displayName, // Wajib guna nama sama supaya masuk folder sama
-            title: `Dummy`, // 🌟 INJECT TITLE YANG ULTRA RINGKAS
-            url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
-          });
+          // Set untuk pastikan Dummy dibuat sekali je untuk setiap kategori bahasa
+          const addedDummies = new Set();
 
           for (const sourceSub of sourceSubtitles) {
             // Cache source metadata for later history enrichment (Stremio may drop query params)
@@ -3023,10 +3019,26 @@ function createSubtitleHandler(config) {
               });
             } catch (_) { /* ignore */ }
 
+            // 🌟 SUNTIKAN BAHASA SUMBER KE DALAM KATEGORI (Sebab Stremio ignore 'title')
+            const sourceLangLabel = (sourceSub.languageCode || '').toUpperCase();
+            const categoryName = `${displayName} [${sourceLangLabel}]`;
+
+            // 🛡️ INJECT PERISAI UNTUK SETIAP KATEGORI BAHASA BARU
+            if (!addedDummies.has(categoryName)) {
+              translationEntries.push({
+                id: `shield_dummy_${targetLang}_${sourceLangLabel}`,
+                lang: categoryName,
+                title: `Dummy`, // Letak juga untuk kekemasan dalam data
+                url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
+              });
+              addedDummies.add(categoryName); // Tanda dummy dah masuk untuk kategori ni
+            }
+
+            // Entry sarikata sebenar
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
-              lang: displayName, // Display as "Make Language" in Stremio UI
-              title: `[${(sourceSub.languageCode || '').toUpperCase()}] ${sourceSub.name || sourceSub.provider}`, // 🌟 INJECT TITLE KAT SINI
+              lang: categoryName, // 🌟 Guna kategori baru yang dah ada [CHI] atau [ENG]
+              title: sourceSub.name || sourceSub.provider, // Paparkan nama original fail
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
