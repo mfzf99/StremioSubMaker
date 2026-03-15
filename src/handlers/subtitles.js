@@ -3025,6 +3025,7 @@ function createSubtitleHandler(config) {
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
               lang: displayName, // Display as "Make Language" in Stremio UI
+              title: `[${(sourceSub.languageCode || '').toUpperCase()}] ${sourceSub.name || sourceSub.provider}`, // 🌟 INJECT TITLE KAT SINI
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
