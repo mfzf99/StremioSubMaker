@@ -5031,15 +5031,15 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (DIRECT ENGINE MODE)
+    // 📱 INJECT PENGGERA TELEGRAM (STEADY MODE)
     try {
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       
-      // Ambil data audit terus dari perut enjin
-      const stats = (translationEngine && translationEngine.translationStats) ? translationEngine.translationEngine.translationStats : {};
-      const total = stats.totalEntries || 0;
-      const success = stats.successfulEntries || 0;
+      // Ambil data audit dari stats yang dah sedia ada
+      const stats = typeof translationStats !== 'undefined' ? translationStats : {};
+      const total = stats.totalEntries || (typeof totalEntries !== 'undefined' ? totalEntries : 0);
+      const success = stats.successfulEntries || total;
       const failed = stats.failedEntries || 0;
       const mismatch = stats.mismatchRetries || 0;
       
