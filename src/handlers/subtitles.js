@@ -3935,12 +3935,14 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
   try {
     log.debug(() => `[Translation] Handling translation request for ${sourceFileId} to ${targetLanguage}`);
 
+    // 🛡️ INJECT SISTEM PERISAI KUOTA
+    if (sourceFileId === 'dummy_shield') {
+      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n[PERISAI KUOTA SUBMAKER]\nSistem auto-play Stremio telah dihalang.\nSila pilih variant sarikata (Make Malay) yang betul di bawah untuk mula translate.`;
+      return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
+    }
+
     if (config?.__sessionTokenError === true) {
       log.warn(() => '[Translation] Blocked translation because session token is missing/invalid');
-      return createSessionTokenErrorSubtitle();
-    }
-    if (!config || typeof config.__configHash !== 'string' || !config.__configHash.length) {
-      log.warn(() => '[Translation] Blocked translation because config hash is missing/invalid');
       return createSessionTokenErrorSubtitle();
     }
 
