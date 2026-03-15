@@ -5034,19 +5034,21 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (THE FINAL HOOK)
+    // 📱 INJECT PENGGERA TELEGRAM (AUTO-COUNT MODE)
     try {
+      // Pancing data tepat sebelum hantar
       const stats = translationEngine?.translationStats || {};
-      const success = stats.successfulEntries || capturedTotal;
+      const finalTotal = stats.totalEntries || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
+      const success = stats.successfulEntries || finalTotal;
       const mismatch = stats.mismatchRetries || 0;
-      const failed = Math.max(0, capturedTotal - success);
+      const failed = Math.max(0, finalTotal - success);
       
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
-                      `📊 *Status:* ${(failed === 0 && capturedTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
-                      `🏁 *Total Entries:* ${capturedTotal}\n` +
+                      `📊 *Status:* ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
+                      `🏁 *Total Entries:* ${finalTotal}\n` +
                       `✅ *Successful:* ${success}\n` +
                       `❌ *Failed:* ${failed}\n` +
                       `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
