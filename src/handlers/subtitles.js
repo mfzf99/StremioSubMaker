@@ -3001,19 +3001,25 @@ function createSubtitleHandler(config) {
         // For each target language, create a translation entry for each source subtitle
         for (const targetLang of targetLangsForTranslation) {
           const baseName = getLanguageName(targetLang) || targetLang;
-          const displayName = `Make ${baseName}`; // Akan jadi "Make Malay"
+          const displayName = `Make ${baseName}`; // Semua masuk 1 folder je
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // 🛡️ INJECT SATU PERISAI DUMMY SAHAJA DI ATAS SEKALI UNTUK KATEGORI INI
+          // 📡 BINA RADAR (Kumpul data bahasa & provider untuk dipaparkan di skrin)
+          const radarData = sourceSubtitles.map(sub => {
+            const lang = (sub.languageCode || '').toUpperCase();
+            const prov = sub.provider === 'subdl' ? 'SubDL' : sub.provider === 'subsource' ? 'SubSrc' : sub.provider === 'opensubtitles-v3' ? 'OSv3' : sub.provider === 'stremio-community-subtitles' ? 'SCS' : 'OS';
+            return `${lang}-${prov}`;
+          }).join('_'); // Contoh jadi: ENG-SubDL_CHI-OSv3
+
+          // 🛡️ INJECT SATU PERISAI DUMMY BERSERTA DATA RADAR
           translationEntries.push({
-            id: `shield_dummy_${targetLang}`,
-            lang: displayName, // Tetap guna "Make Malay" supaya tak overwrite
+            id: `dummy_shield__${radarData}`,
+            lang: displayName,
             title: `Dummy`, 
-            url: `{{ADDON_URL}}/translate/dummy_shield/${targetLang}${translationUrlExtension}${translateQuery}`
+            url: `{{ADDON_URL}}/translate/dummy_shield__${radarData}/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
           for (const sourceSub of sourceSubtitles) {
-            // Cache source metadata for later history enrichment
             try {
               const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceSub.fileId}`;
               translationSourceMeta.set(metaKey, {
@@ -3023,13 +3029,11 @@ function createSubtitleHandler(config) {
               });
             } catch (_) { /* ignore */ }
 
-            const sourceLangLabel = (sourceSub.languageCode || '').toUpperCase();
-
             // Entry sarikata sebenar
             const translationEntry = {
               id: `translate_${sourceSub.fileId}_to_${targetLang}`,
-              lang: displayName, // SEMUA kumpul bawah "Make Malay" supaya Android keluarkan semua fail
-              title: `[${sourceLangLabel}] ${sourceSub.name || sourceSub.provider}`, // Desktop akan tunjuk tag [CHI]/[ENG] dengan jelas!
+              lang: displayName, // SEMUA kumpul bawah "Make Malay" supaya takde isu dengan Android/Desktop
+              title: `[${(sourceSub.languageCode || '').toUpperCase()}] ${sourceSub.name || sourceSub.provider}`,
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
