@@ -5031,18 +5031,18 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (AUDIT REPORT MODE)
+    // 📱 INJECT PENGGERA TELEGRAM (RE-WIRED DASHBOARD)
     try {
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       
-      // Ambil data audit dari enjin
-      const stats = translationStats || {};
-      const total = stats.totalEntries || 0;
-      const success = stats.successfulEntries || 0;
-      const failed = stats.failedEntries || 0;
-      const mismatch = stats.mismatchRetries || 0;
-      const finalStatus = (success === total && total > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️';
+      // Ambil data langsung dari skop fungsi
+      const total = typeof totalEntries !== 'undefined' ? totalEntries : 0;
+      const success = (translationEngine && translationEngine.translationStats) ? translationEngine.translationStats.successfulEntries : total;
+      const mismatch = (translationEngine && translationEngine.translationStats) ? translationEngine.translationStats.mismatchRetries : 0;
+      const failed = total - success;
+      
+      const finalStatus = (failed === 0 && total > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️';
 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
@@ -5065,7 +5065,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     } catch (err) { 
       log.debug(() => `[Telegram] Ralat sistem penggera: ${err.message}`);
     }
-
+    
     // Cache the translation (disk-only, permanent by default)
     const cacheConfig = config.translationCache || { enabled: true, duration: 0, persistent: true };
     const bypass = config.bypassCache === true;
