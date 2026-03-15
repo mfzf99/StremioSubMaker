@@ -25,7 +25,7 @@ const { handleCaughtError } = require('../utils/errorClassifier');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 const { recordKeyError: recordKeyErrorRedis, isKeyCoolingDown: isKeyCoolingDownRedis, getNextRotationIndex, resetKeyHealth } = require('../utils/sharedCache');
 const { executeParallelTranslation } = require('../utils/parallelTranslation');
-// 🛑 BINA PEDAL BREK ANGIN (1.5 SAAT)
+// 🛑 BINA PEDAL BREK ANGIN (2.0 SAAT)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Extract normalized tokens from a language label/code (split on common separators)
