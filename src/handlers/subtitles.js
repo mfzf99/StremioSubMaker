@@ -5031,40 +5031,36 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (SNAPSHOT MODE)
+    // 📱 INJECT PENGGERA TELEGRAM (INSIDE ENGINE SCOPE)
     try {
+      const stats = translationEngine?.translationStats || translationStats || {};
+      const total = stats.totalEntries || (typeof totalEntries !== 'undefined' ? totalEntries : 0);
+      
+      // Kalau total masih 0, kita buat manual check dari array entries
+      const finalTotal = (total === 0 && typeof entries !== 'undefined') ? entries.length : total;
+      const success = stats.successfulEntries || finalTotal;
+      const failed = stats.failedEntries || 0;
+      const mismatch = stats.mismatchRetries || 0;
+      
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
-      
-      // Ambil snapshot stats sebelum engine shutdown
-      const currentStats = translationEngine?.translationStats || translationStats || {};
-      const total = currentStats.totalEntries || (typeof totalEntries !== 'undefined' ? totalEntries : 0);
-      const success = currentStats.successfulEntries || 0;
-      const failed = currentStats.failedEntries || 0;
-      const mismatch = currentStats.mismatchRetries || 0;
-      
-      const finalStatus = (success >= total && total > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️';
-
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
-                      `📊 *Status:* ${finalStatus}\n` +
-                      `🏁 *Total Entries:* ${total}\n` +
+                      `📊 *Status:* ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
+                      `🏁 *Total Entries:* ${finalTotal}\n` +
                       `✅ *Successful:* ${success}\n` +
                       `❌ *Failed:* ${failed}\n` +
                       `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
                       `🌐 *Target:* ${targetLanguage.toUpperCase()}\n` +
                       `🔑 *Provider:* ${providerName}\n` +
                       `🧠 *Engine:* ${effectiveModel}\n\n` +
-                      `🍿 *Ready to stream!*`;
+                      ` popcorn *Ready to stream!*`;
       
       const axios = require('axios');
-      axios.post(teleUrl, {
-        chat_id: chatId,
-        text: teleMsg,
-        parse_mode: 'Markdown'
-      }).catch(e => log.debug(() => `[Telegram] Gagal hantar notif: ${e.message}`));
-    } catch (err) { 
-      log.debug(() => `[Telegram] Ralat sistem penggera: ${err.message}`);
+      axios.post(teleUrl, { chat_id: chatId, text: teleMsg, parse_mode: 'Markdown' })
+        .catch(e => log.debug(() => `[Telegram] Gagal: ${e.message}`));
+    } catch (teleErr) {
+      log.debug(() => `[Telegram] Ralat: ${teleErr.message}`);
     }
     
     // Cache the translation (disk-only, permanent by default)
