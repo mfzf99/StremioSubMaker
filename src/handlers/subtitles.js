@@ -4904,6 +4904,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     let partialDeliveryDisabled = false;
 
     try {
+      // 🎣 Pancing data awal-awal sebelum Gemini mula (Baris 4906)
+    const entriesToTranslate = parseSRT(sourceContent);
+    const capturedTotal = entriesToTranslate.length || 0;
       translatedContent = await translationEngine.translateSubtitle(
         sourceContent,
         targetLangName,
@@ -5031,30 +5034,26 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (INSIDE ENGINE SCOPE)
+    // 📱 INJECT PENGGERA TELEGRAM (THE FINAL HOOK)
     try {
-      const stats = translationEngine?.translationStats || translationStats || {};
-      const total = stats.totalEntries || (typeof totalEntries !== 'undefined' ? totalEntries : 0);
-      
-      // Kalau total masih 0, kita buat manual check dari array entries
-      const finalTotal = (total === 0 && typeof entries !== 'undefined') ? entries.length : total;
-      const success = stats.successfulEntries || finalTotal;
-      const failed = stats.failedEntries || 0;
+      const stats = translationEngine?.translationStats || {};
+      const success = stats.successfulEntries || capturedTotal;
       const mismatch = stats.mismatchRetries || 0;
+      const failed = Math.max(0, capturedTotal - success);
       
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
-                      `📊 *Status:* ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
-                      `🏁 *Total Entries:* ${finalTotal}\n` +
+                      `📊 *Status:* ${(failed === 0 && capturedTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
+                      `🏁 *Total Entries:* ${capturedTotal}\n` +
                       `✅ *Successful:* ${success}\n` +
                       `❌ *Failed:* ${failed}\n` +
                       `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
                       `🌐 *Target:* ${targetLanguage.toUpperCase()}\n` +
                       `🔑 *Provider:* ${providerName}\n` +
                       `🧠 *Engine:* ${effectiveModel}\n\n` +
-                      ` popcorn *Ready to stream!*`;
+                      `🍿 *Ready to stream!*`;
       
       const axios = require('axios');
       axios.post(teleUrl, { chat_id: chatId, text: teleMsg, parse_mode: 'Markdown' })
