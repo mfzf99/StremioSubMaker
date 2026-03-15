@@ -3951,7 +3951,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       
       let radarText = '';
       if (radarArray.length > 0) {
-        radarText = '\n\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
+        radarText = '\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
         
         // Kumpul semua variant dalam bentuk ringkas (Cth: V2:ENG-SubDL)
         const chunks = [];
