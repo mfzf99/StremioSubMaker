@@ -27472,6 +27472,7 @@
   "animenewsnetwork_id" : 1453,
   "anime-planet_id" : "machine-hayabusa",
   "anisearch_id" : 2806,
+  "imdb_id" : "tt36647357",
   "kitsu_id" : 6241,
   "mal_id" : 10562,
   "simkl_id" : 38363,
@@ -202747,10 +202748,17 @@
   "animecountdown_id" : 2460012,
   "anime-planet_id" : "awajima-hyakkei",
   "anisearch_id" : 19289,
+  "imdb_id" : "tt37388613",
   "kitsu_id" : 48846,
   "livechart_id" : 11038,
   "mal_id" : 58820,
-  "simkl_id" : 2460012
+  "simkl_id" : 2460012,
+  "themoviedb_id" : 291403,
+  "tvdb_id" : 449883,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 18620,
@@ -205318,6 +205326,7 @@
   "animenewsnetwork_id" : 33453,
   "anime-planet_id" : "inazuma-eleven-compilation-movie-densetsu-no-kickoff",
   "anisearch_id" : 19753,
+  "imdb_id" : "tt33318428",
   "kitsu_id" : 49232,
   "livechart_id" : 12816,
   "mal_id" : 59709,
@@ -212033,6 +212042,7 @@
   "type" : "MOVIE",
   "anidb_id" : 19601,
   "anisearch_id" : 20905,
+  "imdb_id" : "tt39254742",
   "themoviedb_id" : 1551201
 }, {
   "type" : "MOVIE",
@@ -212292,7 +212302,13 @@
   "anisearch_id" : 20962,
   "livechart_id" : 13355,
   "mal_id" : 62617,
-  "simkl_id" : 2893984
+  "simkl_id" : 2893984,
+  "themoviedb_id" : 302051,
+  "tvdb_id" : 468809,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19636,
@@ -212308,7 +212324,13 @@
   "kitsu_id" : 50253,
   "livechart_id" : 13255,
   "mal_id" : 62005,
-  "simkl_id" : 2893986
+  "simkl_id" : 2893986,
+  "themoviedb_id" : 296933,
+  "tvdb_id" : 471395,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "MOVIE",
   "anidb_id" : 19638,
@@ -212382,7 +212404,11 @@
   "anisearch_id" : 20986,
   "livechart_id" : 13364,
   "mal_id" : 62753,
-  "simkl_id" : 2901666
+  "simkl_id" : 2901666,
+  "tvdb_id" : 469231,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19651,
@@ -212613,7 +212639,13 @@
 }, {
   "type" : "UNKNOWN",
   "anidb_id" : 19690,
-  "anisearch_id" : 20997
+  "anisearch_id" : 20997,
+  "themoviedb_id" : 312849,
+  "tvdb_id" : 470406,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19691,
@@ -212651,7 +212683,13 @@
   "anisearch_id" : 21055,
   "kitsu_id" : 50332,
   "livechart_id" : 13400,
-  "simkl_id" : 2918498
+  "simkl_id" : 2918498,
+  "themoviedb_id" : 304577,
+  "tvdb_id" : 470050,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19698,
@@ -212674,7 +212712,13 @@
   "kitsu_id" : 50320,
   "livechart_id" : 13379,
   "mal_id" : 62893,
-  "simkl_id" : 2921470
+  "simkl_id" : 2921470,
+  "themoviedb_id" : 304820,
+  "tvdb_id" : 469985,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19700
@@ -212754,10 +212798,17 @@
   "animenewsnetwork_id" : 37986,
   "anime-planet_id" : "needy-girl-overdose",
   "anisearch_id" : 21013,
+  "imdb_id" : "",
   "kitsu_id" : 50341,
   "livechart_id" : 13384,
   "mal_id" : 62913,
-  "simkl_id" : 2929626
+  "simkl_id" : 2929626,
+  "themoviedb_id" : 305329,
+  "tvdb_id" : 470270,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19714
@@ -212806,7 +212857,11 @@
   "kitsu_id" : 50349,
   "livechart_id" : 13390,
   "mal_id" : 62932,
-  "simkl_id" : 2933442
+  "simkl_id" : 2933442,
+  "tvdb_id" : 470401,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19720,
@@ -212844,9 +212899,16 @@
   "animenewsnetwork_id" : 38019,
   "anime-planet_id" : "killed-again-mr-detective",
   "anisearch_id" : 21015,
+  "imdb_id" : "tt39122702",
   "livechart_id" : 13392,
   "mal_id" : 62964,
-  "simkl_id" : 2936722
+  "simkl_id" : 2936722,
+  "themoviedb_id" : 312293,
+  "tvdb_id" : 470519,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19723,
@@ -212876,10 +212938,16 @@
   "animenewsnetwork_id" : 37310,
   "anime-planet_id" : "hoppe-chan-san-okoku-to-kuro-hoppe-dan-no-himitsu",
   "anisearch_id" : 21011,
+  "imdb_id" : "tt38254583",
   "kitsu_id" : 50436,
   "livechart_id" : 13264,
   "mal_id" : 63106,
-  "simkl_id" : 2938846
+  "simkl_id" : 2938846,
+  "themoviedb_id" : 310330,
+  "tvdb_id" : 466523,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19726,
@@ -212891,7 +212959,13 @@
   "kitsu_id" : 50355,
   "livechart_id" : 13396,
   "mal_id" : 62978,
-  "simkl_id" : 2939974
+  "simkl_id" : 2939974,
+  "themoviedb_id" : 306120,
+  "tvdb_id" : 470611,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "MOVIE",
   "anidb_id" : 19727,
@@ -212922,7 +212996,12 @@
   "anisearch_id" : 21024,
   "livechart_id" : 13398,
   "mal_id" : 62983,
-  "simkl_id" : 2941080
+  "simkl_id" : 2941080,
+  "themoviedb_id" : 315816,
+  "tvdb_id" : 471300,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19731,
@@ -212934,7 +213013,13 @@
   "kitsu_id" : 50356,
   "livechart_id" : 13399,
   "mal_id" : 62989,
-  "simkl_id" : 2942230
+  "simkl_id" : 2942230,
+  "themoviedb_id" : 306231,
+  "tvdb_id" : 470719,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19734,
@@ -212951,6 +213036,7 @@
   "animenewsnetwork_id" : 38055,
   "anime-planet_id" : "pardon-the-intrusion-im-home",
   "anisearch_id" : 21022,
+  "imdb_id" : "tt40548626",
   "livechart_id" : 13402,
   "mal_id" : 63014,
   "simkl_id" : 2946324,
@@ -213035,7 +213121,11 @@
   "kitsu_id" : 50374,
   "livechart_id" : 13216,
   "mal_id" : 61943,
-  "simkl_id" : 2949486
+  "simkl_id" : 2949486,
+  "tvdb_id" : 471000,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19747,
@@ -213084,11 +213174,19 @@
   "anidb_id" : 19751,
   "animecountdown_id" : 2953770,
   "animenewsnetwork_id" : 38097,
-  "simkl_id" : 2953770
+  "simkl_id" : 2953770,
+  "tvdb_id" : 471128,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "UNKNOWN",
   "anidb_id" : 19752,
-  "anisearch_id" : 21054
+  "anisearch_id" : 21054,
+  "tvdb_id" : 471848,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19753,
@@ -213107,7 +213205,13 @@
   "anisearch_id" : 21098,
   "livechart_id" : 13416,
   "mal_id" : 63053,
-  "simkl_id" : 2957216
+  "simkl_id" : 2957216,
+  "themoviedb_id" : 307903,
+  "tvdb_id" : 471316,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19755,
@@ -213118,12 +213222,24 @@
   "anisearch_id" : 21096,
   "livechart_id" : 13417,
   "mal_id" : 63061,
-  "simkl_id" : 2958136
+  "simkl_id" : 2958136,
+  "themoviedb_id" : 307585,
+  "tvdb_id" : 471296,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "UNKNOWN",
   "anidb_id" : 19757,
   "anilist_id" : 203651,
-  "anisearch_id" : 21062
+  "anisearch_id" : 21062,
+  "themoviedb_id" : 307705,
+  "tvdb_id" : 471756,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19758
@@ -213139,7 +213255,11 @@
   "type" : "TV",
   "anidb_id" : 19760,
   "animecountdown_id" : 2960894,
-  "simkl_id" : 2960894
+  "simkl_id" : 2960894,
+  "tvdb_id" : 471495,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19761,
@@ -213167,10 +213287,23 @@
   "anisearch_id" : 21085,
   "livechart_id" : 13420,
   "mal_id" : 63082,
-  "simkl_id" : 2962970
+  "simkl_id" : 2962970,
+  "themoviedb_id" : 312507,
+  "tvdb_id" : 471497,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
-  "anidb_id" : 19765
+  "anidb_id" : 19765,
+  "imdb_id" : "tt39181351",
+  "themoviedb_id" : 297903,
+  "tvdb_id" : 471609,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "MOVIE",
   "anidb_id" : 19766,
@@ -213190,7 +213323,13 @@
   "simkl_id" : 2965354
 }, {
   "type" : "TV",
-  "anidb_id" : 19768
+  "anidb_id" : 19768,
+  "themoviedb_id" : 308403,
+  "tvdb_id" : 471657,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19770,
@@ -213234,7 +213373,11 @@
   "anisearch_id" : 21112,
   "livechart_id" : 13437,
   "mal_id" : 63135,
-  "simkl_id" : 2970776
+  "simkl_id" : 2970776,
+  "tvdb_id" : 471828,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "SPECIAL",
   "anidb_id" : 19774,
@@ -213311,7 +213454,14 @@
   "anisearch_id" : 21045
 }, {
   "type" : "TV",
-  "anidb_id" : 19782
+  "anidb_id" : 19782,
+  "imdb_id" : "tt39246964",
+  "themoviedb_id" : 308874,
+  "tvdb_id" : 471878,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19783,
@@ -213472,7 +213622,13 @@
 }, {
   "type" : "TV",
   "anidb_id" : 19809,
-  "anisearch_id" : 20723
+  "anisearch_id" : 20723,
+  "themoviedb_id" : 304023,
+  "tvdb_id" : 469053,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19810,
@@ -213483,7 +213639,13 @@
   "anisearch_id" : 21195,
   "livechart_id" : 13470,
   "mal_id" : 63256,
-  "simkl_id" : 2985076
+  "simkl_id" : 2985076,
+  "themoviedb_id" : 310112,
+  "tvdb_id" : 472341,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19811,
@@ -213514,7 +213676,13 @@
   "type" : "UNKNOWN",
   "anidb_id" : 19815,
   "anilist_id" : 205619,
-  "livechart_id" : 13471
+  "livechart_id" : 13471,
+  "themoviedb_id" : 312049,
+  "tvdb_id" : 472490,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19816,
@@ -213543,7 +213711,13 @@
   "kitsu_id" : 50353,
   "livechart_id" : 13375,
   "mal_id" : 62864,
-  "simkl_id" : 2990898
+  "simkl_id" : 2990898,
+  "themoviedb_id" : 304126,
+  "tvdb_id" : 474202,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19822,
@@ -213551,7 +213725,13 @@
   "animenewsnetwork_id" : 38274,
   "anime-planet_id" : "full-clearing-another-world-under-a-goddess-with-zero-believers",
   "livechart_id" : 13477,
-  "mal_id" : 63292
+  "mal_id" : 63292,
+  "themoviedb_id" : 288588,
+  "tvdb_id" : 472640,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19823,
@@ -213562,7 +213742,11 @@
   "kitsu_id" : 50471,
   "livechart_id" : 13476,
   "mal_id" : 63293,
-  "simkl_id" : 2990962
+  "simkl_id" : 2990962,
+  "tvdb_id" : 472641,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19825,
@@ -213591,7 +213775,11 @@
   "anime-planet_id" : "zero-rise",
   "kitsu_id" : 50474,
   "livechart_id" : 13479,
-  "mal_id" : 63325
+  "mal_id" : 63325,
+  "tvdb_id" : 472690,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "MOVIE",
   "anidb_id" : 19829,
@@ -213608,7 +213796,13 @@
   "anidb_id" : 19831,
   "animecountdown_id" : 2992900,
   "anisearch_id" : 21200,
-  "simkl_id" : 2992900
+  "simkl_id" : 2992900,
+  "themoviedb_id" : 310921,
+  "tvdb_id" : 472764,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "SPECIAL",
   "anidb_id" : 19834,
@@ -213638,7 +213832,11 @@
   "kitsu_id" : 50483,
   "livechart_id" : 13485,
   "mal_id" : 63324,
-  "simkl_id" : 2995876
+  "simkl_id" : 2995876,
+  "tvdb_id" : 472831,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19838,
@@ -213656,7 +213854,13 @@
   "anime-planet_id" : "doukyoshiteiru-kensei-no-onna-shishou-ga-kawaisugite-mainichi-shiawase-desu",
   "anisearch_id" : 21166,
   "livechart_id" : 13488,
-  "mal_id" : 63350
+  "mal_id" : 63350,
+  "themoviedb_id" : 312047,
+  "tvdb_id" : 472832,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19840,
@@ -213679,6 +213883,14 @@
 }, {
   "type" : "ONA",
   "anidb_id" : 19844
+}, {
+  "anidb_id" : 19846,
+  "themoviedb_id" : 987654,
+  "tvdb_id" : 123456,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19847,
@@ -213717,7 +213929,13 @@
   "anime-planet_id" : "onegai-aipri",
   "anisearch_id" : 21193,
   "livechart_id" : 13492,
-  "mal_id" : 63352
+  "mal_id" : 63352,
+  "themoviedb_id" : 312123,
+  "tvdb_id" : 474655,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19851
@@ -213740,7 +213958,11 @@
   "anisearch_id" : 21188,
   "kitsu_id" : 50496,
   "livechart_id" : 13496,
-  "simkl_id" : 3004092
+  "simkl_id" : 3004092,
+  "tvdb_id" : 473182,
+  "season" : {
+    "tvdb" : 1
+  }
 }, {
   "type" : "MOVIE",
   "anidb_id" : 19857,
@@ -213756,7 +213978,19 @@
   "type" : "TV",
   "anidb_id" : 19858,
   "animecountdown_id" : 3004128,
-  "simkl_id" : 3004128
+  "simkl_id" : 3004128,
+  "tvdb_id" : 473125,
+  "season" : {
+    "tvdb" : 1
+  }
+}, {
+  "anidb_id" : 19859,
+  "themoviedb_id" : 312359,
+  "tvdb_id" : 473154,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19861,
@@ -213765,8 +213999,15 @@
   "animenewsnetwork_id" : 38382,
   "anime-planet_id" : "nippon-sangoku",
   "anisearch_id" : 21198,
+  "imdb_id" : "tt40548519",
   "mal_id" : 63375,
-  "simkl_id" : 3006106
+  "simkl_id" : 3006106,
+  "themoviedb_id" : 312474,
+  "tvdb_id" : 473228,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "TV",
   "anidb_id" : 19862,
@@ -213775,7 +214016,13 @@
   "anime-planet_id" : "megami-isekai-tensei-nani-ni-naritai-desu-ka-ore-yuusha-no-rokkotsu-de",
   "livechart_id" : 13500,
   "mal_id" : 63376,
-  "simkl_id" : 3006108
+  "simkl_id" : 3006108,
+  "themoviedb_id" : 312522,
+  "tvdb_id" : 473229,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "ONA",
   "anidb_id" : 19863,
@@ -213789,12 +214036,34 @@
   "anime-planet_id" : "nia-liston-the-merciless-maiden",
   "livechart_id" : 13504,
   "mal_id" : 63382,
-  "simkl_id" : 3007186
+  "simkl_id" : 3007186,
+  "themoviedb_id" : 312850,
+  "tvdb_id" : 473266,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "type" : "OVA",
   "anidb_id" : 19866,
   "animecountdown_id" : 3007188,
   "simkl_id" : 3007188
+}, {
+  "anidb_id" : 19871,
+  "themoviedb_id" : 312822,
+  "tvdb_id" : 473516,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19873,
+  "themoviedb_id" : 312949,
+  "tvdb_id" : 473423,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
 }, {
   "anidb_id" : 19876,
   "themoviedb_id" : 313068,
@@ -213802,6 +214071,100 @@
   "season" : {
     "tvdb" : 1,
     "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19877,
+  "tvdb_id" : 473563,
+  "season" : {
+    "tvdb" : 1
+  }
+}, {
+  "anidb_id" : 19878,
+  "themoviedb_id" : 313215,
+  "tvdb_id" : 473560,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19880,
+  "themoviedb_id" : 313394,
+  "tvdb_id" : 473648,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19881,
+  "themoviedb_id" : 313346,
+  "tvdb_id" : 473642,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19889,
+  "tvdb_id" : 473913,
+  "season" : {
+    "tvdb" : 1
+  }
+}, {
+  "anidb_id" : 19891,
+  "themoviedb_id" : 313966,
+  "tvdb_id" : 473945,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19894,
+  "themoviedb_id" : 314054,
+  "tvdb_id" : 474027,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19896,
+  "themoviedb_id" : 314554,
+  "tvdb_id" : 474303,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19901,
+  "tvdb_id" : 471791,
+  "season" : {
+    "tvdb" : 1
+  }
+}, {
+  "anidb_id" : 19907,
+  "themoviedb_id" : 314954,
+  "tvdb_id" : 474488,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19908,
+  "tvdb_id" : 474294,
+  "season" : {
+    "tvdb" : 1
+  }
+}, {
+  "anidb_id" : 19909,
+  "themoviedb_id" : 315054,
+  "tvdb_id" : 474490,
+  "season" : {
+    "tvdb" : 1,
+    "tmdb" : 1
+  }
+}, {
+  "anidb_id" : 19912,
+  "tvdb_id" : 474691,
+  "season" : {
+    "tvdb" : 1
   }
 }, {
   "type" : "SPECIAL",
