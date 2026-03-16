@@ -5064,19 +5064,21 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (V3 ULTIMATE - PERFECT + CACHE + VARIANT)
+    // 📱 INJECT PENGGERA TELEGRAM (V3.1 - ANTI CRASH REDIS)
     try {
+      // 1. Ekstrak Detail Fail & Pancing Variant
       const metaKey = `${userHash || 'default'}:${sourceFileId}`;
       const cachedMeta = translationSourceMeta.get(metaKey) || {};
       const movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
 
       let variantInfo = '';
-      if (sourceFileId.includes('__')) {
+      if (sourceFileId && sourceFileId.includes('__')) {
         const parts = sourceFileId.split('__');
         const vIndex = parts[2]; 
         if (vIndex !== undefined) variantInfo = ` [V${parseInt(vIndex) + 2}]`;
       }
 
+      // 2. Kenalpasti Sumber
       let sourceName = 'OpenSubtitles';
       if (sourceFileId.startsWith('subdl_')) sourceName = 'SubDL';
       else if (sourceFileId.startsWith('subsource_')) sourceName = 'SubSource';
@@ -5085,28 +5087,36 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       else if (sourceFileId.startsWith('wyzie_')) sourceName = 'Wyzie Subs';
       const sourceProv = `${sourceName}${variantInfo}`;
 
-      const isCached = !!(await redis?.get(`trans:${runtimeKey}`));
-      const cacheStatus = isCached ? 'CACHE ⚡' : 'FRESH 🌱';
+      // 3. Status Cache vs Fresh (Cara Kebal - Tanpa panggil 'redis')
+      const stats = translationEngine?.translationStats || {};
+      // Jika tak ada token used dan tak ada retries, kemungkinan besar dia ambil dari Cache
+      const isActuallyFresh = (stats.totalTokens && stats.totalTokens > 0);
+      const cacheStatus = isActuallyFresh ? 'FRESH 🌱' : 'CACHE ⚡';
 
+      // 4. Kira Masa & Stats
       const tStatus = translationStatus.get(runtimeKey) || {};
       const startTime = tStatus.startedAt || Date.now();
       const durationSec = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-      const timeTaken = durationSec > 60 ? `${Math.floor(durationSec/60)}m ${durationSec%60}s` : `${durationSec}s`;
+      const mins = Math.floor(durationSec / 60);
+      const secs = durationSec % 60;
+      const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-      const stats = translationEngine?.translationStats || {};
       const finalTotal = stats.totalEntries || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
       const success = stats.successfulEntries || finalTotal;
       const failed = Math.max(0, finalTotal - success);
       const mismatch = stats.mismatchRetries || 0;
-      const tokenUsage = stats.totalTokens ? `${stats.totalTokens.toLocaleString()} tokens` : 'N/A';
+      const tokenUsage = stats.totalTokens ? `${stats.totalTokens.toLocaleString()} tokens` : 'N/A (Cache)';
 
-      const finalStatusText = (failed === 0 && finalTotal > 0) ? `PERFECT ✨ (${cacheStatus})` : `COMPLETED WITH AUDIT ⚠️ (${cacheStatus})`;
+      const finalStatusText = (failed === 0 && finalTotal > 0) ? `PERFECT ✨ (${cacheStatus})` : `COMPLETED ⚠️ (${cacheStatus})`;
 
+      // 5. Build Message
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       
-      const teleMsg = `✅ *Subtitle Translation Report V3* 🎬\n\n` +
+      const targetLang = (typeof targetLanguage !== 'undefined' ? targetLanguage : 'MAY').toUpperCase();
+
+      const teleMsg = `✅ *Subtitle Translation Report V3.1* 🎬\n\n` +
                       `🍿 *Title:* \`${movieTitle}\`\n` +
                       `📥 *Source:* ${sourceProv}\n\n` +
                       `📊 *Status:* ${finalStatusText}\n` +
@@ -5116,9 +5126,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                       `✅ *Successful:* ${success}\n` +
                       `❌ *Failed:* ${failed}\n` +
                       `🔄 *Retries:* ${mismatch}\n\n` +
-                      `🌐 *Target:* ${(targetLanguage || 'MAY').toUpperCase()} | 🧠 *Model:* Flash Lite\n` +
+                      `🌐 *Target:* ${targetLang} | 🧠 *Model:* Flash Lite\n` +
                       `🎉 *Ready to stream!*`;
       
+      // 6. Hantar guna Fetch (Native)
       fetch(teleUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5126,7 +5137,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       }).catch(e => log.debug(() => `[Telegram] Gagal: ${e.message}`));
 
     } catch (teleErr) {
-      log.debug(() => `[Telegram] Ralat Report: ${teleErr.message}`);
+      log.debug(() => `[Telegram] Ralat Report V3.1: ${teleErr.message}`);
     }
     
     // Cache the translation (disk-only, permanent by default)
