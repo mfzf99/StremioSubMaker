@@ -5042,28 +5042,57 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (AUTO-COUNT MODE)
+    // 📱 INJECT PENGGERA TELEGRAM (V2 CEO DASHBOARD)
     try {
-      // Pancing data tepat sebelum hantar
+      // 1. Ekstrak Tajuk Movie dari Memori Lori
+      const metaKey = `${userHash || 'default'}:${sourceFileId}`;
+      const cachedMeta = translationSourceMeta.get(metaKey) || {};
+      const movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
+
+      // 2. Kenalpasti Sumber Kilang (Source Provider)
+      let sourceProv = 'OpenSubtitles (Auth)';
+      if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
+      else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
+      else if (sourceFileId.startsWith('v3_')) sourceProv = 'OpenSubtitles V3';
+      else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
+      else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
+      else if (sourceFileId.startsWith('subsro_')) sourceProv = 'Subs.ro';
+      else if (sourceFileId.startsWith('xembed_')) sourceProv = 'Embedded Original';
+
+      // 3. Kira Masa Diambil (Stopwatch)
+      const tStatus = translationStatus.get(runtimeKey) || {};
+      const startTime = tStatus.startedAt || Date.now();
+      const durationSec = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+      const mins = Math.floor(durationSec / 60);
+      const secs = durationSec % 60;
+      const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+      // 4. Susun Audit Data
       const stats = translationEngine?.translationStats || {};
-      const finalTotal = stats.totalEntries || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
-      const success = stats.successfulEntries || finalTotal;
+      const success = stats.successfulEntries || capturedTotal;
+      const failed = Math.max(0, capturedTotal - success);
       const mismatch = stats.mismatchRetries || 0;
-      const failed = Math.max(0, finalTotal - success);
-      
+      const totalBatches = stats.totalBatches || Math.ceil(capturedTotal / (config.advancedSettings?.batchSize || 10));
+
+      const finalStatus = (failed === 0 && capturedTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️';
+
       const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
       const chatId = '310452904'; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      
       const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
-                      `📊 *Status:* ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
-                      `🏁 *Total Entries:* ${finalTotal}\n` +
+                      `🍿 *Title:* \`${movieTitle}\`\n` +
+                      `📥 *Source:* ${sourceProv}\n\n` +
+                      `📊 *Status:* ${finalStatus}\n` +
+                      `⏱️ *Time Taken:* ${timeTaken}\n` +
+                      `🏁 *Total Entries:* ${capturedTotal} (${totalBatches} Batches)\n` +
                       `✅ *Successful:* ${success}\n` +
                       `❌ *Failed:* ${failed}\n` +
                       `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
                       `🌐 *Target:* ${targetLanguage.toUpperCase()}\n` +
                       `🔑 *Provider:* ${providerName}\n` +
                       `🧠 *Engine:* ${effectiveModel}\n\n` +
-                      `🍿 *Ready to stream!*`;
+                      `🎉 *Ready to stream!*`;
       
       const axios = require('axios');
       axios.post(teleUrl, { chat_id: chatId, text: teleMsg, parse_mode: 'Markdown' })
