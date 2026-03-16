@@ -1778,37 +1778,20 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `<system_role>
-You are a professional subtitle translator.
-</system_role>
+    const promptBody = `You are a professional subtitle translator.
 
-<context>
-${contextInstructions || "Movie subtitle."}
-</context>
+Context: ${contextInstructions || "Movie subtitle."}
 
-<critical_rules>
-1. Translate ONLY the text inside each <s id="N"> tag.
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. Return EXACTLY ${expectedCount} tagged entries.
+Guidelines:
+1. Translate only the text inside <s id="N"> tags into ${targetLabel}.
+2. Use "saya" and "awak" for general dialogue.
+3. Incorporate common English loanwords naturally.
 4. Keep line breaks within each entry.
-5. Translate into ${targetLabel}. Use "saya" and "awak" for general dialogue.
-6. Naturally incorporate common English loanwords as used by Malaysians in everyday speech.
-7. Preserve any existing formatting tags.${context ? '\n8. Use the provided context to ensure consistency.' : ''}
-</critical_rules>
+5. Return EXACTLY ${expectedCount} entries — never skip, merge, or create extra entries.
+6. Return only the XML tagged entries. No explanations or notes.${context ? '\n7. Use provided context to ensure consistency.' : ''}
 
-<strict_constraints>
-- Do NOT add acknowledgements, explanations, notes, or commentary.
-- Do NOT skip, merge, or split entries. NEVER output markdown.
-- Do NOT include any timestamps/timecodes.
-- YOUR RESPONSE MUST start with <s id="1"> and end with </s> after entry ${expectedCount}.
-- Contain ONLY the XML-tagged translated entries.
-</strict_constraints>
-
-<input_data>
 ${batchText}
-</input_data>
-
-<output>`;
+<s id="`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
