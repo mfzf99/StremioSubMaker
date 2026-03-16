@@ -1778,7 +1778,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = You are a professional subtitle translator.
+    const promptBody = `You are a professional subtitle translator.
 
 Context: ${contextInstructions || "Movie subtitle dialogue."}
 
@@ -1791,7 +1791,7 @@ Guidelines:
 6. Return only the XML tagged entries. No explanations or notes.${context ? '\n7. Use provided context to ensure consistency.' : ''}
 
 ${batchText}
-<s id=";
+<s id="`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
