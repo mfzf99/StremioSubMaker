@@ -1780,10 +1780,10 @@ CONTEXT PROVIDED:
 
     const promptBody = `You are a professional subtitle translator.
 
-Context: ${contextInstructions || "Movie subtitle dialogue."}
+Context: ${contextInstructions || "Movie subtitle."}
 
 Guidelines:
-1. Translate only the text inside <s id="N"> tags into ${targetLabel}.
+1. Translate only the text inside <s id="N"> tags into colloquial ${targetLabel}.
 2. Use "saya" and "awak" for general dialogue.
 3. Naturally incorporate common English loanwords as used by Malaysians in everyday speech.
 4. Keep line breaks within each entry.
