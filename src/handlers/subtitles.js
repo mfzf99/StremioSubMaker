@@ -5071,6 +5071,15 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       const cachedMeta = translationSourceMeta.get(metaKey) || {};
       const movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
 
+      // --- INI SAHAJA YANG DITAMBAH: PANCING VARIANT ---
+      let variantInfo = '';
+      if (sourceFileId && sourceFileId.includes('__')) {
+        const parts = sourceFileId.split('__');
+        const vIndex = parts[2]; 
+        if (vIndex !== undefined) variantInfo = ` [V${parseInt(vIndex) + 2}]`;
+      }
+      // ------------------------------------------------
+
       // 2. Kenalpasti Sumber (Kalis VPS Baru)
       let sourceProv = 'OpenSubtitles (Auth)';
       if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
@@ -5079,6 +5088,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
       else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
       
+      // GABUNG NAMA SOURCE & VARIANT (Contoh: SubDL [V5])
+      sourceProv += variantInfo;
+
       // 3. Kira Masa (Stopwatch)
       const tStatus = translationStatus.get(runtimeKey) || {};
       const startTime = tStatus.startedAt || Date.now();
