@@ -778,9 +778,9 @@ Translate to {target_language}.`;
                 thinkingBudget: modelDefaults.thinkingBudget,
                 temperature: modelDefaults.temperature,
                 topP: 0.95,
-                topK: 40,
+                topK: 20,
                 enableBatchContext: false, // Include original surrounding context and previous translations
-                contextSize: 8, // Number of preceding original entries to include as context
+                contextSize: 10, // Number of preceding original entries to include as context
                 sendTimestampsToAI: false, // Let AI handle timestamps directly
                 translationWorkflow: 'xml', // 'original', 'ai', 'xml', or 'json'
                 mismatchRetries: 1 // Retries when AI returns wrong entry count (0-3)
@@ -1957,7 +1957,7 @@ Translate to {target_language}.`;
         const topPChanged = parseFloat(advTopPEl.value) !== defaults.topP;
         // Batch context changes are also considered advanced modifications
         const batchCtxChanged = batchCtxEl ? (batchCtxEl.checked !== (defaults.enableBatchContext === true)) : false;
-        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 8)) : false;
+        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 10)) : false;
         // Mismatch retries change
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
         const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 1)) : false;
@@ -5917,7 +5917,7 @@ Translate to {target_language}.`;
                 contextSizeGroupEl.style.display = enableBatchContextEl.checked ? 'block' : 'none';
             }
         }
-        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 8;
+        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 10;
         {
             let workflow = currentConfig.advancedSettings?.translationWorkflow ||
                 ((currentConfig.advancedSettings?.sendTimestampsToAI === true) ? 'ai' : 'xml');
@@ -6273,9 +6273,9 @@ Translate to {target_language}.`;
                 thinkingBudget: (function () { const el = document.getElementById('advancedThinkingBudget'); return el ? parseInt(el.value) : 0; })(),
                 temperature: (function () { const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.8; })(),
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
-                topK: 40, // Keep default topK
+                topK: 20, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
-                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 8; })(),
+                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 10; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
                 mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 1)) : 1; })()
             }
