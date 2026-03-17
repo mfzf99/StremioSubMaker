@@ -1783,12 +1783,12 @@ CONTEXT PROVIDED:
 Context: ${contextInstructions || "Dialogues from a movie or drama."}
 
 Guidelines:
-1. Translate only the text inside <s id="N"> tags into colloquial ${targetLabel}.
+1. Translate only the text inside <s id="N"> tags into ${targetLabel}.
 2. Use "saya" and "awak" for general dialogue.
 3. Naturally incorporate common English loanwords as used by Malaysians in everyday speech.
 4. Keep line breaks within each entry.
 5. Return exactly ${expectedCount} entries — never skip, merge, or split entries.
-6. Return only the XML tagged entries. No explanations or notes.${context ? '\n7. Use provided context to maintain coherence and consistency.' : ''}
+6. Return only the XML tagged entries. No explanations or notes.${context ? '\n7. Use provided context to ensure consistency.' : ''}
 
 ${batchText}
 <s id="`;
