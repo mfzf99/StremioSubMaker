@@ -1786,29 +1786,8 @@ You are a professional subtitle translator.
 ${contextInstructions || "Movie or drama subtitle."}
 </context>
 
-<examples>
-Input:
-<s id="1">Previously on Breaking Bad...</s>
-<s id="2">- You knew about this?
-- I had no choice.</s>
-<s id="3">Whatever.</s>
-<s id="4">During dinner just now, didn't I ask if you wanted to talk to him?</s>
-<s id="5">Pick up the phone when I call.</s>
-<s id="6">I answered that last time.</s>
-
-Output:
-<s id="1">Sebelum ini dalam Breaking Bad…</s>
-<s id="2">- Awak tahu pasal ini?
-- Saya terpaksa.</s>
-<s id="3">Lantaklah.</s>
-<s id="4">Masa kita makan tadi, bukankah saya ada tanya
-kalau awak nak cakap dengan dia?</s>
-<s id="5">Angkat telefon bila saya call.</s>
-<s id="6">Saya dah jawab dah haritu.</s>
-</examples>
-
 <task>
-Translate the text inside the XML tags into natural colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, reorder, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
+Translate the text inside the XML tags into natural colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
