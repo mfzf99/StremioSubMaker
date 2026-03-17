@@ -5064,14 +5064,14 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
-    // 📱 INJECT PENGGERA TELEGRAM (V2 CEO DASHBOARD - FINAL FIX)
+    // 📱 INJECT PENGGERA TELEGRAM (V3 GOD TIER - FINAL FIX)
     try {
-      // 1. Ekstrak Tajuk Movie (Kalis VPS Baru)
-      const metaKey = `${userHash || 'default'}:${sourceFileId}`;
-      const cachedMeta = translationSourceMeta.get(metaKey) || {};
+      // 1. Ekstrak Tajuk Movie (FIX: Cari guna sourceFileId dahulu ikut arkitektur DEV)
+      const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
+      const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
       const movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
 
-      // 2. Kenalpasti Sumber (Kalis VPS Baru)
+      // 2. Kenalpasti Sumber
       let sourceProv = 'OpenSubtitles (Auth)';
       if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
       else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
@@ -5087,11 +5087,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       const secs = durationSec % 60;
       const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-      // 4. KIRAAN KEBAL (Recall cara yang berjaya tadi)
+      // 4. Kiraan Kebal
       const stats = translationEngine?.translationStats || {};
-      // Kita kira sendiri totalEntries guna match \n\n supaya tak kena 'not defined'
       const finalTotal = stats.totalEntries || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
-      
       const success = stats.successfulEntries || finalTotal;
       const mismatch = stats.mismatchRetries || 0;
       const failed = Math.max(0, finalTotal - success);
@@ -5101,25 +5099,26 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       const chatId = '310452904'; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       
-      const teleMsg = `✅ *Subtitle Translation Report* 🎬\n\n` +
-                      `🍿 *Title:* \`${movieTitle}\`\n` +
-                      `📥 *Source:* ${sourceProv}\n\n` +
-                      `📊 *Status:* ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
-                      `⏱️ *Time Taken:* ${timeTaken}\n` +
-                      `🏁 *Total Entries:* ${finalTotal} (${totalBatches} Batches)\n` +
-                      `✅ *Successful:* ${success}\n` +
-                      `❌ *Failed:* ${failed}\n` +
-                      `🔄 *Mismatch Retries:* ${mismatch}\n\n` +
-                      `🌐 *Target:* ${(targetLanguage || 'MAY').toUpperCase()}\n` +
-                      `🔑 *Provider:* ${providerName || 'gemini'}\n` +
-                      `🧠 *Engine:* ${effectiveModel || 'gemini-3.1-flash-lite-preview'}\n\n` +
-                      `🎉 *Ready to stream!*`;
+      // 5. Mesej Telegram (FIX: Tukar ke HTML Mode supaya kebal simbol pelik)
+      const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
+                      `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
+                      `📥 <b>Source:</b> ${sourceProv}\n\n` +
+                      `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
+                      `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
+                      `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
+                      `✅ <b>Successful:</b> ${success}\n` +
+                      `❌ <b>Failed:</b> ${failed}\n` +
+                      `🔄 <b>Mismatch Retries:</b> ${mismatch}\n\n` +
+                      `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
+                      `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
+                      `🧠 <b>Engine:</b> ${effectiveModel || 'gemini-3.1-flash-lite-preview'}\n\n` +
+                      `🎉 <b>Ready to stream!</b>`;
       
-      // 5. Hantar guna Native Fetch (Kalis 'axios' not found)
+      // 6. Hantar guna Native Fetch (parse_mode: 'HTML')
       fetch(teleUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'Markdown' })
+        body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
       }).catch(e => log.debug(() => `[Telegram] Gagal: ${e.message}`));
 
     } catch (teleErr) {
