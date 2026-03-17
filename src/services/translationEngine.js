@@ -1784,10 +1784,9 @@ Context: ${contextInstructions || "Movie subtitle."}
 
 Guidelines:
 1. Translate only the text inside <s id="N"> tags into ${targetLabel}.
-2. Use "saya" and "awak" for general dialogue.
-3. Keep line breaks within each entry.
-4. Return exactly ${expectedCount} entries — never skip, merge, or split entries.
-5. Return only the XML tagged entries. No explanations or notes.${context ? '\n6. Use provided context to ensure consistency.' : ''}
+2. Keep line breaks within each entry.
+3. Return exactly ${expectedCount} entries — never skip, merge, or split entries.
+4. Return only the XML tagged entries. No explanations or notes.${context ? '\n5. Use provided context to ensure consistency.' : ''}
 
 ${batchText}
 <s id="`;
