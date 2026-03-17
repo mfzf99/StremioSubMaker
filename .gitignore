@@ -53,11 +53,17 @@ build/
 #-
 nul
 .sidedocs/
+.codex-tmp/
 temp/
 .temp/
 temp
 .temp
 native/
 scripts/
+.tests
+.tests/
 tests/
 tests
+!tests/
+tests/*
+!tests/*.test.js
