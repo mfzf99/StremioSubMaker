@@ -1780,15 +1780,15 @@ CONTEXT PROVIDED:
 
     const promptBody = `You are a professional subtitle translator.
 
-Context: ${contextInstructions || "Dialogues from a movie or drama."}
+Context: ${contextInstructions || "Dialogue from a movie or drama."}
 
 Guidelines:
-1. Translate only the text inside <s id="N"> tags into ${targetLabel}.
+1. Translate only the text within <s id="N"> tags into ${targetLabel}.
 2. Use "saya" and "awak" for general dialogue.
-3. Naturally incorporate common English loanwords as used by Malaysians in everyday speech.
-4. Keep line breaks within each entry.
-5. Return exactly ${expectedCount} entries — never skip, merge, or split entries.
-6. Return only the XML tagged entries. No explanations or notes.${context ? '\n7. Use provided context to ensure consistency.' : ''}
+3. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
+4. Preserve line breaks within each entry.
+5. Return exactly ${expectedCount} entries — do not skip, merge, or split any entries.
+6. Return only the <s id="N">...</s> XML entries. No explanations or notes.${context ? '\n7. Use the provided context to ensure consistency.' : ''}
 
 ${batchText}
 <s id="`;
