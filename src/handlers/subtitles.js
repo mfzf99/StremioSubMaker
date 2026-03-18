@@ -3064,7 +3064,7 @@ function createSubtitleHandler(config) {
 
           // 🛡️ INJECT SATU PERISAI DUMMY BERSERTA DATA RADAR
           translationEntries.push({
-            id: `dummy_shield__${radarData}`,
+            id: `dummy_shield__${targetLang}__${radarData}`,
             lang: displayName,
             title: `Dummy`, 
             url: `{{ADDON_URL}}/translate/dummy_shield__${radarData}/${targetLang}${translationUrlExtension}${translateQuery}`
