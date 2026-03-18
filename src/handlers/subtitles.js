@@ -5126,8 +5126,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       const failed = Math.max(0, finalTotal - success);
       const totalBatches = stats.totalBatches || Math.ceil(finalTotal / 10);
 
-      const botToken = '8646287812:AAFNHMdtTbtzSAqeD3QFnPlcZA_TdE9F_9E'; 
-      const chatId = '310452904'; 
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      const chatId = process.env.TELEGRAM_CHAT_ID; 
       const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       
       // 5. Mesej Telegram (FIX: Tukar ke HTML Mode supaya kebal simbol pelik)
