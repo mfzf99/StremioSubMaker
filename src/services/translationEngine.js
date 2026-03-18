@@ -1787,7 +1787,7 @@ ${contextInstructions || "Movie or drama subtitle."}
 </context>
 
 <task>
-Translate the text inside the XML tags into natural colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
+Translate the text inside the XML tags into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate common English loanwords as Malaysians use in everyday speech. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
