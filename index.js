@@ -5363,46 +5363,49 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
             const now = Date.now();
             const windowMs = 5_000; // 5 seconds
             const entry = firstClickTracker.get(clickKey) || { times: [] };
+            
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
-            entry.times.push(now);
-            firstClickTracker.set(clickKey, entry);
+            
+            // HUMAN CHECK: Bezakan jari manusia vs Spam Automatik
+            const lastClick = entry.times.length > 0 ? entry.times[entry.times.length - 1] : 0;
+            const isHumanClick = entry.times.length === 0 || (now - lastClick) > 250;
+
+            if (isHumanClick) {
+                entry.times.push(now);
+                firstClickTracker.set(clickKey, entry);
+            } else {
+                log.debug(() => `[LearnPurgeTrigger] Ignoring automated spam request from client (Delta: ${now - lastClick}ms)`);
+            }
 
             if (entry.times.length >= 3) {
-                // SAFETY CHECK 1: Block cache reset if translation is in progress
+                // SAFETY CHECK: Block cache reset if translation is in progress
                 const shouldBlock = await shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang);
 
                 if (shouldBlock) {
                     log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
                 } else {
-                    // SAFETY CHECK 2 (GEMINI FIX): Block if FULL cache already exists!
-                    const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
-                    
-                    if (hadCache) {
-                        log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but BLOCKED: Full translation cache ALREADY EXISTS for ${sourceFileId}/${targetLang}. Ignoring spam requests.`);
-                        firstClickTracker.set(clickKey, { times: [] });
+                    const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
+
+                    if (rateLimitStatus.blocked) {
+                        log.warn(() => `[LearnPurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                     } else {
-                        const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
+                        // Reset the counter immediately to avoid loops
+                        firstClickTracker.set(clickKey, { times: [] });
+                        const partialKey = runtimeKey || cacheKey;
+                        const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
+                        const partial = (!hadCache) ? await readFromPartialCache(partialKey) : null;
+                        const hasResetTarget = hadCache || (partial && typeof partial.content === 'string' && partial.content.length > 0);
 
-                        if (rateLimitStatus.blocked) {
-                            log.warn(() => `[LearnPurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
+                        if (!hasResetTarget) {
+                            log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
                         } else {
-                            firstClickTracker.set(clickKey, { times: [] });
-                            
-                            const partialKey = runtimeKey || cacheKey;
-                            const partial = await readFromPartialCache(partialKey);
-                            const hasResetTarget = (partial && typeof partial.content === 'string' && partial.content.length > 0);
-
-                            if (!hasResetTarget) {
-                                log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
+                            const consumeStatus = checkCacheResetRateLimit(config);
+                            if (consumeStatus.blocked) {
+                                log.warn(() => `[LearnPurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                             } else {
-                                const consumeStatus = checkCacheResetRateLimit(config);
-                                if (consumeStatus.blocked) {
-                                    log.warn(() => `[LearnPurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
-                                } else {
-                                    log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging partial translation cache and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
-                                    await purgeTranslationCache(sourceFileId, targetLang, config);
-                                }
+                                log.debug(() => `[LearnPurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging ${hadCache ? 'cached translation' : 'partial translation cache'} and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
+                                await purgeTranslationCache(sourceFileId, targetLang, config);
                             }
                         }
                     }
