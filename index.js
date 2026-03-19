@@ -5071,46 +5071,51 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
             const now = Date.now();
             const windowMs = 5_000; // 5 seconds
             const entry = firstClickTracker.get(clickKey) || { times: [] };
+            
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
-            entry.times.push(now);
-            firstClickTracker.set(clickKey, entry);
+            
+            // HUMAN CHECK: Bezakan jari manusia (PC) vs Spam Automatik (Android/libmpv)
+            // Manusia perlukan at least 250ms antara klik. Spam Android berlaku dalam ~4ms.
+            const lastClick = entry.times.length > 0 ? entry.times[entry.times.length - 1] : 0;
+            const isHumanClick = entry.times.length === 0 || (now - lastClick) > 250;
+
+            if (isHumanClick) {
+                entry.times.push(now);
+                firstClickTracker.set(clickKey, entry);
+            } else {
+                log.debug(() => `[PurgeTrigger] Ignoring automated spam request from client (Delta: ${now - lastClick}ms)`);
+            }
 
             if (entry.times.length >= 3) {
-                // SAFETY CHECK 1: Block cache reset if translation is in progress
+                // SAFETY CHECK: Block cache reset if translation is in progress
                 const shouldBlock = await shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang);
 
                 if (shouldBlock) {
                     log.debug(() => `[PurgeTrigger] 3 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
                 } else {
-                    // SAFETY CHECK 2 (GEMINI FIX): Block if FULL cache already exists!
-                    const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
-                    
-                    if (hadCache) {
-                        log.debug(() => `[PurgeTrigger] 3 rapid loads detected but BLOCKED: Full translation cache ALREADY EXISTS for ${sourceFileId}/${targetLang}. Ignoring spam requests.`);
-                        firstClickTracker.set(clickKey, { times: [] });
+                    const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
+
+                    if (rateLimitStatus.blocked) {
+                        log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                     } else {
-                        const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
+                        // Reset the counter immediately to avoid loops
+                        firstClickTracker.set(clickKey, { times: [] });
+                        const { runtimeKey } = generateCacheKeys(config, sourceFileId, targetLang);
+                        const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
+                        const partial = (!hadCache) ? await readFromPartialCache(runtimeKey) : null;
+                        const hasResetTarget = hadCache || (partial && typeof partial.content === 'string' && partial.content.length > 0);
 
-                        if (rateLimitStatus.blocked) {
-                            log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
+                        if (!hasResetTarget) {
+                            log.debug(() => `[PurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
                         } else {
-                            firstClickTracker.set(clickKey, { times: [] });
-                            
-                            const { runtimeKey } = generateCacheKeys(config, sourceFileId, targetLang);
-                            const partial = await readFromPartialCache(runtimeKey);
-                            const hasResetTarget = (partial && typeof partial.content === 'string' && partial.content.length > 0);
-
-                            if (!hasResetTarget) {
-                                log.debug(() => `[PurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
+                            // Consume rate-limit slot only when we actually purge
+                            const consumeStatus = checkCacheResetRateLimit(config);
+                            if (consumeStatus.blocked) {
+                                log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                             } else {
-                                const consumeStatus = checkCacheResetRateLimit(config);
-                                if (consumeStatus.blocked) {
-                                    log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
-                                } else {
-                                    log.debug(() => `[PurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging partial translation cache and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
-                                    await purgeTranslationCache(sourceFileId, targetLang, config);
-                                }
+                                log.debug(() => `[PurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging ${hadCache ? 'cached translation' : 'partial translation cache'} and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
+                                await purgeTranslationCache(sourceFileId, targetLang, config);
                             }
                         }
                     }
@@ -5119,7 +5124,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
         } catch (e) {
             log.warn(() => '[PurgeTrigger] Click tracking error:', e.message);
         }
-
+        
         // Prefetch Cooldown: Block libmpv prefetch requests during cooldown window after subtitle list is served
         // This is more targeted than burst detection - specifically for Stremio Community clients
         // NOTE: Use configStr (session token) here, NOT configKey (computed hash) - the cooldown is set
