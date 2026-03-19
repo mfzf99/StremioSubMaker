@@ -1787,7 +1787,7 @@ ${contextInstructions || "Movie subtitle."}
 </context>
 
 <task>
-Translate into natural and idiomatic ${targetLabel}. Use colloquialisms and common English loanwords where appropriate while maintaining the character's personality and emotional tone of the scene. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return exactly ${expectedCount} entries — never skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
+Translate into natural ${targetLabel}. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return exactly ${expectedCount} entries — never skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
