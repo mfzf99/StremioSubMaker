@@ -5083,31 +5083,48 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
                 if (shouldBlock) {
                     log.debug(() => `[PurgeTrigger] 3 rapid loads detected but BLOCKED: Translation in progress for ${sourceFileId}/${targetLang} (user: ${config.__configHash})`);
                 } else {
-                    const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
+                    // --- START CLAUDE FIX ---
+                    // [PostCompletionCooldown] Block PurgeTrigger for 60s after translation completes
+                    const { runtimeKey, baseKey: ptBaseKey } = generateCacheKeys(config, sourceFileId, targetLang);
+                    const completedStatus = translationStatus.get(runtimeKey) || translationStatus.get(ptBaseKey);
+                    const PURGE_COOLDOWN_MS = 60_000;
+                    const recentlyCompleted = completedStatus
+                        && !completedStatus.inProgress
+                        && completedStatus.completedAt
+                        && (Date.now() - completedStatus.completedAt) < PURGE_COOLDOWN_MS;
 
-                    if (rateLimitStatus.blocked) {
-                        log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
+                    if (recentlyCompleted) {
+                        const ageSec = Math.round((Date.now() - completedStatus.completedAt) / 1000);
+                        log.debug(() => `[PurgeTrigger] BLOCKED: Translation completed ${ageSec}s ago — cooldown active for ${sourceFileId}/${targetLang}`);
                     } else {
-                        // Reset the counter immediately to avoid loops
-                        firstClickTracker.set(clickKey, { times: [] });
-                        const { runtimeKey } = generateCacheKeys(config, sourceFileId, targetLang);
-                        const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
-                        const partial = (!hadCache) ? await readFromPartialCache(runtimeKey) : null;
-                        const hasResetTarget = hadCache || (partial && typeof partial.content === 'string' && partial.content.length > 0);
+                    // --- END CLAUDE FIX INSERTION ---
+                    
+                        const rateLimitStatus = checkCacheResetRateLimit(config, { consume: false });
 
-                        if (!hasResetTarget) {
-                            log.debug(() => `[PurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
+                        if (rateLimitStatus.blocked) {
+                            log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                         } else {
-                            // Consume rate-limit slot only when we actually purge
-                            const consumeStatus = checkCacheResetRateLimit(config);
-                            if (consumeStatus.blocked) {
-                                log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
+                            // Reset the counter immediately to avoid loops
+                            firstClickTracker.set(clickKey, { times: [] });
+                            // DELETED BY CLAUDE FIX: const { runtimeKey } = generateCacheKeys...
+                            const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
+                            const partial = (!hadCache) ? await readFromPartialCache(runtimeKey) : null;
+                            const hasResetTarget = hadCache || (partial && typeof partial.content === 'string' && partial.content.length > 0);
+
+                            if (!hasResetTarget) {
+                                log.debug(() => `[PurgeTrigger] 3 rapid loads detected but no cached translation or partial found for ${sourceFileId}/${targetLang}. Skipping purge and rate-limit consumption.`);
                             } else {
-                                log.debug(() => `[PurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging ${hadCache ? 'cached translation' : 'partial translation cache'} and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
-                                await purgeTranslationCache(sourceFileId, targetLang, config);
+                                // Consume rate-limit slot only when we actually purge
+                                const consumeStatus = checkCacheResetRateLimit(config);
+                                if (consumeStatus.blocked) {
+                                    log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${consumeStatus.cacheType} cache (${consumeStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
+                                } else {
+                                    log.debug(() => `[PurgeTrigger] 3 rapid loads detected (<5s) for ${sourceFileId}/${targetLang}. Purging ${hadCache ? 'cached translation' : 'partial translation cache'} and re-triggering translation. Remaining resets this window: ${consumeStatus.remaining}`);
+                                    await purgeTranslationCache(sourceFileId, targetLang, config);
+                                }
                             }
                         }
-                    }
+                    } // <-- EXTRA CLOSING BRACE ADDED HERE FOR CLAUDE'S FIX
                 }
             }
         } catch (e) {
