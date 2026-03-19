@@ -1787,7 +1787,7 @@ ${contextInstructions || "Movie subtitle."}
 </context>
 
 <task>
-Translate into colloquial ${targetLabel} using common English loanwords where they sound natural. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
+Translate into natural ${targetLabel} using common English loanwords where they sound natural. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure consistency.' : ''}
 </task>
 
 ${batchText}
