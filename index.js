@@ -5367,7 +5367,7 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
             
-            // HUMAN CHECK: Bezakan jari manusia vs Spam Automatik
+            // HUMAN CHECK: Prevent 4ms Android spam
             const lastClick = entry.times.length > 0 ? entry.times[entry.times.length - 1] : 0;
             const isHumanClick = entry.times.length === 0 || (now - lastClick) > 250;
 
@@ -5379,6 +5379,9 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
             }
 
             if (entry.times.length >= 3) {
+                // CRITICAL FIX: Reset counter SYNCHRONOUSLY before any 'await' to prevent Race Conditions!
+                firstClickTracker.set(clickKey, { times: [] });
+
                 // SAFETY CHECK: Block cache reset if translation is in progress
                 const shouldBlock = await shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang);
 
@@ -5390,8 +5393,6 @@ app.get('/addon/:config/learn/:sourceFileId/:targetLang', normalizeSubtitleForma
                     if (rateLimitStatus.blocked) {
                         log.warn(() => `[LearnPurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                     } else {
-                        // Reset the counter immediately to avoid loops
-                        firstClickTracker.set(clickKey, { times: [] });
                         const partialKey = runtimeKey || cacheKey;
                         const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
                         const partial = (!hadCache) ? await readFromPartialCache(partialKey) : null;
