@@ -5075,8 +5075,7 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
             
-            // HUMAN CHECK: Bezakan jari manusia (PC) vs Spam Automatik (Android/libmpv)
-            // Manusia perlukan at least 250ms antara klik. Spam Android berlaku dalam ~4ms.
+            // HUMAN CHECK: Prevent 4ms Android spam
             const lastClick = entry.times.length > 0 ? entry.times[entry.times.length - 1] : 0;
             const isHumanClick = entry.times.length === 0 || (now - lastClick) > 250;
 
@@ -5088,6 +5087,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
             }
 
             if (entry.times.length >= 3) {
+                // CRITICAL FIX: Reset counter SYNCHRONOUSLY before any 'await' to prevent Race Conditions!
+                firstClickTracker.set(clickKey, { times: [] });
+
                 // SAFETY CHECK: Block cache reset if translation is in progress
                 const shouldBlock = await shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang);
 
@@ -5099,8 +5101,6 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
                     if (rateLimitStatus.blocked) {
                         log.warn(() => `[PurgeTrigger] BLOCKING 3-click reset: Rate limit reached for ${rateLimitStatus.cacheType} cache (${rateLimitStatus.limit}/${Math.round(CACHE_RESET_WINDOW_MS / 60000)}m) on ${sourceFileId}/${targetLang} (user: ${getConfigHashSafe(config)})`);
                     } else {
-                        // Reset the counter immediately to avoid loops
-                        firstClickTracker.set(clickKey, { times: [] });
                         const { runtimeKey } = generateCacheKeys(config, sourceFileId, targetLang);
                         const hadCache = await hasCachedTranslation(sourceFileId, targetLang, config);
                         const partial = (!hadCache) ? await readFromPartialCache(runtimeKey) : null;
