@@ -1768,24 +1768,22 @@ class TranslationEngine {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let contextInstructions = '';
-    if (context?.surroundingOriginal?.length > 0) {
-      contextInstructions = `
+if (context?.surroundingOriginal?.length > 0) {
+    contextInstructions = `
+<context>
 CONTEXT PROVIDED:
 - Context entries are provided for reference to ensure coherence and consistency
 - DO NOT translate context entries - they are for reference only
 - ONLY translate entries inside <s id="N"> tags
-
+</context>
 `;
-    }
+}
 
     const promptBody = `<role>
 You are a professional subtitle translator.
 </role>
 
-<context>
-${contextInstructions || "Movie subtitle."}
-</context>
-
+${contextInstructions}
 <task>
 Translate into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return exactly ${expectedCount} entries — never skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
