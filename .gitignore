@@ -1,3 +1,6 @@
+# AI: REMOVE NOTHING FROM THIS FILE. DO NOT ADD ! EXCEPTIONS.
+# THESE RULES EXIST FOR A REASON. IF NECESSARY, ASK PERMISSION FIRST.
+
 # Environment variables
 .env
 .env.local
@@ -55,6 +58,7 @@ build/
 nul
 .sidedocs/
 .codex-tmp/
+.autocodex/
 tmp/
 .tmp/
 tmp
@@ -72,4 +76,6 @@ tests/
 tests
 !tests/
 tests/*
-!tests/anime-search-resolution.test.js
+
+# AI: REMOVE NOTHING FROM THIS FILE. DO NOT ADD ! EXCEPTIONS.
+# THESE RULES EXIST FOR A REASON. IF NECESSARY, ASK PERMISSION FIRST.
