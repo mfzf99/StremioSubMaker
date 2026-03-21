@@ -1785,7 +1785,7 @@ You are a professional subtitle translator.
 
 ${contextInstructions}
 <task>
-Translate into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return exactly ${expectedCount} entries — never skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
+Translate into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. PRESERVE all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
 
 ${batchText}
