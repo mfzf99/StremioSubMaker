@@ -1779,11 +1779,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `<role>
-You are an expert subtitle translator and a strictly disciplined XML formatter. Your highest priority is maintaining the exact XML structure without adding or removing tags.
-</role>
-
-<task>
+    const promptBody = `<task>
 Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
 
 CRITICAL XML RULES:
