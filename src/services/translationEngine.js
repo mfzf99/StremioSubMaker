@@ -1779,15 +1779,11 @@ CONTEXT PROVIDED:
 `;
 }
 
-    const promptBody = `<role>
-You are a professional subtitle translator.
-</role>
-
-${contextInstructions}
-<task>
-Translate into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. PRESERVE all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
+    const promptBody = `<task>
+Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
 
+${contextInstructions}
 ${batchText}
 <s id="`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
