@@ -1771,7 +1771,7 @@ class TranslationEngine {
     if (context?.surroundingOriginal?.length > 0) {
       contextInstructions = `
 CONTEXT PROVIDED:
-- Context entries are provided for reference to maintain coherence and consistency
+- Context entries are provided for reference to ensure coherence and consistency
 - DO NOT translate context entries - they are for reference only
 - ONLY translate entries inside <s id="N"> tags
 
@@ -2213,7 +2213,7 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     if (context?.surroundingOriginal?.length > 0) {
       contextInstructions = `
 CONTEXT PROVIDED:
-- Context entries are provided for reference to maintain coherence and consistency
+- Context entries are provided for reference to ensure coherence and consistency
 - Context entries are marked with [Context N]
 - DO NOT translate context entries - they are for reference only
 - Use the context to understand dialogue flow, character names, and references
