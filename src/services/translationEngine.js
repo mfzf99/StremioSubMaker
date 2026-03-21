@@ -1768,8 +1768,8 @@ class TranslationEngine {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let contextInstructions = '';
-if (context?.surroundingOriginal?.length > 0) {
-    contextInstructions = `
+    if (context?.surroundingOriginal?.length > 0) {
+        contextInstructions = `
 <context>
 CONTEXT PROVIDED:
 - Context entries are provided for reference to ensure coherence and consistency
@@ -1777,17 +1777,24 @@ CONTEXT PROVIDED:
 - ONLY translate entries inside <s id="N"> tags
 </context>
 `;
-}
+    }
 
     const promptBody = `<task>
-Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
+Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
+
+CRITICAL XML RULES:
+1. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.
+2. NEVER create new <s id="N"> tags.
+3. If an entry contains multiple lines or speaker dashes, keep them together inside the SAME tag.
+${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
 
 ${contextInstructions}
 ${batchText}
 <s id="`;
+    
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-  }
+}
 
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
