@@ -1779,7 +1779,11 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `<task>
+    const promptBody = `<role>
+You are an expert subtitle translator and a strictly disciplined XML formatter. Your highest priority is maintaining the exact XML structure without adding or removing tags.
+</role>
+
+<task>
 Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
 
 CRITICAL XML RULES:
@@ -1795,7 +1799,7 @@ ${batchText}
     
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
-
+  
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
    * Each entry is a {"id": N, "text": "..."} object.
