@@ -1784,7 +1784,7 @@ ${batchText}
 </input>
 
 <task>
-As a professional subtitle translator, translate the <input> into natural ${targetLabel} using suitable English loanwords. Use "saya/awak" for dialogue (except songs/lyrics).
+As a professional subtitle translator, translate the <input> into colloquial ${targetLabel} using suitable English loanwords. Use "saya/awak" for general dialogue except for music or songs lyrics.
 
 CRITICAL RULES:
 1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
