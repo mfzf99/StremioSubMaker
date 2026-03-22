@@ -1780,7 +1780,7 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<task>
-Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
+Translate the text inside the XML tags into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
 
 CRITICAL XML RULES:
 1. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.
@@ -1792,7 +1792,6 @@ ${context ? ' Use the provided context to ensure coherence and consistency.' : '
 ${contextInstructions}
 ${batchText}
 <s id="`;
-    
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
   
