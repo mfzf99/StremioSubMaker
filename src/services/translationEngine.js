@@ -1779,7 +1779,7 @@ CONTEXT PROVIDED:
     }
 
     const promptBody = `<task>
-Translate the text inside the XML tags into natural ${targetLabel}. Use suitable English loanwords. Use "saya" and "awak" for general dialogue unless specified otherwise.
+Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue but not for music or song lyrics.
 
 CRITICAL XML RULES (PENALTY FOR FAILURE):
 1. EXACT COUNT: You MUST return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries.
