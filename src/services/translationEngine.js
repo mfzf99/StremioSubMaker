@@ -1768,19 +1768,16 @@ class TranslationEngine {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let contextInstructions = '';
-    // Tukang Bedah fix: Aku masukkan ${context} terus dalam tag ni supaya AI boleh baca rujukan tu
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
 <context>
 CONTEXT PROVIDED:
 - The following entries are provided for reference to ensure coherence.
 - DO NOT translate context entries.
-${context.surroundingOriginal}
 </context>
 `;
     }
 
-    // HUKUM GOOGLE: Letak Context & Input di atas, Task & Arahan di bawah sekali!
     const promptBody = `${contextInstructions}
 <input>
 ${batchText}
