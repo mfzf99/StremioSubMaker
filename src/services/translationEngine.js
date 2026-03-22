@@ -1784,13 +1784,12 @@ ${batchText}
 </input>
 
 <task>
-You are a professional subtitle translator. Translate the text inside the <input> tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue, but EXEMPT this rule for music or song lyrics.
+As a professional subtitle translator, translate the <input> into natural ${targetLabel} using suitable English loanwords. Use "saya/awak" for dialogue (except songs/lyrics).
 
-CRITICAL XML RULES (PENALTY FOR FAILURE):
-1. EXACT COUNT: You MUST return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries.
-2. PRESERVE IDs STRICTLY: The <s id="N"> numbers must PERFECTLY match the input. DO NOT renumber, shift, or invent new IDs just to meet the count.
-3. PRESERVE FORMATTING: Keep all line breaks (\\n) and speaker dashes (-) intact within their original tags.
-4. NO CHITCHAT: Output ONLY the raw XML tags. Do not use markdown blocks (like \`\`\`xml) and do not add any conversational text.
+CRITICAL RULES:
+1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
+2. STRICT IDs: <s id="N"> numbers must perfectly match the input. Do not renumber or invent IDs.
+3. FORMATTING: Preserve all original line breaks (\n) and speaker dashes (-).
 </task>
 
 <s id="`;
