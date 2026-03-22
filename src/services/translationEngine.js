@@ -1772,26 +1772,29 @@ class TranslationEngine {
         contextInstructions = `
 <context>
 CONTEXT PROVIDED:
-- Context entries are provided for reference to ensure coherence and consistency
-- DO NOT translate context entries - they are for reference only
-- ONLY translate entries inside <s id="N"> tags
+- Context entries are provided for reference to ensure coherence.
+- DO NOT translate context entries.
 </context>
 `;
     }
 
     const promptBody = `<task>
-Translate the text inside the XML tags into colloquial ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly.
+Translate the text inside the XML tags into natural ${targetLabel}. Use suitable English loanwords. Use "saya" and "awak" for general dialogue unless specified otherwise.
 
-CRITICAL XML RULES:
-1. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.
-2. NEVER create new <s id="N"> tags.
-3. If an entry contains multiple lines or speaker dashes, keep them together inside the SAME tag.
+CRITICAL XML RULES (PENALTY FOR FAILURE):
+1. EXACT COUNT: You MUST return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries.
+2. PRESERVE IDs STRICTLY: The <s id="N"> numbers must PERFECTLY match the input. DO NOT renumber, shift, or invent new IDs just to meet the count.
+3. PRESERVE FORMATTING: Keep all line breaks (\\n) and speaker dashes (-) intact within their original tags.
+4. NO CHITCHAT: Output ONLY the raw XML tags. Do not use markdown blocks (like \`\`\`xml) and do not add any conversational text.
 ${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
 
 ${contextInstructions}
+<input>
 ${batchText}
+</input>
 <s id="`;
+    
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
   
