@@ -1784,9 +1784,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the text inside the <input> tags into natural ${targetLabel}.
-- Use suitable English loanwords where natural.
-- Use "saya" and "awak" for general dialogue, but EXEMPT this rule for music or song lyrics.
+You are a professional subtitle translator. Translate the text inside the <input> tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue, but EXEMPT this rule for music or song lyrics.
 
 CRITICAL XML RULES (PENALTY FOR FAILURE):
 1. EXACT COUNT: You MUST return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries.
