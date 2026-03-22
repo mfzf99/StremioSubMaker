@@ -1768,31 +1768,36 @@ class TranslationEngine {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let contextInstructions = '';
+    // Tukang Bedah fix: Aku masukkan ${context} terus dalam tag ni supaya AI boleh baca rujukan tu
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
 <context>
 CONTEXT PROVIDED:
-- Context entries are provided for reference to ensure coherence.
+- The following entries are provided for reference to ensure coherence.
 - DO NOT translate context entries.
+${context.surroundingOriginal}
 </context>
 `;
     }
 
-    const promptBody = `<task>
-Translate the text inside the XML tags into natural ${targetLabel} with suitable English loanwords. Use "saya" and "awak" for general dialogue but not for music or song lyrics.
+    // HUKUM GOOGLE: Letak Context & Input di atas, Task & Arahan di bawah sekali!
+    const promptBody = `${contextInstructions}
+<input>
+${batchText}
+</input>
+
+<task>
+Translate the text inside the <input> tags into natural ${targetLabel}.
+- Use suitable English loanwords where natural.
+- Use "saya" and "awak" for general dialogue, but EXEMPT this rule for music or song lyrics.
 
 CRITICAL XML RULES (PENALTY FOR FAILURE):
 1. EXACT COUNT: You MUST return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split entries.
 2. PRESERVE IDs STRICTLY: The <s id="N"> numbers must PERFECTLY match the input. DO NOT renumber, shift, or invent new IDs just to meet the count.
 3. PRESERVE FORMATTING: Keep all line breaks (\\n) and speaker dashes (-) intact within their original tags.
 4. NO CHITCHAT: Output ONLY the raw XML tags. Do not use markdown blocks (like \`\`\`xml) and do not add any conversational text.
-${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 </task>
 
-${contextInstructions}
-<input>
-${batchText}
-</input>
 <s id="`;
     
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
