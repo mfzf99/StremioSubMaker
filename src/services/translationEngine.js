@@ -1784,7 +1784,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the <input> into colloquial ${targetLabel}. Use suitable English loanwords. Use "saya/awak" for general dialogue.
+Translate the <input> into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 CRITICAL RULES:
 1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
