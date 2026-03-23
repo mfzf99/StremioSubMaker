@@ -1784,7 +1784,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the <input> into colloquial ${targetLabel} using common English loanwords. Use "saya/awak" for general dialogue, but use "aku/kau" for music, song lyrics (often marked with ♪), or poetry.
+Translate the <input> into colloquial ${targetLabel}. Use English loanwords sparingly. Use "saya/awak" for general dialogue.
 
 CRITICAL RULES:
 1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
