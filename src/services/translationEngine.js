@@ -1879,6 +1879,12 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
    */
   parseXmlBatchResponse(translatedText, expectedCount) {
     let cleaned = String(translatedText || '').trim();
+    // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
+        // AI menyambung terus dari pancing `<s id="` yang kita hantar (contoh dia mula dengan `1">...`).
+        // Tapi Regex kita perlukan tag penuh. Jadi kita cantumkan semula pancing tu kat depan teks!
+        if (!cleaned.startsWith('<s')) {
+            cleaned = '<s id="' + cleaned;
+        }
     // Remove markdown code blocks
     cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
 
