@@ -289,16 +289,16 @@ class GeminiService {
       }
     }
 
-    // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT! 🚨
-    // Check if the prompt ALREADY contains the subtitle content (e.g., inside <input> tags from TranslationEngine)
-    // If it does, DO NOT append it again. This saves 50% API tokens!
+    // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT (VERSI MUKTAMAD)! 🚨
     let userPrompt;
-    if (systemPrompt.includes('<input>') && systemPrompt.includes('</input>')) {
-      // TranslationEngine already embedded the batchText perfectly. Just use the systemPrompt.
-      // But we still append the final `<s id="` trigger (which was passed as subtitleContent from the Engine).
-      userPrompt = `${systemPrompt}\n\n${subtitleContent}`;
+    
+    // Kalau prompt dah ada tag <input> atau perkataan "INPUT (" (dari TranslationEngine)
+    if (systemPrompt.includes('<input>') || systemPrompt.includes('INPUT (')) {
+      // Prompt tu DAH LENGKAP sepenuhnya dengan muatan sarikata dan cangkuk penamat.
+      // Kita BUANG TERUS subtitleContent supaya tak berlaku double payload!
+      userPrompt = systemPrompt;
     } else {
-      // Legacy / Fallback mode (for standard JSON/Numbered list without <input> wrapping)
+      // Legacy / Fallback kalau sistem lain panggil GeminiService secara direct
       userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
     }
 
