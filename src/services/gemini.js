@@ -289,7 +289,18 @@ class GeminiService {
       }
     }
 
-    const userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
+    // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT! 🚨
+    // Check if the prompt ALREADY contains the subtitle content (e.g., inside <input> tags from TranslationEngine)
+    // If it does, DO NOT append it again. This saves 50% API tokens!
+    let userPrompt;
+    if (systemPrompt.includes('<input>') && systemPrompt.includes('</input>')) {
+      // TranslationEngine already embedded the batchText perfectly. Just use the systemPrompt.
+      // But we still append the final `<s id="` trigger (which was passed as subtitleContent from the Engine).
+      userPrompt = `${systemPrompt}\n\n${subtitleContent}`;
+    } else {
+      // Legacy / Fallback mode (for standard JSON/Numbered list without <input> wrapping)
+      userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
+    }
 
     return { userPrompt, systemPrompt, normalizedTarget };
   }
