@@ -1767,6 +1767,11 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
+    // 💉 PISAU BEDAH REGEX: Tangkap ID Pertama (X) dan Terakhir (Y) dari batchText
+    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
+    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
@@ -1787,7 +1792,7 @@ ${batchText}
 Translate the text inside the <input> tags into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
-1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
+1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process the input sequentially from id ${startId} to id ${endId}. NEVER skip, merge, or split IDs.
 2. STRICT IDs: <s id="N"> numbers must perfectly match the input. Do not renumber or invent IDs.
 3. FORMATTING: Preserve all original line breaks (\n) and speaker dashes (-).
 </task>
