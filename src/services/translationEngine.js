@@ -1784,7 +1784,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the <input> tags into colloquial ${targetLabel}. Use appropriate English loanwords where natural. Use "saya" and "awak" for general dialogue.
+Translate the text inside the <input> tags into colloquial ${targetLabel} using suitable English loanwords where natural. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
 1. EXACT COUNT: Return EXACTLY ${expectedCount} entries. NEVER skip, merge, or split.
