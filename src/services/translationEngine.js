@@ -1788,8 +1788,9 @@ CRITICAL RULES:
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
 4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
-5. Use "saya" and "awak" for general dialogue.
-6. Naturally incorporate appropriate English loanwords commonly used in Malaysian everyday speech.
+5. Maintain natural dialogue flow.
+6. Use "saya" and "awak" for general dialogue.
+7. Naturally incorporate appropriate English loanwords commonly used in Malaysian everyday speech.
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. NEVER output markdown.
