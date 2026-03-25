@@ -1775,28 +1775,31 @@ class TranslationEngine {
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
-<context>
 CONTEXT PROVIDED:
 - The following entries are provided for reference to ensure coherence and consistency.
-- DO NOT translate context entries.
-</context>
+- DO NOT translate context entries - they are for reference only.
 `;
     }
 
-    const promptBody = `${contextInstructions}
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag.
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
+4. Maintain original line breaks (\\n) and speaker dashes (-).
+5. Use appropriate colloquialisms for ${targetLabel}.
+6. Maintain natural dialogue flow and preserve any existing formatting tags.
+
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
+
 <input>
 ${batchText}
 </input>
 
-<task>
-You are a professional subtitle translator. Translate the text inside the <input> tags into colloquial ${targetLabel} with appropriate English loanwords where natural. Use "saya" and "awak" for general dialogue.
-
-CRITICAL RULES:
-1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process the input sequentially from id ${startId} to id ${endId}. NEVER skip, merge, or split IDs.
-2. STRICT IDs: <s id="N"> numbers must perfectly match the input. Do not renumber or invent IDs.
-3. FORMATTING: Preserve all original line breaks (\n) and speaker dashes (-).
-</task>
-
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):
 <s id="`;
     
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
