@@ -1788,7 +1788,7 @@ CRITICAL RULES:
 2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
 3. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
 4. Maintain original line breaks (\\n) and speaker dashes (-).
-5. Use appropriate colloquialisms for ${targetLabel}.
+5. Use colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
 6. Maintain natural dialogue flow and preserve any existing formatting tags.
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
