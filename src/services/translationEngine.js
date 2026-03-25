@@ -1777,7 +1777,7 @@ class TranslationEngine {
         contextInstructions = `
 <context>
 CONTEXT PROVIDED:
-- The following entries are provided for reference to ensure coherence.
+- The following entries are provided for reference to ensure coherence and consistency.
 - DO NOT translate context entries.
 </context>
 `;
@@ -1789,7 +1789,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the text inside the <input> tags into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
+Translate the text inside the <input> tags into colloquial ${targetLabel}.
 
 CRITICAL RULES:
 1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process the input sequentially from id ${startId} to id ${endId}. NEVER skip, merge, or split IDs.
