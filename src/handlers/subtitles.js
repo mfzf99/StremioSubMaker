@@ -5220,7 +5220,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       const success = stats.successfulEntries || finalTotal;
       const mismatch = stats.mismatchRetries || 0;
       const failed = Math.max(0, finalTotal - success);
-      const totalBatches = stats.totalBatches || Math.ceil(finalTotal / 10);
+      
+      // FIX: Cari nilai batch size dari engine, atau fallback ke 40 (bukan 10)
+      const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 40;
+      const totalBatches = stats.totalBatches || Math.ceil(finalTotal / currentBatchSize);
 
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
