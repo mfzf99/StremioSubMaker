@@ -114,26 +114,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 50;
+    return 40;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 50;
+    return 40;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 40;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 50;
+    return 40;
   }
 
   // Default batch size for unknown models
-  return 50;
+  return 40;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -198,7 +198,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 50;
+    const JSON_MAX_BATCH_SIZE = 40;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
@@ -1789,7 +1789,7 @@ ${batchText}
 </input>
 
 <task>
-Translate the text inside the <input> tags into colloquial ${targetLabel}.
+Translate the text inside the <input> tags into colloquial ${targetLabel}. Use "saya" and "awak" as default pronouns for general dialogue.
 
 CRITICAL RULES:
 1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process the input sequentially from id ${startId} to id ${endId}. NEVER skip, merge, or split IDs.
