@@ -1789,7 +1789,7 @@ ${batchText}
 </input>
 
 <task>
-You are a professional subtitle translator. Translate the text inside the <input> tags into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
+You are a professional subtitle translator. Translate the text inside the <input> tags into colloquial ${targetLabel} with appropriate English loanwords where natural. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
 1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process the input sequentially from id ${startId} to id ${endId}. NEVER skip, merge, or split IDs.
