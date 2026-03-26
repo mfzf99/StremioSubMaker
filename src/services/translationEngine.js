@@ -1781,7 +1781,7 @@ CONTEXT:
     }
 
     const promptBody = `ROLE:
-You are a professional subtitle translator.
+You are a high-precision subtitle translator.
 
 TASK:
 Translate into appropriate colloquialisms for ${targetLabel}.
