@@ -1777,30 +1777,30 @@ class TranslationEngine {
         contextInstructions = `
 CONTEXT PROVIDED:
 - The following entries are provided for reference to ensure coherence and consistency.
-- DO NOT translate context entries - they are for reference only.
+- Do not translate context entries - they are for reference only.
 `;
     }
 
     const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag.
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
-3. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
+1. Translate only the text inside each <s id="N"> tag.
+2. Preserve the XML tags exactly: <s id="N">translated text</s>
+3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
 4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
 5. Maintain natural dialogue flow.
 6. Use "saya" and "awak" for general dialogue.
 7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do NOT skip, merge, or split entries. NEVER output markdown.
-Do NOT include any timestamps/timecodes.
+Do not add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. Never output markdown.
+Do not include any timestamps/timecodes.
 
 <input>
 ${batchText}
 </input>
 
-OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):
+Output (exactly ${expectedCount} XML-tagged entries):
 <s id="`;
     
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
