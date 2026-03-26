@@ -1775,38 +1775,50 @@ class TranslationEngine {
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
-CONTEXT:
-- Reference only. Do not translate or copy.
+CONTEXT PROVIDED:
+- Reference entries for coherence and consistency only.
+- DO NOT translate, paraphrase, or include these entries in the output.
+- DO NOT copy any text from the context.
 `;
     }
 
-    const promptBody = `ROLE:
-You are a high-precision subtitle translator.
-
-TASK:
-Translate into appropriate colloquialisms for ${targetLabel}.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 
 ${contextInstructions}
-RULES:
+CRITICAL RULES (STRICTLY ENFORCED):
 1. Translate ONLY text inside each <s id="N"> tag.
-2. Keep XML EXACTLY: <s id="N">translated text</s>
-3. Output EXACTLY ${expectedCount} entries, from id ${startId} to ${endId}, in order.
-4. Do not skip, merge, split, or reorder entries.
-5. Preserve line breaks (\\n), dashes (-), and formatting.
+2. Preserve XML structure EXACTLY: <s id="N">translated text</s>
+3. Output EXACTLY ${expectedCount} entries.
+4. Process sequentially from id ${startId} to id ${endId}.
+5. Preserve all line breaks (\\n), dashes (-), and formatting.
 6. Maintain natural conversational dialogue.
-7. Use "saya" and "awak" for general dialogue.
+7. Use "saya" and "awak"for general dialogue.
 8. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
-OUTPUT FORMAT:
-- Valid XML only.
-- No extra text before or after.
-- No markdown, no explanations.
-- No timestamps or timecodes.
+VALIDATION REQUIREMENTS:
+- The number of <s id="..."> elements MUST equal ${expectedCount}.
+- The first id MUST be ${startId} and the last id MUST be ${endId}.
+- IDs MUST remain unchanged and in order.
 
-INPUT:
+HARD CONSTRAINTS (NON-NEGOTIABLE):
+- Output MUST be valid XML only.
+- NO extra text before or after XML.
+- NO markdown, explanations, or comments.
+- NO skipping, merging, splitting, or reordering entries.
+- NO invented or missing entries.
+- NO timestamps or timecodes.
+
+FAIL CONDITIONS (MUST AVOID):
+- If any entry is missing → INVALID OUTPUT
+- If extra text exists → INVALID OUTPUT
+- If XML structure breaks → INVALID OUTPUT
+- If count ≠ ${expectedCount} → INVALID OUTPUT
+
+<input>
 ${batchText}
+</input>
 
-OUTPUT:
+Output (begin immediately, no preamble):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
