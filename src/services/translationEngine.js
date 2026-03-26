@@ -1775,13 +1775,16 @@ class TranslationEngine {
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
-CONTEXT (REFERENCE ONLY):
-- Reference entries for coherence and consistency only.
-- Do not translate or copy any context text.
+CONTEXT:
+- Reference only. Do not translate or copy.
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
+    const promptBody = `ROLE:
+You are a professional subtitle translator.
+
+TASK:
+Translate into appropriate colloquialisms for ${targetLabel}.
 
 ${contextInstructions}
 RULES:
@@ -1792,19 +1795,18 @@ RULES:
 5. Preserve line breaks (\\n), dashes (-), and formatting.
 6. Maintain natural conversational dialogue.
 7. Use "saya" and "awak" for general dialogue.
-8. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
+8. Use natural Malaysian English loanwords.
 
-CONSTRAINTS:
-- Output must be valid XML only.
+OUTPUT FORMAT:
+- Valid XML only.
 - No extra text before or after.
 - No markdown, no explanations.
 - No timestamps or timecodes.
 
-<input>
+INPUT:
 ${batchText}
-</input>
 
-Output:
+OUTPUT:
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
