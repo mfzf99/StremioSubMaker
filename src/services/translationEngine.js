@@ -1792,8 +1792,8 @@ CRITICAL RULES (STRICTLY ENFORCED):
 4. Process sequentially from id ${startId} to id ${endId}.
 5. Preserve all line breaks (\\n), dashes (-), and formatting.
 6. Maintain natural conversational dialogue.
-7. Use "saya" and "awak".
-8. Use Malaysian English loanwords naturally.
+7. Use "saya" and "awak" for general dialogue.
+8. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 VALIDATION REQUIREMENTS:
 - The number of <s id="..."> elements MUST equal ${expectedCount}.
