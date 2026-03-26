@@ -1790,7 +1790,7 @@ CRITICAL RULES:
 4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
 5. Maintain natural dialogue flow.
 6. Use "saya" and "awak" for general dialogue.
-7. Naturally incorporate appropriate English loanwords commonly used in Malaysian everyday speech.
+7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. NEVER output markdown.
