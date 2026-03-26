@@ -1782,7 +1782,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into natural, colloquial ${targetLabel}.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 
 ${contextInstructions}
 CRITICAL RULES (STRICTLY ENFORCED):
@@ -1794,7 +1794,7 @@ CRITICAL RULES (STRICTLY ENFORCED):
 6. Preserve all original line breaks (\\n), speaker dashes (-), and inline formatting.
 7. Maintain natural dialogue flow and conversational tone.
 8. Use "saya" and "awak" for general dialogue.
-9. Incorporate commonly used English loanwords naturally (Malaysian usage).
+9. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 HARD CONSTRAINTS:
 - Output MUST be valid XML only.
