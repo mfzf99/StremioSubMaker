@@ -1767,7 +1767,7 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // 💉 PISAU BEDAH REGEX: Tangkap ID Pertama (X) dan Terakhir (Y) dari batchText
+    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
     const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
@@ -1777,7 +1777,7 @@ class TranslationEngine {
         contextInstructions = `
 CONTEXT PROVIDED:
 - The following entries are provided for reference to ensure coherence and consistency.
-- Do not translate context entries - they are for reference only.
+- Do not translate context entries; they are for reference only.
 `;
     }
 
@@ -1785,7 +1785,7 @@ CONTEXT PROVIDED:
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate only the text inside each <s id="N"> tag.
-2. Preserve the XML tags exactly: <s id="N">translated text</s>
+2. Preserve the XML tags exactly: <s id="N">translated text</s>.
 3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
 4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
 5. Maintain natural dialogue flow.
@@ -1794,7 +1794,7 @@ CRITICAL RULES:
 
 Do not add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. Never output markdown.
-Do not include any timestamps/timecodes.
+Do not include any timestamps or timecodes.
 
 <input>
 ${batchText}
@@ -1802,7 +1802,7 @@ ${batchText}
 
 Output (exactly ${expectedCount} XML-tagged entries):
 <s id="`;
-    
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
   
