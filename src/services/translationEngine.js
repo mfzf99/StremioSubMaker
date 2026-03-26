@@ -1795,7 +1795,7 @@ RULES:
 5. Preserve line breaks (\\n), dashes (-), and formatting.
 6. Maintain natural conversational dialogue.
 7. Use "saya" and "awak" for general dialogue.
-8. Use natural Malaysian English loanwords.
+8. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 OUTPUT FORMAT:
 - Valid XML only.
