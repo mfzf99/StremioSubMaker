@@ -1793,8 +1793,8 @@ CRITICAL RULES:
 7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
+Do NOT skip, merge, or split entries. NEVER output markdown.
+Do NOT include any timestamps/timecodes.
 
 <input>
 ${batchText}
