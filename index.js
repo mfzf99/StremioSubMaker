@@ -5067,26 +5067,29 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
         // Create deduplication key based on source file and target language
         const dedupKey = `translate:${configKey}:${sourceFileId}:${targetLang}`;
 
-        // Unusual purge: if same translated subtitle is loaded 3 times in < 5s, purge and retrigger
+        // Unusual purge: if same translated subtitle is loaded 3 times in < 3s, purge and retrigger
         // SAFETY BLOCK: Only purge if translation is NOT currently in progress
         try {
             const clickKey = `translate-click:${configKey}:${sourceFileId}:${targetLang}`;
             const now = Date.now();
-            const windowMs = 5_000; // 5 seconds
+            const windowMs = 3_000; // FIX: Turunkan ke 3 saat (manusia tak ambil masa 5 saat untuk 3 klik)
             const entry = firstClickTracker.get(clickKey) || { times: [] };
             
             // Keep only clicks within window
             entry.times = (entry.times || []).filter(t => now - t <= windowMs);
             
-            // HUMAN CHECK: Prevent 4ms Android spam
+            // HUMAN CHECK: Prevent 4ms Android spam AND automated 1s+ retries from mobile players
             const lastClick = entry.times.length > 0 ? entry.times[entry.times.length - 1] : 0;
-            const isHumanClick = entry.times.length === 0 || (now - lastClick) > 250;
+            const timeDiff = now - lastClick;
+            
+            // FIX: Abaikan spam terlalu laju (<250ms) DAN auto-retry lambat (>1200ms) dari ExoPlayer/libmpv
+            const isHumanClick = entry.times.length === 0 || (timeDiff > 250 && timeDiff < 1200);
 
             if (isHumanClick) {
                 entry.times.push(now);
                 firstClickTracker.set(clickKey, entry);
             } else {
-                log.debug(() => `[PurgeTrigger] Ignoring automated spam request from client (Delta: ${now - lastClick}ms)`);
+                log.debug(() => `[PurgeTrigger] Ignoring automated spam/retry from client (Delta: ${timeDiff}ms)`);
             }
 
             if (entry.times.length >= 3) {
