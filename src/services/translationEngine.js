@@ -1776,31 +1776,38 @@ class TranslationEngine {
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
 CONTEXT PROVIDED:
-- The following entries are provided for reference to ensure coherence and consistency.
-- Do not translate context entries; they are for reference only.
+- Reference entries for coherence and consistency only.
+- DO NOT translate, paraphrase, or include these entries in the output.
+- DO NOT copy any text from the context.
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate only the text inside each <s id="N"> tag.
-2. Preserve the XML tags exactly: <s id="N">translated text</s>.
-3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
-4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
-5. Maintain natural dialogue flow.
-6. Use "saya" and "awak" for general dialogue.
-7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
+    const promptBody = `You are a high-precision subtitle translator. Translate into natural, colloquial ${targetLabel}.
 
-Do not add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. Never output markdown.
-Do not include any timestamps or timecodes.
+${contextInstructions}
+CRITICAL RULES (STRICTLY ENFORCED):
+1. Translate ONLY the text inside each <s id="N"> tag. Do not alter anything outside the tags.
+2. Preserve XML structure EXACTLY. Output must strictly follow this format: <s id="N">translated text</s>
+3. Output EXACTLY ${expectedCount} entries. No more, no less.
+4. Process entries sequentially from id ${startId} to id ${endId}. Do not reorder.
+5. DO NOT skip, merge, split, or invent entries.
+6. Preserve all original line breaks (\\n), speaker dashes (-), and inline formatting.
+7. Maintain natural dialogue flow and conversational tone.
+8. Use "saya" and "awak" for general dialogue.
+9. Incorporate commonly used English loanwords naturally (Malaysian usage).
+
+HARD CONSTRAINTS:
+- Output MUST be valid XML only.
+- NO explanations, notes, comments, or extra text.
+- NO markdown, code fences, or annotations.
+- NO timestamps or timecodes.
+- NO leading or trailing text outside XML entries.
 
 <input>
 ${batchText}
 </input>
 
-Output (exactly ${expectedCount} XML-tagged entries):
+Output (exact format, begin immediately):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
