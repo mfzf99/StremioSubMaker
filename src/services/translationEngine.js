@@ -1786,28 +1786,39 @@ CONTEXT PROVIDED:
 
 ${contextInstructions}
 CRITICAL RULES (STRICTLY ENFORCED):
-1. Translate ONLY the text inside each <s id="N"> tag. Do not alter anything outside the tags.
-2. Preserve XML structure EXACTLY. Output must strictly follow this format: <s id="N">translated text</s>
-3. Output EXACTLY ${expectedCount} entries. No more, no less.
-4. Process entries sequentially from id ${startId} to id ${endId}. Do not reorder.
-5. DO NOT skip, merge, split, or invent entries.
-6. Preserve all original line breaks (\\n), speaker dashes (-), and inline formatting.
-7. Maintain natural dialogue flow and conversational tone.
-8. Use "saya" and "awak" for general dialogue.
-9. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
+1. Translate ONLY text inside each <s id="N"> tag.
+2. Preserve XML structure EXACTLY: <s id="N">translated text</s>
+3. Output EXACTLY ${expectedCount} entries.
+4. Process sequentially from id ${startId} to id ${endId}.
+5. Preserve all line breaks (\\n), dashes (-), and formatting.
+6. Maintain natural conversational dialogue.
+7. Use "saya" and "awak".
+8. Use Malaysian English loanwords naturally.
 
-HARD CONSTRAINTS:
+VALIDATION REQUIREMENTS:
+- The number of <s id="..."> elements MUST equal ${expectedCount}.
+- The first id MUST be ${startId} and the last id MUST be ${endId}.
+- IDs MUST remain unchanged and in order.
+
+HARD CONSTRAINTS (NON-NEGOTIABLE):
 - Output MUST be valid XML only.
-- NO explanations, notes, comments, or extra text.
-- NO markdown, code fences, or annotations.
+- NO extra text before or after XML.
+- NO markdown, explanations, or comments.
+- NO skipping, merging, splitting, or reordering entries.
+- NO invented or missing entries.
 - NO timestamps or timecodes.
-- NO leading or trailing text outside XML entries.
+
+FAIL CONDITIONS (MUST AVOID):
+- If any entry is missing → INVALID OUTPUT
+- If extra text exists → INVALID OUTPUT
+- If XML structure breaks → INVALID OUTPUT
+- If count ≠ ${expectedCount} → INVALID OUTPUT
 
 <input>
 ${batchText}
 </input>
 
-Output (exact format, begin immediately):
+Output (begin immediately, no preamble):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
