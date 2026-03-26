@@ -1781,7 +1781,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate into natural ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate ONLY the text inside each <s id="N"> tag.
