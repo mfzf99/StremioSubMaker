@@ -1781,16 +1781,13 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate only the text inside each <s id="N"> tag.
 2. Preserve the XML tags exactly: <s id="N">translated text</s>.
 3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
 4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
-5. Maintain natural dialogue flow.
-6. Use "saya" and "awak" for general dialogue.
-7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
 Do not add acknowledgements, explanations, notes, or commentary.
 Do not skip, merge, or split entries. Never output markdown.
