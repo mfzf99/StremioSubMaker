@@ -1781,7 +1781,7 @@ CONTEXT: Do NOT translate these reference entries.
 
     const promptBody = `<task>
 
-Translate the text inside each <s id="N"> tag into appropriate colloquialisms for ${targetLabel} with appropriate English loanwords where natural. Maintain natural conversational dialogue. Use "saya" and "awak" for general dialogue. Preserve all line breaks (\\n), dashes (-), and formatting. Process entries sequentially from id ${startId} to id ${endId}. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
+Translate the text inside the XML tags into appropriate colloquialisms for ${targetLabel} with appropriate English loanwords. Maintain natural conversational dialogue. Use "saya" and "awak" for general dialogue. Preserve all line breaks (\\n), dashes (-), and formatting. Process entries sequentially from id ${startId} to id ${endId}. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
 
 </task>
 
