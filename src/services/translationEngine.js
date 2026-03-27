@@ -1775,39 +1775,20 @@ class TranslationEngine {
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
-CONTEXT PROVIDED:
-- Reference entries for coherence and consistency only.
-- DO NOT translate, paraphrase, or include these entries in the output.
-- DO NOT copy any text from the context.
+CONTEXT: Do NOT translate these reference entries.
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
+    const promptBody = `<task>
+
+Translate the text inside the XML tags into appropriate colloquialisms for ${targetLabel} with appropriate English loanwords. Maintain natural conversational dialogue. Use "saya" and "awak" for general dialogue. Keep line breaks within each entry. Preserve all XML tags exactly. Process entries sequentially from id ${startId} to id ${endId}. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
+
+</task>
 
 ${contextInstructions}
-CRITICAL RULES (STRICTLY ENFORCED):
-1. Translate ONLY the text inside each <s id="N"> tag. Do not alter anything outside the tags.
-2. Preserve XML structure EXACTLY. Output must strictly follow this format: <s id="N">translated text</s>
-3. Output EXACTLY ${expectedCount} entries. No more, no less.
-4. Process entries sequentially from id ${startId} to id ${endId}. Do not reorder.
-5. DO NOT skip, merge, split, or invent entries.
-6. Preserve all original line breaks (\\n), speaker dashes (-), and inline formatting.
-7. Maintain natural dialogue flow and conversational tone.
-8. Use "saya" and "awak" for general dialogue.
-9. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
-HARD CONSTRAINTS:
-- Output MUST be valid XML only.
-- NO explanations, notes, comments, or extra text.
-- NO markdown, code fences, or annotations.
-- NO timestamps or timecodes.
-- NO leading or trailing text outside XML entries.
-
-<input>
 ${batchText}
-</input>
 
-Output (exact format, begin immediately):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
