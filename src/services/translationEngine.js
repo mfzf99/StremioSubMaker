@@ -1767,7 +1767,7 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
+    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
     const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
@@ -1775,20 +1775,32 @@ class TranslationEngine {
     let contextInstructions = '';
     if (context?.surroundingOriginal?.length > 0) {
         contextInstructions = `
-CONTEXT: Do NOT translate these reference entries.
+CONTEXT PROVIDED:
+- The following entries are provided for reference to ensure coherence and consistency.
+- Do not translate context entries; they are for reference only.
 `;
     }
 
-    const promptBody = `<task>
-
-Translate the text inside the XML tags into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue. Preserve all line breaks (\\n), dashes (-), and formatting. Process entries sequentially from id ${startId} to id ${endId}. Return EXACTLY ${expectedCount} entries — NEVER skip, merge, or split entries.${context ? ' Use the provided context to ensure coherence and consistency.' : ''}
-
-</task>
-
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 ${contextInstructions}
+CRITICAL RULES:
+1. Translate only the text inside each <s id="N"> tag.
+2. Preserve the XML tags exactly: <s id="N">translated text</s>.
+3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
+4. Maintain original line breaks (\\n), speaker dashes (-), and preserve any existing formatting tags.
+5. Maintain natural dialogue flow.
+6. Use "saya" and "awak" for general dialogue.
+7. Naturally incorporate English loanwords commonly used in Malaysian everyday speech.
 
+Do not add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. Never output markdown.
+Do not include any timestamps or timecodes.
+
+<input>
 ${batchText}
+</input>
 
+Output (exactly ${expectedCount} XML-tagged entries):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
