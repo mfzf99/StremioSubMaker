@@ -1781,7 +1781,7 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
+    const promptBody = `You are a high-precision subtitle translator. Translate into natural ${targetLabel} with common English loanwords. Use "saya" and "awak" for general dialogue.
 ${contextInstructions}
 CRITICAL RULES:
 1. Translate only the text inside each <s id="N"> tag.
