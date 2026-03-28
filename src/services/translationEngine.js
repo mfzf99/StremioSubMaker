@@ -1781,24 +1781,18 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into ${targetLabel}.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
+
 ${contextInstructions}
-CRITICAL RULES (STRICTLY ENFORCED):
-1. Output must contain exactly ${expectedCount} entries. No more, no less.
-2. Preserve the XML structure exactly: <s id="N">translated text</s>.
-3. Do not skip, merge, split, reorder, or invent entries.
-4. Do not add acknowledgements, explanations, notes, or commentary.
-5. Do not include timestamps, timecodes, or markdown.
+CRITICAL RULES:
+1. Translate only the text inside each <s id="N"> tag.
+2. Preserve the XML tags exactly: <s id="N">translated text</s>.
+3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
+4. Maintain original line breaks (\\n), speaker dashes (-), and formatting tags.
 
-TRANSLATION RULES:
-6. Translate only the text inside each <s id="N"> tag.
-7. Process sequentially from id ${startId} to id ${endId}.
-8. Preserve original line breaks (\\n), speaker dashes (-), and formatting tags.
-
-LANGUAGE & STYLE:
-9. Maintain natural dialogue flow in ${targetLabel}.
-10. Use appropriate colloquialisms for ${targetLabel}.
-11. Use "saya" and "awak" for general dialogue.
+Do not add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. Never output markdown.
+Do not include any timestamps or timecodes.
 
 <input>
 ${batchText}
