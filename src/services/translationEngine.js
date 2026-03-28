@@ -1773,10 +1773,10 @@ class TranslationEngine {
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
     const promptBody = `[ROLE]
-You are an expert localization specialist and professional subtitle translator.
+You are a professional subtitle translator.
 
 [OBJECTIVE]
-Translate the provided subtitles into natural ${targetLabel}, retaining common English loanwords only when naturally used in daily spoken Malay, using "saya" and "awak" for general dialogue.
+Translate the provided subtitles into natural ${targetLabel}. Use "saya" and "awak" for general dialogue.
 
 [STRICT RULES]
 1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
