@@ -1777,28 +1777,28 @@ class TranslationEngine {
         contextInstructions = `
 CONTEXT PROVIDED:
 - The following entries are provided for reference to ensure coherence and consistency.
-- Do not translate context entries; they are for reference only.
+- Do NOT translate context entries; they are for reference ONLY.
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel} with common English loanwords. Use "saya" and "awak" for general dialogue.
 ${contextInstructions}
 
 CRITICAL RULES:
-1. Translate only the text inside each <s id="N"> tag.
-2. Preserve the XML tags exactly: <s id="N">translated text</s>.
-3. Exact count & sequence: Return exactly ${expectedCount} entries. Process sequentially from id ${startId} to id ${endId}.
-4. Preserve original line breaks (\\n), speaker dashes (-), and formatting tags.
+1. Translate ONLY the text inside each <s id="N"> tag.
+2. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
+3. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
+4. PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
 
-Do not add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. Never output markdown.
-Do not include any timestamps or timecodes.
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do NOT skip, merge, or split entries. NEVER output markdown.
+Do NOT include any timestamps or timecodes.
 
 <input>
 ${batchText}
 </input>
 
-Output (exactly ${expectedCount} XML-tagged entries):
+Output (EXACTLY ${expectedCount} XML-tagged entries):
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
