@@ -1781,18 +1781,17 @@ CONTEXT PROVIDED:
 `;
     }
 
-    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel} with common English loanwords. Use "saya" and "awak" for general dialogue.
+    const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
 ${contextInstructions}
 
 CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag.
-2. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
-3. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
+1. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
+2. Translate ONLY the text inside each <s id="N"> tag.
+3. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
 4. PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
-
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do NOT skip, merge, or split entries. NEVER output markdown.
-Do NOT include any timestamps or timecodes.
+5. Do NOT add acknowledgements, explanations, notes, or commentary.
+6. Do NOT skip, merge, or split entries. NEVER output markdown.
+7. Do NOT include any timestamps or timecodes.
 
 <input>
 ${batchText}
