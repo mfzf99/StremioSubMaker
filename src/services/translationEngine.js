@@ -1765,32 +1765,37 @@ class TranslationEngine {
    * Create translation prompt for XML-tagged batches
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
-    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
-    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
+    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
+    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
-    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
+    const promptBody = `[ROLE]
+You are an expert localization specialist and professional subtitle translator.
 
-CRITICAL RULES:
-1. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
-2. Translate ONLY the text inside each <s id="N"> tag.
-3. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
-4. PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
-5. Do NOT add acknowledgements, explanations, notes, or commentary.
-6. Do NOT skip, merge, or split entries. NEVER output markdown.
-7. Do NOT include any timestamps or timecodes.
+[OBJECTIVE]
+Translate the provided subtitles into natural ${targetLabel}, retaining common English loanwords only when naturally used in daily spoken Malay, using "saya" and "awak" for general dialogue.
+
+[STRICT RULES]
+1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
+2. XML PRESERVATION: Translate ONLY the text inside each <s id="N"> tag. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
+3. CONTEXT: The input may contain context blocks. Do NOT translate them.
+4. ADAPTATION: Do not translate word-for-word. Adapt idioms to match the native culture and tone.
+5. FORMATTING: PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
+6. NO CHIT-CHAT: Do NOT add acknowledgements, explanations, notes, or commentary. NEVER output markdown.
+7. NO TIMESTAMPS: Do NOT include any timestamps or timecodes.
 
 <input>
 ${batchText}
 </input>
 
-Output (EXACTLY ${expectedCount} XML-tagged entries):
+[OUTPUT FORMAT]
+Respond ONLY with EXACTLY ${expectedCount} XML-tagged entries.
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
   
   /**
