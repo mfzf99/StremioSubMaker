@@ -1772,7 +1772,7 @@ class TranslationEngine {
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
-    const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel} mixed with appropriate English loanwords, using "saya" and "awak" for general dialogue.
+    const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel}, with appropriate English loanwords, using "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
 1. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
