@@ -1772,17 +1772,14 @@ class TranslationEngine {
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
-    let contextInstructions = '';
+    // ✨ IDEA BERNAS: Jadikan amaran context sebagai Rule ke-8 bersyarat
+    let contextRule = '';
     if (context?.surroundingOriginal?.length > 0) {
-        contextInstructions = `
-CONTEXT PROVIDED:
-- The following entries are provided for reference to ensure coherence and consistency.
-- Do NOT translate context entries; they are for reference ONLY.
-`;
+        // Kita guna ayat asal kau, takde tambah tolak, cuma letak nombor 8
+        contextRule = '\n8. Do NOT translate context entries; they are for reference ONLY.';
     }
 
     const promptBody = `You are a high-precision subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.
-${contextInstructions}
 
 CRITICAL RULES:
 1. EXACT count & sequence: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
@@ -1791,7 +1788,7 @@ CRITICAL RULES:
 4. PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
 5. Do NOT add acknowledgements, explanations, notes, or commentary.
 6. Do NOT skip, merge, or split entries. NEVER output markdown.
-7. Do NOT include any timestamps or timecodes.
+7. Do NOT include any timestamps or timecodes.${contextRule}
 
 <input>
 ${batchText}
