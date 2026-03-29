@@ -1772,25 +1772,32 @@ class TranslationEngine {
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
-    const promptBody = `[ROLE]
-You are a professional subtitle translator.
+    const promptBody = `[SYSTEM_CONFIG]
+TASK: SUBTITLE_TRANSLATION
+TARGET_LANG: ${targetLabel}
+TONE_STYLE: COLLOQUIAL
+VOCABULARY_OVERRIDE: INTEGRATE_COMMON_ENGLISH_LOANWORDS (Condition: Contextually appropriate)
+PRONOUN_OVERRIDE: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
 
-[OBJECTIVE]
-Translate into appropriate colloquialisms for ${targetLabel}, with common English loanwords where they sound natural. Use "saya" and "awak" for general dialogue.
+[EXECUTION_PARAMETERS]
+- EXPECTED_NODE_COUNT: ${expectedCount}
+- PROCESSING_RANGE: ID_${startId} TO ID_${endId} (STRICT_SEQUENTIAL)
+- XML_SCHEMA_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
+- PRESERVE_LINE_BREAKS (\\n): TRUE
+- PRESERVE_SPEAKER_DASHES (-): TRUE
+- PRESERVE_FORMATTING_TAGS: TRUE
 
-[STRICT RULES]
-1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
-2. XML PRESERVATION: Translate ONLY the text inside each <s id="N"> tag. Preserve the XML tags EXACTLY: <s id="N">translated text</s>.
-3. FORMATTING: PRESERVE original line breaks (\\n), speaker dashes (-), and formatting tags.
-4. NO CHIT-CHAT: Do NOT add acknowledgements, explanations, notes, or commentary. NEVER output markdown.
-5. NO TIMESTAMPS: Do NOT include any timestamps or timecodes.
+[NEGATIVE_CONSTRAINTS]
+- INJECT_TIMESTAMPS: FALSE
+- MARKDOWN_WRAPPING: FALSE
+- CONVERSATIONAL_FILLER: FALSE
+- NOTES_OR_EXPLANATIONS: FALSE
 
-<input>
+[PAYLOAD_INPUT]
 ${batchText}
-</input>
 
-[OUTPUT FORMAT]
-Respond ONLY with EXACTLY ${expectedCount} XML-tagged entries.
+[PAYLOAD_OUTPUT]
+RESPOND_ONLY_WITH_XML_NODES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
