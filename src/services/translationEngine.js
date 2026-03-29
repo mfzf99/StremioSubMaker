@@ -1777,11 +1777,11 @@ TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
 LOANWORDS_POLICY: SPARINGLY (Condition: Prefer Malay. Use English ONLY if native Malay sounds too formal or awkward)
-PRONOUNS: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
+PRONOUN_OVERRIDE: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
 
 [EXECUTION_PARAMS]
-EXPECTED_COUNT: ${expectedCount}
 PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
+EXPECTED_COUNT: ${expectedCount}
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
 PRESERVE_LINE_BREAKS: TRUE
