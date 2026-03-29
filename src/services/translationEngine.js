@@ -1776,7 +1776,7 @@ class TranslationEngine {
 You are a professional subtitle translator.
 
 [OBJECTIVE]
-Translate into appropriate colloquialisms for ${targetLabel}, using common English loanwords where they sound natural. Use "saya" and "awak" for general dialogue.
+Translate into appropriate colloquialisms for ${targetLabel}, with common English loanwords where they sound natural. Use "saya" and "awak" for general dialogue.
 
 [STRICT RULES]
 1. EXACT COUNT & SEQUENCE: Return EXACTLY ${expectedCount} entries. Process SEQUENTIALLY from id ${startId} to id ${endId}.
