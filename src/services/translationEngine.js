@@ -1775,7 +1775,7 @@ class TranslationEngine {
     const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
-TONE: COLLOQUIAL (APPROPRIATE)
+TONE: COLLOQUIAL
 INTEGRATE_ENGLISH_LOANWORDS: TRUE (Condition: Must sound natural)
 PRONOUNS: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
 
