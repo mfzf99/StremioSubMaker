@@ -1767,7 +1767,6 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
     const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
     const startId = idMatches.length > 0 ? idMatches[0] : 'START';
     const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
@@ -1776,12 +1775,12 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
-LOANWORDS_POLICY: SPARINGLY (Condition: Prefer Malay. Use English ONLY if native Malay sounds too formal or awkward)
+LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY if native Malay sounds too formal or awkward)
 PRONOUN_OVERRIDE: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
 
 [EXECUTION_PARAMS]
-PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
 EXPECTED_COUNT: ${expectedCount}
+PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
 PRESERVE_LINE_BREAKS: TRUE
