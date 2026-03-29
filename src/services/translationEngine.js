@@ -1765,42 +1765,42 @@ class TranslationEngine {
    * Create translation prompt for XML-tagged batches
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
-    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
-    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    // 💉 PISAU BEDAH REGEX: Tangkap ID pertama (X) dan terakhir (Y) dari batchText
+    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
+    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
 
-    const promptBody = `[SYSTEM_CONFIG]
+    const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
-TONE_STYLE: COLLOQUIAL
-VOCABULARY_OVERRIDE: INTEGRATE_COMMON_ENGLISH_LOANWORDS (Condition: Contextually appropriate)
-PRONOUN_OVERRIDE: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
+TONE: COLLOQUIAL_APPROPRIATE
+LOANWORDS: ALLOW_NATURAL_ENGLISH
+PRONOUNS: {1ST: "saya", 2ND: "awak"}
 
-[EXECUTION_PARAMETERS]
-- EXPECTED_NODE_COUNT: ${expectedCount}
-- PROCESSING_RANGE: ID_${startId} TO ID_${endId} (STRICT_SEQUENTIAL)
-- XML_SCHEMA_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
-- PRESERVE_LINE_BREAKS (\\n): TRUE
-- PRESERVE_SPEAKER_DASHES (-): TRUE
-- PRESERVE_FORMATTING_TAGS: TRUE
+[EXECUTION_PARAMS]
+EXPECTED_COUNT: ${expectedCount}
+PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
+XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
+PRESERVE_LINE_BREAKS: TRUE
+PRESERVE_SPEAKER_DASHES: TRUE
+PRESERVE_FORMATTING_TAGS: TRUE
 
 [NEGATIVE_CONSTRAINTS]
-- INJECT_TIMESTAMPS: FALSE
-- MARKDOWN_WRAPPING: FALSE
-- CONVERSATIONAL_FILLER: FALSE
-- NOTES_OR_EXPLANATIONS: FALSE
+ALLOW_MARKDOWN: FALSE
+ALLOW_CONVERSATIONAL_FILLER: FALSE
+INJECT_TIMESTAMPS: FALSE
 
-[PAYLOAD_INPUT]
+<input>
 ${batchText}
+</input>
 
-[PAYLOAD_OUTPUT]
-RESPOND_ONLY_WITH_XML_NODES.
+[OUTPUT_FORMAT]
+RESPOND_ONLY_WITH_XML_NODES
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
 }
   
   /**
