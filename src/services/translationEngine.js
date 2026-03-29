@@ -1776,8 +1776,8 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
-INTEGRATE_ENGLISH_LOANWORDS: TRUE (Condition: Must sound natural)
-PRONOUNS: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
+LOANWORDS_POLICY: SPARINGLY (Condition: Prefer Malay. Use English ONLY if native Malay sounds too formal or awkward)
+PRONOUN_OVERRIDE: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" }
 
 [EXECUTION_PARAMS]
 EXPECTED_COUNT: ${expectedCount}
