@@ -1767,9 +1767,32 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-    const startId = idMatches.length > 0 ? idMatches[0] : 'START';
-    const endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    let startId = 'START';
+    let endId = 'END';
+
+    if (totalBatches === 1) {
+        // 🚀 LOGIK SINGLE BATCH: Laju & jimat memori bila hadam 1000+ baris serentak
+        // Intai ID pertama dari atas
+        const firstMatch = batchText.match(/<s id="([^"]+)">/);
+        if (firstMatch) startId = firstMatch[1];
+
+        // Intai ID terakhir dari bawah (reverse scan)
+        const lastIndex = batchText.lastIndexOf('<s id="');
+        if (lastIndex !== -1) {
+            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
+            if (endMatch) endId = endMatch[1];
+        }
+    } else {
+        // 💉 PISAU BEDAH REGEX (NORMAL BATCH): Logik asal yang dah working, kita tak kacau!
+        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+        startId = idMatches.length > 0 ? idMatches[0] : 'START';
+        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    }
+
+    // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
+    const antiLazyWarning = totalBatches === 1 
+        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do not merge, summarize, or skip any lines. 1:1 translation is strictly enforced for this full file.)' 
+        : '';
 
     const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
@@ -1785,7 +1808,7 @@ XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
 PRESERVE_LINE_BREAKS: TRUE
 PRESERVE_SPEAKER_DASHES: START_OF_LINE_ONLY (Convert any trailing double-dashes '--' at the end of sentences to ellipsis '...')
-PRESERVE_FORMATTING_TAGS: TRUE
+PRESERVE_FORMATTING_TAGS: TRUE${antiLazyWarning}
 
 [NEGATIVE_CONSTRAINTS]
 ALLOW_MARKDOWN: FALSE
