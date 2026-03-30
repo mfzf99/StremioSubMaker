@@ -1775,7 +1775,7 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
-LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY if native Malay sounds too formal or awkward)
+LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY to avoid sounding formal or awkward)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
