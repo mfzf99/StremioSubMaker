@@ -1756,7 +1756,6 @@ class TranslationEngine {
         result += `Source: ${cleanSource}\nTranslation: ${cleanTrans}\n\n`;
       });
       result += '=== END OF MEMORY ===\n\n';
-      result += '=== ENTRIES TO TRANSLATE ===\n\n';
     }
 
     const xmlEntries = batch.map((entry, index) => {
@@ -1806,7 +1805,6 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
-LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY to avoid sounding formal or awkward)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
