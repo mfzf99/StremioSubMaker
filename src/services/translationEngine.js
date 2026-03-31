@@ -2469,9 +2469,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
    */
   parseBatchResponse(translatedText, expectedCount) {
     let cleaned = translatedText.trim();
-    cleaned = cleaned.replace(/
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
+    cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
     
     // --- Fix #8: Strip context sections before parsing ---
     // Remove entire context blocks the AI may have echoed back
