@@ -664,9 +664,6 @@ class TranslationEngine {
     // Track per-run RTL so all cleanups (including streaming) can apply markers consistently
     this.isRtlTarget = isRtlLanguage(targetLanguage);
 
-    // 🚀 SIMPAN GLOBAL CONTEXT: Tangkap fail SRT penuh untuk dihantar ke Cache Google
-    this.globalContextSrt = srtContent;
-
     // Step 1: Parse SRT into structured entries
     const entries = parseSRT(srtContent);
     if (!entries || entries.length === 0) {
@@ -674,6 +671,9 @@ class TranslationEngine {
     }
     // Stats: entry count
     this.translationStats.entryCount = entries.length;
+
+    // 🚀 SIMPAN GLOBAL CONTEXT (TEKS SAHAJA): Untuk Cache Google tanpa membazir token dengan timecode
+    this.globalContextText = entries.map(e => e.text.trim().replace(/\n+/g, ' ')).join('\n');
 
     // Single-batch mode: translate the whole file (with limited auto-splitting)
     if (this.singleBatchMode) {
