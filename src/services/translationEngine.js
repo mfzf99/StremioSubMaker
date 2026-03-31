@@ -1748,15 +1748,16 @@ class TranslationEngine {
   prepareBatchXml(batch, context = null) {
     let result = '';
 
-    // Add context section if provided
-    if (context?.surroundingOriginal?.length > 0) {
-      result += '=== CONTEXT (FOR REFERENCE ONLY - DO NOT TRANSLATE) ===\n\n';
-      context.surroundingOriginal.forEach((entry, index) => {
-        const cleanText = entry.text.trim().replace(/\n+/g, '\n');
-        result += `[Context ${index + 1}] ${cleanText}\n\n`;
+    // Masukkan Memori Terjemahan (Source + Target)
+    if (context?.previousMemory?.length > 0) {
+      result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n\n';
+      context.previousMemory.forEach((entry) => {
+        // Buang line-breaks dalam memori supaya jimat token dan kemas
+        const cleanSource = entry.source.trim().replace(/\n+/g, ' ');
+        const cleanTrans = entry.translation.trim().replace(/\n+/g, ' ');
+        result += `Source: ${cleanSource}\nTranslation: ${cleanTrans}\n\n`;
       });
-      result += '=== END OF CONTEXT ===\n\n';
-      result += '=== ENTRIES TO TRANSLATE ===\n\n';
+      result += '=== END OF MEMORY ===\n\n';
     }
 
     const xmlEntries = batch.map((entry, index) => {
