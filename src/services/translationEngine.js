@@ -2316,12 +2316,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
     let parsedEntries = [];
 
-    // JSON workflow: extract completed entries from partial JSON during streaming.
-    // Use extractJsonEntries() directly instead of parseJsonResponse() because
-    // streaming chunks are almost always incomplete JSON (e.g. [{"id":1,"text":"hello"},{"id":2,"te)
-    // that will always fail JSON.parse(), generating noise in logs and wasting cycles.
-    // The regex extractor reliably pulls out fully-formed {"id":N,"text":"..."} objects
-    // from partial text without needing the overall array to be valid JSON.
     if (this.translationWorkflow === 'json') {
       const rawCleaned = String(partialText).trim()
         .replace(/```json\s*/gi, '').replace(/```\s*/g, '');
@@ -2334,9 +2328,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       }
     }
 
-    // Fall back to workflow-specific parsing if JSON didn't yield results.
-    // For JSON workflow, partial streams may have no complete JSON objects,
-    // so we let other parsers provide some streaming feedback rather than none.
     if (parsedEntries.length === 0) {
       if (this.translationWorkflow === 'ai') {
         const parsed = parseSRT(partialText) || [];
@@ -2346,7 +2337,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
           timecode: entry.timecode || ''
         }));
       } else if (this.translationWorkflow === 'xml') {
-        // Parse partial XML tags from streaming output
         const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
         let match;
         while ((match = xmlPattern.exec(partialText)) !== null) {
@@ -2357,10 +2347,9 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
           }
         }
       } else {
-        // Use the same robust parsing as parseBatchResponse:
-        // line-by-line to handle multi-line entries, with context stripping and dedup
         let cleaned = partialText.trim();
-        cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
+        cleaned = cleaned.replace(/
+http://googleusercontent.com/immersive_entry_chip/0
         // Strip echoed context sections
         cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
         cleaned = cleaned.replace(/===\s*ENTRIES TO TRANSLATE[^=]*===/gi, '');
