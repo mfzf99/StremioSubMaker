@@ -1190,7 +1190,10 @@ class TranslationEngine {
     // Sequence counter for streaming progress events (used by both auto-chunk and normal paths)
     let streamSequence = 0;
 
-    if (allowAutoChunking && estimatedTokens > this.maxTokensPerBatch && batch.length > 1) {
+    // 🚨 BYPASS LIMIT UNTUK GLOBAL CONTEXT: Kita matikan chunking kalau kita tengah pakai context penuh
+    const shouldChunk = allowAutoChunking && estimatedTokens > this.maxTokensPerBatch && batch.length > 1 && !this.globalContextText;
+
+    if (shouldChunk) {
       // Auto-chunk: Split batch in half recursively (sequential for memory safety)
       log.debug(() => `[TranslationEngine] Batch too large (${estimatedTokens}${actualTokenCount ? ' actual' : ' est.'} tokens), auto-chunking into 2 parts`);
 
