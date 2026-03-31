@@ -2302,9 +2302,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     let globalContextBlock = '';
     
     // Kita cuma masukkan Global Context kalau ia bukan Single Batch
-    // (Sebab Single Batch memang dah hantar skrip penuh dalam body)
-    if (this.globalContextSrt && !this.singleBatchMode) {
-      globalContextBlock = `[GLOBAL CONTEXT - FULL SCRIPT FOR REFERENCE]\n(INSTRUCTION: Read this full script to understand the story, characters, and tone. DO NOT translate this section. ONLY translate the specific entries provided in the input section below.)\n\n${this.globalContextSrt}\n\n=== END OF GLOBAL CONTEXT ===\n\n`;
+    if (this.globalContextText && !this.singleBatchMode) {
+      globalContextBlock = `[GLOBAL CONTEXT - FULL SCRIPT FOR REFERENCE]\n(INSTRUCTION: Read this full script to understand the story, characters, and tone. DO NOT translate this section. ONLY translate the specific entries provided in the input section below.)\n\n${this.globalContextText}\n\n=== END OF GLOBAL CONTEXT ===\n\n`;
     }
 
     // 3. BATCH HEADER (Dinamik - Berubah setiap batch)
