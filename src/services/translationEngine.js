@@ -1060,28 +1060,36 @@ class TranslationEngine {
     }
 
     const firstEntryId = batch[0].id;
-    const lastEntryId = batch[batch.length - 1].id;
-
-    // Get surrounding context from original entries (before the batch)
     const surroundingStartIdx = Math.max(0, firstEntryId - 1 - this.contextSize);
     const surroundingEndIdx = firstEntryId - 2;
-    const surroundingContext = [];
+    const memoryContext = [];
+
+    // Bina 'Kamus' carian pantas untuk terjemahan yang dah siap
+    const translatedMap = new Map();
+    for (const t of translatedSoFar) {
+      translatedMap.set(t.id, t.text);
+    }
 
     for (let i = surroundingStartIdx; i <= surroundingEndIdx && i < allOriginalEntries.length; i++) {
       if (allOriginalEntries[i]) {
-        surroundingContext.push({
-          id: allOriginalEntries[i].id,
-          text: allOriginalEntries[i].text,
-          timecode: allOriginalEntries[i].timecode
-        });
+        const origEntry = allOriginalEntries[i];
+        const translatedText = translatedMap.get(origEntry.id);
+        
+        // Cuma masukkan dalam memori kalau terjemahan tu berjaya (bukan ralat)
+        if (translatedText && !translatedText.startsWith('[⚠]')) {
+          memoryContext.push({
+            id: origEntry.id,
+            source: origEntry.text,
+            translation: translatedText
+          });
+        }
       }
     }
 
-    // Only include context if this is NOT the first batch
-    const hasContext = batchIndex > 0 && surroundingContext.length > 0;
+    const hasContext = batchIndex > 0 && memoryContext.length > 0;
 
     return hasContext ? {
-      surroundingOriginal: surroundingContext
+      previousMemory: memoryContext
     } : null;
   }
 
