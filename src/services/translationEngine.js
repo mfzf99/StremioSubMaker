@@ -162,7 +162,7 @@ class TranslationEngine {
 
     // Context settings (disabled by default)
     this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
-    this.contextSize = parseInt(this.advancedSettings.contextSize) || 8;
+    this.contextSize = parseInt(this.advancedSettings.contextSize) || 20;
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
