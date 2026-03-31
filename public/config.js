@@ -9779,7 +9779,7 @@ Translate to {target_language}.`;
                 contextSizeGroupEl.style.display = enableBatchContextEl.checked ? 'block' : 'none';
             }
         }
-        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 8;
+        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 20;
         {
             let workflow = currentConfig.advancedSettings?.translationWorkflow ||
                 ((currentConfig.advancedSettings?.sendTimestampsToAI === true) ? 'ai' : 'xml');
