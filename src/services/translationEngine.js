@@ -2470,9 +2470,9 @@ http://googleusercontent.com/immersive_entry_chip/0
    */
   parseBatchResponse(translatedText, expectedCount) {
     let cleaned = translatedText.trim();
-
     cleaned = cleaned.replace(/
 http://googleusercontent.com/immersive_entry_chip/0
+http://googleusercontent.com/immersive_entry_chip/1
     
     // --- Fix #8: Strip context sections before parsing ---
     // Remove entire context blocks the AI may have echoed back
