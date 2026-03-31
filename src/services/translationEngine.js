@@ -2348,8 +2348,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
         }
       } else {
         let cleaned = partialText.trim();
-        cleaned = cleaned.replace(/
-http://googleusercontent.com/immersive_entry_chip/0
+        cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
         // Strip echoed context sections
         cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
         cleaned = cleaned.replace(/===\s*ENTRIES TO TRANSLATE[^=]*===/gi, '');
