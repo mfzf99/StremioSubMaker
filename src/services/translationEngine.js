@@ -1773,35 +1773,36 @@ class TranslationEngine {
    * Create translation prompt for XML-tagged batches
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = 'START';
-    let endId = 'END';
+    let startId = 'START';
+    let endId = 'END';
 
-    if (totalBatches === 1) {
-        const firstMatch = batchText.match(/<s id="([^"]+)">/);
-        if (firstMatch) startId = firstMatch[1];
+    if (totalBatches === 1) {
+        // 🚀 LOGIK SINGLE BATCH: Laju & jimat memori bila hadam 1000+ baris serentak
+        // Intai ID pertama dari atas
+        const firstMatch = batchText.match(/<s id="([^"]+)">/);
+        if (firstMatch) startId = firstMatch[1];
 
-        const lastIndex = batchText.lastIndexOf('<s id="');
-        if (lastIndex !== -1) {
-            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
-            if (endMatch) endId = endMatch[1];
-        }
-    } else {
-        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-        startId = idMatches.length > 0 ? idMatches[0] : 'START';
-        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
-    }
+        // Intai ID terakhir dari bawah (reverse scan)
+        const lastIndex = batchText.lastIndexOf('<s id="');
+        if (lastIndex !== -1) {
+            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
+            if (endMatch) endId = endMatch[1];
+        }
+    } else {
+        // 💉 PISAU BEDAH REGEX (NORMAL BATCH): Logik asal yang dah working, kita tak kacau!
+        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+        startId = idMatches.length > 0 ? idMatches[0] : 'START';
+        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    }
 
-    const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do not merge, summarize, or skip any lines. 1:1 translation is strictly enforced for this full file.)' 
-        : '';
+    // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
+    const antiLazyWarning = totalBatches === 1 
+        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do not merge, summarize, or skip any lines. 1:1 translation is strictly enforced for this full file.)' 
+        : '';
 
-    const memoryInstruction = context?.previousMemory?.length > 0
-        ? '\nCONTEXT_AWARENESS: TRUE (Refer to [PREVIOUS_TRANSLATION_MEMORY] for continuity. DO NOT translate or output the memory block. ONLY output the XML tags.)'
-        : '';
-
-    const promptBody = `[SYSTEM_CONFIG]
+    const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
@@ -1810,7 +1811,7 @@ PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Stand
 
 [EXECUTION_PARAMS]
 EXPECTED_COUNT: ${expectedCount}
-PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)${memoryInstruction}
+PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
 PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. DO NOT merge sentences into a single line!)
@@ -1830,8 +1831,8 @@ ${batchText}
 RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-  }
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+}
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
