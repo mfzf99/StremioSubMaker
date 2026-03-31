@@ -2482,9 +2482,9 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
   parseBatchResponse(translatedText, expectedCount) {
     let cleaned = translatedText.trim();
 
-    // Remove markdown code blocks
-    cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
-
+    cleaned = cleaned.replace(/
+http://googleusercontent.com/immersive_entry_chip/0
+    
     // --- Fix #8: Strip context sections before parsing ---
     // Remove entire context blocks the AI may have echoed back
     cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
