@@ -1812,7 +1812,7 @@ EXPECTED_COUNT: ${expectedCount}
 PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
-PRESERVE_LINE_BREAKS: TRUE
+PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. DO NOT merge sentences into a single line!)
 PRESERVE_SPEAKER_DASHES: START_OF_LINE_ONLY (Convert any trailing double-dashes '--' at the end of sentences to ellipsis '...')
 PRESERVE_FORMATTING_TAGS: TRUE${antiLazyWarning}
 
@@ -1830,7 +1830,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-}
+  }
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
