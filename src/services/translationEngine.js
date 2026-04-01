@@ -1800,18 +1800,17 @@ class TranslationEngine {
     const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 
 CRITICAL RULES:
-1. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
-2. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
-3. Return EXACTLY ${expectedCount} tagged entries. 1 input ID MUST equal 1 output ID.
-4. Keep line breaks within each entry (If source has multiple lines, output MUST have multiple lines).
+1. Return EXACTLY ${expectedCount} tagged entries.
+2. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
+3. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
+4. PRESERVE line breaks within each entry.
 5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" for 1st-person and "awak" for 2nd-person in standard dialogue.
-6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech. Avoid hyper-formal or robotic terms.
+6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech.
 7. Preserve any existing formatting tags and speaker dashes.${contextInstruction}
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
-Do NOT skip, drop, merge, or split any entries. Strict 1:1 translation is enforced.
-NEVER output markdown.
-Do not include any timestamps/timecodes.
+Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
+Do NOT include any timestamps/timecodes.
 
 <input>
 ${batchText}
