@@ -163,7 +163,7 @@ StorageAdapter.CACHE_TYPES = {
 // CACHE_LIMIT_TRANSLATION=50000000000 (50GB) - requires Redis with 120GB+ RAM
 StorageAdapter.SIZE_LIMITS = {
   [StorageAdapter.CACHE_TYPES.TRANSLATION]: parseInt(process.env.CACHE_LIMIT_TRANSLATION) || (1.5 * 1024 * 1024 * 1024), // 1.5GB - was 6GB (for 16GB Redis)
-  [StorageAdapter.CACHE_TYPES.BYPASS]: parseInt(process.env.CACHE_LIMIT_BYPASS) || (0.5 * 1024 * 1024 * 1024),           // 0.5GB - was 2GB (for 16GB Redis)
+  [StorageAdapter.CACHE_TYPES.BYPASS]: parseInt(process.env.CACHE_LIMIT_BYPASS) || (5 * 1024 * 1024 * 1024),            // 5GB - diubah dari 0.5GB
   [StorageAdapter.CACHE_TYPES.PARTIAL]: parseInt(process.env.CACHE_LIMIT_PARTIAL) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.SYNC]: parseInt(process.env.CACHE_LIMIT_SYNC) || (0.5 * 1024 * 1024 * 1024),               // 0.5GB - was 2GB (for 16GB Redis)
   [StorageAdapter.CACHE_TYPES.AUTOSUB]: parseInt(process.env.CACHE_LIMIT_AUTOSUB) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - AutoSubs cache
@@ -177,7 +177,7 @@ StorageAdapter.SIZE_LIMITS = {
 // Default TTL in seconds
 StorageAdapter.DEFAULT_TTL = {
   [StorageAdapter.CACHE_TYPES.TRANSLATION]: null,     // No expiry
-  [StorageAdapter.CACHE_TYPES.BYPASS]: 12 * 60 * 60, // 12 hours
+  [StorageAdapter.CACHE_TYPES.BYPASS]: null,          // No expiry - diubah dari 12 jam
   [StorageAdapter.CACHE_TYPES.PARTIAL]: 60 * 60,     // 1 hour
   [StorageAdapter.CACHE_TYPES.SYNC]: null,            // No expiry
   [StorageAdapter.CACHE_TYPES.AUTOSUB]: null,         // No expiry
