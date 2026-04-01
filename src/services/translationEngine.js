@@ -1797,19 +1797,17 @@ class TranslationEngine {
         ? ' (CONTEXT: Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency)'
         : '';
 
-    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.${contextInstruction}
 
 CRITICAL RULES:
 1. Return EXACTLY ${expectedCount} tagged entries.
 2. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
 3. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
 4. PRESERVE line breaks within each entry.
-5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" and "awak" for general dialogue.
-6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech.
-7. PRESERVE any existing formatting tags and speaker dashes${contextInstruction}.
-8. Do NOT add acknowledgements, explanations, notes, or commentary.
-9. Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
-10. Do NOT include any timestamps/timecodes.
+5. PRESERVE any existing formatting tags and speaker dashes.
+6. Do NOT add acknowledgements, explanations, notes, or commentary.
+7. Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
+8. Do NOT include any timestamps/timecodes.
 
 <input>
 ${batchText}
