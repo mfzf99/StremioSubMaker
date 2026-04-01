@@ -1799,7 +1799,7 @@ class TranslationEngine {
 
     // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
     const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, drop, merge, split, or add any lines. 1:1 translation is strictly enforced for this full file.)' 
+        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, drop, merge, or split any lines. 1:1 translation is strictly enforced for this full file.)' 
         : '';
 
     const promptBody = `[SYSTEM_CONFIG]
