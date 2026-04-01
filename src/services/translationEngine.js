@@ -1797,7 +1797,7 @@ class TranslationEngine {
         ? '\n8. Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency.'
         : '';
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel}.
 
 CRITICAL RULES:
 1. Return EXACTLY ${expectedCount} tagged entries.
@@ -1807,10 +1807,9 @@ CRITICAL RULES:
 5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" for 1st-person and "awak" for 2nd-person in standard dialogue.
 6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech.
 7. Preserve any existing formatting tags and speaker dashes.${contextInstruction}
-
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
-Do NOT include any timestamps/timecodes.
+8. Do NOT add acknowledgements, explanations, notes, or commentary.
+9. Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
+10. Do NOT include any timestamps/timecodes.
 
 <input>
 ${batchText}
