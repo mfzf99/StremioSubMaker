@@ -1793,17 +1793,13 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `You are a professional subtitle translator. Translate into natural, colloquial ${targetLabel} with appropriate English loanwords, using "saya" and "awak" for general dialogue. Capture the exact vibe of the characters and the mood of the scene. Ensure all exclamations, slang, and reactions remain culturally neutral and logically fit the source material's context.
+    const promptBody = `Act as a professional subtitle translator. Translate into colloquial ${targetLabel} using "saya"/"awak" and appropriate English loanwords. Keep reactions culturally neutral and true to the scene's vibe.
 
 CRITICAL RULES:
-1. Return EXACTLY ${expectedCount} tagged entries.
-2. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
-3. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
-4. PRESERVE line breaks within each entry.
-5. PRESERVE any existing formatting tags and speaker dashes.
-6. Do NOT add acknowledgements, explanations, notes, or commentary.
-7. Do NOT skip, merge, or split any entries. NEVER output markdown.
-8. Do NOT include any timestamps/timecodes.
+1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
+2. FORMAT: <s id="N">translated text</s>. PRESERVE all original XML tags, line breaks, formatting, and speaker dashes.
+3. Translate ONLY text inside the tags. NO timestamps/timecodes.
+4. NO markdown, NO commentary, NO explanations. DO NOT skip, merge, or split entries.
 
 <input>
 ${batchText}
