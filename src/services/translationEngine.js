@@ -1799,7 +1799,7 @@ class TranslationEngine {
 
     // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
     const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, merge, or split any lines. 1:1 translation is strictly enforced for this full file.)' 
+        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, drop, merge, split, or add any lines. 1:1 translation is strictly enforced for this full file.)' 
         : '';
 
     const promptBody = `[SYSTEM_CONFIG]
@@ -1814,7 +1814,7 @@ EXPECTED_COUNT: ${expectedCount}
 PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
-PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. DO NOT merge sentences into a single line!)
+PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. Do NOT merge sentences into a single line!)
 PRESERVE_SPEAKER_DASHES: START_OF_LINE_ONLY
 PRESERVE_FORMATTING_TAGS: TRUE${antiLazyWarning}
 
