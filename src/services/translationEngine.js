@@ -1806,7 +1806,7 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: NATURAL
-LOANWORDS_POLICY: SPARINGLY (Condition: Use English for words that Malay people commonly use in English naturally in everyday speech)
+LOANWORDS_POLICY: BALANCED (Condition: Retain English words ONLY if they are naturally assimilated into everyday Malaysian speech. Avoid hyper-formal dictionary terms if translating them makes the dialogue sound robotic, dramatic, or awkward)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
