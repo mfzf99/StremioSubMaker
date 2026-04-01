@@ -1797,7 +1797,7 @@ class TranslationEngine {
         ? '\n[CONTEXT PROVIDED]\nUse the [PREVIOUS_TRANSLATION_MEMORY] block below to ensure continuity.'
         : '';
 
-    const promptBody = `You are a professional subtitle translator. Translate into natural ${targetLabel} with appropriate English loanwords. Use "saya" and "awak" for general dialogue.
+    const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel} with appropriate English loanwords. Use "saya" and "awak" for general dialogue.
 ${contextInstruction}
 
 CRITICAL RULES:
