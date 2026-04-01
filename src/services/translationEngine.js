@@ -1772,7 +1772,7 @@ class TranslationEngine {
   /**
    * Create translation prompt for XML-tagged batches
    */
-  createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
+    createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let startId = 'START';
@@ -1794,10 +1794,11 @@ class TranslationEngine {
     }
 
     const contextInstruction = context?.previousMemory?.length > 0
-        ? ' (CONTEXT: Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency)'
+        ? '\n[CONTEXT PROVIDED]\nUse the [PREVIOUS_TRANSLATION_MEMORY] block below to ensure continuity.'
         : '';
 
-    const promptBody = `Translate to ${targetLabel} with appropriate English loanwords. Use "saya" and "awak" for general dialogue.${contextInstruction}
+    const promptBody = `You are a professional subtitle translator. Translate into natural ${targetLabel} with appropriate English loanwords. Use "saya" and "awak" for general dialogue.
+${contextInstruction}
 
 CRITICAL RULES:
 1. Return EXACTLY ${expectedCount} tagged entries.
