@@ -1756,6 +1756,7 @@ class TranslationEngine {
         result += `Source: ${cleanSource}\nTranslation: ${cleanTrans}\n\n`;
       });
       result += '=== END OF MEMORY ===\n\n';
+      result += '=== ENTRIES TO TRANSLATE ===\n\n';
     }
 
     const xmlEntries = batch.map((entry, index) => {
@@ -1805,7 +1806,7 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
-LOANWORDS_POLICY: NATURAL_LOCALIZATION (Condition: Prioritize natural Malay. Retain English words ONLY if the direct Malay translation sounds hyper-formal, robotic, or ruins the emotional delivery)
+LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY for words that Malay people commonly use in English naturally in everyday speech)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
