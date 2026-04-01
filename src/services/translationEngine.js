@@ -1799,14 +1799,14 @@ class TranslationEngine {
 
     // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
     const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do not merge, summarize, or skip any lines. 1:1 translation is strictly enforced for this full file.)' 
+        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, merge, or split any lines. 1:1 translation is strictly enforced for this full file.)' 
         : '';
 
     const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: NATURAL
-LOANWORDS_POLICY: BALANCED (Condition: Retain English words ONLY if they are naturally assimilated into everyday Malaysian speech. Avoid hyper-formal dictionary terms if translating them makes the dialogue sound robotic, dramatic, or awkward)
+LOANWORDS_POLICY: BALANCED (Condition: Retain English words ONLY if they are naturally assimilated into everyday Malaysian speech)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
