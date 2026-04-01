@@ -1797,7 +1797,7 @@ class TranslationEngine {
         ? ' (CONTEXT: Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency)'
         : '';
 
-    const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel}.
+    const promptBody = `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}.
 
 CRITICAL RULES:
 1. Return EXACTLY ${expectedCount} tagged entries.
