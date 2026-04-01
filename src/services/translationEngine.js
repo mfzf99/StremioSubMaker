@@ -1773,36 +1773,29 @@ class TranslationEngine {
    * Create translation prompt for XML-tagged batches
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = 'START';
-    let endId = 'END';
+    let startId = 'START';
+    let endId = 'END';
 
-    if (totalBatches === 1) {
-        // 🚀 LOGIK SINGLE BATCH: Laju & jimat memori bila hadam 1000+ baris serentak
-        // Intai ID pertama dari atas
-        const firstMatch = batchText.match(/<s id="([^"]+)">/);
-        if (firstMatch) startId = firstMatch[1];
+    if (totalBatches === 1) {
+        // 🚀 LOGIK SINGLE BATCH
+        const firstMatch = batchText.match(/<s id="([^"]+)">/);
+        if (firstMatch) startId = firstMatch[1];
 
-        // Intai ID terakhir dari bawah (reverse scan)
-        const lastIndex = batchText.lastIndexOf('<s id="');
-        if (lastIndex !== -1) {
-            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
-            if (endMatch) endId = endMatch[1];
-        }
-    } else {
-        // 💉 PISAU BEDAH REGEX (NORMAL BATCH): Logik asal yang dah working, kita tak kacau!
-        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-        startId = idMatches.length > 0 ? idMatches[0] : 'START';
-        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
-    }
+        const lastIndex = batchText.lastIndexOf('<s id="');
+        if (lastIndex !== -1) {
+            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
+            if (endMatch) endId = endMatch[1];
+        }
+    } else {
+        // 💉 PISAU BEDAH REGEX (NORMAL BATCH)
+        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+        startId = idMatches.length > 0 ? idMatches[0] : 'START';
+        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    }
 
-    // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
-    const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT skip, drop, merge, or split any lines. 1:1 translation is strictly enforced for this full file.)' 
-        : '';
-
-    const promptBody = `[SYSTEM_CONFIG]
+    const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: NATURAL
@@ -1812,13 +1805,16 @@ PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Stand
 [EXECUTION_PARAMS]
 EXPECTED_COUNT: ${expectedCount}
 PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
+ONE_TO_ONE_MAPPING: TRUE (CRITICAL: 1 input ID MUST equal 1 output ID. You MUST translate EVERY SINGLE ID in the input. Do NOT skip, drop, merge, or split any lines. Strict 1:1 format is enforced)
 XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
 TRANSLATE_ONLY_INNER_TEXT: TRUE
-PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. Do NOT merge sentences into a single line!)
+PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines)
 PRESERVE_SPEAKER_DASHES: START_OF_LINE_ONLY
-PRESERVE_FORMATTING_TAGS: TRUE${antiLazyWarning}
+PRESERVE_FORMATTING_TAGS: TRUE
 
 [NEGATIVE_CONSTRAINTS]
+MERGE_ENTRIES_ACROSS_IDS: FALSE
+DROP_OR_OMIT_IDS: FALSE
 ALLOW_MARKDOWN: FALSE
 ALLOW_NOTES_OR_COMMENTARY: FALSE
 INJECT_TIMESTAMPS: FALSE
@@ -1831,8 +1827,8 @@ ${batchText}
 RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-}
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+  }
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
