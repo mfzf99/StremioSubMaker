@@ -1793,7 +1793,7 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Act as a professional subtitle translator. Translate into colloquial ${targetLabel} using "saya"/"awak" and appropriate English loanwords. Keep reactions culturally neutral and true to the scene's vibe.
+    const promptBody = `Act as a professional subtitle translator. Translate into colloquial ${targetLabel} using appropriate English loanwords sparingly. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
