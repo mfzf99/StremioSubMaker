@@ -2525,9 +2525,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // Strip ASS/SSA override tags
     cleaned = cleaned.replace(/\{\\[^}]*\}/g, '').trim();
 
-    // 🚨 PENYAPU SENGKANG: Auto tukar '--' yang AI lupa nak convert jadi '...'
-    // Guna flag 'gm' supaya dia check setiap baris dalam subtitle tu.
-    cleaned = cleaned.replace(/--\s*$/gm, '...');
+    // 🚨 PENYAPU SENGKANG (UPGRADED + SPACING): Tangkap semua jenis sengkang dan letak ' ... ' dengan jarak yang kemas
+    cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
     // Normalize line endings (CRLF → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
