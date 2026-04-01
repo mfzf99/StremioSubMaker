@@ -1804,9 +1804,9 @@ CRITICAL RULES:
 2. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
 3. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
 4. PRESERVE line breaks within each entry.
-5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" for 1st-person and "awak" for 2nd-person in standard dialogue.
+5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" and "awak" for general dialogue.
 6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech.
-7. Preserve any existing formatting tags and speaker dashes${contextInstruction}.
+7. PRESERVE any existing formatting tags and speaker dashes${contextInstruction}.
 8. Do NOT add acknowledgements, explanations, notes, or commentary.
 9. Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
 10. Do NOT include any timestamps/timecodes.
