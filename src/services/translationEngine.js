@@ -1794,7 +1794,7 @@ class TranslationEngine {
     }
 
     const contextInstruction = context?.previousMemory?.length > 0
-        ? '\n8. Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency.'
+        ? ' (CONTEXT: Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency)'
         : '';
 
     const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel}.
@@ -1806,7 +1806,7 @@ CRITICAL RULES:
 4. PRESERVE line breaks within each entry.
 5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" for 1st-person and "awak" for 2nd-person in standard dialogue.
 6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech.
-7. Preserve any existing formatting tags and speaker dashes.${contextInstruction}
+7. Preserve any existing formatting tags and speaker dashes${contextInstruction}.
 8. Do NOT add acknowledgements, explanations, notes, or commentary.
 9. Do NOT skip, drop, merge, or split any entries. NEVER output markdown.
 10. Do NOT include any timestamps/timecodes.
