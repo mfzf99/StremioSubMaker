@@ -1773,55 +1773,45 @@ class TranslationEngine {
    * Create translation prompt for XML-tagged batches
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
-    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = 'START';
-    let endId = 'END';
+    let startId = 'START';
+    let endId = 'END';
 
-    if (totalBatches === 1) {
-        // 🚀 LOGIK SINGLE BATCH: Laju & jimat memori bila hadam 1000+ baris serentak
-        // Intai ID pertama dari atas
-        const firstMatch = batchText.match(/<s id="([^"]+)">/);
-        if (firstMatch) startId = firstMatch[1];
+    if (totalBatches === 1) {
+        const firstMatch = batchText.match(/<s id="([^"]+)">/);
+        if (firstMatch) startId = firstMatch[1];
 
-        // Intai ID terakhir dari bawah (reverse scan)
-        const lastIndex = batchText.lastIndexOf('<s id="');
-        if (lastIndex !== -1) {
-            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
-            if (endMatch) endId = endMatch[1];
-        }
-    } else {
-        // 💉 PISAU BEDAH REGEX (NORMAL BATCH): Logik asal yang dah working, kita tak kacau!
-        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-        startId = idMatches.length > 0 ? idMatches[0] : 'START';
-        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
-    }
+        const lastIndex = batchText.lastIndexOf('<s id="');
+        if (lastIndex !== -1) {
+            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
+            if (endMatch) endId = endMatch[1];
+        }
+    } else {
+        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+        startId = idMatches.length > 0 ? idMatches[0] : 'START';
+        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+    }
 
-    // 🚨 ANTI-LAZY INJECTION: Khas untuk "ugut" AI bila hantar 1 fail segedebuk
-    const antiLazyWarning = totalBatches === 1 
-        ? '\n\n[CRITICAL_MANDATE]\nNO_SKIPPING: TRUE (You must translate EVERY SINGLE ID. Do NOT merge, summarize, or skip any lines. 1:1 translation is strictly enforced for this full file.)' 
-        : '';
+    const contextInstruction = context?.previousMemory?.length > 0
+        ? '\n8. Use the provided [PREVIOUS_TRANSLATION_MEMORY] to ensure continuity and consistency.'
+        : '';
 
-    const promptBody = `[SYSTEM_CONFIG]
-TASK: SUBTITLE_TRANSLATION
-TARGET_LANG: ${targetLabel}
-TONE: COLLOQUIAL
-LOANWORDS_POLICY: BALANCED (Condition: Retain English words ONLY if they are naturally assimilated into everyday Malaysian speech. Avoid hyper-formal dictionary terms if translating them makes the dialogue sound robotic, dramatic, or awkward)
-PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
 
-[EXECUTION_PARAMS]
-EXPECTED_COUNT: ${expectedCount}
-PROCESSING_RANGE: ID_${startId}_TO_ID_${endId} (STRICT_SEQUENTIAL)
-XML_PRESERVATION: TRUE (Format: <s id="N">translated_text</s>)
-TRANSLATE_ONLY_INNER_TEXT: TRUE
-PRESERVE_LINE_BREAKS: TRUE (CRITICAL: If the source text has multiple lines/newlines, the output MUST also have multiple lines. Do NOT merge sentences into a single line!)
-PRESERVE_SPEAKER_DASHES: START_OF_LINE_ONLY
-PRESERVE_FORMATTING_TAGS: TRUE${antiLazyWarning}
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag (Processing range: ID_${startId} to ID_${endId}).
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
+3. Return EXACTLY ${expectedCount} tagged entries. 1 input ID MUST equal 1 output ID.
+4. Keep line breaks within each entry (If source has multiple lines, output MUST have multiple lines).
+5. Maintain natural dialogue flow for ${targetLabel}. Use "saya" for 1st-person and "awak" for 2nd-person in standard dialogue.
+6. LOANWORDS: Retain English words ONLY if they naturally assimilate into everyday Malaysian speech. Avoid hyper-formal or robotic terms.
+7. Preserve any existing formatting tags and speaker dashes.${contextInstruction}
 
-[NEGATIVE_CONSTRAINTS]
-ALLOW_MARKDOWN: FALSE
-ALLOW_NOTES_OR_COMMENTARY: FALSE
-INJECT_TIMESTAMPS: FALSE
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do NOT skip, drop, merge, or split any entries. Strict 1:1 translation is enforced.
+NEVER output markdown.
+Do not include any timestamps/timecodes.
 
 <input>
 ${batchText}
@@ -1831,8 +1821,8 @@ ${batchText}
 RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-}
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+  }
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
