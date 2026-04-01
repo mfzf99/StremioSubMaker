@@ -1805,8 +1805,8 @@ class TranslationEngine {
     const promptBody = `[SYSTEM_CONFIG]
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
-TONE: COLLOQUIAL
-LOANWORDS_POLICY: SPARINGLY (Condition: Use English ONLY for words that Malay people commonly use in English naturally in everyday speech)
+TONE: NATURAL
+LOANWORDS_POLICY: SPARINGLY (Condition: Use English for words that Malay people commonly use in English naturally in everyday speech)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
