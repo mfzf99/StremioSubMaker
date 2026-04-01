@@ -1805,6 +1805,7 @@ class TranslationEngine {
 TASK: SUBTITLE_TRANSLATION
 TARGET_LANG: ${targetLabel}
 TONE: COLLOQUIAL
+LOANWORDS_POLICY: NATURAL_LOCALIZATION (Condition: Prioritize natural Malay. Retain English words ONLY if the direct Malay translation sounds hyper-formal, robotic, or ruins the emotional delivery)
 PRONOUN_POLICY: { 1ST_PERSON: "saya", 2ND_PERSON: "awak" } (Scope: General/Standard dialogue only)
 
 [EXECUTION_PARAMS]
