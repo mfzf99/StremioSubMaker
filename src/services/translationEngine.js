@@ -1793,12 +1793,7 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const contextInstruction = context?.previousMemory?.length > 0
-        ? '\n[CONTEXT PROVIDED]\nUse the [PREVIOUS_TRANSLATION_MEMORY] block below to ensure continuity.'
-        : '';
-
     const promptBody = `You are a professional subtitle translator. Translate into colloquial ${targetLabel} with appropriate English loanwords. Use "saya" and "awak" for general dialogue.
-${contextInstruction}
 
 CRITICAL RULES:
 1. Return EXACTLY ${expectedCount} tagged entries.
