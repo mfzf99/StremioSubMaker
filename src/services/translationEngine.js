@@ -2540,14 +2540,17 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
     cleaned = cleaned.replace(timecodePattern, '').trim();
 
-    // Strip ASS/SSA override tags that LLMs sometimes hallucinate into translated text
-    // Matches {\anX}, {\an8}, {\pos(x,y)}, {\fad(...)}, {\b1}, {\i1}, etc.
+    // Strip ASS/SSA override tags
     cleaned = cleaned.replace(/\{\\[^}]*\}/g, '').trim();
+
+    // 🚨 PENYAPU SENGKANG: Auto tukar '--' yang AI lupa nak convert jadi '...'
+    // Guna flag 'gm' supaya dia check setiap baris dalam subtitle tu.
+    cleaned = cleaned.replace(/--\s*$/gm, '...');
 
     // Normalize line endings (CRLF → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // For RTL targets, wrap lines with embedding markers so punctuation renders on the correct side
+    // For RTL targets
     if (this.isRtlTarget) {
       cleaned = wrapRtlText(cleaned);
     }
