@@ -1886,47 +1886,57 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
 
   /**
    * Parse XML-tagged translation response
-   * Matches <s id="N">text</s> patterns and recovers entries by ID
+   * Matches <s id="N">text</s> patterns and recovers entries by ID.
+   * [UPDATED]: Resilient against malformed quotes, self-closing tags, and truncated endings.
    */
   parseXmlBatchResponse(translatedText, expectedCount) {
     let cleaned = String(translatedText || '').trim();
-    // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
-        // AI menyambung terus dari pancing `<s id="` yang kita hantar (contoh dia mula dengan `1">...`).
-        // Tapi Regex kita perlukan tag penuh. Jadi kita cantumkan semula pancing tu kat depan teks!
-        if (!cleaned.startsWith('<s')) {
-            cleaned = '<s id="' + cleaned;
-        }
-    // Remove markdown code blocks
-    cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
 
-    // Strip any trailing content after the last </s> tag.
-    // AI models sometimes append commentary after the entries (e.g. "Hope this helps!").
-    // This ensures the $ anchor in our lookahead matches correctly for the final entry.
-    const lastClosingTag = cleaned.lastIndexOf('</s>');
-    if (lastClosingTag !== -1) {
-      cleaned = cleaned.slice(0, lastClosingTag + 4); // 4 = '</s>'.length
+    // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
+    // AI menyambung terus dari pancing `<s id="` yang kita hantar.
+    if (!cleaned.startsWith('<s')) {
+      cleaned = '<s id="' + cleaned;
     }
 
+    // Remove markdown code blocks (Guna hex \x60 untuk elak UI markdown pecah)
+    const mdRegex = new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi');
+    cleaned = cleaned.replace(mdRegex, '');
+    cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
+
+    // ⚠️ KITA BUANG KOD 'lastClosingTag' & 'slice' DI SINI ⚠️
+    // (Ini adalah punca utama ayat terakhir yang terputus dibuang terus dari memori)
+
     // Fix #15 (v1.4.38+): Remove any content between </s> and <s tags before parsing.
-    // AI models sometimes insert commentary (e.g. "Note: informal" or "Hope this helps!")
-    // between entries. The old lookahead-based regex failed to match entries followed by
-    // such content. By stripping inter-tag content first, we allow a simpler greedy regex.
     cleaned = cleaned.replace(/<\/s>\s*(?:(?!<s[\s>])[\s\S])*?(?=<s[\s>])/gi, '</s>\n');
 
     const entries = [];
-    // Simpler regex now that inter-tag content is stripped
-    const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
+    
+    // 1. REGEX BARU: Tangkap tag normal & tag terputus (takde </s>)
+    // Kebal terhadap single quote (id='1'), extra space, dan atribut haram.
+    const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|$)/gi;
     let match;
     while ((match = xmlPattern.exec(cleaned)) !== null) {
       const id = parseInt(match[1], 10);
       const text = match[2].trim();
+      
       // Fix #14: Accept entries with empty text (legitimate for "♪", sound effects, etc.)
-      // Only require a valid positive ID. Empty translations are preserved to avoid
-      // count mismatches in alignTranslatedEntries().
       if (id > 0) {
         entries.push({
           index: id - 1,
           text: text
+        });
+      }
+    }
+
+    // 2. REGEX TAMBAHAN: Tangkap tag senyap / self-closing (<s id="15"/>)
+    const selfClosingPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*\/>/gi;
+    while ((match = selfClosingPattern.exec(cleaned)) !== null) {
+      const id = parseInt(match[1], 10);
+      if (id > 0) {
+        // Tag self-closing bermaksud tiada teks, kita pulangkan string kosong
+        entries.push({
+          index: id - 1,
+          text: ""
         });
       }
     }
@@ -1944,7 +1954,6 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
 
     return deduped;
   }
-
 
   /**
    * Route to the correct batch content preparation method based on workflow
