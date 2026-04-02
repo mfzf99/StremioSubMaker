@@ -1796,9 +1796,11 @@ class TranslationEngine {
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
-2. FORMAT: <s id="N">translated text</s>. PRESERVE all original XML tags, line breaks, formatting, and speaker dashes.
-3. Translate ONLY text inside the tags. NO timestamps/timecodes.
-4. NO markdown, NO commentary, NO explanations. DO NOT skip, merge, or split entries.
+2. FORMAT: <s id="N">translated text</s>.
+3. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
+4. PRESERVE any speaker dashes (-).
+5. Translate ONLY text inside the tags. NO timestamps/timecodes.
+6. NO markdown, NO commentary. DO NOT skip or merge entries.
 
 <input>
 ${batchText}
