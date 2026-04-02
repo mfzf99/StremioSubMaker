@@ -1751,9 +1751,7 @@ class TranslationEngine {
     if (context?.previousMemory?.length > 0) {
       result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n\n';
       context.previousMemory.forEach((entry) => {
-        const cleanSource = entry.source.trim().replace(/\n+/g, ' ');
-        const cleanTrans = entry.translation.trim().replace(/\n+/g, ' ');
-        result += `Source: ${cleanSource}\nTranslation: ${cleanTrans}\n\n`;
+        // ... (kod memori sama) ...
       });
       result += '=== END OF MEMORY ===\n\n';
       result += '=== ENTRIES TO TRANSLATE ===\n\n';
@@ -1761,7 +1759,8 @@ class TranslationEngine {
 
     const xmlEntries = batch.map((entry, index) => {
       const num = index + 1;
-      const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+      // 🚨 UBAHAN DI SINI: Tukar line break kepada tag [br]
+      const cleanText = entry.text.trim().replace(/\n+/g, ' [br] ');
       return `<s id="${num}">${cleanText}</s>`;
     }).join('\n');
 
