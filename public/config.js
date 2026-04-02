@@ -10142,7 +10142,7 @@ Translate to {target_language}.`;
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
                 topK: 40, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
-                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 5; })(),
+                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 10; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
                 mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 1)) : 1; })()
             }
