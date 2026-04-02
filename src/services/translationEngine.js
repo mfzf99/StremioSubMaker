@@ -1796,7 +1796,7 @@ class TranslationEngine {
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
-2. FORMAT: <s id="N">translated text</s>.
+2. FORMAT: <s id="{id}">translated text</s>. PRESERVE the original ID numbers.
 3. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
 4. PRESERVE any speaker dashes (-).
 5. Translate ONLY text inside the tags. NO timestamps/timecodes.
