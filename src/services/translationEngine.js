@@ -2517,9 +2517,9 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     return deduped;
   }
 
-
   /**
    * Clean translated text (remove timecodes, normalize line endings)
+   * [UPDATED - FASA 2]: Added Auto-Closer for tags & Poisonous Character Sanitizer
    */
   cleanTranslatedText(text) {
     let cleaned = String(text || '').trim();
@@ -2536,6 +2536,24 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
     // 🚨 UBAHAN BARU 2: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
+
+    // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
+    // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
+    const formattingTags = ['i', 'b', 'u'];
+    formattingTags.forEach(tag => {
+      const openCount = (cleaned.match(new RegExp(`<${tag}>`, 'gi')) || []).length;
+      const closeCount = (cleaned.match(new RegExp(`</${tag}>`, 'gi')) || []).length;
+      
+      // Kalau tag pembuka lebih banyak dari penutup, kita tambah penutup
+      if (openCount > closeCount) {
+        cleaned += `</${tag}>`.repeat(openCount - closeCount);
+      }
+    });
+
+    // 🛡️ FASA 2 (B): PEMBERSIH KARAKTER BERACUN 🛡️
+    // Tukar simbol `<` yang digunakan secara rawak (contoh: A < B atau 10 < 20) 
+    // supaya tak disalah anggap sebagai permulaan tag XML oleh video player.
+    cleaned = cleaned.replace(/<(?=[\s\d])/g, '&lt;');
 
     // Normalize line endings (CRLF → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
