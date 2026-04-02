@@ -2294,6 +2294,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Build streaming progress payload from partial text
+   * [UPDATED - FASA 3]: Applied robust XML parsing for real-time truncated strings.
    */
   buildStreamingProgress(partialText, originalBatch = []) {
     if (!partialText) return null;
@@ -2305,7 +2306,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
     if (this.translationWorkflow === 'json') {
       const rawCleaned = String(partialText).trim()
-        .replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+        .replace(/```json\s*/gi, '').replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
       const extracted = this.extractJsonEntries(rawCleaned);
       if (extracted && extracted.length > 0) {
         parsedEntries = extracted.map(item => {
@@ -2324,18 +2325,45 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
           timecode: entry.timecode || ''
         }));
       } else if (this.translationWorkflow === 'xml') {
-        const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
+        // 🛡️ FASA 3: REGEX KEBAL UNTUK STREAMING 🛡️
+        let cleaned = partialText;
+        
+        // Pancing penyambung untuk streaming
+        if (!cleaned.startsWith('<s')) {
+          cleaned = '<s id="' + cleaned;
+        }
+        
+        // Buang markdown (guna hex untuk elak UI pecah)
+        const mdRegex = new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi');
+        cleaned = cleaned.replace(mdRegex, '');
+        cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
+
+        // Tangkap ayat normal & terputus (real-time typing)
+        // Kebal quote, space, dan atribut haram.
+        const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|$)/gi;
         let match;
-        while ((match = xmlPattern.exec(partialText)) !== null) {
+        while ((match = xmlPattern.exec(cleaned)) !== null) {
           const id = parseInt(match[1], 10);
           const text = match[2].trim();
+          
+          // Mesti ada teks kalau bukan tag senyap
           if (id > 0 && text) {
             parsedEntries.push({ index: id - 1, text });
           }
         }
+        
+        // Tangkap tag senyap / self-closing (<s id="15"/>)
+        const selfClosingPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*\/>/gi;
+        while ((match = selfClosingPattern.exec(cleaned)) !== null) {
+          const id = parseInt(match[1], 10);
+          if (id > 0) {
+            // Teks kosong dibenarkan untuk tag self-closing
+            parsedEntries.push({ index: id - 1, text: "" });
+          }
+        }
       } else {
         let cleaned = partialText.trim();
-        cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
+        cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi'), '');
         // Strip echoed context sections
         cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
         cleaned = cleaned.replace(/===\s*ENTRIES TO TRANSLATE[^=]*===/gi, '');
@@ -2366,15 +2394,15 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
             parsedEntries.push({ index: currentNum - 1, text });
           }
         }
-
-        // Deduplicate by index (keep first occurrence)
-        const seen = new Set();
-        parsedEntries = parsedEntries.filter(entry => {
-          if (seen.has(entry.index)) return false;
-          seen.add(entry.index);
-          return true;
-        });
       }
+      
+      // Deduplicate by index (keep first occurrence)
+      const seen = new Set();
+      parsedEntries = parsedEntries.filter(entry => {
+        if (seen.has(entry.index)) return false;
+        seen.add(entry.index);
+        return true;
+      });
     }
 
     if (!parsedEntries || parsedEntries.length === 0) {
@@ -2385,6 +2413,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     for (const entry of parsedEntries) {
       const original = originalBatch[entry.index];
       if (!original) continue;
+      
+      // Bersihkan teks secara real-time
       const cleanedText = this.cleanTranslatedText(entry.text || original.text);
       const timecode = (this.sendTimestampsToAI && entry.timecode) ? entry.timecode : original.timecode;
       merged.push({
