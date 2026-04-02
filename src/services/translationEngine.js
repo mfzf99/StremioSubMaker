@@ -1792,7 +1792,7 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Translate into colloquial ${targetLabel}. Use "saya" and "awak" for general dialogue.
+    const promptBody = `You are a professional subtitle translator. Translate into natural, colloquial ${targetLabel} with appropriate English loanwords, using "saya" and "awak" for general dialogue. Capture the exact vibe of the characters and the mood of the scene. Ensure all exclamations, slang, and reactions remain culturally neutral and logically fit the source material's context.
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
