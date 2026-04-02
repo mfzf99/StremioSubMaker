@@ -1792,7 +1792,7 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Translate into natural, colloquial ${targetLabel} using appropriate English loanwords sparingly. Use "saya" and "awak" for general dialogue.
+    const promptBody = `Translate into appropriate colloquialisms for ${targetLabel}.
     
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
