@@ -2522,7 +2522,10 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // Strip ASS/SSA override tags
     cleaned = cleaned.replace(/\{\\[^}]*\}/g, '').trim();
 
-    // 🚨 PENYAPU SENGKANG (UPGRADED + SPACING): Tangkap semua jenis sengkang dan letak ' ... ' dengan jarak yang kemas
+    // 🚨 UBAHAN BARU 1: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
+    cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
+
+    // 🚨 UBAHAN BARU 2: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
     // Normalize line endings (CRLF → LF)
