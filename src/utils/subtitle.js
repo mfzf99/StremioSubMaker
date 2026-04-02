@@ -321,17 +321,82 @@ function appendHiddenInformationalNote(srtContent, note = DEFAULT_INFO_SUBTITLE_
 }
 
 /**
- * Convert parsed subtitle entries back to SRT format
+ * Convert parsed subtitle entries back to SRT format with SMART PADDING
  * @param {Array} entries - Array of subtitle entries
  * @returns {string} - SRT formatted content
  */
 function toSRT(entries) {
-  return entries
-    .map(entry => {
-      // Ensure text uses only LF (\n), not CRLF (\r\n)
-      // This prevents extra spacing issues on Linux
+  if (!Array.isArray(entries)) return '';
+
+  // --- HELPER 1: Tukar String "HH:MM:SS,mmm" ke Milisaat (Nombor) ---
+  const timeToMs = (timeStr) => {
+    const match = /^(\d+):(\d{2}):(\d{2}),(\d{3})$/.exec(timeStr.trim());
+    if (!match) return 0;
+    const [_, h, m, s, ms] = match;
+    return (parseInt(h, 10) * 3600 + parseInt(m, 10) * 60 + parseInt(s, 10)) * 1000 + parseInt(ms, 10);
+  };
+
+  // --- HELPER 2: Tukar Milisaat (Nombor) balik ke "HH:MM:SS,mmm" ---
+  const msToTime = (ms) => {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const milli = Math.floor(ms % 1000);
+    const pad = (num, size) => String(num).padStart(size, '0');
+    return `${pad(h, 2)}:${pad(m, 2)}:${pad(s, 2)},${pad(milli, 3)}`;
+  };
+
+  // Tapis siap-siap supaya senang cermin depan berfungsi
+  const validEntries = entries.filter(e => e && typeof e === 'object' && e.id && e.timecode && e.text);
+
+  return validEntries
+    .map((entry, index) => {
+      // Normalisasi teks asal (Penting untuk Linux spacing)
       const normalizedText = entry.text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      return `${entry.id}\n${entry.timecode}\n${normalizedText}`;
+      let timecode = entry.timecode;
+
+      // 🚨 TRIK DEVELOPER: SMART PADDING (Pencegahan Pelanggaran) 🚨
+      try {
+        const parts = timecode.split('-->');
+        if (parts.length === 2) {
+          const startStr = parts[0].trim();
+          const endStr = parts[1].trim();
+
+          const startMs = timeToMs(startStr);
+          let endMs = timeToMs(endStr);
+
+          // Sasaran durasi minimum: 1.2 saat (1200ms)
+          const minDuration = 1200;
+
+          // Kalau durasi asal kurang dari 1.2 saat
+          if (startMs > 0 && endMs > 0 && (endMs - startMs) < minDuration) {
+            let proposedEndMs = startMs + minDuration;
+
+            // TENGOK CERMIN DEPAN: Semak ayat seterusnya
+            if (index < validEntries.length - 1) {
+              const nextParts = validEntries[index + 1].timecode.split('-->');
+              if (nextParts.length === 2) {
+                const nextStartMs = timeToMs(nextParts[0].trim());
+                
+                // BREK KECEMASAN: Kalau bertembung, jarakkan 100ms
+                if (proposedEndMs >= nextStartMs) {
+                  // Pastikan tak lebih pendek dari masa asal
+                  proposedEndMs = Math.max(endMs, nextStartMs - 100); 
+                }
+              }
+            }
+
+            // Kemaskini timecode baru kalau ada penambahan masa
+            if (proposedEndMs > endMs) {
+              timecode = `${startStr} --> ${msToTime(proposedEndMs)}`;
+            }
+          }
+        }
+      } catch (err) {
+        // Kalau apa-apa error masa kira, dia relaks je guna timecode asal
+      }
+
+      return `${entry.id}\n${timecode}\n${normalizedText}`;
     })
     .join('\n\n') + '\n';
 }
@@ -372,7 +437,7 @@ function srtDurationMs(tc) {
 /**
  * Convert two aligned SRT strings into a dual-language WebVTT output
  * - Merges both languages into a single cue per entry (line break separated)
- *   for maximum cross-player compatibility (Android, Android TV, desktop)
+ * for maximum cross-player compatibility (Android, Android TV, desktop)
  * - Order controls which language appears on the first line
  */
 function srtPairToWebVTT(sourceSrt, targetSrt, order = 'source-top', placement = 'stacked', options = {}) {
