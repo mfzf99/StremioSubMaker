@@ -2286,10 +2286,14 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Prefix prompt with batch marker so the model knows which chunk it is handling
+   * [UPDATED]: Added Safety Mantra at the absolute top to prevent PROHIBITED_CONTENT
    */
   addBatchHeader(prompt, batchIndex, totalBatches) {
+    const safetyMantra = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTITIOUS\n\n`;
     const header = `BATCH ${batchIndex + 1}/${totalBatches}`;
-    return `${header}\n\n${prompt}`;
+    
+    // Susunan baru: MANTERA -> BATCH X/Y -> PROMPT
+    return `${safetyMantra}${header}\n\n${prompt}`;
   }
 
   /**
