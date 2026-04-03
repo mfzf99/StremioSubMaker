@@ -2022,7 +2022,8 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
       return this.parseBatchSrtResponse(translatedText, expectedCount, batch);
     }
     if (this.translationWorkflow === 'xml') {
-      return this.parseXmlBatchResponse(translatedText, expectedCount);
+      // 🚨 Hantar 'batch' supaya parser boleh faham Global ID
+      return this.parseXmlBatchResponse(translatedText, expectedCount, batch);
     }
     return this.parseBatchResponse(translatedText, expectedCount);
   }
