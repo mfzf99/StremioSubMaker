@@ -1812,12 +1812,12 @@ class TranslationEngine {
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
-2. FORMAT: <s id="{id}">translated text</s>. PRESERVE the original ID numbers.
-3. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
-4. PRESERVE any speaker dashes (-).
-5. Translate ONLY text inside the tags. NO timestamps/timecodes.
-6. NO markdown, NO commentary. DO NOT skip or merge entries. DO NOT combine tags.
-7. TRANSLATE STRICTLY LINE-BY-LINE. If a sentence is split across multiple IDs, translate each part exactly in its own ID. NEVER merge or combine text from different IDs.
+2. DO NOT skip or merge entries. DO NOT combine tags.
+3. FORMAT: <s id="{id}">translated text</s>. PRESERVE the original ID numbers.
+4. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
+5. PRESERVE any speaker dashes (-).
+6. Translate ONLY text inside the tags.
+7. NO markdown, NO commentary. NO timestamps/timecodes.
 
 <input>
 ${batchText}
