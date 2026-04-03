@@ -1751,15 +1751,17 @@ class TranslationEngine {
     if (context?.previousMemory?.length > 0) {
       result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n\n';
       context.previousMemory.forEach((entry) => {
-        // ... (kod memori sama) ...
+        if (entry.translation) {
+           result += `<s id="${entry.id}">${entry.translation}</s>\n`;
+        }
       });
       result += '=== END OF MEMORY ===\n\n';
       result += '=== ENTRIES TO TRANSLATE ===\n\n';
     }
 
-    const xmlEntries = batch.map((entry, index) => {
-      const num = index + 1;
-      // 🚨 UBAHAN DI SINI: Tukar line break kepada tag [br]
+    const xmlEntries = batch.map((entry) => {
+      // 🚨 PENGGUNAAN GLOBAL ID: Jangan reset ke 1,2,3. Guna ID asal!
+      const num = entry.id; 
       const cleanText = entry.text.trim().replace(/\n+/g, ' [br] ');
       return `<s id="${num}">${cleanText}</s>`;
     }).join('\n');
