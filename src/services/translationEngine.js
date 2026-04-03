@@ -1808,7 +1808,7 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Translate into natural, fluent ${targetLabel} that reflects authentic spoken dialogue. Naturally integrate common English loanwords sparingly. Use "saya" and "awak" for general dialogue. Maintain a polite tone and strictly avoid any profanity, vulgarity, or aggressive slang.
+    const promptBody = `Translate into natural, fluent ${targetLabel} that reflects authentic spoken dialogue. Naturally integrate common English loanwords sparingly. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES:
 1. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
