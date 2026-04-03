@@ -5191,68 +5191,83 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     const translationStats = translationEngine?.translationStats || {};
 
     log.debug(() => '[Translation] Background translation completed successfully');
+
     // 📱 INJECT PENGGERA TELEGRAM (V3 GOD TIER - FINAL FIX)
     try {
-      // 1. Ekstrak Tajuk Movie (FIX: Cari guna sourceFileId dahulu ikut arkitektur DEV)
-      const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
-      const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
-      const movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
-
-      // 2. Kenalpasti Sumber
-      let sourceProv = 'OpenSubtitles (Auth)';
-      if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
-      else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
-      else if (sourceFileId.startsWith('v3_')) sourceProv = 'OpenSubtitles V3';
-      else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
-      else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
-      
-      // 3. Kira Masa (Stopwatch)
-      const tStatus = translationStatus.get(runtimeKey) || {};
-      const startTime = tStatus.startedAt || Date.now();
-      const durationSec = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-      const mins = Math.floor(durationSec / 60);
-      const secs = durationSec % 60;
-      const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-
-      // 4. Kiraan Kebal
-      const stats = translationEngine?.translationStats || {};
-      const finalTotal = stats.totalEntries || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
-      const success = stats.successfulEntries || finalTotal;
-      const mismatch = stats.mismatchRetries || 0;
-      const failed = Math.max(0, finalTotal - success);
-      
-      // FIX: Cari nilai batch size dari engine, atau fallback ke 40 (bukan 10)
-      const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 40;
-      const totalBatches = stats.totalBatches || Math.ceil(finalTotal / currentBatchSize);
-
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
-      const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
-      
-      // 5. Mesej Telegram (FIX: Tukar ke HTML Mode supaya kebal simbol pelik)
-      const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
-                      `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
-                      `📥 <b>Source:</b> ${sourceProv}\n\n` +
-                      `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH AUDIT ⚠️'}\n` +
-                      `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
-                      `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
-                      `✅ <b>Successful:</b> ${success}\n` +
-                      `❌ <b>Failed:</b> ${failed}\n` +
-                      `🔄 <b>Mismatch Retries:</b> ${mismatch}\n\n` +
-                      `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
-                      `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
-                      `🧠 <b>Engine:</b> ${effectiveModel || 'gemini-3.1-flash-lite-preview'}\n\n` +
-                      `🎉 <b>Ready to stream!</b>`;
-      
-      // 6. Hantar guna Native Fetch (parse_mode: 'HTML')
-      fetch(teleUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
-      }).catch(e => log.debug(() => `[Telegram] Gagal: ${e.message}`));
 
+      // Semak kalau token wujud, kalau tak ada, tak payah buang masa
+      if (botToken && chatId) {
+        // 1. Ekstrak Tajuk Movie & Sanitize (Kebal Telegram HTML)
+        const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
+        const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
+        let movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
+        
+        // 🛡️ PENAWAR HTML: Tukar simbol bahaya supaya Telegram tak reject
+        movieTitle = movieTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // 2. Kenalpasti Sumber
+        let sourceProv = 'OpenSubtitles (Auth)';
+        if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
+        else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
+        else if (sourceFileId.startsWith('v3_')) sourceProv = 'OpenSubtitles V3';
+        else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
+        else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
+        else if (sourceFileId.startsWith('opensubtitles_')) sourceProv = 'OpenSubtitles';
+        
+        // 3. Kira Masa (Stopwatch) yang Tepat
+        const tStatus = translationStatus.get(runtimeKey) || {};
+        let timeTaken = 'N/A';
+        if (tStatus.startedAt) {
+          const durationSec = Math.max(1, Math.round((Date.now() - tStatus.startedAt) / 1000));
+          const mins = Math.floor(durationSec / 60);
+          const secs = durationSec % 60;
+          timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        }
+
+        // 4. Integrasi Statistik Sebenar (Sync dengan translationEngine.js)
+        const stats = translationEngine?.translationStats || {};
+        
+        const finalTotal = stats.entryCount || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
+        const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 100;
+        const totalBatches = stats.batchCount || Math.ceil(finalTotal / currentBatchSize);
+
+        // Baca laporan Mismatch & Recovery dari enjin
+        const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
+        const missing = stats.missingEntries || 0;
+        const recovered = stats.recoveredEntries || 0;
+        
+        // Kiraan sukses dan gagal muktamad
+        const failed = Math.max(0, missing - recovered);
+        const success = finalTotal - failed;
+
+        const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        
+        // 5. Mesej Telegram (Kemaskan Format)
+        const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
+                        `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
+                        `📥 <b>Source:</b> ${sourceProv}\n\n` +
+                        `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH MISSING LINES ⚠️'}\n` +
+                        `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
+                        `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
+                        `✅ <b>Successful:</b> ${success}\n` +
+                        `❌ <b>Failed:</b> ${failed}\n` +
+                        `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n\n` +
+                        `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
+                        `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
+                        `🧠 <b>Engine:</b> ${effectiveModel || 'gemini-3.1-flash-lite-preview'}\n\n` +
+                        `🎉 <b>Ready to stream!</b>`;
+        
+        // 6. Hantar guna Native Fetch (parse_mode: 'HTML')
+        fetch(teleUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
+        }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message}`));
+      }
     } catch (teleErr) {
-      log.debug(() => `[Telegram] Ralat: ${teleErr.message}`);
+      log.debug(() => `[Telegram] Ralat dalaman: ${teleErr.message}`);
     }
     
     // Cache the translation (disk-only, permanent by default)
