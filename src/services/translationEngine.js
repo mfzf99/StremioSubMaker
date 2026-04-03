@@ -1800,7 +1800,7 @@ CRITICAL RULES:
 3. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
 4. PRESERVE any speaker dashes (-).
 5. Translate ONLY text inside the tags. NO timestamps/timecodes.
-6. NO markdown, NO commentary. DO NOT skip or merge entries.
+6. NO markdown, NO commentary. DO NOT skip or merge entries. DO NOT combine tags.
 
 <input>
 ${batchText}
