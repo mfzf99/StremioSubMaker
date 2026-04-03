@@ -1817,6 +1817,7 @@ CRITICAL RULES:
 4. PRESERVE any speaker dashes (-).
 5. Translate ONLY text inside the tags. NO timestamps/timecodes.
 6. NO markdown, NO commentary. DO NOT skip or merge entries. DO NOT combine tags.
+7. TRANSLATE STRICTLY LINE-BY-LINE. If a sentence is split across multiple IDs, translate each part exactly in its own ID. NEVER merge or combine text from different IDs.
 
 <input>
 ${batchText}
