@@ -1773,23 +1773,29 @@ class TranslationEngine {
   /**
    * Create translation prompt for XML-tagged batches
    */
-    createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
+  createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
     let startId = 'START';
     let endId = 'END';
 
+    // 🚨 Halang baca ID dari memori, fokus pada teks sasaran sahaja
+    let targetSection = batchText;
+    if (batchText.includes('=== ENTRIES TO TRANSLATE ===')) {
+      targetSection = batchText.split('=== ENTRIES TO TRANSLATE ===')[1];
+    }
+
     if (totalBatches === 1) {
-        const firstMatch = batchText.match(/<s id="([^"]+)">/);
+        const firstMatch = targetSection.match(/<s id="([^"]+)">/);
         if (firstMatch) startId = firstMatch[1];
 
-        const lastIndex = batchText.lastIndexOf('<s id="');
+        const lastIndex = targetSection.lastIndexOf('<s id="');
         if (lastIndex !== -1) {
-            const endMatch = batchText.substring(lastIndex).match(/<s id="([^"]+)">/);
+            const endMatch = targetSection.substring(lastIndex).match(/<s id="([^"]+)">/);
             if (endMatch) endId = endMatch[1];
         }
     } else {
-        const idMatches = [...batchText.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+        const idMatches = [...targetSection.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
         startId = idMatches.length > 0 ? idMatches[0] : 'START';
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
