@@ -5192,12 +5192,11 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V3 GOD TIER - FINAL FIX)
+    // 📱 INJECT PENGGERA TELEGRAM (V4 GOD TIER - DYNAMIC DIAGNOSTICS)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
 
-      // Semak kalau token wujud, kalau tak ada, tak payah buang masa
       if (botToken && chatId) {
         // 1. Ekstrak Tajuk Movie & Sanitize (Kebal Telegram HTML)
         const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
@@ -5237,14 +5236,55 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
         const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
         const missing = stats.missingEntries || 0;
         const recovered = stats.recoveredEntries || 0;
-        
-        // Kiraan sukses dan gagal muktamad
         const failed = Math.max(0, missing - recovered);
         const success = finalTotal - failed;
 
+        // ====================================================================
+        // 5. 🕵️‍♂️ DYNAMIC ADVANCED DIAGNOSTICS (Hanya wujud jika ada kecemasan)
+        // ====================================================================
+        let advancedStats = '';
+        
+        // A. Key Rotations / Rate Limits (Kesan kalau Google blok API)
+        if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
+            advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
+        }
+        
+        // B. Error Types (Kesan penyakit AI)
+        if (stats.errorTypes && stats.errorTypes.length > 0) {
+            advancedStats += `🦠 <b>AI Errors Handled:</b> ${stats.errorTypes.join(', ')}\n`;
+        }
+        
+        // C. Fallback Provider (Kalau Gemini gagal, siapa tolong?)
+        if (stats.usedSecondaryProvider) {
+            advancedStats += `🛟 <b>Fallback Triggered:</b> ${stats.secondaryProviderName || 'Unknown'}\n`;
+            if (stats.primaryFailureReason) {
+                // Potong mesej error supaya Telegram tak nampak semak
+                const shortReason = stats.primaryFailureReason.length > 50 ? stats.primaryFailureReason.substring(0, 50) + '...' : stats.primaryFailureReason;
+                advancedStats += `   └ <i>Reason: ${shortReason}</i>\n`;
+            }
+        }
+        
+        // D. Format Fallback (Penyelamat Struktur JSON)
+        if (stats.jsonXmlFallback) {
+            advancedStats += `🛠️ <b>Format Rescue:</b> JSON to XML Fallback Activated\n`;
+        }
+        
+        // E. Mode Operasi Spesifik
+        if (stats.parallelBatchesUsed) {
+            advancedStats += `⚡ <b>Execution:</b> Parallel Batches\n`;
+        } else if (stats.singleBatchMode) {
+            advancedStats += `📦 <b>Execution:</b> Single Batch Mode\n`;
+        }
+
+        // Kalau ada maklumat kecemasan, kita lekatkan sebagai satu seksyen
+        let diagnosticsSection = '';
+        if (advancedStats !== '') {
+            diagnosticsSection = `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}`;
+        }
+
         const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
         
-        // 5. Mesej Telegram (Kemaskan Format)
+        // 6. Mesej Telegram (Kemaskan Format + Dynamic Section)
         const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
                         `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
                         `📥 <b>Source:</b> ${sourceProv}\n\n` +
@@ -5253,13 +5293,14 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                         `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
                         `✅ <b>Successful:</b> ${success}\n` +
                         `❌ <b>Failed:</b> ${failed}\n` +
-                        `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n\n` +
+                        `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n` +
+                        `${diagnosticsSection}\n` + // <-- SEKSYEN DINAMIK MASUK SINI
                         `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
                         `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
                         `🧠 <b>Engine:</b> ${effectiveModel || 'gemini-3.1-flash-lite-preview'}\n\n` +
                         `🎉 <b>Ready to stream!</b>`;
         
-        // 6. Hantar guna Native Fetch (parse_mode: 'HTML')
+        // 7. Hantar guna Native Fetch (parse_mode: 'HTML')
         fetch(teleUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
