@@ -2334,12 +2334,22 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
   /**
    * Build streaming progress payload from partial text
    * [UPDATED - FASA 3]: Applied robust XML parsing for real-time truncated strings.
+   * [GLOBAL ID FIX]: Maps global IDs back to local batch indices for streaming progress.
    */
   buildStreamingProgress(partialText, originalBatch = []) {
     if (!partialText) return null;
 
     const batchStartId = originalBatch?.[0]?.id || 1;
     const batchEndId = originalBatch?.[originalBatch.length - 1]?.id || batchStartId;
+
+    // 🛡️ PETA GLOBAL ID KE INDEX TEMPATAN 🛡️
+    // Digunakan untuk padankan ID sebenar dari filem (contoh: 101) ke index array batch ini (0-99)
+    const validIds = new Map();
+    if (originalBatch && originalBatch.length > 0) {
+      originalBatch.forEach((entry, idx) => {
+        validIds.set(entry.id, idx);
+      });
+    }
 
     let parsedEntries = [];
 
@@ -2387,7 +2397,18 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
           
           // Mesti ada teks kalau bukan tag senyap
           if (id > 0 && text) {
-            parsedEntries.push({ index: id - 1, text });
+            let localIndex = id - 1; // Default/Fallback
+
+            // Padankan dengan Peta Global ID
+            if (validIds.size > 0) {
+              if (validIds.has(id)) {
+                localIndex = validIds.get(id); // Ambil index sebenar dari batch ini
+              } else {
+                continue; // Abaikan ID halusinasi yang dicipta AI
+              }
+            }
+
+            parsedEntries.push({ index: localIndex, text });
           }
         }
         
@@ -2396,8 +2417,19 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
         while ((match = selfClosingPattern.exec(cleaned)) !== null) {
           const id = parseInt(match[1], 10);
           if (id > 0) {
+            let localIndex = id - 1;
+
+            // Padankan dengan Peta Global ID
+            if (validIds.size > 0) {
+              if (validIds.has(id)) {
+                localIndex = validIds.get(id);
+              } else {
+                continue; // Abaikan ID halusinasi
+              }
+            }
+
             // Teks kosong dibenarkan untuk tag self-closing
-            parsedEntries.push({ index: id - 1, text: "" });
+            parsedEntries.push({ index: localIndex, text: "" });
           }
         }
       } else {
