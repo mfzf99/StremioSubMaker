@@ -1890,8 +1890,9 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
    * Parse XML-tagged translation response
    * Matches <s id="N">text</s> patterns and recovers entries by ID.
    * [UPDATED]: Resilient against malformed quotes, self-closing tags, and truncated endings.
+   * [GLOBAL ID FIX]: Maps global IDs back to local batch indices and filters AI hallucinations.
    */
-  parseXmlBatchResponse(translatedText, expectedCount) {
+  parseXmlBatchResponse(translatedText, expectedCount, batch = []) {
     let cleaned = String(translatedText || '').trim();
 
     // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
@@ -1911,6 +1912,15 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     // Fix #15 (v1.4.38+): Remove any content between </s> and <s tags before parsing.
     cleaned = cleaned.replace(/<\/s>\s*(?:(?!<s[\s>])[\s\S])*?(?=<s[\s>])/gi, '</s>\n');
 
+    // 🛡️ PETA GLOBAL ID KE INDEX TEMPATAN 🛡️
+    // Petakan ID sebenar dari filem ke index tempatan (0 hingga 99)
+    const validIds = new Map();
+    if (batch && batch.length > 0) {
+      batch.forEach((entry, idx) => {
+        validIds.set(entry.id, idx);
+      });
+    }
+
     const entries = [];
     
     // 1. REGEX BARU: Tangkap tag normal & tag terputus (takde </s>)
@@ -1923,8 +1933,19 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
       
       // Fix #14: Accept entries with empty text (legitimate for "♪", sound effects, etc.)
       if (id > 0) {
+        let localIndex = id - 1; // Fallback jika map kosong
+
+        if (validIds.size > 0) {
+          if (validIds.has(id)) {
+            localIndex = validIds.get(id); // Dapatkan kedudukan sebenar dari peta
+          } else {
+            // 🚨 PISAU PEMOTONG: Buang ID halusinasi yang AI cipta!
+            continue; 
+          }
+        }
+
         entries.push({
-          index: id - 1,
+          index: localIndex,
           text: text
         });
       }
@@ -1935,9 +1956,20 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     while ((match = selfClosingPattern.exec(cleaned)) !== null) {
       const id = parseInt(match[1], 10);
       if (id > 0) {
+        let localIndex = id - 1;
+
+        if (validIds.size > 0) {
+          if (validIds.has(id)) {
+            localIndex = validIds.get(id);
+          } else {
+            // 🚨 PISAU PEMOTONG: Buang ID halusinasi!
+            continue; 
+          }
+        }
+
         // Tag self-closing bermaksud tiada teks, kita pulangkan string kosong
         entries.push({
-          index: id - 1,
+          index: localIndex,
           text: ""
         });
       }
@@ -1956,7 +1988,7 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
 
     return deduped;
   }
-
+  
   /**
    * Route to the correct batch content preparation method based on workflow
    */
