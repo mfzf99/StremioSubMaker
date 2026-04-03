@@ -1234,10 +1234,18 @@ class TranslationEngine {
       }
 
       // Fix #7: Build context for second half from first half's translations
-      // This ensures coherence is maintained across auto-chunked batches
+      // [UPDATED]: Added previousMemory mapping for XML workflow to prevent Amnesia Auto-Chunking
       const contextCount = Math.min(this.contextSize, firstHalf.length);
       const secondHalfContext = this.enableBatchContext && contextCount > 0 ? {
-        surroundingOriginal: firstHalf.slice(-contextCount)
+        surroundingOriginal: firstHalf.slice(-contextCount),
+        previousMemory: firstHalf.slice(-contextCount).map((orig, i) => {
+          const transIdx = firstTranslated.length - contextCount + i;
+          return {
+            id: orig.id,
+            source: orig.text,
+            translation: firstTranslated[transIdx] ? firstTranslated[transIdx].text : ''
+          };
+        })
       } : null;
 
       const secondTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches, secondHalfContext, opts);
