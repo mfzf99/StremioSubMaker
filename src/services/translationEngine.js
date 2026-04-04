@@ -1814,8 +1814,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 1. STRICT 1-TO-1 MAPPING: Translation for ID_X MUST contain ONLY the meaning of input ID_X. NEVER pull meaning from ID_X+1 into ID_X.
 2. TRANSLATE FRAGMENTS AS FRAGMENTS: If input is incomplete, translate it as incomplete. DO NOT complete it using words from the next line.
 3. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE. Never duplicate or split an ID.
-4. OUTPUT IDs MUST MATCH INPUT IDs EXACTLY. If input starts at ID_247, output starts at ID_247.
-5. Output EXACTLY ${expectedCount} entries. NEVER fabricate content to fill missing entries.
+4. OUTPUT IDs MUST MATCH INPUT IDs EXACTLY. If input starts at ID_${startId}, output starts at ID_${startId}.
+5. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate content to fill missing entries.
 6. FORMAT: <s id="[original_id]">translated text</s>.
 7. [br] tags must remain at the EXACT same position within the translated text as in the source.
 8. Translate ONLY text inside tags. NO markdown, NO commentary.
