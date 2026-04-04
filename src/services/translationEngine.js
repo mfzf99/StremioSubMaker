@@ -1815,9 +1815,9 @@ CRITICAL RULES:
 2. FORMAT: <s id="{id}">translated text</s>. PRESERVE the original ID numbers.
 3. DO NOT remove or modify the [br] tags. Leave them exactly where they belong in the sentence.
 4. PRESERVE any speaker dashes (-).
-5. Translate ONLY text inside the tags. NO timestamps/timecodes.
-6. NO markdown, NO commentary. DO NOT skip or merge entries. DO NOT combine tags.
-7. TRANSLATE STRICTLY LINE-BY-LINE. If a sentence is split across multiple IDs, translate each part exactly in its own ID. NEVER merge or combine text from different IDs.
+5. Translate ONLY the text inside the tags. NO timestamps or timecodes.
+6. NO markdown and NO commentary. Output ONLY the valid XML tags.
+7. TRANSLATE STRICTLY LINE-BY-LINE. DO NOT skip, merge, or combine entries. If a sentence is split across multiple IDs, translate each part exactly in its own ID.
 
 <input>
 ${batchText}
