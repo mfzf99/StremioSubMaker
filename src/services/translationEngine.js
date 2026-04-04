@@ -1811,13 +1811,15 @@ class TranslationEngine {
     const promptBody = `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
-1. STRICT 1-TO-1 MAPPING: The translation for ID_X MUST ONLY contain the exact meaning of input ID_X. NEVER shift the meaning of ID_X+1 into ID_X.
-2. TRANSLATE FRAGMENTS AS FRAGMENTS: If an input line is an incomplete sentence (a fragment), translate it EXACTLY as an incomplete sentence. DO NOT "complete" it by stealing words from the next line.
-3. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}).
-4. FORMAT: <s id="{id}">translated text</s>. PRESERVE the exact original ID numbers.
-5. PRESERVE ALL [br] tags and speaker dashes (-) exactly where they belong.
-6. Translate ONLY the text inside the tags. NO markdown, NO commentary.
-7. NEVER MERGE OR SKIP ENTRIES. If you merge lines in your head, you will ruin the subtitle synchronization.
+1. STRICT 1-TO-1 MAPPING: Translation for ID_X MUST contain ONLY the meaning of input ID_X. NEVER pull meaning from ID_X+1 into ID_X.
+2. TRANSLATE FRAGMENTS AS FRAGMENTS: If input is incomplete, translate it as incomplete. DO NOT complete it using words from the next line.
+3. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE. Never duplicate or split an ID.
+4. OUTPUT IDs MUST MATCH INPUT IDs EXACTLY. If input starts at ID_247, output starts at ID_247.
+5. Output EXACTLY ${expectedCount} entries. NEVER fabricate content to fill missing entries.
+6. FORMAT: <s id="[original_id]">translated text</s>.
+7. [br] tags must remain at the EXACT same position within the translated text as in the source.
+8. Translate ONLY text inside tags. NO markdown, NO commentary.
+9. NEVER MERGE OR SKIP ENTRIES. Merging will desync every subtitle below it permanently.
 
 <input>
 ${batchText}
