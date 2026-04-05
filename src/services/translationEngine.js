@@ -2341,7 +2341,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
    */
   addBatchHeader(prompt, batchIndex, totalBatches) {
     const header = `BATCH ${batchIndex + 1}/${totalBatches}`;
-    return ${header}\n\n${prompt};
+    return `${header}\n\n${prompt}`;
   }
 
   /**
