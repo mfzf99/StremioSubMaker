@@ -2340,7 +2340,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
    * Prefix prompt with batch marker so the model knows which chunk it is handling
    */
   addBatchHeader(prompt, batchIndex, totalBatches) {
-    const header = BATCH ${batchIndex + 1}/${totalBatches};
+    const header = `BATCH ${batchIndex + 1}/${totalBatches}`;
     return ${header}\n\n${prompt};
   }
 
