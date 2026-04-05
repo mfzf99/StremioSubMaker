@@ -1808,7 +1808,7 @@ const modifiedPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW 
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Strictly avoid any profanity, vulgarity, or aggressive slang.
+    const promptBody = `Translate into conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 1. STRICT 1-TO-1 MAPPING: Translation for ID_X MUST contain ONLY the meaning of input ID_X. NEVER pull meaning from ID_X+1 into ID_X.
