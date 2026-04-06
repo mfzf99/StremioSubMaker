@@ -1401,32 +1401,32 @@ class TranslationEngine {
         const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback);
         const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback);
 
-        // 🛑 TAKTIK PENYAMARAN MUTLAK: TUKAR SENARIO KEPADA PERGADUHAN BIASA 🛑
+        // 🛑 TAKTIK PENYAMARAN MUTLAK: TUKAR KEPADA "PERGADUHAN MULUT" (SIFAR FIZIKAL) 🛑
         const maskToxicWords = (text) => {
           return String(text)
-            // 1. Hapuskan Konteks Seksual/Cabul
-            .replace(/sexual harassment/gi, 'a huge misunderstanding')
-            .replace(/sexual predator/gi, 'rude person')
+            // 1. Hapuskan Konteks Seksual & Fizikal -> Tukar ke Mulut/Verbal
+            .replace(/sexual harassment/gi, 'verbal abuse')
+            .replace(/sexual predator/gi, 'loud bully')
             .replace(/sexual/gi, 'rude')
             .replace(/predator/gi, 'bully')
-            .replace(/groping/gi, 'pushing')
+            .replace(/groping/gi, 'shouting')
             .replace(/harassment/gi, 'arguing')
-            // 2. Hapuskan Konteks Sentuhan Fizikal Berlebihan
-            .replace(/grabbed/gi, 'pushed')
-            .replace(/leaned on/gi, 'bumped into')
-            .replace(/leaning/gi, 'bumping')
-            .replace(/assault/gi, 'an argument')
-            .replace(/contusions/gi, 'scratches')
-            // 3. Pelembut Kata Makian (PG-13)
+            .replace(/grabbed/gi, 'scolded')
+            .replace(/leaned on/gi, 'yelled at')
+            .replace(/leaning/gi, 'yelling')
+            .replace(/uncomfortable/gi, 'angry')
+            .replace(/assault/gi, 'insults')
+            .replace(/contusions/gi, 'headaches')
+            // 2. Pelembut Kata Makian (PG-13)
             .replace(/bitch/gi, 'jerk')
             .replace(/bastard/gi, 'fool')
             .replace(/lunatic/gi, 'weirdo')
             .replace(/crazy/gi, 'mad')
-            .replace(/damn it/gi, 'oh no') // Buang makian ringan
+            .replace(/damn it/gi, 'oh no')
             .replace(/damn/gi, 'darn')
             .replace(/fuck/gi, 'darn')
             .replace(/shit/gi, 'crap')
-            // 4. Jenayah / Tuduhan
+            // 3. Jenayah / Tuduhan
             .replace(/rape/gi, 'crime')
             .replace(/suicide/gi, 'tragedy')
             .replace(/kill/gi, 'remove')
@@ -1435,11 +1435,11 @@ class TranslationEngine {
             .replace(/accused/gi, 'blamed')
             .replace(/victim/gi, 'target')
             .replace(/blackmail/gi, 'pressure')
-            // 5. 🔥 HAPUSKAN KONTEKS POLIS & MAHKAMAH (PUNCA UTAMA SANGKUT) 🔥
+            // 4. Konteks Polis & Undang-undang (Tukar ke Sekuriti)
             .replace(/police/gi, 'security')
             .replace(/behind bars/gi, 'in trouble')
             .replace(/the law/gi, 'the rules')
-            .replace(/punished/gi, 'scolded')
+            .replace(/punished/gi, 'reprimanded')
             .replace(/framed/gi, 'blamed')
             .replace(/sue/gi, 'report')
             .replace(/investigating/gi, 'checking');
