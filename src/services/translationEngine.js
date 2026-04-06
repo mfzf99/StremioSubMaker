@@ -1464,6 +1464,7 @@ class TranslationEngine {
           }
         }
       }
+    } // <--- KURUNGAN PALING PENTING! (Menutup blok catch)
 
     // Parse translated text back into entries
     if (!translatedEntries) {
