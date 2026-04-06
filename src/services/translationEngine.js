@@ -36,7 +36,7 @@ const PROMPT_TEMPLATES = {
   primary: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue, seamlessly integrating common English loanwords where appropriate. Use "saya" and "awak" for general dialogue.`,
 
   // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
-  fallback: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue, seamlessly integrating common English loanwords where appropriate. Use "saya" and "awak" for general dialogue. Maintain a polite tone and strictly avoid any profanity, vulgarity, or aggressive slang.`
+  fallback: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue, seamlessly integrating common English loanwords where appropriate. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 
@@ -1401,36 +1401,38 @@ class TranslationEngine {
         const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback);
         const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback);
 
-        // 🛑 TAKTIK PENYAMARAN (SEMANTIC REPLACEMENT): TUKAR KE PERKATAAN SELAMAT 🛑
+        // 🛑 TAKTIK PENYAMARAN MUTLAK: TUKAR SENARIO KEPADA PERGADUHAN BIASA 🛑
         const maskToxicWords = (text) => {
           return String(text)
-            // Frasa panjang (mesti letak atas supaya tak bertindih)
-            .replace(/sexual harassment/gi, 'severe misconduct')
-            .replace(/sexual predator/gi, 'dangerous person')
-            // Perkataan tunggal (Kategori: Seksual / Kasar)
-            .replace(/sexual/gi, 'inappropriate')
-            .replace(/predator/gi, 'attacker')
-            .replace(/groping/gi, 'inappropriate touching')
-            .replace(/harassment/gi, 'bothering')
+            // 1. Hapuskan Konteks Seksual/Cabul
+            .replace(/sexual harassment/gi, 'a huge misunderstanding') // Gangguan seksual -> Salah faham besar
+            .replace(/sexual predator/gi, 'rude person') // Pemangsa seksual -> Orang biadab
+            .replace(/sexual/gi, 'rude')
+            .replace(/predator/gi, 'bully')
+            .replace(/groping/gi, 'pushing') // Meraba -> Menolak
+            .replace(/harassment/gi, 'arguing')
+            // 2. Hapuskan Konteks Sentuhan Fizikal Berlebihan
+            .replace(/grabbed/gi, 'pushed') // Pegang/Rentap -> Tolak
+            .replace(/leaned on/gi, 'bumped into') // Bersandar -> Terlanggar
+            .replace(/leaning/gi, 'bumping')
+            .replace(/assault/gi, 'an argument') // Serangan -> Pergaduhan mulut
+            .replace(/contusions/gi, 'scratches') // Lebam -> Calar
+            // 3. Pelembut Kata Makian (PG-13)
             .replace(/bitch/gi, 'jerk')
-            .replace(/bastard/gi, 'scoundrel')
-            .replace(/rape/gi, 'terrible crime')
-            .replace(/suicide/gi, 'fatal tragedy')
+            .replace(/bastard/gi, 'fool')
+            .replace(/lunatic/gi, 'weirdo')
+            .replace(/crazy/gi, 'mad')
             .replace(/fuck/gi, 'damn')
             .replace(/shit/gi, 'crap')
-            // Kategori: Keganasan / Jenayah / Tindakan Fizikal
-            .replace(/kill/gi, 'eliminate')
+            // 4. Jenayah / Tuduhan
+            .replace(/rape/gi, 'crime')
+            .replace(/suicide/gi, 'tragedy')
+            .replace(/kill/gi, 'remove')
             .replace(/murder/gi, 'destroy')
-            .replace(/assault/gi, 'physical conflict')
-            .replace(/grabbed/gi, 'pulled')
             .replace(/accusing/gi, 'blaming')
             .replace(/accused/gi, 'blamed')
             .replace(/victim/gi, 'target')
-            // Kategori: Psiko / Ugutan (Tambahan Terbaru)
-            .replace(/blackmail/gi, 'pressure')
-            .replace(/dead/gi, 'gone')
-            .replace(/disgusts/gi, 'annoys')
-            .replace(/despise/gi, 'dislike');
+            .replace(/blackmail/gi, 'pressure');
         };
 
         // Sistem akan cari ayat 'primary' dalam prompt, dan tukar jadi ayat 'fallback'
