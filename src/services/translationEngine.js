@@ -36,7 +36,7 @@ const PROMPT_TEMPLATES = {
   primary: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords.`,
 
   // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
-  fallback: (targetLabel) => `Translate into natural, conversational ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords.`
+  fallback: (targetLabel) => `Translate into natural, conversational ${targetLabel}. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 
