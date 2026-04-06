@@ -1404,10 +1404,10 @@ class TranslationEngine {
         // 🛑 TAKTIK PENYAMARAN (SEMANTIC REPLACEMENT): TUKAR KE PERKATAAN SELAMAT 🛑
         const maskToxicWords = (text) => {
           return String(text)
-            // Frasa panjang (mesti di atas)
+            // Frasa panjang (mesti letak atas supaya tak bertindih)
             .replace(/sexual harassment/gi, 'severe misconduct')
             .replace(/sexual predator/gi, 'dangerous person')
-            // Perkataan tunggal
+            // Perkataan tunggal (Kategori: Seksual / Kasar)
             .replace(/sexual/gi, 'inappropriate')
             .replace(/predator/gi, 'attacker')
             .replace(/groping/gi, 'inappropriate touching')
@@ -1418,13 +1418,19 @@ class TranslationEngine {
             .replace(/suicide/gi, 'fatal tragedy')
             .replace(/fuck/gi, 'damn')
             .replace(/shit/gi, 'crap')
+            // Kategori: Keganasan / Jenayah / Tindakan Fizikal
             .replace(/kill/gi, 'eliminate')
             .replace(/murder/gi, 'destroy')
             .replace(/assault/gi, 'physical conflict')
             .replace(/grabbed/gi, 'pulled')
-            .replace(/accusing/gi, 'blaming')    // Cover 'accusing'
-            .replace(/accused/gi, 'blamed')     // Cover 'accused'
-            .replace(/victim/gi, 'target');
+            .replace(/accusing/gi, 'blaming')
+            .replace(/accused/gi, 'blamed')
+            .replace(/victim/gi, 'target')
+            // Kategori: Psiko / Ugutan (Tambahan Terbaru)
+            .replace(/blackmail/gi, 'pressure')
+            .replace(/dead/gi, 'gone')
+            .replace(/disgusts/gi, 'annoys')
+            .replace(/despise/gi, 'dislike');
         };
 
         // Sistem akan cari ayat 'primary' dalam prompt, dan tukar jadi ayat 'fallback'
