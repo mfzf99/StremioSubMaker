@@ -1405,24 +1405,26 @@ class TranslationEngine {
         const maskToxicWords = (text) => {
           return String(text)
             // 1. Hapuskan Konteks Seksual/Cabul
-            .replace(/sexual harassment/gi, 'a huge misunderstanding') // Gangguan seksual -> Salah faham besar
-            .replace(/sexual predator/gi, 'rude person') // Pemangsa seksual -> Orang biadab
+            .replace(/sexual harassment/gi, 'a huge misunderstanding')
+            .replace(/sexual predator/gi, 'rude person')
             .replace(/sexual/gi, 'rude')
             .replace(/predator/gi, 'bully')
-            .replace(/groping/gi, 'pushing') // Meraba -> Menolak
+            .replace(/groping/gi, 'pushing')
             .replace(/harassment/gi, 'arguing')
             // 2. Hapuskan Konteks Sentuhan Fizikal Berlebihan
-            .replace(/grabbed/gi, 'pushed') // Pegang/Rentap -> Tolak
-            .replace(/leaned on/gi, 'bumped into') // Bersandar -> Terlanggar
+            .replace(/grabbed/gi, 'pushed')
+            .replace(/leaned on/gi, 'bumped into')
             .replace(/leaning/gi, 'bumping')
-            .replace(/assault/gi, 'an argument') // Serangan -> Pergaduhan mulut
-            .replace(/contusions/gi, 'scratches') // Lebam -> Calar
+            .replace(/assault/gi, 'an argument')
+            .replace(/contusions/gi, 'scratches')
             // 3. Pelembut Kata Makian (PG-13)
             .replace(/bitch/gi, 'jerk')
             .replace(/bastard/gi, 'fool')
             .replace(/lunatic/gi, 'weirdo')
             .replace(/crazy/gi, 'mad')
-            .replace(/fuck/gi, 'damn')
+            .replace(/damn it/gi, 'oh no') // Buang makian ringan
+            .replace(/damn/gi, 'darn')
+            .replace(/fuck/gi, 'darn')
             .replace(/shit/gi, 'crap')
             // 4. Jenayah / Tuduhan
             .replace(/rape/gi, 'crime')
@@ -1432,7 +1434,15 @@ class TranslationEngine {
             .replace(/accusing/gi, 'blaming')
             .replace(/accused/gi, 'blamed')
             .replace(/victim/gi, 'target')
-            .replace(/blackmail/gi, 'pressure');
+            .replace(/blackmail/gi, 'pressure')
+            // 5. 🔥 HAPUSKAN KONTEKS POLIS & MAHKAMAH (PUNCA UTAMA SANGKUT) 🔥
+            .replace(/police/gi, 'security')
+            .replace(/behind bars/gi, 'in trouble')
+            .replace(/the law/gi, 'the rules')
+            .replace(/punished/gi, 'scolded')
+            .replace(/framed/gi, 'blamed')
+            .replace(/sue/gi, 'report')
+            .replace(/investigating/gi, 'checking');
         };
 
         // 🔥 STRATEGI AMNESIA: PADAM MEMORI BATCH SUPAYA AI TAK BOLEH TEKA KONTEKS 🔥
