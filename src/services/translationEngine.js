@@ -1435,8 +1435,13 @@ class TranslationEngine {
             .replace(/blackmail/gi, 'pressure');
         };
 
-        // Sistem akan cari ayat 'primary' dalam prompt, dan tukar jadi ayat 'fallback'
-        let softenedPrompt = prompt.replace(primaryIntro, fallbackIntro);
+        // 🔥 STRATEGI AMNESIA: PADAM MEMORI BATCH SUPAYA AI TAK BOLEH TEKA KONTEKS 🔥
+        // Kita panggil balik fungsi prepareBatchContent & createPrompt tapi hantar 'null' untuk context
+        const memorylessBatchText = this.prepareBatchContent(batch, null);
+        const memorylessPrompt = this.createPromptForWorkflow(memorylessBatchText, targetLanguage, customPrompt, batch.length, null, batchIndex, totalBatches);
+
+        // Sistem akan cari ayat 'primary' dalam prompt tanpa memori, dan tukar jadi ayat 'fallback'
+        let softenedPrompt = memorylessPrompt.replace(primaryIntro, fallbackIntro);
         
         // Censor perkataan panas dalam Prompt dan BatchText
         softenedPrompt = maskToxicWords(softenedPrompt);
