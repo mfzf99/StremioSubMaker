@@ -114,26 +114,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 100;
+    return 70;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 100;
+    return 70;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 100;
+    return 70;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 100;
+    return 70;
   }
 
   // Default batch size for unknown models
-  return 100;
+  return 70;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -198,7 +198,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 100;
+    const JSON_MAX_BATCH_SIZE = 70;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
@@ -1808,7 +1808,7 @@ const modifiedPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW 
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    const promptBody = `Translate into natural ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords.
+    const promptBody = `Translate into natural, conversational ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords.
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 1. STRICT 1-TO-1 MAPPING: Translation for ID_X MUST contain ONLY the meaning of input ID_X. NEVER pull meaning from ID_X+1 into ID_X.
