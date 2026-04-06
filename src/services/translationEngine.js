@@ -28,6 +28,18 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // 🛑 BINA PEDAL BREK ANGIN (2.0 SAAT)
 //const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ============================================================================
+// 🛠️ ZON TEMPLATE PROMPT (EDIT DI SINI BILA-BILA MASA UNTUK EKSPERIMEN)
+// ============================================================================
+const PROMPT_TEMPLATES = {
+  // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
+  primary: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords where appropriate.`,
+
+  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
+  fallback: (targetLabel) => `Translate into natural, conversational ${targetLabel}. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords where appropriate.`
+};
+// ============================================================================
+
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
   return String(value || '')
