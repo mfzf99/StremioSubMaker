@@ -1415,7 +1415,11 @@ class TranslationEngine {
             .replace(/fuck/gi, 'f*ck')
             .replace(/shit/gi, 'sh*t')
             .replace(/kill/gi, 'k*ll')
-            .replace(/murder/gi, 'm*rder');
+            .replace(/murder/gi, 'm*rder')
+            .replace(/assault/gi, 'ass**lt')      // Tambahan baru
+            .replace(/grabbed/gi, 'gr*bbed')      // Tambahan baru
+            .replace(/accused/gi, 'acc*sed')      // Tambahan baru
+            .replace(/victim/gi, 'v*ctim');       // Tambahan baru
         };
 
         // Sistem akan cari ayat 'primary' dalam prompt, dan tukar jadi ayat 'fallback'
