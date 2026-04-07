@@ -1897,6 +1897,7 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 7. [br] tags must remain at the EXACT same position within the translated text as in the source.
 8. Translate ONLY text inside tags. NO markdown, NO commentary.
 9. NEVER MERGE OR SKIP ENTRIES. Merging will desync every subtitle below it permanently.
+10. STRICT NO ORPHAN TEXT: ALL translated words MUST be securely placed INSIDE the <s id="[original_id]">...</s> tags. DO NOT leave any text floating outside the tags. If an input has multiple sentences or fragments, keep the translation strictly within its single corresponding tag.
 
 <input>
 ${batchText}
