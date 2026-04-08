@@ -1836,7 +1836,7 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 1. STRICT 1-TO-1 MAPPING: Translation for ID_X MUST contain ONLY the meaning of input ID_X. NEVER pull meaning from ID_X+1 into ID_X.
-2. TRANSLATE FRAGMENTS AS FRAGMENTS: If input is incomplete, translate it as incomplete. DO NOT complete it using words from the next line.
+2. TRANSLATE FRAGMENTS STRICTLY AS FRAGMENTS: If an input sentence is split across multiple IDs, YOU MUST SPLIT THE TRANSLATION EXACTLY THE SAME WAY. NEVER combine the meaning of two IDs into one. If ID_X is half a sentence, output half a sentence for ID_X.
 3. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE. Never duplicate or split an ID.
 4. OUTPUT IDs MUST MATCH INPUT IDs EXACTLY. If input starts at ID_${startId}, output starts at ID_${startId}.
 5. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate content to fill missing entries.
@@ -1844,6 +1844,7 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 7. [br] tags must remain at the EXACT same position within the translated text as in the source.
 8. Translate ONLY text inside tags. NO markdown, NO commentary.
 9. NEVER MERGE OR SKIP ENTRIES. Merging will desync every subtitle below it permanently.
+10. STRICT NO ORPHAN TEXT: ALL translated words MUST be securely placed INSIDE the <s id="[original_id]">...</s> tags. DO NOT leave any text floating outside the tags. If an input has multiple sentences or fragments, keep the translation strictly within its single corresponding tag.
 
 <input>
 ${batchText}
