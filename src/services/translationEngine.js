@@ -1965,9 +1965,9 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
 
     const entries = [];
     
-    // 1. REGEX BARU: Tangkap tag normal & tag terputus (takde </s>)
-    // Kebal terhadap single quote (id='1'), extra space, dan atribut haram.
-    const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|$)/gi;
+    // 1. REGEX BARU (UPGRADED): Tangkap tag normal & tag terputus (takde </s>)
+    // Ditambah Brek Kecemasan (?=<s\b) supaya tak tertelan tag seterusnya kalau AI lupa penutup!
+    const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|(?=<s\b)|$)/gi;
     let match;
     while ((match = xmlPattern.exec(cleaned)) !== null) {
       const id = parseInt(match[1], 10);
