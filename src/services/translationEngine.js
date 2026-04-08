@@ -36,7 +36,7 @@ const PROMPT_TEMPLATES = {
   primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.`,
 
   // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
-  fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.`
+  fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 
