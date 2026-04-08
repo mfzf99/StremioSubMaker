@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, conversational ${targetLabel} that reflects authentic spoken dialogue, seamlessly integrating common English loanwords where appropriate. Use "saya" and "awak" for general dialogue.`,
+  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.`,
 
   // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
-  fallback: (targetLabel) => `Translate into ${targetLabel}. Use "saya" and "awak" for general dialogue.`
+  fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 
