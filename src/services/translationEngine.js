@@ -2003,16 +2003,17 @@ class TranslationEngine {
     const promptBody = `${introInstruction}
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
-1. STRICT ANTI-SHIFTING PROTOCOL: The translation for ID_X MUST perfectly match the input of ID_X. NEVER shift translations up or down. Do not put the meaning of ID_X+1 into ID_X.
-2. THE ESCAPE HATCH: If you accidentally skip a line, do not understand a line, or if the line contains only symbols/music notes, DO NOT SHIFT. Simply output the exact ORIGINAL SOURCE TEXT for that ID. 
-3. TRANSLATE FRAGMENTS STRICTLY AS FRAGMENTS: If an input sentence is split across multiple IDs, YOU MUST SPLIT THE TRANSLATION EXACTLY THE SAME WAY. NEVER combine the meaning of two IDs into one.
-4. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE in chronological order. Never duplicate or split an ID.
-5. OUTPUT IDs MUST MATCH INPUT IDs EXACTLY. If input starts at ID_${startId}, output starts at ID_${startId}.
-6. Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate content to fill missing entries.
+
+1. STRICT 1-TO-1 MAPPING & ANTI-SHIFTING: The translation for ID_X MUST perfectly match the input of ID_X. NEVER pull meaning from ID_X+1 into ID_X. NEVER shift translations up or down.
+2. NO MERGING FRAGMENTS (CRITICAL): If an input sentence is split across multiple IDs, YOU MUST KEEP THEM SPLIT EXACTLY THE SAME WAY. NEVER combine the meaning of two IDs into one, even if it feels more natural or grammatically correct. If ID_X is half a sentence, output ONLY half a sentence for ID_X.
+3. THE ESCAPE HATCH: If you accidentally skip a line, do not understand it, or if it contains only symbols/music notes, DO NOT SHIFT the next lines. Simply output the exact ORIGINAL ENGLISH SOURCE TEXT for that specific ID.
+4. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE in strict chronological order. Never duplicate, merge, or split an ID.
+5. EXACT ID MATCHING: Output IDs MUST MATCH input IDs exactly. If input starts at ID_${startId}, output starts at ID_${startId}.
+6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate content or copy-paste unrelated text at the end of the batch just to fulfill the missing count.
 7. FORMAT: <s id="[original_id]">translated text</s>.
-8. [br] tags must remain at the EXACT same position within the translated text as in the source.
-9. Translate ONLY text inside tags. NO markdown, NO commentary.
-10. STRICT NO ORPHAN TEXT: ALL translated words MUST be placed INSIDE their corresponding <s id="[original_id]">...</s> tag. NEVER leave text floating outside tags.
+8. [br] TAGS: [br] tags must remain at the EXACT same relative position within the translated text as in the source.
+9. NO EXTRA CONTENT: Translate ONLY text inside tags. NO markdown, NO commentary, NO conversational replies.
+10. STRICT NO ORPHAN TEXT: ALL translated words MUST be placed INSIDE their corresponding <s id="[original_id]">...</s> tag. Even if the input is a fragment, the fragment's translation stays within that single tag. NEVER leave text floating outside tags.
 
 <input>
 ${batchText}
