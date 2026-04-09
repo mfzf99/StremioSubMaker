@@ -1637,8 +1637,24 @@ class TranslationEngine {
       let { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
       this.translationStats.missingEntries += missingIndices.length;
 
-      if (missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
-        // Pass 2: Re-translate only the missing entries individually
+      // 🚀 INJECT: OTAK SUPER GENIUS (SHIFT DETECTOR) 🚀
+      let isShiftedError = false;
+      if (missingIndices.length > 0) {
+        const lastExpectedIndices = [];
+        // Buat senarai index yang patut berada di hujung
+        for (let i = batch.length - missingIndices.length; i < batch.length; i++) {
+          lastExpectedIndices.push(i);
+        }
+        // Kalau yang hilang tu SEBIJI macam senarai di hujung, ini sah KES GESERAN!
+        isShiftedError = JSON.stringify(missingIndices) === JSON.stringify(lastExpectedIndices);
+      }
+
+      if (isShiftedError) {
+         log.warn(() => `[TranslationEngine] 🚨 SHIFT DETECTED 🚨 Missing indices are at the exact end of the batch. Bypassing targeted retry and forcing FULL BATCH RETRY to prevent subtitle desync!`);
+      }
+
+      // Pass 2: Targeted Retry (Hanya jalan kalau BUKAN kes Geseran, dan hilang kurang 30%)
+      if (!isShiftedError && missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
         log.info(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} missing entries, attempting targeted re-translation`);
         try {
           const missingBatch = missingIndices.map(i => batch[i]);
@@ -1712,7 +1728,7 @@ class TranslationEngine {
         }
       }
 
-      // Pass 3: Full Batch Retry (Kalau masih ada yang hilang)
+      // Pass 3: Full Batch Retry (Akan trigger kalau Targeted gagal, mismatch besar, ATAU kes GESERAN/SHIFT tadi!)
       if (missingIndices.length > 0) {
         let retrySuccess = false;
         for (let retryAttempt = 0; retryAttempt < this.mismatchRetries; retryAttempt++) {
