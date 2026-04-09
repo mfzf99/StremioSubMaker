@@ -1648,33 +1648,51 @@ class TranslationEngine {
           
           const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
           
+          // 🚀 UBAHAN DEWA: KITA HAPUSKAN BEKAS LAMA (NO MUTATION)! 🚀
+          // Kita bina bekas baru dari kosong dan susun ID dari awal sampai akhir.
+          const freshAlignedContainer = {};
           const retryHasIds = retryEntries.some(e => typeof e.index === 'number' && e.index >= 0);
-          if (retryHasIds) {
-            for (let i = 0; i < retryEntries.length; i++) {
-              const retryIdx = retryEntries[i].index;
-              if (retryIdx >= 0 && retryIdx < missingIndices.length) {
-                const targetIdx = missingIndices[retryIdx];
-                if (retryEntries[i].text) {
-                  aligned[targetIdx] = {
-                    index: targetIdx,
-                    text: retryEntries[i].text,
-                    timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
-                  };
-                }
+
+          for (let i = 0; i < batch.length; i++) {
+            // 1. Jika kerusi ini adalah kerusi yang tercicir (Missing)
+            if (missingIndices.includes(i)) {
+              let recoveredText = null;
+              let recoveredTimecode = undefined;
+
+              if (retryHasIds) {
+                 // Cari padanan ID yang tepat dalam hasil Retry
+                 const retryHit = retryEntries.find(r => r.index === missingIndices.indexOf(i));
+                 if (retryHit && retryHit.text) {
+                    recoveredText = retryHit.text;
+                    recoveredTimecode = retryHit.timecode;
+                 }
+              } else {
+                 // Fallback posisi
+                 const positionalHit = retryEntries[missingIndices.indexOf(i)];
+                 if (positionalHit && positionalHit.text) {
+                    recoveredText = positionalHit.text;
+                    recoveredTimecode = positionalHit.timecode;
+                 }
               }
-            }
-          } else {
-             for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
-              const targetIdx = missingIndices[i];
-              if (retryEntries[i] && retryEntries[i].text) {
-                aligned[targetIdx] = {
-                  index: targetIdx,
-                  text: retryEntries[i].text,
-                  timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
-                };
+
+              if (recoveredText) {
+                 freshAlignedContainer[i] = {
+                    index: i,
+                    text: recoveredText,
+                    timecode: recoveredTimecode || batch[i].timecode
+                 };
+              } else {
+                 freshAlignedContainer[i] = aligned[i]; // Gagal recover, salin amaran [⚠]
               }
+            } 
+            // 2. Jika kerusi ini memang dah elok dari Pass 1, salin masuk ke bekas baru
+            else {
+              freshAlignedContainer[i] = aligned[i];
             }
           }
+
+          // 🚨 TUKAR BEKAS SEKARANG! Buang terus memori 'aligned' yang lama!
+          aligned = freshAlignedContainer;
 
           // Semak semula berapa yang masih missing lepas dijahit
           missingIndices = Object.keys(aligned).map(Number).filter(i => aligned[i].text.startsWith('[⚠]'));
