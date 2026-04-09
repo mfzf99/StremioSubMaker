@@ -1973,7 +1973,7 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
   /**
    * Parse XML-tagged translation response
    * Matches <s id="N">text</s> patterns and recovers entries by ID.
-   * [UPDATED]: Resilient against malformed quotes, self-closing tags, and truncated endings.
+   * [UPGRADED]: Single-pass Regex for blazing speed, handles both normal and self-closing tags.
    * [GLOBAL ID FIX]: Maps global IDs back to local batch indices and filters AI hallucinations.
    */
   parseXmlBatchResponse(translatedText, expectedCount, batch = []) {
@@ -2005,15 +2005,16 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
       });
     }
 
-    const entries = [];
+    // Guna Map terus untuk auto-deduplicate tanpa perlu loop kedua
+    const entriesMap = new Map(); 
     
-    // 1. REGEX BARU (UPGRADED): Tangkap tag normal & tag terputus (takde </s>)
-    // Ditambah Brek Kecemasan (?=<s\b) supaya tak tertelan tag seterusnya kalau AI lupa penutup!
-    const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|(?=<s\b)|$)/gi;
+    // 🚀 THE GOD-TIER REGEX (One Pass to Rule Them All)
+    // Tangkap tag normal & self-closing serentak dalam satu pusingan.
+    const superXmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*?(?:\/>|>([\s\S]*?)(?:<\/s>|(?=<s\b)|$))/gi;
     let match;
-    while ((match = xmlPattern.exec(cleaned)) !== null) {
+    
+    while ((match = superXmlPattern.exec(cleaned)) !== null) {
       const id = parseInt(match[1], 10);
-      const text = match[2].trim();
       
       // Fix #14: Accept entries with empty text (legitimate for "♪", sound effects, etc.)
       if (id > 0) {
@@ -2028,49 +2029,21 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
           }
         }
 
-        entries.push({
-          index: localIndex,
-          text: text
-        });
-      }
-    }
+        // Kalau match[2] wujud, ia tag normal. Kalau undefined, ia tag self-closing (teks kosong).
+        const text = match[2] !== undefined ? match[2].trim() : "";
 
-    // 2. REGEX TAMBAHAN: Tangkap tag senyap / self-closing (<s id="15"/>)
-    const selfClosingPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*\/>/gi;
-    while ((match = selfClosingPattern.exec(cleaned)) !== null) {
-      const id = parseInt(match[1], 10);
-      if (id > 0) {
-        let localIndex = id - 1;
-
-        if (validIds.size > 0) {
-          if (validIds.has(id)) {
-            localIndex = validIds.get(id);
-          } else {
-            // 🚨 PISAU PEMOTONG: Buang ID halusinasi!
-            continue; 
-          }
+        // Hanya simpan kejadian PERTAMA (buang duplikat automatik dengan Map)
+        if (!entriesMap.has(localIndex)) {
+          entriesMap.set(localIndex, {
+            index: localIndex,
+            text: text
+          });
         }
-
-        // Tag self-closing bermaksud tiada teks, kita pulangkan string kosong
-        entries.push({
-          index: localIndex,
-          text: ""
-        });
       }
     }
 
-    // Sort by index and deduplicate (keep first occurrence per ID)
-    const seen = new Set();
-    const deduped = [];
-    entries.sort((a, b) => a.index - b.index);
-    for (const entry of entries) {
-      if (!seen.has(entry.index)) {
-        seen.add(entry.index);
-        deduped.push(entry);
-      }
-    }
-
-    return deduped;
+    // Tukar Map kepada Array dan susun ikut index
+    return Array.from(entriesMap.values()).sort((a, b) => a.index - b.index);
   }
   
   /**
