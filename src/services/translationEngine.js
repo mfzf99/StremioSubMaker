@@ -1674,7 +1674,9 @@ class TranslationEngine {
         );
         if (xmlFallback?.entries?.length > 0) {
           translatedText = xmlFallback.translatedText;
-          translatedEntries = xmlFallback.entries;
+          // 🚀 UBAHAN DEWA: Wajib lalui proses align semula supaya timing terjamin!
+          const { aligned: fallbackAligned } = this.alignTranslatedEntries(xmlFallback.entries, batch);
+          translatedEntries = Object.values(fallbackAligned).sort((a, b) => a.index - b.index);
         }
       }
     }
