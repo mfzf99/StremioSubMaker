@@ -1507,7 +1507,7 @@ class TranslationEngine {
           }
         }
       }
-    } // <--- KURUNGAN PALING PENTING! (Menutup blok catch)
+    } // <--- END OF TRY CATCH BLOCK
 
     // Parse translated text back into entries
     if (!translatedEntries) {
@@ -1532,81 +1532,55 @@ class TranslationEngine {
       }
     }
 
-    // Handle entry count mismatches with two-pass recovery
-    if (translatedEntries.length !== batch.length) {
-      log.warn(() => `[TranslationEngine] Entry count mismatch: expected ${batch.length}, got ${translatedEntries.length}`);
-      // Stats: mismatch detected
-      this.translationStats.mismatchDetected = true;
+    // 🚨 UBAHAN DEWA: KITA PAKSA ALIGNMENT SETIAP MASA!
+    // Jangan percaya pada '.length'. AI boleh cipta ID palsu dan skip ID betul, menyebabkan length sama tapi susunan hancur.
+    let { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
 
-      // Pass 1: Align what we can by index, identify missing entries
-      const { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
+    if (missingIndices.length > 0) {
+      log.warn(() => `[TranslationEngine] Mismatch detected: ${missingIndices.length} entries missing`);
+      this.translationStats.mismatchDetected = true;
       this.translationStats.missingEntries += missingIndices.length;
 
-      if (missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
-        // Pass 2: Re-translate only the missing entries individually
-        log.info(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} missing entries, attempting targeted re-translation`);
+      // 🧵 Fungsi 'Tukang Jahit': Jahit terjemahan yang berjaya masuk ke kerusi (index) asal dengan tepat!
+      const mergeRecoveredEntries = (retryEntries, subBatch) => {
+        let recoveredCount = 0;
+        for (const retryEntry of retryEntries) {
+          if (typeof retryEntry.index === 'number' && retryEntry.index >= 0 && retryEntry.index < subBatch.length) {
+            const originalEntry = subBatch[retryEntry.index];
+            const globalIdx = batch.indexOf(originalEntry); // Cari posisi mutlak dalam batch asal
+            
+            if (globalIdx !== -1 && aligned[globalIdx].text.startsWith('[⚠]')) {
+              aligned[globalIdx] = {
+                index: globalIdx,
+                text: retryEntry.text,
+                timecode: retryEntry.timecode || originalEntry.timecode
+              };
+              recoveredCount++;
+            }
+          }
+        }
+        return recoveredCount;
+      };
+
+      // Pass 2: Targeted Retry (Kalau sikit je hilang)
+      if (missingIndices.length <= Math.ceil(batch.length * 0.3)) {
+        log.info(() => `[TranslationEngine] Two-pass recovery: attempting targeted re-translation for ${missingIndices.length} entries`);
         try {
-          // Fix #4: Don't rotate key for parse-failure recovery — the API succeeded, only parsing failed.
-          // Key rotation should only occur for actual API errors (429, 503, etc.), not content issues.
           const missingBatch = missingIndices.map(i => batch[i]);
           const missingText = this.prepareBatchContent(missingBatch, null);
           const missingPrompt = this.createPromptForWorkflow(missingText, targetLanguage, customPrompt, missingBatch.length, null, batchIndex, totalBatches);
           const retryText = await this._translateCall(missingText, targetLanguage, missingPrompt, false, null);
-          const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
-
-          // Merge recovered entries back into aligned result
-          const retryHasIds = retryEntries.some(e => typeof e.index === 'number' && e.index >= 0);
           
-          // 🚀 UBAHAN DEWA: KITA HAPUSKAN SYARAT `length === missingBatch.length`
-          // Biarkan sistem guna Jahitan ID walaupun AI tercicir ayat masa retry!
-          if (retryHasIds) {
-            // Jahitan Tepat (ID-Based): Jahit ikut index sebenar
-            for (let i = 0; i < retryEntries.length; i++) {
-              const retryIdx = retryEntries[i].index;
-              if (retryIdx >= 0 && retryIdx < missingIndices.length) {
-                const targetIdx = missingIndices[retryIdx];
-                if (retryEntries[i].text) {
-                  aligned[targetIdx] = {
-                    index: targetIdx,
-                    text: retryEntries[i].text,
-                    timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
-                  };
-                }
-              }
-            }
-          } else {
-            // Positional fallback (Hanya jika API tak support ID)
-            for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
-              const targetIdx = missingIndices[i];
-              if (retryEntries[i] && retryEntries[i].text) {
-                aligned[targetIdx] = {
-                  index: targetIdx,
-                  text: retryEntries[i].text,
-                  timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
-                };
-              }
-            }
-          }
-          } else {
-            // Positional fallback: map sequentially
-            for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
-              const targetIdx = missingIndices[i];
-              if (retryEntries[i] && retryEntries[i].text) {
-                aligned[targetIdx] = {
-                  index: targetIdx,
-                  text: retryEntries[i].text,
-                  timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
-                };
-              }
-            }
-          }
-          const stillMissing = missingIndices.filter(i => !aligned[i] || aligned[i].text.startsWith('[⚠]'));
-          if (stillMissing.length > 0) {
-            log.warn(() => `[TranslationEngine] Two-pass recovery: ${stillMissing.length} entries still missing after targeted retry`);
-            this.translationStats.recoveredEntries += (missingIndices.length - stillMissing.length);
-          } else {
-            log.info(() => `[TranslationEngine] Two-pass recovery succeeded: all ${missingIndices.length} missing entries recovered`);
-            this.translationStats.recoveredEntries += missingIndices.length;
+          const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
+          
+          // Jahit hasil targeted retry (Buang terus positional fallback yang merosakkan timing!)
+          const recovered = mergeRecoveredEntries(retryEntries, missingBatch);
+          log.info(() => `[TranslationEngine] Targeted recovery restored ${recovered}/${missingIndices.length} entries`);
+
+          // Kemaskini senarai kerusi kosong
+          missingIndices.length = 0;
+          for (let i = 0; i < batch.length; i++) {
+            if (aligned[i].text.startsWith('[⚠]')) missingIndices.push(i);
           }
         } catch (retryErr) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
@@ -1614,24 +1588,27 @@ class TranslationEngine {
           }
           log.warn(() => `[TranslationEngine] Two-pass targeted retry failed: ${retryErr.message}`);
         }
-        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
-      } else if (missingIndices.length > 0) {
-        // Too many missing entries for targeted retry, fall back to full batch retry
-        let retrySuccess = false;
+      }
+
+      // Pass 3: Full Batch Retry (Kalau masih ada yang hilang)
+      if (missingIndices.length > 0) {
         for (let retryAttempt = 0; retryAttempt < this.mismatchRetries; retryAttempt++) {
-          log.info(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1}/${this.mismatchRetries} (${missingIndices.length} missing entries too many for targeted recovery)`);
+          if (missingIndices.length === 0) break;
+          
+          log.info(() => `[TranslationEngine] Full batch recovery attempt ${retryAttempt + 1} (${missingIndices.length} still missing)`);
           try {
-            // Fix #4: Don't rotate key for parse-failure recovery — the API call succeeded.
-            // Key rotation wastes healthy keys on content/parsing issues, not API problems.
             await new Promise(resolve => setTimeout(resolve, 500));
             const retryText = await this._translateCall(batchText, targetLanguage, prompt, false, null);
             const retryEntries = this.parseResponseForWorkflow(retryText, batch.length, batch);
-            if (retryEntries.length === batch.length) {
-              translatedEntries = retryEntries;
-              retrySuccess = true;
-              // Stats: full batch recovered all missing entries
-              this.translationStats.recoveredEntries += missingIndices.length;
-              break;
+            
+            // Jahit apa saja yang AI bagi
+            const recovered = mergeRecoveredEntries(retryEntries, batch);
+            log.info(() => `[TranslationEngine] Full batch recovery restored ${recovered} entries`);
+
+            // Kemaskini senarai kerusi kosong
+            missingIndices.length = 0;
+            for (let i = 0; i < batch.length; i++) {
+              if (aligned[i].text.startsWith('[⚠]')) missingIndices.push(i);
             }
           } catch (retryErr) {
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
@@ -1640,19 +1617,15 @@ class TranslationEngine {
             log.warn(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1} failed: ${retryErr.message}`);
           }
         }
-        if (!retrySuccess) {
-          // Use the aligned result with markers for missing entries
-          translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
-          const markedCount = translatedEntries.filter(e => e.text.startsWith('[⚠]')).length;
-          if (markedCount > 0) {
-            log.warn(() => `[TranslationEngine] Marked ${markedCount} entries as untranslated after all retries`);
-          }
+        
+        if (missingIndices.length > 0) {
+           log.warn(() => `[TranslationEngine] Marked ${missingIndices.length} entries as untranslated after all retries`);
         }
-      } else {
-        // All entries aligned despite count mismatch (extras were trimmed)
-        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
       }
     }
+
+    // Paksa array akhir disusun 100% mengikut acuan 'aligned' yang tepat!
+    translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
 
     // If JSON mismatch recovery still leaves warning placeholders, try XML once.
     if (this.translationWorkflow === 'json' && !jsonXmlFallbackAttempted) {
