@@ -1555,14 +1555,14 @@ class TranslationEngine {
           const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
 
           // Merge recovered entries back into aligned result
-          // Use ID-based matching when available (JSON/XML parsers provide meaningful indices),
-          // fall back to positional mapping for numbered-list responses
           const retryHasIds = retryEntries.some(e => typeof e.index === 'number' && e.index >= 0);
-          if (retryHasIds && retryEntries.length === missingBatch.length) {
-            // Map retry entry indices (0-based within the mini-batch) back to original batch positions
+          
+          // 🚀 UBAHAN DEWA: KITA HAPUSKAN SYARAT `length === missingBatch.length`
+          // Biarkan sistem guna Jahitan ID walaupun AI tercicir ayat masa retry!
+          if (retryHasIds) {
+            // Jahitan Tepat (ID-Based): Jahit ikut index sebenar
             for (let i = 0; i < retryEntries.length; i++) {
               const retryIdx = retryEntries[i].index;
-              // retryIdx is relative to the mini-batch (0..missingBatch.length-1)
               if (retryIdx >= 0 && retryIdx < missingIndices.length) {
                 const targetIdx = missingIndices[retryIdx];
                 if (retryEntries[i].text) {
@@ -1574,6 +1574,19 @@ class TranslationEngine {
                 }
               }
             }
+          } else {
+            // Positional fallback (Hanya jika API tak support ID)
+            for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
+              const targetIdx = missingIndices[i];
+              if (retryEntries[i] && retryEntries[i].text) {
+                aligned[targetIdx] = {
+                  index: targetIdx,
+                  text: retryEntries[i].text,
+                  timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
+                };
+              }
+            }
+          }
           } else {
             // Positional fallback: map sequentially
             for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
