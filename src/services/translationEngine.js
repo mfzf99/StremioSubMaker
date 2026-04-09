@@ -2286,6 +2286,7 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
   /**
    * Align translated entries to original batch by index, identifying missing entries
    * Used by two-pass mismatch recovery
+   * [UPGRADED]: Smart Context Awareness - ignores empty/symbol-only lines for retries
    */
   alignTranslatedEntries(translatedEntries, originalBatch) {
     const aligned = {};
@@ -2298,19 +2299,46 @@ OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     }
 
     const missingIndices = [];
+
+    // 🚀 THE UPGRADE: Fungsi penilai ayat (Adakah ayat ini patut diterjemah?)
+    const isUntranslatable = (text) => {
+      if (!text) return true;
+      const t = text.trim();
+      if (!t) return true;
+      // Abai kalau cuma ada simbol muzik, sengkang, atau space sahaja
+      if (/^[♪♫♬\-\s_]+$/.test(t)) return true; 
+      // Abai tag HTML kosong macam <i></i> atau tag yang takde teks <font color="#fff">
+      if (/^<[^>]+>\s*<\/[^>]+>$/.test(t) || /^<[^>]+>$/.test(t)) return true;
+      
+      return false;
+    };
+
     for (let i = 0; i < originalBatch.length; i++) {
       const existing = translatedMap.get(i);
-      if (existing && existing.text) {
+      const originalText = originalBatch[i].text || '';
+
+      // 1. Kalau terjemahan wujud dan elok
+      if (existing && typeof existing.text === 'string') {
         aligned[i] = {
           index: i,
           text: existing.text,
           timecode: existing.timecode || undefined
         };
-      } else {
+      } 
+      // 2. 🛡️ THE UPGRADE: Kalau AI tertinggal, tapi ayat tu tak perlu diterjemah pun
+      else if (isUntranslatable(originalText)) {
+        aligned[i] = {
+          index: i,
+          text: originalText, // Pakai ayat asal tanpa tanda amaran
+          timecode: originalBatch[i].timecode || undefined
+        };
+      } 
+      // 3. Kalau AI tertinggal dan ayat tu penting (Mismatch Sebenar!)
+      else {
         missingIndices.push(i);
         aligned[i] = {
           index: i,
-          text: `[⚠] ${originalBatch[i].text}`,
+          text: `[⚠] ${originalText}`,
           timecode: originalBatch[i].timecode || undefined
         };
       }
