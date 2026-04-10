@@ -1,3 +1,5 @@
+require('dns').setDefaultResultOrder('ipv4first');
+
 // Load environment variables from .env file FIRST (before anything else)
 require('dotenv').config();
 
