@@ -5305,10 +5305,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
-        }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message}`));
+        }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message} - Punca: ${e.cause ? e.cause.message : 'Tiada info'}`));
       }
     } catch (teleErr) {
-      log.debug(() => `[Telegram] Ralat dalaman: ${teleErr.message}`);
+      log.debug(() => `[Telegram] Ralat dalaman: ${teleErr.message} - Punca: ${teleErr.stack || 'Tiada susur galur'}`);
     }
     
     // Cache the translation (disk-only, permanent by default)
