@@ -16,7 +16,7 @@ let lastGeminiConfigLog = 0;
 let suppressedGeminiConfigLogs = 0;
 
 // Maximum number of Gemini API keys allowed in rotation (configurable via env, default 5)
-const MAX_GEMINI_API_KEYS = parseInt(process.env.MAX_GEMINI_API_KEYS, 10) || 5;
+const MAX_GEMINI_API_KEYS = parseInt(process.env.MAX_GEMINI_API_KEYS, 10) || 10;
 
 function parseLanguageLimit(envVar, fallback, min = 1, max = 50) {
   const parsed = parseInt(process.env[envVar], 10);
