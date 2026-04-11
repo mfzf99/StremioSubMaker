@@ -2011,7 +2011,7 @@ CRITICAL RULES:
 
 ✅ "Saya nak" (fragment, CORRECT)
 ❌ "Saya nak balik rumah" (stolen from next ID, CATASTROPHICALLY WRONG)
-    
+
 <input>
 ${batchText}
 </input>
