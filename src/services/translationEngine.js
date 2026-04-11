@@ -2004,17 +2004,47 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. STRICT 1-TO-1 MAPPING & ANTI-SHIFTING: The translation for ID_X MUST perfectly match the input of ID_X. NEVER pull meaning from ID_X+1 into ID_X. NEVER shift translations up or down.
-2. NO MERGING FRAGMENTS (CRITICAL): If an input sentence is split across multiple IDs, YOU MUST KEEP THEM SPLIT EXACTLY THE SAME WAY. NEVER combine the meaning of two IDs into one, even if it feels more natural or grammatically correct. If ID_X is half a sentence, output ONLY half a sentence for ID_X.
-3. THE ESCAPE HATCH: If you accidentally skip a line, do not understand it, or if it contains only symbols/music notes, DO NOT SHIFT the next lines. Simply output the exact ORIGINAL ENGLISH SOURCE TEXT for that specific ID.
-4. ONE OUTPUT PER ID: Each ID must appear EXACTLY ONCE in strict chronological order. Never duplicate, merge, or split an ID.
-5. EXACT ID MATCHING: Output IDs MUST MATCH input IDs exactly. If input starts at ID_${startId}, output starts at ID_${startId}.
-6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate content or copy-paste unrelated text at the end of the batch just to fulfill the missing count.
-7. FORMAT: <s id="[original_id]">translated text</s>.
-8. [br] TAGS: [br] tags must remain at the EXACT same relative position within the translated text as in the source.
-9. NO EXTRA CONTENT: Translate ONLY text inside tags. NO markdown, NO commentary, NO conversational replies.
-10. STRICT NO ORPHAN TEXT: ALL translated words MUST be placed INSIDE their corresponding <s id="[original_id]">...</s> tag. Even if the input is a fragment, the fragment's translation stays within that single tag. NEVER leave text floating outside tags.
+1. STRICT 1-TO-1 ANTI-SHIFT: Translation for ID_X MUST perfectly match 
+   input ID_X ONLY. NEVER pull meaning from ID_X+1 into ID_X. NEVER 
+   shift translations up or down.
 
+2. ISOLATED BOX RULE (MOST CRITICAL): Treat each <s id="N"> as a 
+   completely sealed, isolated container. You have ZERO knowledge of 
+   adjacent IDs. An incomplete sentence IN = an incomplete sentence OUT.
+
+   ✅ CORRECT:
+   IN:  <s id="45">I really want to</s> / <s id="46">go home now.</s>
+   OUT: <s id="45">Saya betul-betul nak</s> / <s id="46">balik rumah sekarang.</s>
+
+   ❌ WRONG:
+   IN:  <s id="45">I really want to</s> / <s id="46">go home now.</s>
+   OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s> / <s id="46">.</s>
+
+   "Saya betul-betul nak" looks wrong but IS CORRECT.
+   A "complete" translation that steals from next ID IS CATASTROPHICALLY WRONG.
+
+3. ESCAPE HATCH: If you skip, don't understand, or see only symbols/music 
+   notes — DO NOT SHIFT. Copy the EXACT ORIGINAL ENGLISH TEXT for that ID.
+
+4. ONE OUTPUT PER ID: Each ID appears EXACTLY ONCE in strict order. 
+   Never duplicate, merge, or split an ID.
+
+5. EXACT ID MATCHING: Output IDs MUST match input IDs exactly, starting 
+   from ID_${startId}.
+
+6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} 
+   to ID_${endId}). NEVER fabricate or copy-paste to fill missing count.
+
+7. FORMAT: <s id="[original_id]">translated text</s>
+
+8. [br] TAGS: Keep [br] at the EXACT same relative position as in source.
+
+9. NO EXTRA CONTENT: Translate ONLY text inside tags. NO markdown, 
+   NO commentary, NO conversational replies.
+
+10. NO ORPHAN TEXT: ALL words MUST be inside their corresponding tag. 
+    NEVER leave text floating outside tags.
+    
 <input>
 ${batchText}
 </input>
