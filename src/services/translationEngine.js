@@ -33,11 +33,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`,
+  primary: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}, seamlessly integrating common English loanwords. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
  // DIBERSIHKAN: Tiada lagi arahan pantang larang supaya Google tak melatah. Semua penapisan dibuat oleh fungsi maskToxicWords.
-  fallback: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`
+  fallback: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}, seamlessly integrating common English loanwords. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`
 };
 // ============================================================================
 
