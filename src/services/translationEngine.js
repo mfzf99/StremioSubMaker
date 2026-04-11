@@ -33,11 +33,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}, seamlessly integrating common English loanwords. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`,
+  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
  // DIBERSIHKAN: Tiada lagi arahan pantang larang supaya Google tak melatah. Semua penapisan dibuat oleh fungsi maskToxicWords.
-  fallback: (targetLabel) => `Translate into a natural, local conversational tone that reflects authentic spoken dialogue in ${targetLabel}, seamlessly integrating common English loanwords. Use "saya" and "awak" for general dialogue. CORE LAW: Each <s id="N"> is an ISOLATED BOX. Translate ONLY what is inside. Never complete fragments. Never merge IDs. Output incomplete sentences if input is incomplete.`
+  fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
 };
 // ============================================================================
 
@@ -2002,15 +2002,48 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES:
-1. ISOLATED BOX: Each ID is sealed. Translate ONLY its content. Nothing from adjacent IDs.
-2. FRAGMENT IN = FRAGMENT OUT. "I want to" → "Saya nak". NEVER complete it.
-3. ESCAPE HATCH: Skip/unknown → copy original English exactly.
-4. ONE ID ONCE. Exact count: ${expectedCount}. Format: <s id="[id]">text</s>.
-5. No orphan text. No markdown. No commentary.
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-✅ "Saya nak" (fragment, CORRECT)
-❌ "Saya nak balik rumah" (stolen from next ID, CATASTROPHICALLY WRONG)
+1. STRICT 1-TO-1 ANTI-SHIFT: Translation for ID_X MUST perfectly match 
+   input ID_X ONLY. NEVER pull meaning from ID_X+1 into ID_X. NEVER 
+   shift translations up or down.
+
+2. ISOLATED BOX RULE (MOST CRITICAL): Treat each <s id="N"> as a 
+   completely sealed, isolated container. You have ZERO knowledge of 
+   adjacent IDs. An incomplete sentence IN = an incomplete sentence OUT.
+
+   ✅ CORRECT:
+   IN:  <s id="45">I really want to</s> / <s id="46">go home now.</s>
+   OUT: <s id="45">Saya betul-betul nak</s> / <s id="46">balik rumah sekarang.</s>
+
+   ❌ WRONG:
+   IN:  <s id="45">I really want to</s> / <s id="46">go home now.</s>
+   OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s> / <s id="46">.</s>
+
+   "Saya betul-betul nak" looks wrong but IS CORRECT.
+   A "complete" translation that steals from next ID IS CATASTROPHICALLY WRONG.
+
+3. ESCAPE HATCH: If you skip, don't understand, or see only symbols/music 
+   notes — DO NOT SHIFT. Copy the EXACT ORIGINAL ENGLISH TEXT for that ID.
+
+4. ONE OUTPUT PER ID: Each ID appears EXACTLY ONCE in strict order. 
+   Never duplicate, merge, or split an ID.
+
+5. EXACT ID MATCHING: Output IDs MUST match input IDs exactly, starting 
+   from ID_${startId}.
+
+6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} 
+   to ID_${endId}). NEVER fabricate or copy-paste to fill missing count.
+
+7. FORMAT: <s id="[original_id]">translated text</s>
+
+8. [br] TAGS: Keep [br] at the EXACT same relative position as in source.
+
+9. NO EXTRA CONTENT: Translate ONLY text inside tags. NO markdown, 
+   NO commentary, NO conversational replies.
+
+10. NO ORPHAN TEXT: ALL words MUST be inside their corresponding tag. 
+    NEVER leave text floating outside tags.
 
 <input>
 ${batchText}
