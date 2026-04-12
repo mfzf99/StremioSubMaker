@@ -33,7 +33,7 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational  ${targetLabel}. You MUST write exactly like how native speakers talk in real life, not like a formal textbook. Translate the INTENT and FEELING, not word-for-word perfectly.
+  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel}. You MUST write exactly like how native speakers talk in real life, not like a formal textbook. Translate the INTENT and FEELING, not word-for-word perfectly.
 
 STYLE GUIDELINES (APPLY TO ALL TEXT):
 - Use "saya" and "awak" for normal dialogue.
@@ -41,8 +41,10 @@ STYLE GUIDELINES (APPLY TO ALL TEXT):
 - NEVER use highly formal/bookish words if a conversational alternative exists (e.g., avoid "mengapakah", "sedang", "amat").
 
 STYLE EXAMPLES:
-Original: "Are you kidding me right now?" -> Translation: "Awak biar betul?"
-Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."`,
+Original: "Are you kidding me right now?" -> Translation: "Awak biar betul nih?"
+Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."
+Original: "Sorry guys, I didn't mean to mess up the test." -> Translation: "Sorry guys, saya tak berniat nak hancurkan test itu."
+Original: "Okay boss, I will tell them right now." -> Translation: "Okay boss, saya akan bagitahu diorang sekarang juga."`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
  fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel}. You MUST write exactly like how native speakers talk in real life, not like a formal textbook. Translate the INTENT and FEELING, not word-for-word perfectly.
@@ -53,8 +55,10 @@ STYLE GUIDELINES (APPLY TO ALL TEXT):
 - NEVER use highly formal/bookish words if a conversational alternative exists.
 
 STYLE EXAMPLES:
-Original: "Are you kidding me right now?" -> Translation: "Awak biar betul?"
-Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."`
+Original: "Are you kidding me right now?" -> Translation: "Awak biar betul nih?"
+Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."
+Original: "Sorry guys, I didn't mean to mess up the test." -> Translation: "Sorry guys, saya tak berniat nak hancurkan test itu."
+Original: "Okay boss, I will tell them right now." -> Translation: "Okay boss, saya akan bagitahu diorang sekarang juga."`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
