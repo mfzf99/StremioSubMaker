@@ -5192,7 +5192,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V7 GOD TIER + LIVE TOKENS FROM GEMINI.JS)
+    // 📱 INJECT PENGGERA TELEGRAM (V10 GOD TIER + GLOBAL TOKENS INTERCEPT)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
@@ -5279,31 +5279,25 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - AUTO HUNTER V9
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - V10 GLOBAL RECEIVER
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // 🚨 TAKTIK GOD TIER: RADAR PENCARI BUKU REKOD 🚨
-            // Kita selongkar perut enjin untuk cari kat mana gemini.js bersembunyi
-            let geminiUsage = {};
-            if (translationEngine) {
-                // Tapis semua objek dalam enjin, cari yang ada 'usageStats'
-                const foundProvider = Object.values(translationEngine).find(obj => obj && typeof obj === 'object' && 'usageStats' in obj);
-                if (foundProvider) {
-                    geminiUsage = foundProvider.usageStats;
-                }
-            }
+            // 🚨 SEDUT DATA TERUS DARI GLOBAL CACHE 🚨
+            const geminiUsage = global.geminiFinOps || {};
 
-            // Tangkap token sebenar! Letak fallback kepada stats asal supaya tak mati keras
-            const inputTokens = geminiUsage.inputTokens || stats.inputTokens || 0;
+            const inputTokens = geminiUsage.inputTokens || 0;
             const cachedTokens = geminiUsage.cachedTokens || 0; 
             const thoughtTokens = geminiUsage.thoughtTokens || 0;
-            const baseOutputTokens = geminiUsage.outputTokens || stats.actualTokens || stats.outputTokens || 0;
+            const baseOutputTokens = geminiUsage.outputTokens || 0;
             
             // Cantumkan token
             const outputTokens = baseOutputTokens + thoughtTokens; 
             const totalPromptSize = inputTokens + cachedTokens; 
             const totalTokens = totalPromptSize + outputTokens;
+
+            // 🧹 RESET GLOBAL CACHE lepas baca (Supaya sedia untuk batch/movie seterusnya)
+            global.geminiFinOps = { inputTokens: 0, cachedTokens: 0, thoughtTokens: 0, outputTokens: 0 };
 
             // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
             const pricing = {
@@ -5327,7 +5321,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 rateCache = isT2 ? pricing["3.1-pro"].cacheT2 : pricing["3.1-pro"].cache;
             } else if (usedModel.includes('3.1-flash-lite')) {
                 rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output; rateCache = pricing["3.1-flash-lite"].cache;
-            } else if (usedModel.includes('3.0-flash')) {
+            // FIX: Kenalpasti gemini-3-flash-preview sebagai 3.0-flash
+            } else if (usedModel.includes('3.0-flash') || usedModel.includes('3-flash')) {
                 rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output; rateCache = pricing["3.0-flash"].cache;
             } else if (usedModel.includes('2.5-pro')) {
                 const isT2 = totalPromptSize > 200000;
