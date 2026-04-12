@@ -33,11 +33,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
+  primary: (targetLabel) => `You are a subtitle translator. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
  // DIBERSIHKAN: Tiada lagi arahan pantang larang supaya Google tak melatah. Semua penapisan dibuat oleh fungsi maskToxicWords.
-  fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
+  fallback: (targetLabel) => `You are a subtitle translator. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
 };
 // ============================================================================
 
