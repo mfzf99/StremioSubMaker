@@ -675,11 +675,23 @@ class GeminiService {
               : payloadStr.trim();
             if (!cleaned) return;
             let data;
-            try {
-              data = JSON.parse(cleaned);
-            } catch (_) {
-              return;
+            try { 
+              data = JSON.parse(cleaned); 
+            } catch (_) { 
+              return; 
             }
+            
+            // ==========================================
+            // 🚨 PROBE DETEKTIF: PRINT RAW DATA KE TERMINAL 🚨
+            // ==========================================
+            log.debug(() => `[RAW DATA PROBE] Chunk Keys: ${Object.keys(data).join(', ')}`);
+            
+            if (data.usageMetadata) {
+                log.debug(() => `[RAW DATA PROBE] 💰 RESIT JUMPA!: ${JSON.stringify(data.usageMetadata)}`);
+                this.updateUsageStats(data.usageMetadata);
+            }
+            // ==========================================
+
             // Capture safety metadata so we can classify empty streams
             if (data.promptFeedback) {
               blockReason = data.promptFeedback.blockReason || blockReason;
