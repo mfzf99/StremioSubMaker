@@ -107,18 +107,30 @@ class GeminiService {
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
-  // 🚨 FUNGSI KUTIP RESIT GOOGLE API 🚨
+  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V8 NESTED FIX) 🚨
   updateUsageStats(usage) {
     if (!usage) return;
     this.usageStats.inputTokens += usage.promptTokenCount || 0;
     this.usageStats.cachedTokens += usage.cachedContentTokenCount || 0;
     
-    let thought = usage.thoughtTokenCount || 0;
-    let totalOut = usage.candidatesTokenCount || 0;
+    let thought = 0;
+    let textOut = 0;
+
+    // Google V1Beta menyembunyikan Thought Tokens dalam array candidatesTokensDetails
+    if (usage.candidatesTokensDetails && Array.isArray(usage.candidatesTokensDetails)) {
+        for (const detail of usage.candidatesTokensDetails) {
+            if (detail.modality === 'THOUGHT') thought += detail.tokenCount;
+            if (detail.modality === 'TEXT') textOut += detail.tokenCount;
+        }
+    } else {
+        // Fallback kalau Google tak pakai array
+        thought = usage.thoughtTokenCount || 0;
+        let totalOut = usage.candidatesTokenCount || 0;
+        textOut = Math.max(0, totalOut - thought);
+    }
     
     this.usageStats.thoughtTokens += thought;
-    // Keluarkan thought token dari jumlah output supaya tak double count
-    this.usageStats.outputTokens += Math.max(0, totalOut - thought); 
+    this.usageStats.outputTokens += textOut; 
   }
 
   getEffectiveThinkingBudget() {
