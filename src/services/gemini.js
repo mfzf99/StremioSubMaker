@@ -865,17 +865,10 @@ class GeminiService {
         return;
       }
 
-      // ==========================================
-      // 🚨 PROBE DETEKTIF 2 (TAYAR SIMPANAN) 🚨
-      // ==========================================
-      log.debug(() => `[RAW DATA PROBE - RECOVERY] Chunk Keys: ${Object.keys(data).join(', ')}`);
-      
+      // 🚨 KUTIP RESIT KOS (FALLBACK) - SECARA SENYAP 🚨
       if (data.usageMetadata) {
-          log.debug(() => `[RAW DATA PROBE - RECOVERY] 💰 RESIT JUMPA!: ${JSON.stringify(data.usageMetadata)}`);
-          // Tembak resit masuk ke sistem Global V10 kita!
           this.updateUsageStats(data.usageMetadata);
       }
-      // ==========================================
 
       const candidate = data?.candidates?.[0];
       if (data?.promptFeedback?.blockReason) {
