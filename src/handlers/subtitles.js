@@ -5192,7 +5192,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V10 GOD TIER + GLOBAL TOKENS INTERCEPT)
+    // 📱 INJECT PENGGERA TELEGRAM (V13 GOD TIER + DETAILED FINOPS RECEIPT)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
@@ -5279,7 +5279,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - V10 GLOBAL RECEIVER
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - DETAILED BREAKDOWN
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
@@ -5362,14 +5362,29 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             // Format paparan
             const displayUSD = `$${totalUSD.toFixed(5)}`;
             const displayMYR = `RM ${totalMYR.toFixed(4)}`;
+            const fmt = (num) => (num || 0).toLocaleString(); // Fungsi pendek untuk format nombor
 
             // Buat label cantik
             let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
             if (totalPromptSize > 200000 && (usedModel.includes('pro'))) cleanModelName += ' (Tier 2)';
 
+            // 🎨 BINA PAPARAN TOKEN TERPERINCI
+            let tokenBreakdown = `  ├ <b>Input:</b> ${fmt(inputTokens)}`;
+            if (cachedTokens > 0) {
+                tokenBreakdown += ` <i>(Cached: ${fmt(cachedTokens)})</i>`;
+            }
+            tokenBreakdown += `\n`;
+            
+            if (thoughtTokens > 0) {
+                tokenBreakdown += `  ├ <b>Thought:</b> ${fmt(thoughtTokens)}\n`;
+            }
+            
+            tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
+                              `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
+
             // Bina paparan FinOps untuk Telegram
             const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
-                                `  ├ <b>Tokens:</b> ±${totalTokens.toLocaleString()}\n` +
+                                tokenBreakdown +
                                 `  └ <b>Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
 
             // ====================================================================
