@@ -41,6 +41,14 @@ class GeminiService {
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
     this.baseUrl = GEMINI_API_URL;
 
+    // 🚨 BUKU REKOD FINOPS (UNTUK TELEGRAM) 🚨
+    this.usageStats = {
+      inputTokens: 0,
+      outputTokens: 0,
+      thoughtTokens: 0,
+      cachedTokens: 0
+    };
+
     // Advanced settings with environment variable fallbacks
     // Priority: advancedSettings param > environment variables > hardcoded defaults
 
@@ -97,6 +105,20 @@ class GeminiService {
 
     // JSON structured output mode (set by TranslationEngine when enabled)
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
+  }
+
+  // 🚨 FUNGSI KUTIP RESIT GOOGLE API 🚨
+  updateUsageStats(usage) {
+    if (!usage) return;
+    this.usageStats.inputTokens += usage.promptTokenCount || 0;
+    this.usageStats.cachedTokens += usage.cachedContentTokenCount || 0;
+    
+    let thought = usage.thoughtTokenCount || 0;
+    let totalOut = usage.candidatesTokenCount || 0;
+    
+    this.usageStats.thoughtTokens += thought;
+    // Keluarkan thought token dari jumlah output supaya tak double count
+    this.usageStats.outputTokens += Math.max(0, totalOut - thought); 
   }
 
   getEffectiveThinkingBudget() {
