@@ -5279,17 +5279,26 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - EXACT TOKENS ONLY
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - AUTO HUNTER V9
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // 🚨 TANGKAP TOKEN SEBENAR SAHAJA (TIADA LAGI FORMULA TEKAAN) 🚨
-            const geminiUsage = translationEngine?.gemini?.usageStats || {};
+            // 🚨 TAKTIK GOD TIER: RADAR PENCARI BUKU REKOD 🚨
+            // Kita selongkar perut enjin untuk cari kat mana gemini.js bersembunyi
+            let geminiUsage = {};
+            if (translationEngine) {
+                // Tapis semua objek dalam enjin, cari yang ada 'usageStats'
+                const foundProvider = Object.values(translationEngine).find(obj => obj && typeof obj === 'object' && 'usageStats' in obj);
+                if (foundProvider) {
+                    geminiUsage = foundProvider.usageStats;
+                }
+            }
 
-            const inputTokens = geminiUsage.inputTokens || 0;
+            // Tangkap token sebenar! Letak fallback kepada stats asal supaya tak mati keras
+            const inputTokens = geminiUsage.inputTokens || stats.inputTokens || 0;
             const cachedTokens = geminiUsage.cachedTokens || 0; 
             const thoughtTokens = geminiUsage.thoughtTokens || 0;
-            const baseOutputTokens = geminiUsage.outputTokens || 0;
+            const baseOutputTokens = geminiUsage.outputTokens || stats.actualTokens || stats.outputTokens || 0;
             
             // Cantumkan token
             const outputTokens = baseOutputTokens + thoughtTokens; 
