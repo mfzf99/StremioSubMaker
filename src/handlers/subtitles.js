@@ -5192,7 +5192,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V6 GOD TIER + FINOPS + LIVE RATE + CACHE MATH COMPLETE)
+    // 📱 INJECT PENGGERA TELEGRAM (V7 GOD TIER + LIVE TOKENS FROM GEMINI.JS)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
@@ -5279,15 +5279,17 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) COMPLETE VERSION
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) + DATA SEBENAR GEMINI.JS
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // 🚨 TANGKAP SEMUA 4 JENIS TOKEN 🚨
-            const inputTokens = stats.estimatedTokens || stats.inputTokens || (finalTotal * 17);
-            const cachedTokens = stats.cachedTokens || 0; 
-            const thoughtTokens = stats.thoughtTokens || 0;
-            const baseOutputTokens = stats.actualTokens || stats.outputTokens || (finalTotal * 15);
+            // 🚨 TANGKAP SEMUA 4 JENIS TOKEN SEBENAR DARI GEMINI.JS 🚨
+            const geminiUsage = translationEngine?.gemini?.usageStats || {};
+
+            const inputTokens = geminiUsage.inputTokens || stats.estimatedTokens || stats.inputTokens || Math.round(finalTotal * 19);
+            const cachedTokens = geminiUsage.cachedTokens || 0; 
+            const thoughtTokens = geminiUsage.thoughtTokens || 0;
+            const baseOutputTokens = geminiUsage.outputTokens || stats.actualTokens || stats.outputTokens || Math.round(finalTotal * 18);
             
             // Cantumkan token yang dikira sama harga
             const outputTokens = baseOutputTokens + thoughtTokens; // Thought ikut harga Output
