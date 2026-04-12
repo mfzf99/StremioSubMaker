@@ -33,13 +33,30 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
+  primary: (targetLabel) => `Translate into natural, local conversational  ${targetLabel}. You MUST write exactly like how native speakers talk in real life, not like a formal textbook. Translate the INTENT and FEELING, not word-for-word perfectly.
+
+STYLE GUIDELINES (APPLY TO ALL TEXT):
+- Use "saya" and "awak" for normal dialogue.
+- Naturally integrate common English loanwords (e.g., "okay", "sorry", "test", "boss", "guys").
+- NEVER use highly formal/bookish words if a conversational alternative exists (e.g., avoid "mengapakah", "sedang", "amat").
+
+STYLE EXAMPLES:
+Original: "Are you kidding me right now?" -> Translation: "Awak biar betul?"
+Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
+ fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel}. You MUST write exactly like how native speakers talk in real life, not like a formal textbook. Translate the INTENT and FEELING, not word-for-word perfectly.
+
+STYLE GUIDELINES (APPLY TO ALL TEXT):
+- Use "saya" and "awak" for normal dialogue.
+- Naturally integrate common English loanwords (e.g., "okay", "sorry", "test", "boss", "guys").
+- NEVER use highly formal/bookish words if a conversational alternative exists.
+
+STYLE EXAMPLES:
+Original: "Are you kidding me right now?" -> Translation: "Awak biar betul?"
+Original: "I don't care what they say, this is ridiculous." -> Translation: "Saya tak kisah apa diorang cakap, benda ini memang mengarut."`
 };
 // ============================================================================
-
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
   return String(value || '')
