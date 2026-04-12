@@ -5192,174 +5192,199 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V4 GOD TIER + FINOPS CALCULATOR COMPLETE)
+    // 📱 INJECT PENGGERA TELEGRAM (V5 GOD TIER + FINOPS + LIVE RATE COMPLETE)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
 
       if (botToken && chatId) {
-        // 1. Ekstrak Tajuk Movie & Sanitize (Kebal Telegram HTML)
-        const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
-        const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
-        let movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
-        
-        // 🛡️ PENAWAR HTML: Tukar simbol bahaya supaya Telegram tak reject
-        movieTitle = movieTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Balut keseluruhan logik notifikasi dalam fungsi async supaya API tukaran duit (await) tak sekat sistem utama
+        (async () => {
+          try {
+            // 1. Ekstrak Tajuk Movie & Sanitize (Kebal Telegram HTML)
+            const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
+            const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
+            let movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
+            
+            // 🛡️ PENAWAR HTML: Tukar simbol bahaya supaya Telegram tak reject
+            movieTitle = movieTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-        // 2. Kenalpasti Sumber
-        let sourceProv = 'OpenSubtitles (Auth)';
-        if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
-        else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
-        else if (sourceFileId.startsWith('v3_')) sourceProv = 'OpenSubtitles V3';
-        else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
-        else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
-        else if (sourceFileId.startsWith('opensubtitles_')) sourceProv = 'OpenSubtitles';
-        
-        // 3. Kira Masa (Stopwatch) yang Tepat
-        const tStatus = translationStatus.get(runtimeKey) || {};
-        let timeTaken = 'N/A';
-        if (tStatus.startedAt) {
-          const durationSec = Math.max(1, Math.round((Date.now() - tStatus.startedAt) / 1000));
-          const mins = Math.floor(durationSec / 60);
-          const secs = durationSec % 60;
-          timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-        }
-
-        // 4. Integrasi Statistik Sebenar (Sync dengan translationEngine.js)
-        const stats = translationEngine?.translationStats || {};
-        
-        const finalTotal = stats.entryCount || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
-        const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 100;
-        const totalBatches = stats.batchCount || Math.ceil(finalTotal / currentBatchSize);
-
-        const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
-        const missing = stats.missingEntries || 0;
-        const recovered = stats.recoveredEntries || 0;
-        const failed = Math.max(0, missing - recovered);
-        const success = finalTotal - failed;
-
-        // ====================================================================
-        // 5. 🕵️‍♂️ DYNAMIC ADVANCED DIAGNOSTICS
-        // ====================================================================
-        let advancedStats = '';
-        
-        if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
-            advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
-        }
-        
-        if (stats.errorTypes && stats.errorTypes.length > 0) {
-            advancedStats += `🦠 <b>AI Errors Handled:</b> ${stats.errorTypes.join(', ')}\n`;
-        }
-        
-        if (stats.usedSecondaryProvider) {
-            advancedStats += `🛟 <b>Fallback Triggered:</b> ${stats.secondaryProviderName || 'Unknown'}\n`;
-            if (stats.primaryFailureReason) {
-                const shortReason = stats.primaryFailureReason.length > 50 ? stats.primaryFailureReason.substring(0, 50) + '...' : stats.primaryFailureReason;
-                advancedStats += `   └ <i>Reason: ${shortReason}</i>\n`;
+            // 2. Kenalpasti Sumber
+            let sourceProv = 'OpenSubtitles (Auth)';
+            if (sourceFileId.startsWith('subdl_')) sourceProv = 'SubDL';
+            else if (sourceFileId.startsWith('subsource_')) sourceProv = 'SubSource';
+            else if (sourceFileId.startsWith('v3_')) sourceProv = 'OpenSubtitles V3';
+            else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
+            else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
+            else if (sourceFileId.startsWith('opensubtitles_')) sourceProv = 'OpenSubtitles';
+            
+            // 3. Kira Masa (Stopwatch) yang Tepat
+            const tStatus = translationStatus.get(runtimeKey) || {};
+            let timeTaken = 'N/A';
+            if (tStatus.startedAt) {
+              const durationSec = Math.max(1, Math.round((Date.now() - tStatus.startedAt) / 1000));
+              const mins = Math.floor(durationSec / 60);
+              const secs = durationSec % 60;
+              timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
             }
-        }
-        
-        if (stats.jsonXmlFallback) {
-            advancedStats += `🛠️ <b>Format Rescue:</b> JSON to XML Fallback Activated\n`;
-        }
-        
-        if (stats.parallelBatchesUsed) {
-            advancedStats += `⚡ <b>Execution:</b> Parallel Batches\n`;
-        } else if (stats.singleBatchMode) {
-            advancedStats += `📦 <b>Execution:</b> Single Batch Mode\n`;
-        }
 
-        let diagnosticsSection = '';
-        if (advancedStats !== '') {
-            diagnosticsSection = `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}`;
-        }
+            // 4. Integrasi Statistik Sebenar (Sync dengan translationEngine.js)
+            const stats = translationEngine?.translationStats || {};
+            
+            const finalTotal = stats.entryCount || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
+            const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 100;
+            const totalBatches = stats.batchCount || Math.ceil(finalTotal / currentBatchSize);
 
-        // ====================================================================
-        // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - GOD TIER EDITION
-        // ====================================================================
-        const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
-        
-        // Cari token (Guna fallback ke formula logik kalau stats token belum ada)
-        const inputTokens = stats.estimatedTokens || stats.inputTokens || (finalTotal * 17);
-        const outputTokens = stats.actualTokens || stats.outputTokens || (finalTotal * 15);
-        const totalTokens = inputTokens + outputTokens;
+            // Baca laporan Mismatch & Recovery dari enjin
+            const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
+            const missing = stats.missingEntries || 0;
+            const recovered = stats.recoveredEntries || 0;
+            const failed = Math.max(0, missing - recovered);
+            const success = finalTotal - failed;
 
-        // Pangkalan Data Harga (USD per 1 Juta Token)
-        const pricing = {
-            "3.1-pro": { input: 2.00, output: 12.00, inputT2: 4.00, outputT2: 18.00 },
-            "3.1-flash-lite": { input: 0.25, output: 1.50 },
-            "3.0-flash": { input: 0.50, output: 3.00 },
-            "2.5-pro": { input: 1.25, output: 10.00, inputT2: 2.50, outputT2: 15.00 },
-            "2.5-flash": { input: 0.30, output: 2.50 },
-            "2.5-flash-lite": { input: 0.10, output: 0.40 }
-        };
+            // ====================================================================
+            // 5. 🕵️‍♂️ DYNAMIC ADVANCED DIAGNOSTICS
+            // ====================================================================
+            let advancedStats = '';
+            
+            if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
+                advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
+            }
+            
+            if (stats.errorTypes && stats.errorTypes.length > 0) {
+                advancedStats += `🦠 <b>AI Errors Handled:</b> ${stats.errorTypes.join(', ')}\n`;
+            }
+            
+            if (stats.usedSecondaryProvider) {
+                advancedStats += `🛟 <b>Fallback Triggered:</b> ${stats.secondaryProviderName || 'Unknown'}\n`;
+                if (stats.primaryFailureReason) {
+                    const shortReason = stats.primaryFailureReason.length > 50 ? stats.primaryFailureReason.substring(0, 50) + '...' : stats.primaryFailureReason;
+                    advancedStats += `   └ <i>Reason: ${shortReason}</i>\n`;
+                }
+            }
+            
+            if (stats.jsonXmlFallback) {
+                advancedStats += `🛠️ <b>Format Rescue:</b> JSON to XML Fallback Activated\n`;
+            }
+            
+            if (stats.parallelBatchesUsed) {
+                advancedStats += `⚡ <b>Execution:</b> Parallel Batches\n`;
+            } else if (stats.singleBatchMode) {
+                advancedStats += `📦 <b>Execution:</b> Single Batch Mode\n`;
+            }
 
-        // Enjin Pencari Harga Dinamik
-        let rateInput = pricing["3.1-flash-lite"].input;  // Default
-        let rateOutput = pricing["3.1-flash-lite"].output;
+            let diagnosticsSection = '';
+            if (advancedStats !== '') {
+                diagnosticsSection = `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}`;
+            }
 
-        if (usedModel.includes('3.1-pro')) {
-            rateInput = inputTokens > 200000 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
-            rateOutput = inputTokens > 200000 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
-        } else if (usedModel.includes('3.1-flash-lite')) {
-            rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output;
-        } else if (usedModel.includes('3.0-flash')) {
-            rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output;
-        } else if (usedModel.includes('2.5-pro')) {
-            rateInput = inputTokens > 200000 ? pricing["2.5-pro"].inputT2 : pricing["2.5-pro"].input;
-            rateOutput = inputTokens > 200000 ? pricing["2.5-pro"].outputT2 : pricing["2.5-pro"].output;
-        } else if (usedModel.includes('2.5-flash-lite')) {
-            rateInput = pricing["2.5-flash-lite"].input; rateOutput = pricing["2.5-flash-lite"].output;
-        } else if (usedModel.includes('2.5-flash')) {
-            rateInput = pricing["2.5-flash"].input; rateOutput = pricing["2.5-flash"].output;
-        }
+            // ====================================================================
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) + LIVE EXCHANGE RATE
+            // ====================================================================
+            const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
+            
+            // Cari token (Guna fallback ke formula logik kalau stats token belum ada)
+            const inputTokens = stats.estimatedTokens || stats.inputTokens || (finalTotal * 17);
+            const outputTokens = stats.actualTokens || stats.outputTokens || (finalTotal * 15);
+            const totalTokens = inputTokens + outputTokens;
 
-        // Kiraan Kos
-        const KADAR_TUKARAN_MYR = 4.75; 
-        const costInput = (inputTokens / 1000000) * rateInput;
-        const costOutput = (outputTokens / 1000000) * rateOutput;
-        const totalUSD = costInput + costOutput;
-        const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
+            // Pangkalan Data Harga (USD per 1 Juta Token)
+            const pricing = {
+                "3.1-pro": { input: 2.00, output: 12.00, inputT2: 4.00, outputT2: 18.00 },
+                "3.1-flash-lite": { input: 0.25, output: 1.50 },
+                "3.0-flash": { input: 0.50, output: 3.00 },
+                "2.5-pro": { input: 1.25, output: 10.00, inputT2: 2.50, outputT2: 15.00 },
+                "2.5-flash": { input: 0.30, output: 2.50 },
+                "2.5-flash-lite": { input: 0.10, output: 0.40 }
+            };
 
-        // Format paparan
-        const displayUSD = `$${totalUSD.toFixed(4)}`;
-        const displayMYR = `RM ${totalMYR.toFixed(4)}`;
+            // Enjin Pencari Harga Dinamik
+            let rateInput = pricing["3.1-flash-lite"].input;
+            let rateOutput = pricing["3.1-flash-lite"].output;
 
-        // Buat label cantik sikit untuk telegram
-        let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
-        if (inputTokens > 200000 && (usedModel.includes('pro'))) cleanModelName += ' (Tier 2)';
+            if (usedModel.includes('3.1-pro')) {
+                rateInput = inputTokens > 200000 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
+                rateOutput = inputTokens > 200000 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
+            } else if (usedModel.includes('3.1-flash-lite')) {
+                rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output;
+            } else if (usedModel.includes('3.0-flash')) {
+                rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output;
+            } else if (usedModel.includes('2.5-pro')) {
+                rateInput = inputTokens > 200000 ? pricing["2.5-pro"].inputT2 : pricing["2.5-pro"].input;
+                rateOutput = inputTokens > 200000 ? pricing["2.5-pro"].outputT2 : pricing["2.5-pro"].output;
+            } else if (usedModel.includes('2.5-flash-lite')) {
+                rateInput = pricing["2.5-flash-lite"].input; rateOutput = pricing["2.5-flash-lite"].output;
+            } else if (usedModel.includes('2.5-flash')) {
+                rateInput = pricing["2.5-flash"].input; rateOutput = pricing["2.5-flash"].output;
+            }
 
-        const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
-                            `  ├ <b>Tokens:</b> ±${totalTokens.toLocaleString()}\n` +
-                            `  └ <b>Cost:</b> ${displayUSD} (${displayMYR})\n`;
+            // 💱 ENJIN LIVE EXCHANGE RATE (USD ke MYR)
+            let KADAR_TUKARAN_MYR = 4.40; // Harga dinding (Fallback)
+            let rateIndicator = '🔒 Fixed Rate';
+            try {
+                // Tarik data dari API percuma (Sangat pantas)
+                const exResponse = await fetch('https://open.er-api.com/v6/latest/USD');
+                if (exResponse.ok) {
+                    const exData = await exResponse.json();
+                    if (exData && exData.rates && exData.rates.MYR) {
+                        KADAR_TUKARAN_MYR = exData.rates.MYR;
+                        rateIndicator = `📈 Live RM${KADAR_TUKARAN_MYR.toFixed(2)}`;
+                    }
+                }
+            } catch (err) {
+                log.debug(() => `[FinOps] Gagal tarik live rate, guna fallback. Punca: ${err.message}`);
+            }
 
-        // ====================================================================
+            // Kiraan Kos
+            const costInput = (inputTokens / 1000000) * rateInput;
+            const costOutput = (outputTokens / 1000000) * rateOutput;
+            const totalUSD = costInput + costOutput;
+            const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
 
-        const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
-        
-        // 6. Mesej Telegram (Kemaskan Format + Dynamic Section + Cost Section)
-        const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
-                        `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
-                        `📥 <b>Source:</b> ${sourceProv}\n\n` +
-                        `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH MISSING LINES ⚠️'}\n` +
-                        `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
-                        `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
-                        `✅ <b>Successful:</b> ${success}\n` +
-                        `❌ <b>Failed:</b> ${failed}\n` +
-                        `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n` +
-                        `${diagnosticsSection}` +
-                        `${costSection}\n` +
-                        `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
-                        `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
-                        `🧠 <b>Engine:</b> ${usedModel}\n\n` +
-                        `🎉 <b>Ready to stream!</b>`;
-        
-        // 7. Hantar guna Native Fetch (parse_mode: 'HTML')
-        fetch(teleUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
-        }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message} - Punca: ${e.cause ? e.cause.message : 'Tiada info'}`));
+            // Format paparan
+            const displayUSD = `$${totalUSD.toFixed(4)}`;
+            const displayMYR = `RM ${totalMYR.toFixed(4)}`;
+
+            // Buat label cantik
+            let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
+            if (inputTokens > 200000 && (usedModel.includes('pro'))) cleanModelName += ' (Tier 2)';
+
+            const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
+                                `  ├ <b>Tokens:</b> ±${totalTokens.toLocaleString()}\n` +
+                                `  └ <b>Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+
+            // ====================================================================
+
+            const teleUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            
+            // 6. Mesej Telegram (Kemaskan Format + Dynamic Section + Cost Section)
+            const teleMsg = `✅ <b>Subtitle Translation Report</b> 🎬\n\n` +
+                            `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
+                            `📥 <b>Source:</b> ${sourceProv}\n\n` +
+                            `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH MISSING LINES ⚠️'}\n` +
+                            `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
+                            `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
+                            `✅ <b>Successful:</b> ${success}\n` +
+                            `❌ <b>Failed:</b> ${failed}\n` +
+                            `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n` +
+                            `${diagnosticsSection}` +
+                            `${costSection}\n` +
+                            `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
+                            `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
+                            `🧠 <b>Engine:</b> ${usedModel}\n\n` +
+                            `🎉 <b>Ready to stream!</b>`;
+            
+            // 7. Hantar guna Native Fetch (parse_mode: 'HTML')
+            await fetch(teleUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
+            }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message} - Punca: ${e.cause ? e.cause.message : 'Tiada info'}`));
+
+          } catch (asyncErr) {
+             log.debug(() => `[Telegram] Ralat dalam blok async FinOps: ${asyncErr.message}`);
+          }
+        })(); // Tutup async wrapper
       }
     } catch (teleErr) {
       log.debug(() => `[Telegram] Ralat dalaman: ${teleErr.message} - Punca: ${teleErr.stack || 'Tiada susur galur'}`);
