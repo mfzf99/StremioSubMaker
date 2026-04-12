@@ -140,6 +140,11 @@ class GeminiService {
     global.geminiFinOps.outputTokens += textOut; 
   }
 
+  // 👉 ORGAN YANG HILANG 
+  getEffectiveThinkingBudget() {
+    return this.isGemmaModel ? 0 : this.thinkingBudget;
+  }
+
   /**
    * Get available models from Gemini API
    */
