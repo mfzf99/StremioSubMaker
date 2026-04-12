@@ -5408,12 +5408,30 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                             `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                             `🎉 <b>Ready to stream!</b>`;
             
-            // 7. Hantar guna Native Fetch (parse_mode: 'HTML')
-            await fetch(teleUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: chatId, text: teleMsg, parse_mode: 'HTML' })
-            }).catch(e => log.debug(() => `[Telegram] Gagal hantar: ${e.message} - Punca: ${e.cause ? e.cause.message : 'Tiada info'}`));
+            // 7. Hantar guna AXIOS + AUTO-RETRY (Posmen Kebal)
+            const axios = require('axios');
+            let cubaLagi = 3;
+            
+            while (cubaLagi > 0) {
+                try {
+                    await axios.post(teleUrl, {
+                        chat_id: chatId, 
+                        text: teleMsg, 
+                        parse_mode: 'HTML'
+                    }, { 
+                        timeout: 10000 // Beri masa 10 saat sebelum timeout
+                    });
+                    break; // Kalau berjaya, terus keluar dari loop (berhenti cuba)
+                } catch (e) {
+                    cubaLagi--; // Tolak 1 nyawa
+                    if (cubaLagi === 0) {
+                        log.debug(() => `[Telegram] Gagal hantar mutlak lepas 3 kali cuba: ${e.message}`);
+                    } else {
+                        log.debug(() => `[Telegram] Posmen terpelecok (${e.message}). Cuba ketuk lagi dalam 2 saat... (Baki nyawa: ${cubaLagi})`);
+                        await new Promise(res => setTimeout(res, 2000)); // Rehat 2 saat sebelum try lagi
+                    }
+                }
+            }
 
           } catch (asyncErr) {
              log.debug(() => `[Telegram] Ralat dalam blok async FinOps: ${asyncErr.message}`);
