@@ -683,16 +683,10 @@ class GeminiService {
               return; 
             }
             
-            // ==========================================
-            // 🚨 PROBE DETEKTIF: PRINT RAW DATA KE TERMINAL 🚨
-            // ==========================================
-            log.debug(() => `[RAW DATA PROBE] Chunk Keys: ${Object.keys(data).join(', ')}`);
-            
+            // 🚨 KUTIP RESIT KOS (STREAMING CHUNKS) - SECARA SENYAP 🚨
             if (data.usageMetadata) {
-                log.debug(() => `[RAW DATA PROBE] 💰 RESIT JUMPA!: ${JSON.stringify(data.usageMetadata)}`);
                 this.updateUsageStats(data.usageMetadata);
             }
-            // ==========================================
 
             // Capture safety metadata so we can classify empty streams
             if (data.promptFeedback) {
