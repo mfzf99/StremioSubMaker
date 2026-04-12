@@ -107,7 +107,7 @@ class GeminiService {
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
-  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V10 GLOBAL INTERCEPT) 🚨
+  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V11 OVERRIDE FIX) 🚨
   updateUsageStats(usage) {
     if (!usage) return;
 
@@ -128,16 +128,18 @@ class GeminiService {
             if (detail.modality === 'TEXT') textOut += detail.tokenCount;
         }
     } else {
-        thought = usage.thoughtTokenCount || 0;
+        // Fallback untuk v1beta API baru
+        thought = usage.thoughtsTokenCount || usage.thoughtTokenCount || 0;
         let totalOut = usage.candidatesTokenCount || 0;
         textOut = Math.max(0, totalOut - thought);
     }
     
-    // Tembak jumlah token ke Global Variable supaya Telegram boleh dengar
-    global.geminiFinOps.inputTokens += input;
-    global.geminiFinOps.cachedTokens += cached;
-    global.geminiFinOps.thoughtTokens += thought;
-    global.geminiFinOps.outputTokens += textOut; 
+    // 🚨 FIX GILA: Guna '=' (Override) BUKAN '+=' (Tambah).
+    // Sebab dalam mode Streaming, Google hantar cumulative usage setiap kali!
+    global.geminiFinOps.inputTokens = input;
+    global.geminiFinOps.cachedTokens = cached;
+    global.geminiFinOps.thoughtTokens = thought;
+    global.geminiFinOps.outputTokens = textOut; 
   }
 
   // 👉 ORGAN YANG HILANG 
