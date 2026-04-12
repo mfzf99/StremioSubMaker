@@ -107,7 +107,7 @@ class GeminiService {
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
-  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V11 OVERRIDE FIX) 🚨
+  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V12 PENJAGA TOL) 🚨
   updateUsageStats(usage) {
     if (!usage) return;
 
@@ -116,32 +116,23 @@ class GeminiService {
         global.geminiFinOps = { inputTokens: 0, cachedTokens: 0, thoughtTokens: 0, outputTokens: 0 };
     }
 
-    let input = usage.promptTokenCount || 0;
-    let cached = usage.cachedContentTokenCount || 0;
-    let thought = 0;
-    let textOut = 0;
-
-    // Selongkar tempat Google sorok Thought Tokens
-    if (usage.candidatesTokensDetails && Array.isArray(usage.candidatesTokensDetails)) {
-        for (const detail of usage.candidatesTokensDetails) {
-            if (detail.modality === 'THOUGHT') thought += detail.tokenCount;
-            if (detail.modality === 'TEXT') textOut += detail.tokenCount;
-        }
-    } else {
-        // Fallback untuk v1beta API baru
-        thought = usage.thoughtsTokenCount || usage.thoughtTokenCount || 0;
-        let totalOut = usage.candidatesTokenCount || 0;
-        textOut = Math.max(0, totalOut - thought);
-    }
+    // Ambil direct je, tak payah matematik tolak-tolak
+    const input = usage.promptTokenCount || 0;
+    const cached = usage.cachedContentTokenCount || 0;
     
-    // 🚨 FIX GILA: Guna '=' (Override) BUKAN '+=' (Tambah).
-    // Sebab dalam mode Streaming, Google hantar cumulative usage setiap kali!
+    // Thought tokens: v1beta baru pakai thoughtsTokenCount (ada 's')
+    const thought = usage.thoughtsTokenCount || usage.thoughtTokenCount || 0;
+    
+    // Output tokens tulen: candidatesTokenCount (Google tak campur dengan thought)
+    const textOut = usage.candidatesTokenCount || 0;
+
+    // Override terus ke Global Variable
     global.geminiFinOps.inputTokens = input;
     global.geminiFinOps.cachedTokens = cached;
     global.geminiFinOps.thoughtTokens = thought;
     global.geminiFinOps.outputTokens = textOut; 
   }
-
+  
   // 👉 ORGAN YANG HILANG 
   getEffectiveThinkingBudget() {
     return this.isGemmaModel ? 0 : this.thinkingBudget;
