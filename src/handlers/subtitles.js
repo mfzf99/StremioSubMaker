@@ -5192,13 +5192,13 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     log.debug(() => '[Translation] Background translation completed successfully');
 
-    // 📱 INJECT PENGGERA TELEGRAM (V5 GOD TIER + FINOPS + LIVE RATE COMPLETE)
+    // 📱 INJECT PENGGERA TELEGRAM (V6 GOD TIER + FINOPS + LIVE RATE + CACHE MATH COMPLETE)
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID; 
 
       if (botToken && chatId) {
-        // Balut keseluruhan logik notifikasi dalam fungsi async supaya API tukaran duit (await) tak sekat sistem utama
+        // Balut keseluruhan logik notifikasi dalam fungsi async
         (async () => {
           try {
             // 1. Ekstrak Tajuk Movie & Sanitize (Kebal Telegram HTML)
@@ -5235,7 +5235,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const currentBatchSize = (translationEngine && translationEngine.batchSize) ? translationEngine.batchSize : 100;
             const totalBatches = stats.batchCount || Math.ceil(finalTotal / currentBatchSize);
 
-            // Baca laporan Mismatch & Recovery dari enjin
+            // Baca laporan Mismatch & Recovery
             const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
             const missing = stats.missingEntries || 0;
             const recovered = stats.recoveredEntries || 0;
@@ -5279,50 +5279,60 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) + LIVE EXCHANGE RATE
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) COMPLETE VERSION
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // Cari token (Guna fallback ke formula logik kalau stats token belum ada)
+            // 🚨 TANGKAP SEMUA 4 JENIS TOKEN 🚨
             const inputTokens = stats.estimatedTokens || stats.inputTokens || (finalTotal * 17);
-            const outputTokens = stats.actualTokens || stats.outputTokens || (finalTotal * 15);
-            const totalTokens = inputTokens + outputTokens;
+            const cachedTokens = stats.cachedTokens || 0; 
+            const thoughtTokens = stats.thoughtTokens || 0;
+            const baseOutputTokens = stats.actualTokens || stats.outputTokens || (finalTotal * 15);
+            
+            // Cantumkan token yang dikira sama harga
+            const outputTokens = baseOutputTokens + thoughtTokens; // Thought ikut harga Output
+            const totalPromptSize = inputTokens + cachedTokens; // Untuk kira Tier 2 (Pro > 200k)
+            const totalTokens = totalPromptSize + outputTokens;
 
-            // Pangkalan Data Harga (USD per 1 Juta Token)
+            // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
             const pricing = {
-                "3.1-pro": { input: 2.00, output: 12.00, inputT2: 4.00, outputT2: 18.00 },
-                "3.1-flash-lite": { input: 0.25, output: 1.50 },
-                "3.0-flash": { input: 0.50, output: 3.00 },
-                "2.5-pro": { input: 1.25, output: 10.00, inputT2: 2.50, outputT2: 15.00 },
-                "2.5-flash": { input: 0.30, output: 2.50 },
-                "2.5-flash-lite": { input: 0.10, output: 0.40 }
+                "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
+                "3.1-flash-lite": { input: 0.25, output: 1.50, cache: 0.025 },
+                "3.0-flash": { input: 0.50, output: 3.00, cache: 0.05 },
+                "2.5-pro": { input: 1.25, output: 10.00, cache: 0.125, inputT2: 2.50, outputT2: 15.00, cacheT2: 0.25 },
+                "2.5-flash": { input: 0.30, output: 2.50, cache: 0.03 },
+                "2.5-flash-lite": { input: 0.10, output: 0.40, cache: 0.01 }
             };
 
             // Enjin Pencari Harga Dinamik
             let rateInput = pricing["3.1-flash-lite"].input;
             let rateOutput = pricing["3.1-flash-lite"].output;
+            let rateCache = pricing["3.1-flash-lite"].cache;
 
             if (usedModel.includes('3.1-pro')) {
-                rateInput = inputTokens > 200000 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
-                rateOutput = inputTokens > 200000 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
+                const isT2 = totalPromptSize > 200000;
+                rateInput = isT2 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
+                rateOutput = isT2 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
+                rateCache = isT2 ? pricing["3.1-pro"].cacheT2 : pricing["3.1-pro"].cache;
             } else if (usedModel.includes('3.1-flash-lite')) {
-                rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output;
+                rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output; rateCache = pricing["3.1-flash-lite"].cache;
             } else if (usedModel.includes('3.0-flash')) {
-                rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output;
+                rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output; rateCache = pricing["3.0-flash"].cache;
             } else if (usedModel.includes('2.5-pro')) {
-                rateInput = inputTokens > 200000 ? pricing["2.5-pro"].inputT2 : pricing["2.5-pro"].input;
-                rateOutput = inputTokens > 200000 ? pricing["2.5-pro"].outputT2 : pricing["2.5-pro"].output;
+                const isT2 = totalPromptSize > 200000;
+                rateInput = isT2 ? pricing["2.5-pro"].inputT2 : pricing["2.5-pro"].input;
+                rateOutput = isT2 ? pricing["2.5-pro"].outputT2 : pricing["2.5-pro"].output;
+                rateCache = isT2 ? pricing["2.5-pro"].cacheT2 : pricing["2.5-pro"].cache;
             } else if (usedModel.includes('2.5-flash-lite')) {
-                rateInput = pricing["2.5-flash-lite"].input; rateOutput = pricing["2.5-flash-lite"].output;
+                rateInput = pricing["2.5-flash-lite"].input; rateOutput = pricing["2.5-flash-lite"].output; rateCache = pricing["2.5-flash-lite"].cache;
             } else if (usedModel.includes('2.5-flash')) {
-                rateInput = pricing["2.5-flash"].input; rateOutput = pricing["2.5-flash"].output;
+                rateInput = pricing["2.5-flash"].input; rateOutput = pricing["2.5-flash"].output; rateCache = pricing["2.5-flash"].cache;
             }
 
             // 💱 ENJIN LIVE EXCHANGE RATE (USD ke MYR)
             let KADAR_TUKARAN_MYR = 4.40; // Harga dinding (Fallback)
             let rateIndicator = '🔒 Fixed Rate';
             try {
-                // Tarik data dari API percuma (Sangat pantas)
                 const exResponse = await fetch('https://open.er-api.com/v6/latest/USD');
                 if (exResponse.ok) {
                     const exData = await exResponse.json();
@@ -5335,20 +5345,23 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 log.debug(() => `[FinOps] Gagal tarik live rate, guna fallback. Punca: ${err.message}`);
             }
 
-            // Kiraan Kos
+            // 🚨 KIRAAN KOS MATEMATIK TEPAT 🚨
             const costInput = (inputTokens / 1000000) * rateInput;
+            const costCache = (cachedTokens / 1000000) * rateCache;
             const costOutput = (outputTokens / 1000000) * rateOutput;
-            const totalUSD = costInput + costOutput;
+            
+            const totalUSD = costInput + costCache + costOutput;
             const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
 
             // Format paparan
-            const displayUSD = `$${totalUSD.toFixed(4)}`;
+            const displayUSD = `$${totalUSD.toFixed(5)}`;
             const displayMYR = `RM ${totalMYR.toFixed(4)}`;
 
             // Buat label cantik
             let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
-            if (inputTokens > 200000 && (usedModel.includes('pro'))) cleanModelName += ' (Tier 2)';
+            if (totalPromptSize > 200000 && (usedModel.includes('pro'))) cleanModelName += ' (Tier 2)';
 
+            // Bina paparan FinOps untuk Telegram
             const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
                                 `  ├ <b>Tokens:</b> ±${totalTokens.toLocaleString()}\n` +
                                 `  └ <b>Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
