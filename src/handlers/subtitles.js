@@ -5279,21 +5279,21 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) + DATA SEBENAR GEMINI.JS
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - EXACT TOKENS ONLY
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // 🚨 TANGKAP SEMUA 4 JENIS TOKEN SEBENAR DARI GEMINI.JS 🚨
+            // 🚨 TANGKAP TOKEN SEBENAR SAHAJA (TIADA LAGI FORMULA TEKAAN) 🚨
             const geminiUsage = translationEngine?.gemini?.usageStats || {};
 
-            const inputTokens = geminiUsage.inputTokens || stats.estimatedTokens || stats.inputTokens || Math.round(finalTotal * 19);
+            const inputTokens = geminiUsage.inputTokens || 0;
             const cachedTokens = geminiUsage.cachedTokens || 0; 
             const thoughtTokens = geminiUsage.thoughtTokens || 0;
-            const baseOutputTokens = geminiUsage.outputTokens || stats.actualTokens || stats.outputTokens || Math.round(finalTotal * 18);
+            const baseOutputTokens = geminiUsage.outputTokens || 0;
             
-            // Cantumkan token yang dikira sama harga
-            const outputTokens = baseOutputTokens + thoughtTokens; // Thought ikut harga Output
-            const totalPromptSize = inputTokens + cachedTokens; // Untuk kira Tier 2 (Pro > 200k)
+            // Cantumkan token
+            const outputTokens = baseOutputTokens + thoughtTokens; 
+            const totalPromptSize = inputTokens + cachedTokens; 
             const totalTokens = totalPromptSize + outputTokens;
 
             // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
