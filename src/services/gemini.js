@@ -677,7 +677,9 @@ class GeminiService {
             
             // 🚨 KUTIP RESIT KOS (STREAMING CHUNKS) - SECARA SENYAP 🚨
             if (data.usageMetadata) {
-                this.updateUsageStats(data.usageMetadata);
+                // Cipta ID unik untuk batch ni kalau belum ada
+                if (!processPayload.streamId) processPayload.streamId = 'batch_' + Date.now() + Math.random();
+                this.updateUsageStats(data.usageMetadata, processPayload.streamId);
             }
 
             // Capture safety metadata so we can classify empty streams
