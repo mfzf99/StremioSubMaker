@@ -5279,25 +5279,34 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             }
 
             // ====================================================================
-            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - DETAILED BREAKDOWN
+            // 5.5 🧮 MESIN KIRA-KIRA KOS GEMINI (FINOPS) - V14 MULTI-BATCH AGGREGATOR
             // ====================================================================
             const usedModel = (effectiveModel || 'gemini-3.1-flash-lite-preview').toLowerCase();
             
-            // 🚨 SEDUT DATA TERUS DARI GLOBAL CACHE 🚨
-            const geminiUsage = global.geminiFinOps || {};
+            // 🚨 BACA BUKU LOG GLOBAL 🚨
+            const geminiLedger = global.geminiFinOps || { streams: {} };
 
-            const inputTokens = geminiUsage.inputTokens || 0;
-            const cachedTokens = geminiUsage.cachedTokens || 0; 
-            const thoughtTokens = geminiUsage.thoughtTokens || 0;
-            const baseOutputTokens = geminiUsage.outputTokens || 0;
+            let inputTokens = 0;
+            let cachedTokens = 0; 
+            let thoughtTokens = 0;
+            let baseOutputTokens = 0;
+
+            // Campurkan semua token dari setiap batch yang wujud dalam buku log
+            for (const batchId in geminiLedger.streams) {
+                const batch = geminiLedger.streams[batchId];
+                inputTokens += batch.input || 0;
+                cachedTokens += batch.cached || 0;
+                thoughtTokens += batch.thought || 0;
+                baseOutputTokens += batch.output || 0;
+            }
             
-            // Cantumkan token
-            const outputTokens = baseOutputTokens + thoughtTokens; 
+            // Cantumkan token untuk kiraan harga
+            const outputTokens = baseOutputTokens + thoughtTokens; // Thought dicaj sebagai Output
             const totalPromptSize = inputTokens + cachedTokens; 
             const totalTokens = totalPromptSize + outputTokens;
 
-            // 🧹 RESET GLOBAL CACHE lepas baca (Supaya sedia untuk batch/movie seterusnya)
-            global.geminiFinOps = { inputTokens: 0, cachedTokens: 0, thoughtTokens: 0, outputTokens: 0 };
+            // 🧹 RESET GLOBAL CACHE (Bakar buku log supaya sedia untuk movie baru)
+            global.geminiFinOps = { streams: {} };
 
             // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
             const pricing = {
