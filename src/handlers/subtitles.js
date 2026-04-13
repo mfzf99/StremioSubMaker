@@ -5391,10 +5391,15 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                               `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
+            // 🎛️ DETEKSI JUMLAH KEY (TRANSPARENT FINOPS)
+            const validKeys = Array.isArray(config.geminiApiKeys) ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
+            const keyCount = validKeys.length > 0 ? validKeys.length : 1;
+            const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+
             // Bina paparan FinOps untuk Telegram
             const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
                                 tokenBreakdown +
-                                `  └ <b>Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+                                `  └ <b>Retail Value:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
 
             // ====================================================================
 
@@ -5413,7 +5418,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                             `${diagnosticsSection}` +
                             `${costSection}\n` +
                             `🌐 <b>Target:</b> ${(targetLanguage || 'MAY').toUpperCase()}\n` +
-                            `🔑 <b>Provider:</b> ${providerName || 'gemini'}\n` +
+                            `🔑 <b>Provider:</b> ${providerName || 'gemini'} [${tierBadge}]\n` +
                             `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                             `🎉 <b>Ready to stream!</b>`;
             
