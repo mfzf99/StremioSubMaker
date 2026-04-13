@@ -861,7 +861,9 @@ class GeminiService {
 
       // 🚨 KUTIP RESIT KOS (FALLBACK) - SECARA SENYAP 🚨
       if (data.usageMetadata) {
-          this.updateUsageStats(data.usageMetadata);
+          // Cipta ID unik untuk batch ni kalau belum ada
+          if (!processPayload.streamId) processPayload.streamId = 'recv_' + Date.now() + Math.random();
+          this.updateUsageStats(data.usageMetadata, processPayload.streamId);
       }
 
       const candidate = data?.candidates?.[0];
