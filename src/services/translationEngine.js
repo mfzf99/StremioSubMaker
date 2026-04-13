@@ -831,10 +831,10 @@ class TranslationEngine {
           }
 
           // 🛑 INJECT BREK 2.0 SAAT DI SINI
-          //if (batchIndex < batches.length - 1) {
-            //log.debug(() => `[⏳ RATE LIMIT] Brek angin 2.0 saat sebelum batch seterusnya...`);
-            //await sleep(2000);
-          //}
+          if (batchIndex < batches.length - 1) {
+            log.debug(() => `[⏳ RATE LIMIT] Brek angin 2.0 saat sebelum batch seterusnya...`);
+            await sleep(2000);
+          }
 
         } catch (error) {
           // Only log if not already logged by upstream handler
