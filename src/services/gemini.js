@@ -107,32 +107,33 @@ class GeminiService {
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
-  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V12 PENJAGA TOL) 🚨
-  updateUsageStats(usage) {
+  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V14 MULTI-BATCH LEDGER) 🚨
+  updateUsageStats(usage, streamId = 'default') {
     if (!usage) return;
 
-    // Cipta PA System (Global Cache) kalau belum wujud
+    // Cipta Buku Log Global kalau belum wujud
     if (!global.geminiFinOps) {
-        global.geminiFinOps = { inputTokens: 0, cachedTokens: 0, thoughtTokens: 0, outputTokens: 0 };
+        global.geminiFinOps = { streams: {} };
     }
 
-    // Ambil direct je, tak payah matematik tolak-tolak
     const input = usage.promptTokenCount || 0;
     const cached = usage.cachedContentTokenCount || 0;
     
     // Thought tokens: v1beta baru pakai thoughtsTokenCount (ada 's')
     const thought = usage.thoughtsTokenCount || usage.thoughtTokenCount || 0;
     
-    // Output tokens tulen: candidatesTokenCount (Google tak campur dengan thought)
+    // Output tokens tulen: candidatesTokenCount
     const textOut = usage.candidatesTokenCount || 0;
 
-    // Override terus ke Global Variable
-    global.geminiFinOps.inputTokens = input;
-    global.geminiFinOps.cachedTokens = cached;
-    global.geminiFinOps.thoughtTokens = thought;
-    global.geminiFinOps.outputTokens = textOut; 
+    // Simpan data ikut ID Batch (Stream ID) supaya tak bertindih dengan batch lain!
+    global.geminiFinOps.streams[streamId] = {
+        input: input,
+        cached: cached,
+        thought: thought,
+        output: textOut
+    };
   }
-  
+
   // 👉 ORGAN YANG HILANG 
   getEffectiveThinkingBudget() {
     return this.isGemmaModel ? 0 : this.thinkingBudget;
