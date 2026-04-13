@@ -1009,10 +1009,10 @@ class TranslationEngine {
       }
 
       // 🛑 INJECT BREK 2.0 SAAT DI SINI (UNTUK CHUNKING)
-      //if (batchIndex < chunks.length - 1) {
-        //log.debug(() => `[⏳ RATE LIMIT] Brek angin 2.0 saat sebelum chunk seterusnya...`);
-        //await sleep(2000);
-      //}
+      if (batchIndex < chunks.length - 1) {
+        log.debug(() => `[⏳ RATE LIMIT] Brek angin 2.0 saat sebelum chunk seterusnya...`);
+        await sleep(2000);
+      }
 
     } // <-- Ini kurungan yang tutup gelung 'for'
 
