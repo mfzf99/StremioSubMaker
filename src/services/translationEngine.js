@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel}, using English loanwords where contextually appropriate. Use "saya" and "awak" for general dialogue.`,
+  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue, using English loanwords where contextually appropriate. Use "saya" and "awak" for general dialogue.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel}, using English loanwords where contextually appropriate. Use "saya" and "awak" for general dialogue.`
+ fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue, using English loanwords where contextually appropriate. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
