@@ -1633,7 +1633,10 @@ class TranslationEngine {
 
       // Pass 1: Align what we can by index, identify missing entries
       let { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
-      this.translationStats.missingEntries += missingIndices.length;
+      
+      // 🚀 UBAHAN BARU: Simpan rekod jumlah hilang asal untuk kiraan Recovered
+      const initialMissingCount = missingIndices.length;
+      this.translationStats.missingEntries += initialMissingCount;
 
       // 🚀 INJECT: OTAK SUPER GENIUS (SHIFT DETECTOR) 🚀
       let isShiftedError = false;
@@ -1713,10 +1716,8 @@ class TranslationEngine {
 
           if (missingIndices.length > 0) {
             log.warn(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} entries still missing after targeted retry`);
-            this.translationStats.recoveredEntries += (missingIndices.length - missingIndices.length);
           } else {
             log.info(() => `[TranslationEngine] Two-pass recovery succeeded: all missing entries recovered`);
-            this.translationStats.recoveredEntries += missingIndices.length;
           }
         } catch (retryErr) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
@@ -1759,13 +1760,21 @@ class TranslationEngine {
         }
       }
 
+      // 🚀 UBAHAN BARU: KIRAAN RECOVERED ENTRIES TEPAT 🚀
+      // Selepas Pass 2 & Pass 3 selesai, kita bandingkan baki missingIndices dengan initialMissingCount
+      const recoveredCount = initialMissingCount - missingIndices.length;
+      if (recoveredCount > 0) {
+        this.translationStats.recoveredEntries += recoveredCount;
+        log.info(() => `[TranslationEngine] Total recovered entries for this batch: ${recoveredCount}`);
+      }
+
       translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
 
     } else {
       const { aligned } = this.alignTranslatedEntries(translatedEntries, batch);
       translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
     }
-
+    
     // If JSON mismatch recovery still leaves warning placeholders, try XML once.
     if (this.translationWorkflow === 'json' && !jsonXmlFallbackAttempted) {
       const markedCount = translatedEntries.filter(entry =>
