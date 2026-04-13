@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using English loanwords appropriately. Use "saya" and "awak" for general dialogue.`,
+  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using common English loanwords appropriately. Use "saya" and "awak" for general dialogue.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using English loanwords appropriately. Use "saya" and "awak" for general dialogue.`
+ fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using common English loanwords appropriately. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2011,19 +2011,37 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely sealed container. You have ZERO knowledge of adjacent IDs. NEVER pull meaning from the next ID.
-   ✅ CORRECT — IN: <s id="45">I really want to</s> OUT: <s id="45">Saya betul-betul nak</s>
-   ❌ WRONG   — IN: <s id="45">I really want to</s> OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
-   "Saya betul-betul nak" IS CORRECT. Stealing from next ID IS CATASTROPHICALLY WRONG.
-2. STRICT 1-TO-1: Translation for ID_X contains ONLY the meaning of input ID_X. NEVER shift up or down.
-3. ESCAPE HATCH: Skip/unknown/symbols → copy EXACT ORIGINAL ENGLISH for that ID. DO NOT SHIFT.
-4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict chronological order. Never duplicate or split.
-5. EXACT IDs: Output IDs MUST match input IDs exactly, starting from ID_${startId}.
-6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate to fill count.
-7. FORMAT: <s id="[original_id]">translated text</s>
-8. [br] TAGS: Keep [br] at EXACT same relative position as in source.
-9. NO EXTRAS: NO markdown, NO commentary, NO conversational replies.
-10. NO ORPHAN TEXT: ALL words MUST be inside their tag. NEVER leave text floating outside tags.
+1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a sealed container.
+   You have ZERO knowledge of what comes before or after it.
+   Fragment IN = Fragment OUT. NEVER complete a sentence using the next ID.
+
+   ✅ CORRECT → IN: <s id="45">I really want to</s>
+                OUT: <s id="45">Saya betul-betul nak</s>
+   ❌ WRONG   → IN: <s id="45">I really want to</s>
+                OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
+
+   "Saya betul-betul nak" IS CORRECT. Stealing from next ID = CATASTROPHIC.
+
+2. STRICT 1-TO-1: ID_X output = ID_X input meaning ONLY. Never shift up or down.
+
+3. ESCAPE HATCH: Skip/unknown/symbols → copy EXACT ORIGINAL ENGLISH for that ID. 
+   NEVER shift remaining entries.
+
+4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict input order. 
+   Never invent an ID that wasn't in the input.
+
+5. EXACT IDs: Output IDs MUST match input IDs exactly, from ID_${startId} to ID_${endId}.
+   Non-sequential input (45, 47, 50) = non-sequential output. Never fill gaps.
+
+6. EXACT COUNT: EXACTLY ${expectedCount} entries. NEVER fabricate to fill count.
+
+7. FORMAT: <s id="45">translated text</s> — use exact ID from input.
+
+8. [br] TAGS: Every [br] from source MUST appear in translation at same relative position.
+
+9. START IMMEDIATELY with first <s> tag. Zero preamble, zero commentary, zero markdown.
+
+10. NO ORPHAN TEXT: Every word inside its tag. Nothing floating outside tags.
 
 <input>
 ${batchText}
