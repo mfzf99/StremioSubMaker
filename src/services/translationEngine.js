@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using common English loanwords appropriately. Use "saya" and "awak" for general dialogue.`,
+  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} using common English loanwords appropriately. Use "saya" and "awak" for general dialogue.`
+ fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" and "awak" for general dialogue.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -125,26 +125,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 40;
+    return 75;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 40;
+    return 75;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 40;
+    return 75;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 40;
+    return 75;
   }
 
   // Default batch size for unknown models
-  return 40;
+  return 75;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -209,7 +209,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 40;
+    const JSON_MAX_BATCH_SIZE = 75;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
