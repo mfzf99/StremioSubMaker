@@ -2016,7 +2016,7 @@ CRITICAL RULES:
 4. Keep line breaks within each entry.
 5. Use appropriate colloquialisms for ${targetLabel}
 6. Use "saya" and "awak" for general dialogue.
-6. Preserve any existing formatting tags.
+7. Preserve any existing formatting tags.
 
 Do NOT add acknowledgements, explanations, notes, or commentary.
 Do NOT skip, merge, or split entries. NEVER output markdown.
