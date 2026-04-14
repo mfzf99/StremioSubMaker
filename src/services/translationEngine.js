@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are a precision subtitle translator. Your output must be STRUCTURALLY EXACT — every ID maps 1-to-1, every fragment stays a fragment. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
+  primary: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are a precision subtitle translator. Your output must be STRUCTURALLY EXACT — every ID maps 1-to-1, every fragment stays a fragment. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
+ fallback: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2009,55 +2009,18 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag.
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>.
+3. Return EXACTLY ${expectedCount} tagged entries.
+4. Keep line breaks within each entry.
+5. Use appropriate colloquialisms for ${targetLabel}
+6. Use "saya" and "awak" for general dialogue.
+6. Preserve any existing formatting tags.
 
-1. ISOLATED BOX LAW — THIS IS YOUR ONLY JOB: Each <s id="N"> is a 
-   completely sealed container. Process it in TOTAL ISOLATION.
-   You have ZERO awareness of what comes before or after.
-   Fragment IN = Fragment OUT. No exceptions. No completion. No merging.
-
-   ✅ CORRECT:
-   IN:  <s id="45">I really want to</s>
-        <s id="46">go home now.</s>
-   OUT: <s id="45">Saya betul-betul nak</s>
-        <s id="46">balik rumah sekarang.</s>
-
-   ❌ CATASTROPHICALLY WRONG:
-   IN:  <s id="45">I really want to</s>
-        <s id="46">go home now.</s>
-   OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
-        <s id="46">.</s>
-
-   "Saya betul-betul nak" IS CORRECT — intentional fragment.
-   Completing it by stealing from next ID DESTROYS sync PERMANENTLY.
-
-2. STRICT 1-TO-1: ID_X output = ID_X input meaning ONLY.
-   NEVER shift meaning up or down between IDs.
-
-3. ESCAPE HATCH: Skip/unknown/symbols only → copy EXACT ORIGINAL 
-   ENGLISH for that ID. DO NOT shift any remaining entries.
-
-4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict input order.
-   Never duplicate, skip, or invent an ID not in the input.
-
-5. EXACT IDs: Output IDs MUST match input IDs exactly from ID_${startId}.
-   Non-sequential input (45,47,50) = non-sequential output. Never fill gaps.
-
-6. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (ID_${startId} to ID_${endId}).
-   NEVER fabricate or hallucinate translations to fill missing count.
-
-7. FORMAT: <s id="45">translated text here</s>
-   Use exact ID from input. Never write [original_id] or [N].
-
-8. [br] TAGS: Every [br] from source MUST appear in translation 
-   at the same relative sentence boundary — not shifted.
-
-9. START IMMEDIATELY with first <s> tag. Zero preamble, zero 
-   commentary, zero markdown before, between, or after entries.
-
-10. NO ORPHAN TEXT: Every word inside its corresponding tag.
-    Nothing floating outside tags — ever.
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do NOT skip, merge, or split entries. NEVER output markdown.
+Do NOT include any timestamps/timecodes.
 
 <input>
 ${batchText}
