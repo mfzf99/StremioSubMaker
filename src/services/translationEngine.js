@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.`,
+  primary: (targetLabel) => `You are a precision subtitle translator. Your output must be STRUCTURALLY EXACT — every ID maps 1-to-1, every fragment stays a fragment. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue.`
+ fallback: (targetLabel) => `You are a precision subtitle translator. Your output must be STRUCTURALLY EXACT — every ID maps 1-to-1, every fragment stays a fragment. Translate into natural, local conversational ${targetLabel} that reflects authentic spoken dialogue. Use "saya" and "awak" for general dialogue. Naturally integrate common English loanwords when contextually appropriate.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2011,13 +2011,10 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. STRICT 1-TO-1 ANTI-SHIFT: Translation for ID_X MUST perfectly match 
-   input ID_X ONLY. NEVER pull meaning from ID_X+1 into ID_X. NEVER 
-   shift translations up or down.
-
-2. ISOLATED BOX RULE (MOST CRITICAL): Treat each <s id="N"> as a 
-   completely sealed, isolated container. You have ZERO knowledge of 
-   adjacent IDs. An incomplete sentence IN = an incomplete sentence OUT.
+1. ISOLATED BOX LAW — THIS IS YOUR ONLY JOB: Each <s id="N"> is a 
+   completely sealed container. Process it in TOTAL ISOLATION.
+   You have ZERO awareness of what comes before or after.
+   Fragment IN = Fragment OUT. No exceptions. No completion. No merging.
 
    ✅ CORRECT:
    IN:  <s id="45">I really want to</s>
@@ -2031,41 +2028,36 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
         <s id="46">.</s>
 
-   "Saya betul-betul nak" IS CORRECT — it is an intentional fragment.
-   Stealing words from the next ID to "complete" a sentence DESTROYS sync permanently.
+   "Saya betul-betul nak" IS CORRECT — intentional fragment.
+   Completing it by stealing from next ID DESTROYS sync PERMANENTLY.
 
-3. ESCAPE HATCH: If you skip, don't understand, or the line contains only 
-   symbols/music notes — DO NOT SHIFT the next lines. Copy the EXACT 
-   ORIGINAL ENGLISH TEXT for that specific ID and move on.
+2. STRICT 1-TO-1: ID_X output = ID_X input meaning ONLY.
+   NEVER shift meaning up or down between IDs.
 
-4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict input order. 
-   Never duplicate, never skip, never invent an ID that wasn't in the input.
+3. ESCAPE HATCH: Skip/unknown/symbols only → copy EXACT ORIGINAL 
+   ENGLISH for that ID. DO NOT shift any remaining entries.
 
-5. EXACT ID MATCHING: Output IDs MUST match input IDs exactly. 
-   If input starts at ID_${startId}, output starts at ID_${startId}.
-   If input IDs are non-sequential (e.g. 45, 47, 50), output MUST use 
-   those exact same IDs — never fill in the gaps.
+4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict input order.
+   Never duplicate, skip, or invent an ID not in the input.
 
-6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} 
-   to ID_${endId}). If you run out of real content before reaching 
-   ${expectedCount}, use ESCAPE HATCH (Rule 3). NEVER invent, fabricate, 
-   or hallucinate translations to fill a missing count.
+5. EXACT IDs: Output IDs MUST match input IDs exactly from ID_${startId}.
+   Non-sequential input (45,47,50) = non-sequential output. Never fill gaps.
+
+6. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   (ID_${startId} to ID_${endId}).
+   NEVER fabricate or hallucinate translations to fill missing count.
 
 7. FORMAT: <s id="45">translated text here</s>
-   Use the exact numeric/alphanumeric ID from the input. Never use 
-   placeholder text like [original_id] or [N].
+   Use exact ID from input. Never write [original_id] or [N].
 
-8. [br] TAGS: Every [br] tag in the source MUST appear in the translation. 
-   Place each [br] at the same relative sentence boundary as in the source — 
-   not shifted earlier or later within the same entry.
+8. [br] TAGS: Every [br] from source MUST appear in translation 
+   at the same relative sentence boundary — not shifted.
 
-9. NO EXTRA CONTENT: Your response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary, NO 
-   conversational replies — before, between, or after the entries.
+9. START IMMEDIATELY with first <s> tag. Zero preamble, zero 
+   commentary, zero markdown before, between, or after entries.
 
-10. NO ORPHAN TEXT: Every translated word MUST be enclosed inside its 
-    corresponding <s id="N">...</s> tag. NEVER leave any word, fragment, 
-    or punctuation floating outside a tag.
+10. NO ORPHAN TEXT: Every word inside its corresponding tag.
+    Nothing floating outside tags — ever.
 
 <input>
 ${batchText}
