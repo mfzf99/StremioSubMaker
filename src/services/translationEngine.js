@@ -33,7 +33,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Always translate "I" and "you" as "saya" and "awak".`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}. Use colloquialisms and idioms appropriate for the target language. Do not translate literally. Always translate "I" and "you" as "saya" and "awak".`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
  fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Always translate "I" and "you" as "saya" and "awak".`
