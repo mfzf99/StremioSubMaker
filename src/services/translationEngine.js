@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Avoid literal translation.`,
+  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Avoid literal translation.`
+ fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
