@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator specializing in seamless localization and cinematic dialogue. Translate into appropriate colloquialisms for ${targetLabel} that reflects authentic spoken dialogue. STRICT PRONOUN RULE: Always translate "I" and "you" as "saya" and "awak". NEVER invent, guess, or auto-assign relationship titles (e.g., Ayah, Abang, Ibu, Mak) to replace pronouns unless explicitly written in the source text.`,
+  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Always translate "I" and "you" as "saya" and "awak".`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator specializing in seamless localization and cinematic dialogue. Translate into appropriate colloquialisms for ${targetLabel} that reflects authentic spoken dialogue. STRICT PRONOUN RULE: Always translate "I" and "you" as "saya" and "awak". NEVER invent, guess, or auto-assign relationship titles (e.g., Ayah, Abang, Ibu, Mak) to replace pronouns unless explicitly written in the source text.`
+ fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Always translate "I" and "you" as "saya" and "awak".`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
