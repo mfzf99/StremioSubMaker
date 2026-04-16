@@ -1575,6 +1575,17 @@ class TranslationEngine {
           const fallbackResult = await tryFallback(currentError);
           if (fallbackResult.handled) {
             translatedText = fallbackResult.text;
+            
+            // 🚀 INJECT: JAHIT HASIL DEEPL (SRT) SUPAYA TAK MASUK PARSER XML 🚀
+            const fallbackName = String(this.fallbackProviderName || '').toLowerCase();
+            if (NATIVE_BATCH_PROVIDER_NAMES.has(fallbackName) || String(fallbackResult.text).includes('-->')) {
+                const trimmed = String(translatedText || '').trim();
+                if (trimmed.includes('-->')) {
+                    translatedEntries = this.parseBatchSrtResponse(trimmed, batch.length, batch);
+                } else {
+                    translatedEntries = this.parseBatchResponse(trimmed, batch.length);
+                }
+            }
           } else {
             throw fallbackResult.error; // TIER 5: Fallback pun gagal, give up & crash.
           }
