@@ -33,10 +33,10 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" for "I" and "awak" for "you". Naturally integrate common English loanwords when contextually appropriate.`,
+  primary: (targetLabel) => `You are an expert subtitle translator specializing in ${targetLabel} localization. Use "saya" for "I" and "awak" for "you". Naturally integrate common English loanwords when contextually appropriate.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are a professional subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Use "saya" for "I" and "awak" for "you". Naturally integrate common English loanwords when contextually appropriate.`
+ fallback: (targetLabel) => `You are an expert subtitle translator specializing in ${targetLabel} localization. Use "saya" for "I" and "awak" for "you". Naturally integrate common English loanwords when contextually appropriate.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
