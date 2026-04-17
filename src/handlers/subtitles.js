@@ -4095,22 +4095,49 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
   try {
     log.debug(() => `[Translation] Handling translation request for ${sourceFileId} to ${targetLanguage}`);
 
-    // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU (COMPACT MODE)
+    // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU (LIVE CHECK CACHE)
     if (sourceFileId.startsWith('dummy_shield')) {
       const parts = sourceFileId.split('__');
-      const radarArray = parts[1] ? parts[1].split('_') : [];
+      const targetLang = parts[1] || targetLanguage;
+      // radarData berada di bahagian belakang, kita cantumkan balik andai kata ada "__" dalam fileId
+      const radarString = parts.slice(2).join('__'); 
+      const radarArray = radarString ? radarString.split('~~') : [];
       
       let radarText = '';
       if (radarArray.length > 0) {
         radarText = '\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
         
-        // Kumpul semua variant dalam bentuk ringkas (Cth: V2:ENG-SubDL)
         const chunks = [];
-        radarArray.forEach((item, idx) => {
-          chunks.push(`V${idx + 2}: ${item.replace('-', '|')}`); 
-        });
+        // Loop setiap file untuk check dalam database
+        // Kita guna 'for' biasa sebab nak pakai 'await' untuk check database
+        for (let i = 0; i < radarArray.length; i++) {
+          const item = radarArray[i];
+          const [actualFileId, label] = item.split('!!');
+          
+          if (!actualFileId || !label) continue;
 
-        // Susun 3 variant dalam 1 baris supaya tak penuh skrin
+          // 🕵️‍♂️ JAMBATAN RADAR: JENGUK DATABASE CACHE
+          const { baseKey, cacheKey, bypass, bypassEnabled, userHash, allowPermanent } = generateCacheKeys(config, actualFileId, targetLang);
+          
+          let isCached = false;
+          try {
+            if (bypass && bypassEnabled && userHash) {
+              const cached = await readFromBypassStorage(cacheKey);
+              if (cached && !cached.isError) isCached = true;
+            } else if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
+              const cached = await readFromStorage(baseKey);
+              if (cached && !cached.isError) isCached = true;
+            }
+          } catch (e) {
+            log.warn(() => `[Dummy Shield] Gagal baca cache untuk ${actualFileId}: ${e.message}`);
+          }
+          
+          // Kalau jumpa dalam cache, letak cop ✅ [SIAP]
+          const statusMark = isCached ? ' ✅ [SIAP]' : '';
+          chunks.push(`V${i + 2}: ${label.replace('-', '|')}${statusMark}`);
+        }
+
+        // Susun 3 variant dalam 1 baris supaya kemas tak penuhi skrin TV
         for (let i = 0; i < chunks.length; i += 3) {
           radarText += chunks.slice(i, i + 3).join('  •  ') + '\n';
         }
@@ -4119,7 +4146,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA SUBMAKER] 🛡️\nSistem auto-play telah dihalang.${radarText}`;
       return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
     }
-
+    
     if (config?.__sessionTokenError === true) {
       log.warn(() => '[Translation] Blocked translation because session token is missing/invalid');
       return createSessionTokenErrorSubtitle();
