@@ -623,12 +623,27 @@ class GeminiService {
           generationConfig.responseMimeType = 'application/json';
         }
 
-        if (thinkingBudget === -1) {
-          generationConfig.thinkingConfig = { thinkingBudget: null };
-        } else if (thinkingBudget > 0) {
-          generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
-        }
+        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5) 🚀
+        const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
 
+        if (thinkingBudget === -1) {
+          if (isGemini3) {
+            generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+          } else {
+            generationConfig.thinkingConfig = { thinkingBudget: null };
+          }
+        } else if (thinkingBudget > 0) {
+          if (isGemini3) {
+            let level = 'minimal';
+            if (thinkingBudget >= 4096) level = 'high';
+            else if (thinkingBudget >= 2048) level = 'medium';
+            else if (thinkingBudget >= 1024) level = 'low';
+            
+            generationConfig.thinkingConfig = { thinkingLevel: level };
+          } else {
+            generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+          }
+        }
         // Safety settings: disable all content filters for subtitle translation
         // Use 'OFF' threshold — stronger than 'BLOCK_NONE' and respected by newer models
         // HARM_CATEGORY_CIVIC_INTEGRITY is deprecated; use enableEnhancedCivicAnswers instead
