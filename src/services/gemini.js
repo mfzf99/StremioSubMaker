@@ -307,10 +307,6 @@ class GeminiService {
 
     // Add thinking-specific rules only when thinking is enabled (thinkingBudget !== 0)
     // When thinking is disabled (thinkingBudget === 0), these rules are unnecessary
-    
-    /* ==========================================
-       START COMMENT: BUANG RANTAI OVERTHINK
-       ==========================================
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
       // Find the last "Do NOT" line and add the thinking rules after it
@@ -328,9 +324,6 @@ class GeminiService {
         );
       }
     }
-       ==========================================
-       END COMMENT
-       ========================================== */
 
     // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT (VERSI MUKTAMAD)! 🚨
     let userPrompt;
