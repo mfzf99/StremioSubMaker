@@ -432,35 +432,37 @@ class GeminiService {
           generationConfig.responseMimeType = 'application/json';
         }
 
-        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5) 🚀
+        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5 vs GEMMA) 🚀
         const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
 
-        if (thinkingBudget === -1) {
-          // MODE: AUTO (-1)
-          if (isGemini3) {
-            generationConfig.thinkingConfig = { thinkingLevel: 'minimal' }; // Default paling sesuai
-          } else {
-            generationConfig.thinkingConfig = { thinkingBudget: null }; // Dynamic
-          }
-        } else if (thinkingBudget === 0) {
-          // MODE: OFF (0)
-          if (isGemini3) {
-            // Gemini 3 tak boleh OFF, jadi kita turunkan ke tahap paling bawah (terhampir dengan OFF)
-            generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
-            log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
-          }
-          // Untuk Gemini 2.5, kita tak set thinkingConfig langsung (OFF sepenuhnya)
-        } else if (thinkingBudget > 0) {
-          // MODE: FIXED BUDGET / LEVEL (>0)
-          if (isGemini3) {
-            let level = 'minimal';
-            if (thinkingBudget >= 4096) level = 'high';
-            else if (thinkingBudget >= 2048) level = 'medium';
-            else if (thinkingBudget >= 1024) level = 'low';
-            
-            generationConfig.thinkingConfig = { thinkingLevel: level };
-          } else {
-            generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+        // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
+        // Jadi, kita kecualikan Gemma dari hantar parameter ini.
+        if (!this.isGemmaModel) {
+          if (thinkingBudget === -1) {
+            // MODE: AUTO (-1)
+            if (isGemini3) {
+              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+            } else {
+              generationConfig.thinkingConfig = { thinkingBudget: null };
+            }
+          } else if (thinkingBudget === 0) {
+            // MODE: OFF (0)
+            if (isGemini3) {
+              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+              log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
+            }
+          } else if (thinkingBudget > 0) {
+            // MODE: FIXED BUDGET / LEVEL (>0)
+            if (isGemini3) {
+              let level = 'minimal';
+              if (thinkingBudget >= 4096) level = 'high';
+              else if (thinkingBudget >= 2048) level = 'medium';
+              else if (thinkingBudget >= 1024) level = 'low';
+              
+              generationConfig.thinkingConfig = { thinkingLevel: level };
+            } else {
+              generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+            }
           }
         }
         // If thinkingBudget is 0, don't add thinkingConfig at all (disabled)
