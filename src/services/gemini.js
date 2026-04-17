@@ -307,16 +307,16 @@ class GeminiService {
 
     // Add thinking-specific rules only when thinking is enabled (thinkingBudget !== 0)
     // When thinking is disabled (thinkingBudget === 0), these rules are unnecessary
-    const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-    if (effectiveThinkingBudget !== 0) {
+    //const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
+    //if (effectiveThinkingBudget !== 0) {
       // Find the last "Do NOT" line and add the thinking rules after it
-      const doNotPattern = /(Do NOT include acknowledgements[^\n]+)\n/;
-      if (doNotPattern.test(systemPrompt)) {
-        systemPrompt = systemPrompt.replace(
-          doNotPattern,
-          '$1\nDo NOT overthink. Do NOT overplan.\n'
-        );
-      } else {
+      //const doNotPattern = /(Do NOT include acknowledgements[^\n]+)\n/;
+      //if (doNotPattern.test(systemPrompt)) {
+        //systemPrompt = systemPrompt.replace(
+          //doNotPattern,
+          //'$1\nDo NOT overthink. Do NOT overplan.\n'
+        //);
+      //} else {
         // Fallback: add before "Output ONLY" if pattern not found
         systemPrompt = systemPrompt.replace(
           /\n(Output ONLY)/,
