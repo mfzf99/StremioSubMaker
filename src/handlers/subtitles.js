@@ -3143,29 +3143,53 @@ function createSubtitleHandler(config) {
           const displayName = `Make ${baseName}`; // Semua masuk 1 folder je
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // 📡 BINA RADAR & SIMPAN DALAM MEMORY CACHE (Elak URL Gergasi)
-          const radarArray = sourceSubtitles.map(sub => {
+          // 📡 BINA RADAR (Cek Cache Terus & Simpan Teks SRT ke Memory)
+          let radarText = '\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
+          const chunks = [];
+          
+          for (let i = 0; i < sourceSubtitles.length; i++) {
+            const sub = sourceSubtitles[i];
             const lang = (sub.languageCode || '').toUpperCase();
             const prov = sub.provider === 'subdl' ? 'SubDL' : sub.provider === 'subsource' ? 'SubSrc' : sub.provider === 'opensubtitles-v3' ? 'OSv3' : sub.provider === 'stremio-community-subtitles' ? 'SCS' : 'OS';
-            return {
-              fileId: sub.fileId,
-              label: `${lang}-${prov}`
-            };
-          });
-
-          // Simpan array radar dalam memory cache guna Kunci Unik
-          const userHash = config.__configHash || config.userHash || 'default';
-          const safeVideoId = encodeURIComponent(id);
-          const radarCacheKey = `radar_${userHash}_${id}_${targetLang}`;
+            let label = `${lang}-${prov}`;
+            
+            // 🕵️‍♂️ CEK DATABASE TERUS KAT SINI SEBELUM MENU KELUAR!
+            let isCached = false;
+            try {
+              const { baseKey, cacheKey, bypass, bypassEnabled, userHash, allowPermanent } = generateCacheKeys(config, sub.fileId, targetLang);
+              if (bypass && bypassEnabled && userHash) {
+                const cached = await readFromBypassStorage(cacheKey);
+                if (cached && !cached.isError) isCached = true;
+              } else if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
+                const cached = await readFromStorage(baseKey);
+                if (cached && !cached.isError) isCached = true;
+              }
+            } catch (e) {}
+            
+            const statusMark = isCached ? ' ✅' : '';
+            chunks.push(`V${i + 2}: ${label}${statusMark}`);
+          }
           
-          translationSourceMeta.set(radarCacheKey, radarArray);
-
-          // 🛡️ INJECT SATU PERISAI DUMMY DENGAN URL SUPER PENDEK
+          // Susun 3 baris
+          for (let i = 0; i < chunks.length; i += 3) {
+            radarText += chunks.slice(i, i + 3).join('  •  ') + '\n';
+          }
+          
+          const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA SUBMAKER] 🛡️\nSistem auto-play telah dihalang.${radarText}`;
+          
+          // ID super ringkas (kalis Stremio crash)
+          const safeId = String(id || '').replace(/[^a-zA-Z0-9]/g, '');
+          const dummyId = `dummyshield-${targetLang}-${safeId}`;
+          
+          // Simpan teks penuh SRT terus ke dalam memory
+          translationSourceMeta.set(dummyId, shieldMsg);
+          
+          // 🛡️ INJECT PERISAI DUMMY
           translationEntries.push({
-            id: `dummy_shield__${targetLang}__${safeVideoId}`,
+            id: dummyId,
             lang: displayName,
             title: `Dummy`, 
-            url: `{{ADDON_URL}}/translate/dummy_shield__${targetLang}__${safeVideoId}/${targetLang}${translationUrlExtension}${translateQuery}`
+            url: `{{ADDON_URL}}/translate/${dummyId}/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
           for (const sourceSub of sourceSubtitles) {
