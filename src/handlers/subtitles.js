@@ -3155,12 +3155,12 @@ function createSubtitleHandler(config) {
 
           // Simpan array radar dalam memory cache guna Kunci Unik
           const userHash = config.__configHash || config.userHash || 'default';
+          const safeVideoId = encodeURIComponent(id);
           const radarCacheKey = `radar_${userHash}_${id}_${targetLang}`;
+          
           translationSourceMeta.set(radarCacheKey, radarArray);
 
           // 🛡️ INJECT SATU PERISAI DUMMY DENGAN URL SUPER PENDEK
-          // id Stremio (contoh: tt12345:1:2) di-encode supaya selamat dalam URL
-          const safeVideoId = encodeURIComponent(id);
           translationEntries.push({
             id: `dummy_shield__${targetLang}__${safeVideoId}`,
             lang: displayName,
