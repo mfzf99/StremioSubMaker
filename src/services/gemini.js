@@ -432,18 +432,29 @@ class GeminiService {
           generationConfig.responseMimeType = 'application/json';
         }
 
-        // Add thinking config based on thinking budget setting
-        // -1 = dynamic thinking (null), 0 = disabled (omit), >0 = fixed budget
+        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5) 🚀
+        const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
+
         if (thinkingBudget === -1) {
-          // Dynamic thinking: let the model decide
-          generationConfig.thinkingConfig = {
-            thinkingBudget: null  // null means dynamic
-          };
+          // Dynamic thinking (Auto)
+          if (isGemini3) {
+            generationConfig.thinkingConfig = { thinkingLevel: 'minimal' }; // Default paling optimum
+          } else {
+            generationConfig.thinkingConfig = { thinkingBudget: null };
+          }
         } else if (thinkingBudget > 0) {
           // Fixed thinking budget
-          generationConfig.thinkingConfig = {
-            thinkingBudget: thinkingBudget
-          };
+          if (isGemini3) {
+            // Map nombor bajet UI kepada level (String) untuk Gemini 3
+            let level = 'minimal';
+            if (thinkingBudget >= 4096) level = 'high';
+            else if (thinkingBudget >= 2048) level = 'medium';
+            else if (thinkingBudget >= 1024) level = 'low';
+            
+            generationConfig.thinkingConfig = { thinkingLevel: level };
+          } else {
+            generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+          }
         }
         // If thinkingBudget is 0, don't add thinkingConfig at all (disabled)
 
