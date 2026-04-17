@@ -3143,19 +3143,21 @@ function createSubtitleHandler(config) {
           const displayName = `Make ${baseName}`; // Semua masuk 1 folder je
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // 📡 BINA RADAR (Kumpul data bahasa & provider untuk dipaparkan di skrin)
+          // 📡 BINA RADAR (Kumpul data bahasa, provider & ID fail sebenar)
           const radarData = sourceSubtitles.map(sub => {
             const lang = (sub.languageCode || '').toUpperCase();
             const prov = sub.provider === 'subdl' ? 'SubDL' : sub.provider === 'subsource' ? 'SubSrc' : sub.provider === 'opensubtitles-v3' ? 'OSv3' : sub.provider === 'stremio-community-subtitles' ? 'SCS' : 'OS';
-            return `${lang}-${prov}`;
-          }).join('_'); // Contoh jadi: ENG-SubDL_CHI-OSv3
+            // Selitkan sub.fileId dan pisahkan dengan "!!"
+            return `${sub.fileId}!!${lang}-${prov}`;
+          }).join('~~'); // Guna "~~" sebagai pemisah variant supaya tak berlanggar dengan underscore
 
           // 🛡️ INJECT SATU PERISAI DUMMY BERSERTA DATA RADAR
           translationEntries.push({
             id: `dummy_shield__${targetLang}__${radarData}`,
             lang: displayName,
             title: `Dummy`, 
-            url: `{{ADDON_URL}}/translate/dummy_shield__${radarData}/${targetLang}${translationUrlExtension}${translateQuery}`
+            // Kita seragamkan parameter URL supaya mudah dipotong (split) kat Blok 2 nanti
+            url: `{{ADDON_URL}}/translate/dummy_shield__${targetLang}__${radarData}/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
           for (const sourceSub of sourceSubtitles) {
