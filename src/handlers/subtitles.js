@@ -3143,21 +3143,29 @@ function createSubtitleHandler(config) {
           const displayName = `Make ${baseName}`; // Semua masuk 1 folder je
           log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
 
-          // 📡 BINA RADAR (Kumpul data bahasa, provider & ID fail sebenar)
-          const radarData = sourceSubtitles.map(sub => {
+          // 📡 BINA RADAR & SIMPAN DALAM MEMORY CACHE (Elak URL Gergasi)
+          const radarArray = sourceSubtitles.map(sub => {
             const lang = (sub.languageCode || '').toUpperCase();
             const prov = sub.provider === 'subdl' ? 'SubDL' : sub.provider === 'subsource' ? 'SubSrc' : sub.provider === 'opensubtitles-v3' ? 'OSv3' : sub.provider === 'stremio-community-subtitles' ? 'SCS' : 'OS';
-            // Selitkan sub.fileId dan pisahkan dengan "!!"
-            return `${sub.fileId}!!${lang}-${prov}`;
-          }).join('~~'); // Guna "~~" sebagai pemisah variant supaya tak berlanggar dengan underscore
+            return {
+              fileId: sub.fileId,
+              label: `${lang}-${prov}`
+            };
+          });
 
-          // 🛡️ INJECT SATU PERISAI DUMMY BERSERTA DATA RADAR
+          // Simpan array radar dalam memory cache guna Kunci Unik
+          const userHash = config.__configHash || config.userHash || 'default';
+          const radarCacheKey = `radar_${userHash}_${id}_${targetLang}`;
+          translationSourceMeta.set(radarCacheKey, radarArray);
+
+          // 🛡️ INJECT SATU PERISAI DUMMY DENGAN URL SUPER PENDEK
+          // id Stremio (contoh: tt12345:1:2) di-encode supaya selamat dalam URL
+          const safeVideoId = encodeURIComponent(id);
           translationEntries.push({
-            id: `dummy_shield__${targetLang}__${radarData}`,
+            id: `dummy_shield__${targetLang}__${safeVideoId}`,
             lang: displayName,
             title: `Dummy`, 
-            // Kita seragamkan parameter URL supaya mudah dipotong (split) kat Blok 2 nanti
-            url: `{{ADDON_URL}}/translate/dummy_shield__${targetLang}__${radarData}/${targetLang}${translationUrlExtension}${translateQuery}`
+            url: `{{ADDON_URL}}/translate/dummy_shield__${targetLang}__${safeVideoId}/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
           for (const sourceSub of sourceSubtitles) {
