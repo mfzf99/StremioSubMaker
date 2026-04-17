@@ -4105,61 +4105,71 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
 
     // 🛡️ INJECT SISTEM PERISAI KUOTA DENGAN RADAR MENU (LIVE CHECK VIA MEMORY)
     if (sourceFileId.startsWith('dummy_shield')) {
-      const parts = sourceFileId.split('__');
-      const targetLang = parts[1] || targetLanguage;
-      // Decode balik videoId yang kita pass dari URL pendek tadi
-      const safeVideoId = parts.slice(2).join('__');
-      const videoId = decodeURIComponent(safeVideoId);
-      
-      const userHash = config.__configHash || config.userHash || 'default';
-      const radarCacheKey = `radar_${userHash}_${videoId}_${targetLang}`;
-      
-      // Tarik balik senarai radar dari Memory Cache
-      const radarArray = translationSourceMeta.get(radarCacheKey) || [];
-      
-      let radarText = '';
-      if (radarArray.length > 0) {
-        radarText = '\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
-        const chunks = [];
+      try {
+        const parts = sourceFileId.split('__');
+        const targetLang = parts[1] || targetLanguage;
+        const safeVideoId = parts.slice(2).join('__');
         
-        // Loop setiap file untuk check dalam database
-        for (let i = 0; i < radarArray.length; i++) {
-          const item = radarArray[i];
-          const actualFileId = item.fileId;
-          const label = item.label;
+        // Failsafe decode
+        let videoId = safeVideoId;
+        try { videoId = decodeURIComponent(safeVideoId); } catch(e) {}
+        
+        const userHash = config.__configHash || config.userHash || 'default';
+        const radarCacheKey = `radar_${userHash}_${videoId}_${targetLang}`;
+        
+        // Tarik balik senarai radar dari Memory Cache
+        const radarArray = translationSourceMeta.get(radarCacheKey) || [];
+        
+        let radarText = '';
+        if (radarArray.length > 0) {
+          radarText = '\n🔍 Senarai Variant Asal (Sila pilih di menu CC):\n';
+          const chunks = [];
           
-          if (!actualFileId || !label) continue;
+          // Loop setiap file untuk check dalam database
+          for (let i = 0; i < radarArray.length; i++) {
+            const item = radarArray[i];
+            const actualFileId = item.fileId;
+            const label = item.label;
+            
+            if (!actualFileId || !label) continue;
 
-          // 🕵️‍♂️ JAMBATAN RADAR: JENGUK DATABASE CACHE
-          const { baseKey, cacheKey, bypass, bypassEnabled, allowPermanent } = generateCacheKeys(config, actualFileId, targetLang);
-          
-          let isCached = false;
-          try {
-            if (bypass && bypassEnabled && userHash) {
-              const cached = await readFromBypassStorage(cacheKey);
-              if (cached && !cached.isError) isCached = true;
-            } else if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
-              const cached = await readFromStorage(baseKey);
-              if (cached && !cached.isError) isCached = true;
+            // 🕵️‍♂️ JAMBATAN RADAR: JENGUK DATABASE CACHE
+            const { baseKey, cacheKey, bypass, bypassEnabled, allowPermanent } = generateCacheKeys(config, actualFileId, targetLang);
+            
+            let isCached = false;
+            try {
+              if (bypass && bypassEnabled && userHash) {
+                const cached = await readFromBypassStorage(cacheKey);
+                if (cached && !cached.isError) isCached = true;
+              } else if (allowPermanent && ENABLE_PERMANENT_TRANSLATIONS) {
+                const cached = await readFromStorage(baseKey);
+                if (cached && !cached.isError) isCached = true;
+              }
+            } catch (e) {
+              // Abaikan error cache, teruskan proses
             }
-          } catch (e) {
-            log.warn(() => `[Dummy Shield] Gagal baca cache untuk ${actualFileId}: ${e.message}`);
+            
+            const statusMark = isCached ? ' ✅ [SIAP]' : '';
+            chunks.push(`V${i + 2}: ${label.replace('-', '|')}${statusMark}`);
           }
-          
-          const statusMark = isCached ? ' ✅ [SIAP]' : '';
-          chunks.push(`V${i + 2}: ${label.replace('-', '|')}${statusMark}`);
+
+          // Susun 3 variant sebaris
+          for (let i = 0; i < chunks.length; i += 3) {
+            radarText += chunks.slice(i, i + 3).join('  •  ') + '\n';
+          }
+        } else {
+           radarText = '\n🔍 Senarai Variant Asal:\n(Data radar terpadam. Sila undur ke menu utama dan mainkan semula filem ini)';
         }
 
-        // Susun 3 variant sebaris
-        for (let i = 0; i < chunks.length; i += 3) {
-          radarText += chunks.slice(i, i + 3).join('  •  ') + '\n';
-        }
-      } else {
-         radarText = '\n🔍 Senarai Variant Asal:\n(Data radar terpadam. Sila undur ke menu utama dan mainkan semula filem ini)';
+        const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA SUBMAKER] 🛡️\nSistem auto-play telah dihalang.${radarText}`;
+        return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
+        
+      } catch (criticalError) {
+        // 🔥 ULTIMATE FAILSAFE: JIKA ADA RALAT, JANGAN BIAR STREMIO CRASH!
+        // Pulangkan ralat sebagai sarikata supaya kita boleh baca kat TV!
+        const failMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA] 🛡️\nSistem auto-play telah dihalang.\n(Ralat Radar: ${criticalError.message})`;
+        return ensureInformationalSubtitleSize(failMsg, null, config.uiLanguage || 'en');
       }
-
-      const shieldMsg = `1\n00:00:00,000 --> 04:00:00,000\n🛡️ [PERISAI KUOTA SUBMAKER] 🛡️\nSistem auto-play telah dihalang.${radarText}`;
-      return ensureInformationalSubtitleSize(shieldMsg, null, config.uiLanguage || 'en');
     }
     
     if (config?.__sessionTokenError === true) {
