@@ -134,9 +134,9 @@ class GeminiService {
     };
   }
 
-  // 👉 ORGAN YANG HILANG 
+  // 👉 ORGAN YANG DAH DIHIDUPKAN (BEBAS UNTUK SEMUA MODEL TERMASUK GEMMA)
   getEffectiveThinkingBudget() {
-    return this.isGemmaModel ? 0 : this.thinkingBudget;
+    return this.thinkingBudget;
   }
 
   /**
