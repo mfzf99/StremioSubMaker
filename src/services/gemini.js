@@ -331,13 +331,6 @@ class GeminiService {
        ==========================================
        END COMMENT
        ========================================== */
-        // Fallback: add before "Output ONLY" if pattern not found
-        systemPrompt = systemPrompt.replace(
-          /\n(Output ONLY)/,
-          '\n\nDo NOT overthink. Do NOT overplan.\n\n$1'
-        );
-      }
-    }
 
     // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT (VERSI MUKTAMAD)! 🚨
     let userPrompt;
