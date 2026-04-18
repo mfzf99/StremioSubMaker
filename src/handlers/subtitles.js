@@ -3192,13 +3192,15 @@ function createSubtitleHandler(config) {
             url: `{{ADDON_URL}}/translate/${dummyId}/${targetLang}${translationUrlExtension}${translateQuery}`
           });
 
+          let vRank = 2; // Bermula dari V2 sebab V1 ialah Dummy Shield
           for (const sourceSub of sourceSubtitles) {
             try {
               const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceSub.fileId}`;
               translationSourceMeta.set(metaKey, {
                 videoId: id,
                 filename: streamFilename,
-                title: sourceSub.name || ''
+                title: sourceSub.name || '',
+                variantRank: `V${vRank}` // 👈 KITA SIMPAN PANGKAT 'V' DALAM MEMORY
               });
             } catch (_) { /* ignore */ }
 
@@ -3210,6 +3212,8 @@ function createSubtitleHandler(config) {
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
+            
+            vRank++; // 👈 Naikkan nombor V untuk fail yang seterusnya
           }
         }
 
