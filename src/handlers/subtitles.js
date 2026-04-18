@@ -5226,6 +5226,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const metaKeyWithHash = `${userHash || 'default'}:${sourceFileId}`;
             const cachedMeta = translationSourceMeta.get(sourceFileId) || translationSourceMeta.get(metaKeyWithHash) || {};
             let movieTitle = cachedMeta.filename || cachedMeta.title || 'Unknown Title';
+            const variantRank = cachedMeta.variantRank ? ` [${cachedMeta.variantRank}]` : ''; // 👈 TARIK PANGKAT 'V' DARI MEMORY
             
             // 🛡️ PENAWAR HTML: Tukar simbol bahaya supaya Telegram tak reject
             movieTitle = movieTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -5238,6 +5239,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             else if (sourceFileId.startsWith('scs_')) sourceProv = 'Stremio Community';
             else if (sourceFileId.startsWith('wyzie_')) sourceProv = 'Wyzie Subs';
             else if (sourceFileId.startsWith('opensubtitles_')) sourceProv = 'OpenSubtitles';
+            
+            sourceProv = `${sourceProv}${variantRank}`; // 👈 GABUNGKAN NAMA PROVIDER & PANGKAT 'V'
             
             // 3. Kira Masa (Stopwatch) yang Tepat
             const tStatus = translationStatus.get(runtimeKey) || {};
