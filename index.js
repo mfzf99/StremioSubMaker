@@ -7098,6 +7098,27 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId', async (req, res) =
         );
 
         if (!match || !match.content) {
+            // --- BERMULA KOD PEMBEDAHAN LOKASI 2 ---
+            // KOD LIVE PROGRESS X-EMBEDDED
+            // Kalau sarikata penuh belum siap, kita hidangkan yang separuh siap dulu kat Stremio
+            try {
+                const runtimeKey = `partial:xembed:${safeVideoHash}:${safeLang}:${safeTrackId}`;
+                const { getStorageAdapter } = require('./src/storage/StorageFactory');
+                const { StorageAdapter } = require('./src/storage');
+                const adapter = await getStorageAdapter();
+                const partial = await adapter.get(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
+                
+                if (partial && partial.content) {
+                    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                    res.setHeader('Content-Disposition', `attachment; filename="${safeVideoHash}_${safeLang}_xembed.srt"`);
+                    setSubtitleCacheHeaders(res, 'loading');
+                    return res.send(partial.content);
+                }
+            } catch(e) {
+                log.debug(() => `[Radar Error] Gagal baca partial cache: ${e.message}`);
+            }
+            // --- TAMAT KOD PEMBEDAHAN LOKASI 2 ---
+
             return res.status(404).send(t('server.errors.translatedEmbeddedMissing', {}, 'Translated embedded subtitle not found'));
         }
 
