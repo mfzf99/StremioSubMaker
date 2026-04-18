@@ -362,7 +362,8 @@ function toSRT(entries) {
   // Tapis siap-siap supaya senang cermin depan berfungsi
   const validEntries = entries.filter(e => e && typeof e === 'object' && e.id && e.timecode && e.text);
 
-  return validEntries
+  // Simpan output ke dalam variable srtText
+  const srtText = validEntries
     .map((entry, index) => {
       // Normalisasi teks asal (Penting untuk Linux spacing)
       const normalizedText = entry.text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -412,6 +413,10 @@ function toSRT(entries) {
       return `${entry.id}\n${timecode}\n${normalizedText}`;
     })
     .join('\n\n') + '\n';
+
+  // 🛡️ SUNTIKAN BOM (Byte Order Mark) UTF-8
+  // Paksa Stremio & VLC player baca fail ni sebagai UTF-8 dengan sempurna!
+  return '\uFEFF' + srtText;
 }
 
 /**
