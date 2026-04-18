@@ -7781,10 +7781,10 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         );
 
         log.debug(() => `[Embedded Translate] Translating track ${safeTrackId} to ${targetLangName} (workflow=${translationWorkflow}, singleBatch=${singleBatchMode}, batchContext=${enableBatchContext}, timestamps=${sendTimestampsToAI})`);
-        
-        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 ---
-        // 1. Persiapan Live Progress (Radar)
-        const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTargetLanguage}:${safeTrackId}`;
+
+        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14 FINOPS & RADAR) ---
+        // 1. Persiapan Live Progress (Radar Ber-Ekor)
+        const runtimeKey = `partial:xembed:${safeVideoHash}:${safeLang}:${safeTrackId}`;
         const { getStorageAdapter } = require('./src/storage/StorageFactory');
         const { StorageAdapter } = require('./src/storage');
         
@@ -7793,10 +7793,18 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             targetLangName,
             workingConfig.translationPrompt,
             async (progress) => {
-                // Tulis SRT separuh siap ke cache setiap kali kelompok (batch) siap
                 try {
+                    let partialSrt = progress.currentSrt;
+                    if (partialSrt) {
+                        // Wajib tambah 'ekor' loading supaya Stremio tak berhenti auto-refresh
+                        const lineCount = partialSrt.trim().split(/\n\n/).length + 10;
+                        const tail = `\n\n${lineCount}\n00:00:00,000 --> 04:00:00,000\nTRANSLATION IN PROGRESS\nReload this subtitle to get more as translation gets ready.`;
+                        partialSrt = partialSrt + tail;
+                    }
+                    
                     const adapter = await getStorageAdapter();
-                    await adapter.set(runtimeKey, { content: progress.currentSrt }, StorageAdapter.CACHE_TYPES.PARTIAL);
+                    await adapter.set(runtimeKey, { content: partialSrt }, StorageAdapter.CACHE_TYPES.PARTIAL);
+                    log.debug(() => `[Radar X-Embed] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}`);
                 } catch(e) {
                     log.debug(() => `[Radar Error] Gagal tulis partial cache: ${e.message}`);
                 }
@@ -7809,37 +7817,151 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
         } catch(e) {}
 
-        // 2. Sistem Notifikasi Telegram FinOps V13 (X-Embedded)
+        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14
         try {
             const axios = require('axios');
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             const chatId = process.env.TELEGRAM_CHAT_ID;
             
             if (botToken && chatId) {
-                const stats = engine.translationStats || {};
-                const timeTaken = stats.timeTakenMs ? (stats.timeTakenMs / 1000).toFixed(1) : 0;
-                const totalLines = stats.totalEntries || 0;
-                const thoughtTokens = stats.thoughtTokens || 0;
-                const usedModel = model || getEffectiveGeminiModel(workingConfig);
-                
-                const text = `🎬 *X-EMBEDDED TRANSLATION REPORT* 🎬\n\n`
-                           + `🏷 *Track:* ${safeTrackId}\n`
-                           + `🌍 *Language:* ${targetLangName}\n`
-                           + `🤖 *Model:* ${usedModel}\n`
-                           + `⏱ *Time Taken:* ${timeTaken}s\n`
-                           + `📝 *Lines:* ${totalLines} lines\n`
-                           + `🧠 *Thoughts:* ${thoughtTokens} tokens\n`
-                           + `✅ *Status:* PERFECT ✨`;
-                           
-                axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                    chat_id: chatId,
-                    text: text,
-                    parse_mode: 'Markdown'
-                }).catch(e => {});
+                (async () => {
+                    try {
+                        let movieTitle = `Embedded Track ${safeTrackId} (${safeVideoHash.substring(0,8)})`;
+                        
+                        // Cuba cari tajuk wayang sebenar dari Cinemeta
+                        try {
+                            const metaUrl = `https://v3-cinemeta.strem.io/meta/movie/${encodeURIComponent(safeVideoHash)}.json`;
+                            const metaResp = await axios.get(metaUrl, { timeout: 3000 });
+                            if (metaResp?.data?.meta?.name) movieTitle = metaResp.data.meta.name;
+                        } catch(e) {}
+                        
+                        movieTitle = movieTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        const sourceProv = `Embedded (MKV/MP4)`;
+                        
+                        const stats = engine.translationStats || {};
+                        const timeTakenMs = stats.timeTakenMs || 0;
+                        const durationSec = Math.max(1, Math.round(timeTakenMs / 1000));
+                        const mins = Math.floor(durationSec / 60);
+                        const secs = durationSec % 60;
+                        const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+                        const finalTotal = stats.entryCount || (typeof translatedContent === 'string' ? (translatedContent.match(/\n\n/g) || []).length + 1 : 0);
+                        const totalBatches = stats.batchCount || 1;
+                        const mismatchDetected = stats.mismatchDetected ? 'Yes ⚠️' : 'No ✨';
+                        const missing = stats.missingEntries || 0;
+                        const recovered = stats.recoveredEntries || 0;
+                        const failed = Math.max(0, missing - recovered);
+                        const success = finalTotal - failed;
+                        const usedModel = (model || getEffectiveGeminiModel(workingConfig) || 'gemini-3.1-flash-lite-preview').toLowerCase();
+
+                        // Advanced diagnostics
+                        let advancedStats = '';
+                        if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
+                            advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
+                        }
+                        let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
+
+                        // FINOPS MESIN KIRA-KIRA
+                        const geminiLedger = global.geminiFinOps || { streams: {} };
+                        let inputTokens = 0, cachedTokens = 0, thoughtTokens = 0, baseOutputTokens = 0;
+                        for (const batchId in geminiLedger.streams) {
+                            const batch = geminiLedger.streams[batchId];
+                            inputTokens += batch.input || 0;
+                            cachedTokens += batch.cached || 0;
+                            thoughtTokens += batch.thought || 0;
+                            baseOutputTokens += batch.output || 0;
+                        }
+                        const outputTokens = baseOutputTokens + thoughtTokens; 
+                        const totalPromptSize = inputTokens + cachedTokens; 
+                        const totalTokens = totalPromptSize + outputTokens;
+                        
+                        global.geminiFinOps = { streams: {} }; // Reset ledger
+
+                        const pricing = {
+                            "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
+                            "3.1-flash-lite": { input: 0.25, output: 1.50, cache: 0.025 },
+                            "3.0-flash": { input: 0.50, output: 3.00, cache: 0.05 },
+                            "2.5-pro": { input: 1.25, output: 10.00, cache: 0.125, inputT2: 2.50, outputT2: 15.00, cacheT2: 0.25 },
+                            "2.5-flash": { input: 0.30, output: 2.50, cache: 0.03 },
+                            "2.5-flash-lite": { input: 0.10, output: 0.40, cache: 0.01 }
+                        };
+
+                        let rateInput = pricing["3.1-flash-lite"].input;
+                        let rateOutput = pricing["3.1-flash-lite"].output;
+                        let rateCache = pricing["3.1-flash-lite"].cache;
+
+                        if (usedModel.includes('3.1-pro')) {
+                            const isT2 = totalPromptSize > 200000;
+                            rateInput = isT2 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
+                            rateOutput = isT2 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
+                            rateCache = isT2 ? pricing["3.1-pro"].cacheT2 : pricing["3.1-pro"].cache;
+                        } else if (usedModel.includes('3.0-flash') || usedModel.includes('3-flash')) {
+                            rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output; rateCache = pricing["3.0-flash"].cache;
+                        }
+
+                        let KADAR_TUKARAN_MYR = 4.40;
+                        let rateIndicator = '🔒 Fixed Rate';
+                        try {
+                            const exResponse = await axios.get('https://open.er-api.com/v6/latest/USD', {timeout: 3000});
+                            if (exResponse.data?.rates?.MYR) {
+                                KADAR_TUKARAN_MYR = exResponse.data.rates.MYR;
+                                rateIndicator = `📈 Live RM${KADAR_TUKARAN_MYR.toFixed(2)}`;
+                            }
+                        } catch (err) {}
+
+                        const costInput = (inputTokens / 1000000) * rateInput;
+                        const costCache = (cachedTokens / 1000000) * rateCache;
+                        const costOutput = (outputTokens / 1000000) * rateOutput;
+                        const totalUSD = costInput + costCache + costOutput;
+                        const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
+
+                        const fmt = (num) => (num || 0).toLocaleString();
+                        let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
+
+                        let tokenBreakdown = `  ├ <b>Input:</b> ${fmt(inputTokens)}`;
+                        if (cachedTokens > 0) tokenBreakdown += ` <i>(Cached: ${fmt(cachedTokens)})</i>`;
+                        tokenBreakdown += `\n`;
+                        if (thoughtTokens > 0) tokenBreakdown += `  ├ <b>Thought:</b> ${fmt(thoughtTokens)}\n`;
+                        tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
+                                          `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
+
+                        const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
+                                            tokenBreakdown +
+                                            `  └ <b>Retail Value:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+
+                        const teleMsg = `✅ <b>Subtitle Translation Report (xEmbed)</b> 🎬\n\n` +
+                                        `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
+                                        `📥 <b>Source:</b> ${sourceProv}\n\n` +
+                                        `📊 <b>Status:</b> ${(failed === 0 && finalTotal > 0) ? 'PERFECT ✨' : 'COMPLETED WITH MISSING LINES ⚠️'}\n` +
+                                        `⏱️ <b>Time Taken:</b> ${timeTaken}\n` +
+                                        `🏁 <b>Total Entries:</b> ${finalTotal} (${totalBatches} Batches)\n` +
+                                        `✅ <b>Successful:</b> ${success}\n` +
+                                        `❌ <b>Failed:</b> ${failed}\n` +
+                                        `🔄 <b>Mismatch Event:</b> ${mismatchDetected} (Recovered: ${recovered})\n` +
+                                        `${diagnosticsSection}` +
+                                        `${costSection}\n` +
+                                        `🌐 <b>Target:</b> ${(targetLangName || 'MAY').toUpperCase()}\n` +
+                                        `🧠 <b>Engine:</b> ${usedModel}\n\n` +
+                                        `🎉 <b>Ready to stream!</b>`;
+
+                        let cubaLagi = 3;
+                        while (cubaLagi > 0) {
+                            try {
+                                await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                                    chat_id: chatId, text: teleMsg, parse_mode: 'HTML'
+                                }, { timeout: 10000 });
+                                break;
+                            } catch (e) {
+                                cubaLagi--;
+                                if (cubaLagi > 0) await new Promise(res => setTimeout(res, 2000));
+                            }
+                        }
+                    } catch(err) {
+                        log.debug(() => `[Telegram] Ralat FinOps: ${err.message}`);
+                    }
+                })();
             }
-        } catch(e) {
-            log.debug(() => `[Telegram Error] Gagal hantar noti: ${e.message}`);
-        }
+        } catch(e) {}
         // --- TAMAT KOD PEMBEDAHAN LOKASI 1 ---
 
         const storedFormat = detectEmbeddedSubtitleFormat({ content: translatedContent });
