@@ -7843,7 +7843,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
         } catch(e) {}
 
-        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.1
+        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.2 (With Key Radar)
         try {
             const axios = require('axios');
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -7885,18 +7885,15 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         }
                         let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
 
-                        // FINOPS MESIN KIRA-KIRA (BACA TERUS DARI ENJIN)
+                        // FINOPS MESIN KIRA-KIRA
                         let inputTokens = stats.promptTokens || 0;
                         let cachedTokens = stats.cachedTokens || 0;
                         let thoughtTokens = stats.thoughtTokens || 0;
                         let totalCompletion = stats.completionTokens || 0;
                         
-                        // Asingkan thought dari total output
                         let baseOutputTokens = totalCompletion > thoughtTokens ? totalCompletion - thoughtTokens : totalCompletion;
-                        
-                        // Fallback kalau API gagal pulangkan nilai token
                         if (inputTokens === 0 && baseOutputTokens === 0) {
-                            inputTokens = finalTotal * 35; // purata 35 token sebaris
+                            inputTokens = finalTotal * 35;
                             baseOutputTokens = finalTotal * 30;
                         }
 
@@ -7952,6 +7949,11 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                                           `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
+                        // 🎛️ DETEKSI JUMLAH KEY (TRANSPARENT FINOPS) - Guna workingConfig
+                        const validKeys = Array.isArray(workingConfig.geminiApiKeys) ? workingConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
+                        const keyCount = validKeys.length > 0 ? validKeys.length : 1;
+                        const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+
                         const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
                                             tokenBreakdown +
                                             `  └ <b>Retail Value:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
@@ -7968,6 +7970,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                         `${diagnosticsSection}` +
                                         `${costSection}\n` +
                                         `🌐 <b>Target:</b> ${(targetLangName || 'MAY').toUpperCase()}\n` +
+                                        `🔑 <b>Provider:</b> Gemini [${tierBadge}]\n` +
                                         `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                                         `🎉 <b>Ready to stream!</b>`;
 
