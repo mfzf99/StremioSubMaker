@@ -7777,34 +7777,60 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             provider,
             model || getEffectiveGeminiModel(workingConfig),
             workingConfig.advancedSettings || {},
-            { singleBatchMode, providerName, fallbackProviderName, enableStreaming: false }
+            // KITA TUKAR ENABLE STREAMING KE TRUE SUPAYA DIA HANTAR REPORT 10,20,30
+            { singleBatchMode, providerName, fallbackProviderName, enableStreaming: true } 
         );
 
         log.debug(() => `[Embedded Translate] Translating track ${safeTrackId} to ${targetLangName} (workflow=${translationWorkflow}, singleBatch=${singleBatchMode}, batchContext=${enableBatchContext}, timestamps=${sendTimestampsToAI})`);
 
-        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14 FINOPS & RADAR) ---
-        // 1. Persiapan Live Progress (Radar Ber-Ekor)
+        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14.1 FINOPS & RADAR STREAMING) ---
+        // 1. Persiapan Live Progress (Radar Ber-Ekor & Checkpoints)
         const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTrackId}`;
         const { getStorageAdapter } = require('./src/storage/StorageFactory');
         const { StorageAdapter } = require('./src/storage');
         
+        let nextCheckpoint = 10;
         const translatedContent = await engine.translateSubtitle(
             sourceContent,
             targetLangName,
             workingConfig.translationPrompt,
             async (progress) => {
                 try {
-                    let partialSrt = progress.currentSrt;
-                    if (partialSrt) {
-                        // Wajib tambah 'ekor' loading supaya Stremio tak berhenti auto-refresh
-                        const lineCount = partialSrt.trim().split(/\n\n/).length + 10;
-                        const tail = `\n\n${lineCount}\n00:00:00,000 --> 04:00:00,000\nTRANSLATION IN PROGRESS\nReload this subtitle to get more as translation gets ready.`;
-                        partialSrt = partialSrt + tail;
-                    }
+                    let shouldSave = false;
+                    let logMsg = '';
                     
-                    const adapter = await getStorageAdapter();
-                    await adapter.set(runtimeKey, { content: partialSrt }, StorageAdapter.CACHE_TYPES.PARTIAL);
-                    log.debug(() => `[Radar X-Embed] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}`);
+                    // Logik Checkpoints 10, 20, 30 untuk Terminal
+                    if (progress.streaming && progress.currentEntry) {
+                        if (progress.currentEntry >= nextCheckpoint) {
+                            shouldSave = true;
+                            logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries (streaming), nextCheckpoint=${nextCheckpoint + 10}`;
+                            nextCheckpoint += 10;
+                        } else if (progress.currentEntry === progress.totalEntries) {
+                            shouldSave = true;
+                            logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries, nextCheckpoint=${nextCheckpoint}`;
+                        } else {
+                            // Update terminal progress tanpa save (supaya log nampak rancak macam biasa)
+                            if (progress.currentEntry % 5 === 0) {
+                                log.debug(() => `[Embedded Translate] Streaming progress: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries (not saved: checkpoint not reached (next=${nextCheckpoint}))`);
+                            }
+                        }
+                    } else if (!progress.streaming) {
+                        shouldSave = true;
+                        logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}`;
+                    }
+
+                    if (shouldSave) {
+                        let partialSrt = progress.currentSrt;
+                        if (partialSrt) {
+                            const lineCount = (partialSrt.match(/\n\n/g) || []).length + 2;
+                            const tail = `\n\n${lineCount}\n00:00:00,000 --> 04:00:00,000\nTRANSLATION IN PROGRESS\nReload this subtitle to get more as translation gets ready.`;
+                            partialSrt = partialSrt + tail;
+                        }
+                        
+                        const adapter = await getStorageAdapter();
+                        await adapter.set(runtimeKey, { content: partialSrt }, StorageAdapter.CACHE_TYPES.PARTIAL);
+                        if (logMsg) log.debug(() => logMsg);
+                    }
                 } catch(e) {
                     log.debug(() => `[Radar Error] Gagal tulis partial cache: ${e.message}`);
                 }
@@ -7817,7 +7843,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
         } catch(e) {}
 
-        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14
+        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.1
         try {
             const axios = require('axios');
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -7827,8 +7853,6 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                 (async () => {
                     try {
                         let movieTitle = `Embedded Track ${safeTrackId} (${safeVideoHash.substring(0,8)})`;
-                        
-                        // Cuba cari tajuk wayang sebenar dari Cinemeta
                         try {
                             const metaUrl = `https://v3-cinemeta.strem.io/meta/movie/${encodeURIComponent(safeVideoHash)}.json`;
                             const metaResp = await axios.get(metaUrl, { timeout: 3000 });
@@ -7861,21 +7885,24 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         }
                         let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
 
-                        // FINOPS MESIN KIRA-KIRA
-                        const geminiLedger = global.geminiFinOps || { streams: {} };
-                        let inputTokens = 0, cachedTokens = 0, thoughtTokens = 0, baseOutputTokens = 0;
-                        for (const batchId in geminiLedger.streams) {
-                            const batch = geminiLedger.streams[batchId];
-                            inputTokens += batch.input || 0;
-                            cachedTokens += batch.cached || 0;
-                            thoughtTokens += batch.thought || 0;
-                            baseOutputTokens += batch.output || 0;
+                        // FINOPS MESIN KIRA-KIRA (BACA TERUS DARI ENJIN)
+                        let inputTokens = stats.promptTokens || 0;
+                        let cachedTokens = stats.cachedTokens || 0;
+                        let thoughtTokens = stats.thoughtTokens || 0;
+                        let totalCompletion = stats.completionTokens || 0;
+                        
+                        // Asingkan thought dari total output
+                        let baseOutputTokens = totalCompletion > thoughtTokens ? totalCompletion - thoughtTokens : totalCompletion;
+                        
+                        // Fallback kalau API gagal pulangkan nilai token
+                        if (inputTokens === 0 && baseOutputTokens === 0) {
+                            inputTokens = finalTotal * 35; // purata 35 token sebaris
+                            baseOutputTokens = finalTotal * 30;
                         }
+
                         const outputTokens = baseOutputTokens + thoughtTokens; 
                         const totalPromptSize = inputTokens + cachedTokens; 
                         const totalTokens = totalPromptSize + outputTokens;
-                        
-                        global.geminiFinOps = { streams: {} }; // Reset ledger
 
                         const pricing = {
                             "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
