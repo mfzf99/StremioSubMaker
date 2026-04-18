@@ -7777,14 +7777,14 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             provider,
             model || getEffectiveGeminiModel(workingConfig),
             workingConfig.advancedSettings || {},
-            // KITA TUKAR ENABLE STREAMING KE TRUE SUPAYA DIA HANTAR REPORT 10,20,30
-            { singleBatchMode, providerName, fallbackProviderName, enableStreaming: true } 
+            // SUIS STREAMING DIHIDUPKAN
+            { singleBatchMode, providerName, fallbackProviderName, enableStreaming: true }
         );
 
         log.debug(() => `[Embedded Translate] Translating track ${safeTrackId} to ${targetLangName} (workflow=${translationWorkflow}, singleBatch=${singleBatchMode}, batchContext=${enableBatchContext}, timestamps=${sendTimestampsToAI})`);
 
-        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14.1 FINOPS & RADAR STREAMING) ---
-        // 1. Persiapan Live Progress (Radar Ber-Ekor & Checkpoints)
+        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14.4 FINOPS & RADAR KLON NORMAL) ---
+        // 1. Persiapan Live Progress (Radar Streaming Ber-Ekor & Checkpoints)
         const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTrackId}`;
         const { getStorageAdapter } = require('./src/storage/StorageFactory');
         const { StorageAdapter } = require('./src/storage');
@@ -7799,28 +7799,38 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                     let shouldSave = false;
                     let logMsg = '';
                     
-                    // Logik Checkpoints 10, 20, 30 untuk Terminal
-                    if (progress.streaming && progress.currentEntry) {
-                        if (progress.currentEntry >= nextCheckpoint) {
+                    // 🚨 WAYAR DIBETULKAN BERDASARKAN translationEngine.js 🚨
+                    const current = progress.completedEntries; // BUKAN currentEntry!
+                    const total = progress.totalEntries;
+                    const batch = progress.currentBatch || 1;
+                    const totalBatches = progress.totalBatches || 1;
+                    const isStreaming = progress.streaming === true;
+
+                    if (isStreaming && typeof current === 'number' && typeof total === 'number') {
+                        if (current >= nextCheckpoint) {
                             shouldSave = true;
-                            logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries (streaming), nextCheckpoint=${nextCheckpoint + 10}`;
-                            nextCheckpoint += 10;
-                        } else if (progress.currentEntry === progress.totalEntries) {
+                            let computedNext = nextCheckpoint;
+                            while (computedNext <= current) {
+                                computedNext += 10;
+                            }
+                            logMsg = `[Embedded Translate] Partial SAVED: batch ${batch}/${totalBatches}, ${current}/${total} entries (streaming), nextCheckpoint=${computedNext}`;
+                            nextCheckpoint = computedNext;
+                        } else if (current === total) {
                             shouldSave = true;
-                            logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries, nextCheckpoint=${nextCheckpoint}`;
+                            logMsg = `[Embedded Translate] Partial SAVED: batch ${batch}/${totalBatches}, ${current}/${total} entries, nextCheckpoint=${nextCheckpoint}`;
                         } else {
-                            // Update terminal progress tanpa save (supaya log nampak rancak macam biasa)
-                            if (progress.currentEntry % 5 === 0) {
-                                log.debug(() => `[Embedded Translate] Streaming progress: batch ${progress.currentBatch}/${progress.totalBatches}, ${progress.currentEntry}/${progress.totalEntries} entries (not saved: checkpoint not reached (next=${nextCheckpoint}))`);
+                            // Papar log pergerakan tanpa save ke database (elak spam Redis)
+                            if (current % 5 === 0) {
+                                log.debug(() => `[Embedded Translate] Streaming progress: batch ${batch}/${totalBatches}, ${current}/${total} entries (not saved: checkpoint not reached (next=${nextCheckpoint}))`);
                             }
                         }
-                    } else if (!progress.streaming) {
+                    } else if (!isStreaming) {
                         shouldSave = true;
-                        logMsg = `[Embedded Translate] Partial SAVED: batch ${progress.currentBatch}/${progress.totalBatches}`;
+                        logMsg = `[Embedded Translate] Partial SAVED: batch ${batch}/${totalBatches}`;
                     }
 
                     if (shouldSave) {
-                        let partialSrt = progress.currentSrt;
+                        let partialSrt = progress.partialSRT; // Ambil terus SRT yang dah siap dibina dari enjin
                         if (partialSrt) {
                             const lineCount = (partialSrt.match(/\n\n/g) || []).length + 2;
                             const tail = `\n\n${lineCount}\n00:00:00,000 --> 04:00:00,000\nTRANSLATION IN PROGRESS\nReload this subtitle to get more as translation gets ready.`;
@@ -7843,7 +7853,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
         } catch(e) {}
 
-        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.2 (With Key Radar)
+        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.4
         try {
             const axios = require('axios');
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -7878,14 +7888,12 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const success = finalTotal - failed;
                         const usedModel = (model || getEffectiveGeminiModel(workingConfig) || 'gemini-3.1-flash-lite-preview').toLowerCase();
 
-                        // Advanced diagnostics
                         let advancedStats = '';
                         if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
                             advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
                         }
                         let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
 
-                        // FINOPS MESIN KIRA-KIRA
                         let inputTokens = stats.promptTokens || 0;
                         let cachedTokens = stats.cachedTokens || 0;
                         let thoughtTokens = stats.thoughtTokens || 0;
@@ -7949,7 +7957,6 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                                           `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
-                        // 🎛️ DETEKSI JUMLAH KEY (TRANSPARENT FINOPS) - Guna workingConfig
                         const validKeys = Array.isArray(workingConfig.geminiApiKeys) ? workingConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
                         const keyCount = validKeys.length > 0 ? validKeys.length : 1;
                         const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
