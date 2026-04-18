@@ -7784,7 +7784,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
         // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14 FINOPS & RADAR) ---
         // 1. Persiapan Live Progress (Radar Ber-Ekor)
-        const runtimeKey = `partial:xembed:${safeVideoHash}:${safeLang}:${safeTrackId}`;
+        const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTrackId}`;
         const { getStorageAdapter } = require('./src/storage/StorageFactory');
         const { StorageAdapter } = require('./src/storage');
         
