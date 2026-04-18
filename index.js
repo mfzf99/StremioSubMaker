@@ -7102,7 +7102,7 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId', async (req, res) =
             // KOD LIVE PROGRESS X-EMBEDDED
             // Kalau sarikata penuh belum siap, kita hidangkan yang separuh siap dulu kat Stremio
             try {
-                const runtimeKey = `partial:xembed:${safeVideoHash}:${safeLang}:${safeTrackId}`;
+                const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTrackId}`;
                 const { getStorageAdapter } = require('./src/storage/StorageFactory');
                 const { StorageAdapter } = require('./src/storage');
                 const adapter = await getStorageAdapter();
