@@ -7760,12 +7760,66 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         );
 
         log.debug(() => `[Embedded Translate] Translating track ${safeTrackId} to ${targetLangName} (workflow=${translationWorkflow}, singleBatch=${singleBatchMode}, batchContext=${enableBatchContext}, timestamps=${sendTimestampsToAI})`);
+        
+        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 ---
+        // 1. Persiapan Live Progress (Radar)
+        const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTargetLanguage}:${safeTrackId}`;
+        const { getStorageAdapter } = require('./src/storage/StorageFactory');
+        const { StorageAdapter } = require('./src/storage');
+        
         const translatedContent = await engine.translateSubtitle(
             sourceContent,
             targetLangName,
             workingConfig.translationPrompt,
-            null
+            async (progress) => {
+                // Tulis SRT separuh siap ke cache setiap kali kelompok (batch) siap
+                try {
+                    const adapter = await getStorageAdapter();
+                    await adapter.set(runtimeKey, { content: progress.currentSrt }, StorageAdapter.CACHE_TYPES.PARTIAL);
+                } catch(e) {
+                    log.debug(() => `[Radar Error] Gagal tulis partial cache: ${e.message}`);
+                }
+            }
         );
+
+        // Bersihkan radar lepas terjemahan siap 100%
+        try {
+            const adapter = await getStorageAdapter();
+            await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
+        } catch(e) {}
+
+        // 2. Sistem Notifikasi Telegram FinOps V13 (X-Embedded)
+        try {
+            const axios = require('axios');
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            const chatId = process.env.TELEGRAM_CHAT_ID;
+            
+            if (botToken && chatId) {
+                const stats = engine.translationStats || {};
+                const timeTaken = stats.timeTakenMs ? (stats.timeTakenMs / 1000).toFixed(1) : 0;
+                const totalLines = stats.totalEntries || 0;
+                const thoughtTokens = stats.thoughtTokens || 0;
+                const usedModel = model || getEffectiveGeminiModel(workingConfig);
+                
+                const text = `🎬 *X-EMBEDDED TRANSLATION REPORT* 🎬\n\n`
+                           + `🏷 *Track:* ${safeTrackId}\n`
+                           + `🌍 *Language:* ${targetLangName}\n`
+                           + `🤖 *Model:* ${usedModel}\n`
+                           + `⏱ *Time Taken:* ${timeTaken}s\n`
+                           + `📝 *Lines:* ${totalLines} lines\n`
+                           + `🧠 *Thoughts:* ${thoughtTokens} tokens\n`
+                           + `✅ *Status:* PERFECT ✨`;
+                           
+                axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    chat_id: chatId,
+                    text: text,
+                    parse_mode: 'Markdown'
+                }).catch(e => {});
+            }
+        } catch(e) {
+            log.debug(() => `[Telegram Error] Gagal hantar noti: ${e.message}`);
+        }
+        // --- TAMAT KOD PEMBEDAHAN LOKASI 1 ---
 
         const storedFormat = detectEmbeddedSubtitleFormat({ content: translatedContent });
         const saveMeta = {
