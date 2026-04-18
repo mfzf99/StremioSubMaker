@@ -7783,7 +7783,10 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
         log.debug(() => `[Embedded Translate] Translating track ${safeTrackId} to ${targetLangName} (workflow=${translationWorkflow}, singleBatch=${singleBatchMode}, batchContext=${enableBatchContext}, timestamps=${sendTimestampsToAI})`);
 
-        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14.4 FINOPS & RADAR KLON NORMAL) ---
+        // --- BERMULA KOD PEMBEDAHAN LOKASI 1 (V14.6 FINOPS + STOPWATCH + FULL DIAGNOSTICS) ---
+        // 0. MULAKAN STOPWATCH KITA SENDIRI
+        const startTimeMs = Date.now();
+
         // 1. Persiapan Live Progress (Radar Streaming Ber-Ekor & Checkpoints)
         const runtimeKey = `partial:xembed:${safeVideoHash}:${safeTrackId}`;
         const { getStorageAdapter } = require('./src/storage/StorageFactory');
@@ -7799,8 +7802,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                     let shouldSave = false;
                     let logMsg = '';
                     
-                    // 🚨 WAYAR DIBETULKAN BERDASARKAN translationEngine.js 🚨
-                    const current = progress.completedEntries; // BUKAN currentEntry!
+                    const current = progress.completedEntries; 
                     const total = progress.totalEntries;
                     const batch = progress.currentBatch || 1;
                     const totalBatches = progress.totalBatches || 1;
@@ -7819,7 +7821,6 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             shouldSave = true;
                             logMsg = `[Embedded Translate] Partial SAVED: batch ${batch}/${totalBatches}, ${current}/${total} entries, nextCheckpoint=${nextCheckpoint}`;
                         } else {
-                            // Papar log pergerakan tanpa save ke database (elak spam Redis)
                             if (current % 5 === 0) {
                                 log.debug(() => `[Embedded Translate] Streaming progress: batch ${batch}/${totalBatches}, ${current}/${total} entries (not saved: checkpoint not reached (next=${nextCheckpoint}))`);
                             }
@@ -7830,7 +7831,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                     }
 
                     if (shouldSave) {
-                        let partialSrt = progress.partialSRT; // Ambil terus SRT yang dah siap dibina dari enjin
+                        let partialSrt = progress.partialSRT; 
                         if (partialSrt) {
                             const lineCount = (partialSrt.match(/\n\n/g) || []).length + 2;
                             const tail = `\n\n${lineCount}\n00:00:00,000 --> 04:00:00,000\nTRANSLATION IN PROGRESS\nReload this subtitle to get more as translation gets ready.`;
@@ -7847,13 +7848,17 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             }
         );
 
+        // HENTIKAN STOPWATCH
+        const endTimeMs = Date.now();
+        const actualTimeTakenMs = endTimeMs - startTimeMs;
+
         // Bersihkan radar lepas terjemahan siap 100%
         try {
             const adapter = await getStorageAdapter();
             await adapter.delete(runtimeKey, StorageAdapter.CACHE_TYPES.PARTIAL);
         } catch(e) {}
 
-        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.4
+        // 2. Sistem Notifikasi Telegram FinOps God-Tier V14.6
         try {
             const axios = require('axios');
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -7873,8 +7878,9 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const sourceProv = `Embedded (MKV/MP4)`;
                         
                         const stats = engine.translationStats || {};
-                        const timeTakenMs = stats.timeTakenMs || 0;
-                        const durationSec = Math.max(1, Math.round(timeTakenMs / 1000));
+                        
+                        // KIRAAN MASA MENGGUNAKAN STOPWATCH KITA SENDIRI
+                        const durationSec = Math.max(1, Math.round(actualTimeTakenMs / 1000));
                         const mins = Math.floor(durationSec / 60);
                         const secs = durationSec % 60;
                         const timeTaken = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
@@ -7888,10 +7894,30 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const success = finalTotal - failed;
                         const usedModel = (model || getEffectiveGeminiModel(workingConfig) || 'gemini-3.1-flash-lite-preview').toLowerCase();
 
+                        // 🕵️‍♂️ DYNAMIC ADVANCED DIAGNOSTICS (SEPENUHNYA SAMA MACAM NORMAL TRANSLATION)
                         let advancedStats = '';
                         if (stats.keyRotationRetries > 0 || stats.rateLimitErrors > 0) {
                             advancedStats += `🔄 <b>Key Rotations:</b> ${stats.keyRotationRetries} times (Rate Limits: ${stats.rateLimitErrors})\n`;
                         }
+                        if (stats.errorTypes && stats.errorTypes.length > 0) {
+                            advancedStats += `🦠 <b>AI Errors Handled:</b> ${stats.errorTypes.join(', ')}\n`;
+                        }
+                        if (stats.usedSecondaryProvider) {
+                            advancedStats += `🛟 <b>Fallback Triggered:</b> ${stats.secondaryProviderName || 'Unknown'}\n`;
+                            if (stats.primaryFailureReason) {
+                                const shortReason = stats.primaryFailureReason.length > 50 ? stats.primaryFailureReason.substring(0, 50) + '...' : stats.primaryFailureReason;
+                                advancedStats += `   └ <i>Reason: ${shortReason}</i>\n`;
+                            }
+                        }
+                        if (stats.jsonXmlFallback) {
+                            advancedStats += `🛠️ <b>Format Rescue:</b> JSON to XML Fallback Activated\n`;
+                        }
+                        if (stats.parallelBatchesUsed) {
+                            advancedStats += `⚡ <b>Execution:</b> Parallel Batches\n`;
+                        } else if (stats.singleBatchMode) {
+                            advancedStats += `📦 <b>Execution:</b> Single Batch Mode\n`;
+                        }
+
                         let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
 
                         let inputTokens = stats.promptTokens || 0;
@@ -8000,7 +8026,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
             }
         } catch(e) {}
         // --- TAMAT KOD PEMBEDAHAN LOKASI 1 ---
-
+        
         const storedFormat = detectEmbeddedSubtitleFormat({ content: translatedContent });
         const saveMeta = {
             ...(mergedMetadata || {}),
