@@ -246,10 +246,23 @@ function parseSRT(srtContent) {
     return [];
   }
 
+  // 🛠️ RAWATAN MOJIBAKE: Cuci file asal yang tersalah format dari provider
+  let cleanContent = srtContent;
+  if (/â|Ã|Æ|Å|œ/.test(cleanContent)) {
+    try {
+      // Tukar string rosak balik ke byte, lepastu decode semula sebagai UTF-8
+      const fixed = Buffer.from(cleanContent, 'latin1').toString('utf8');
+      // Kalau lepas convert tak keluar simbol kotak pelik (Replacement Character), maknanya berjaya!
+      if (!fixed.includes('')) {
+        cleanContent = fixed;
+      }
+    } catch(e) {}
+  }
+
   const entries = [];
   // CRLF-aware splitting: handles both \n\n (LF) and \r\n\r\n (CRLF) line endings
   // Pattern (?:\r?\n){2,} matches 2 or more consecutive newlines (with optional \r before each \n)
-  const blocks = srtContent.trim().split(/(?:\r?\n){2,}/);
+  const blocks = cleanContent.trim().split(/(?:\r?\n){2,}/);
 
   for (const block of blocks) {
     // Also handle CRLF when splitting lines within each block
