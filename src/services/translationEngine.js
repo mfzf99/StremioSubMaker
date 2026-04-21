@@ -2042,13 +2042,11 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. STRICT 1-TO-1 ANTI-SHIFT: Translation for ID_X MUST perfectly match 
-   input ID_X ONLY. NEVER pull meaning from ID_X+1 into ID_X. NEVER 
-   shift translations up or down.
-
-2. ISOLATED BOX RULE (MOST CRITICAL): Treat each <s id="N"> as a 
-   completely sealed, isolated container. You have ZERO knowledge of 
-   adjacent IDs. An incomplete sentence IN = an incomplete sentence OUT.
+1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
+   sealed container. Translate ONLY its own content — in TOTAL ISOLATION. 
+   You have ZERO awareness of adjacent IDs.
+   Fragment IN = Fragment OUT. NEVER complete a sentence by stealing 
+   words from the next ID.
 
    ✅ CORRECT:
    IN:  <s id="45">I really want to</s>
@@ -2057,46 +2055,36 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
         <s id="46">balik rumah sekarang.</s>
 
    ❌ CATASTROPHICALLY WRONG:
-   IN:  <s id="45">I really want to</s>
-        <s id="46">go home now.</s>
    OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
         <s id="46">.</s>
 
    "Saya betul-betul nak" IS CORRECT — it is an intentional fragment.
-   Stealing words from the next ID to "complete" a sentence DESTROYS sync permanently.
+   Completing it by stealing from the next ID DESTROYS sync permanently.
 
-3. ESCAPE HATCH: If you skip, don't understand, or the line contains only 
-   symbols/music notes — DO NOT SHIFT the next lines. Copy the EXACT 
-   ORIGINAL ENGLISH TEXT for that specific ID and move on.
+2. ESCAPE HATCH: If you skip, don't understand, or the line contains 
+   only symbols/music notes — copy the EXACT ORIGINAL ENGLISH TEXT 
+   for that ID. DO NOT shift any entry below it.
 
-4. ONE ID ONCE: Each ID appears EXACTLY ONCE in strict input order. 
-   Never duplicate, never skip, never invent an ID that wasn't in the input.
+3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
+   Output IDs MUST match input IDs exactly, starting from ID_${startId}. 
+   Non-sequential input (e.g. 45, 47, 50) = non-sequential output — 
+   never fill gaps, never invent an ID not in the input.
 
-5. EXACT ID MATCHING: Output IDs MUST match input IDs exactly. 
-   If input starts at ID_${startId}, output starts at ID_${startId}.
-   If input IDs are non-sequential (e.g. 45, 47, 50), output MUST use 
-   those exact same IDs — never fill in the gaps.
+4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   (ID_${startId} to ID_${endId}). 
+   NEVER fabricate or hallucinate translations to fill a missing count — 
+   use Rule 2 instead.
 
-6. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} 
-   to ID_${endId}). If you run out of real content before reaching 
-   ${expectedCount}, use ESCAPE HATCH (Rule 3). NEVER invent, fabricate, 
-   or hallucinate translations to fill a missing count.
+5. FORMAT: <s id="45">translated text</s>
+   Use the exact ID from input. Never write [original_id] or [N].
 
-7. FORMAT: <s id="45">translated text here</s>
-   Use the exact numeric/alphanumeric ID from the input. Never use 
-   placeholder text like [original_id] or [N].
+6. [br] TAGS: Every [br] from source MUST appear in the translation 
+   at the same relative sentence boundary — never shifted.
 
-8. [br] TAGS: Every [br] tag in the source MUST appear in the translation. 
-   Place each [br] at the same relative sentence boundary as in the source — 
-   not shifted earlier or later within the same entry.
-
-9. NO EXTRA CONTENT: Your response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary, NO 
-   conversational replies — before, between, or after the entries.
-
-10. NO ORPHAN TEXT: Every translated word MUST be enclosed inside its 
-    corresponding <s id="N">...</s> tag. NEVER leave any word, fragment, 
-    or punctuation floating outside a tag.
+7. CLEAN OUTPUT: Response MUST start immediately with the first 
+   <s id="..."> tag. NO preamble, NO markdown, NO commentary — 
+   before, between, or after entries. Every translated word MUST be 
+   inside its corresponding tag. NOTHING floating outside.
 
 <input>
 ${batchText}
