@@ -2078,8 +2078,9 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 5. FORMAT: <s id="45">translated text</s>
    Use the exact ID from input. Never write [original_id] or [N].
 
-6. [br] TAGS: Every [br] from source MUST appear in the translation 
-   at the same relative sentence boundary — never shifted.
+6. PRESERVE FORMATTING: Every [br] tag MUST appear in the translation 
+   at the same relative sentence boundary — never shifted. 
+   Speaker dashes (-) MUST be preserved exactly as they appear in the source.
 
 7. CLEAN OUTPUT: Response MUST start immediately with the first 
    <s id="..."> tag. NO preamble, NO markdown, NO commentary — 
