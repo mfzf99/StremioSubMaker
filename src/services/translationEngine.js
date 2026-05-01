@@ -26,7 +26,7 @@ const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLan
 const { recordKeyError: recordKeyErrorRedis, isKeyCoolingDown: isKeyCoolingDownRedis, getNextRotationIndex, resetKeyHealth } = require('../utils/sharedCache');
 const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // 🛑 BINA PEDAL BREK ANGIN (5.0 SAAT)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+//const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ============================================================================
 // 🛠️ ZON TEMPLATE PROMPT (EDIT DI SINI BILA-BILA MASA UNTUK EKSPERIMEN)
