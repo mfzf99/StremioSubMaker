@@ -310,8 +310,8 @@ class GeminiService {
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
       
-      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL V3 (THE ZERO-THOUGHT BYPASS)
-      const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, literal translations, overlapping speech (-), and sound tags (e.g., [sighs]), bypass reasoning ENTIRELY. Do not use the scratchpad. Output the XML immediately.\n4. SELECTIVE REASONING: ONLY activate reasoning if you encounter a highly complex idiom or untranslatable slang. Resolve its meaning conceptually and immediately output XML.\n';
+      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL
+      const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL] - Do NOT overthink. Do NOT overplan.\n';
       
       // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
