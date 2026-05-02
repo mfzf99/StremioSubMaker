@@ -7954,12 +7954,25 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
                         let diagnosticsSection = advancedStats !== '' ? `\n🔍 <b>Advanced Diagnostics:</b>\n${advancedStats}` : '';
 
-                        let inputTokens = stats.promptTokens || 0;
-                        let cachedTokens = stats.cachedTokens || 0;
-                        let thoughtTokens = stats.thoughtTokens || 0;
-                        let totalCompletion = stats.completionTokens || 0;
-                        
-                        let baseOutputTokens = totalCompletion > thoughtTokens ? totalCompletion - thoughtTokens : totalCompletion;
+                        // --- 🚀 MULA: PEMBEDAHAN FINOPS TOKEN 🚀 ---
+                        let inputTokens = 0;
+                        let cachedTokens = 0;
+                        let thoughtTokens = 0;
+                        let baseOutputTokens = 0;
+
+                        if (global.geminiFinOps && global.geminiFinOps.streams) {
+                            for (const streamId in global.geminiFinOps.streams) {
+                                const st = global.geminiFinOps.streams[streamId];
+                                inputTokens += (st.input || 0);
+                                cachedTokens += (st.cached || 0);
+                                thoughtTokens += (st.thought || 0);
+                                baseOutputTokens += (st.output || 0);
+                            }
+                            // SELEPAS sedut, cuci laci supaya tak bertindih dengan job lain
+                            global.geminiFinOps.streams = {};
+                        }
+
+                        // Fallback jika API down atau provider lain digunakan (bukan Gemini)
                         if (inputTokens === 0 && baseOutputTokens === 0) {
                             inputTokens = finalTotal * 35;
                             baseOutputTokens = finalTotal * 30;
@@ -7968,6 +7981,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const outputTokens = baseOutputTokens + thoughtTokens; 
                         const totalPromptSize = inputTokens + cachedTokens; 
                         const totalTokens = totalPromptSize + outputTokens;
+                        // --- 🏁 TAMAT: PEMBEDAHAN FINOPS TOKEN 🏁 ---
 
                         const pricing = {
                             "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
