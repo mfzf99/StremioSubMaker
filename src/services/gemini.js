@@ -309,24 +309,19 @@ class GeminiService {
     // When thinking is disabled (thinkingBudget === 0), these rules are unnecessary
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
-      const thinkingRules = '\n\nDo NOT overthink. Do NOT overplan.\n\n';
+      
+      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL (MULTI-LANGUAGE & SET-AND-FORGET)
+      const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. SELECTIVE FOCUS: Reserve reasoning EXCLUSIVELY for complex idioms, slang, emotional tone, or difficult cultural nuances. Skip reasoning completely for simple, literal lines.\n4. INSTANT EXECUTION: Once the translation phrasing is conceptually resolved, terminate reasoning and output the XML immediately.\n';
 
-      // 🚀 INJECT: Sistem pengesan "Maha Kebal" untuk custom prompt
-      // 1. Cari tag <input> dalam custom prompt bos
+      // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
-        systemPrompt = systemPrompt.replace('<input>', thinkingRules + '<input>');
-      } 
-      // 2. Fallback 1: Kalau pakai prompt default DEV
-      else if (systemPrompt.includes('Do NOT include acknowledgements')) {
-        systemPrompt = systemPrompt.replace(/(Do NOT include acknowledgements[^\n]+)\n/, '$1' + thinkingRules);
-      } 
-      // 3. Fallback 2: Kalau pakai prompt lama DEV
-      else if (systemPrompt.includes('Output ONLY')) {
-        systemPrompt = systemPrompt.replace(/\n(Output ONLY)/, thinkingRules + '$1');
-      } 
-      // 4. Ultimate Fallback: Kalau prompt totally alien, sumbat je kat hujung
-      else {
-        systemPrompt = systemPrompt + thinkingRules;
+        systemPrompt = systemPrompt.replace('<input>', universalReasoningChain + '\n<input>');
+      } else if (systemPrompt.includes('Do NOT include acknowledgements')) {
+        systemPrompt = systemPrompt.replace(/(Do NOT include acknowledgements[^\n]+)\n/, '$1' + universalReasoningChain);
+      } else if (systemPrompt.includes('Output ONLY')) {
+        systemPrompt = systemPrompt.replace(/\n(Output ONLY)/, universalReasoningChain + '\n$1');
+      } else {
+        systemPrompt = systemPrompt + universalReasoningChain;
       }
     }
 
