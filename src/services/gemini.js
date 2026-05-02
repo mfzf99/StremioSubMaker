@@ -637,16 +637,8 @@ class GeminiService {
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            // 🚀 THE STREAMING BYPASS: Tukar "null" kepada "high" khusus untuk Streaming!
-            if (isGemini3) {
-              generationConfig.thinkingConfig = { thinkingLevel: 'high' };
-              log.debug(() => `[Gemini Streaming] Dynamic budget (-1) detected. Forcing 'high' thinking level to bypass streaming API limitation.`);
-            } else {
-               // Fallback untuk model siri 2.5 (kalau diguna masa streaming)
-               const dynamicCeiling = Math.max(1024, estimatedOutputTokens - 1024);
-               generationConfig.thinkingConfig = { thinkingBudget: dynamicCeiling };
-               log.debug(() => `[Gemini Streaming] Dynamic budget (-1) detected. Forcing fixed budget of ${dynamicCeiling} tokens.`);
-            }
+            // UBAHAN BARU: Hantar null (dynamic) untuk semua model termasuk Gemini 3.0
+            generationConfig.thinkingConfig = { thinkingBudget: null };
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
             if (isGemini3) {
