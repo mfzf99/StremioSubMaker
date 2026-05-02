@@ -309,19 +309,24 @@ class GeminiService {
     // When thinking is disabled (thinkingBudget === 0), these rules are unnecessary
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
-      // Find the last "Do NOT" line and add the thinking rules after it
-      const doNotPattern = /(Do NOT include acknowledgements[^\n]+)\n/;
-      if (doNotPattern.test(systemPrompt)) {
-        systemPrompt = systemPrompt.replace(
-          doNotPattern,
-          '$1\nDo NOT overthink. Do NOT overplan.\n'
-        );
-      } else {
-        // Fallback: add before "Output ONLY" if pattern not found
-        systemPrompt = systemPrompt.replace(
-          /\n(Output ONLY)/,
-          '\n\nDo NOT overthink. Do NOT overplan.\n\n$1'
-        );
+      const thinkingRules = '\n\nDo NOT overthink. Do NOT overplan.\n\n';
+
+      // 🚀 INJECT: Sistem pengesan "Maha Kebal" untuk custom prompt
+      // 1. Cari tag <input> dalam custom prompt bos
+      if (systemPrompt.includes('<input>')) {
+        systemPrompt = systemPrompt.replace('<input>', thinkingRules + '<input>');
+      } 
+      // 2. Fallback 1: Kalau pakai prompt default DEV
+      else if (systemPrompt.includes('Do NOT include acknowledgements')) {
+        systemPrompt = systemPrompt.replace(/(Do NOT include acknowledgements[^\n]+)\n/, '$1' + thinkingRules);
+      } 
+      // 3. Fallback 2: Kalau pakai prompt lama DEV
+      else if (systemPrompt.includes('Output ONLY')) {
+        systemPrompt = systemPrompt.replace(/\n(Output ONLY)/, thinkingRules + '$1');
+      } 
+      // 4. Ultimate Fallback: Kalau prompt totally alien, sumbat je kat hujung
+      else {
+        systemPrompt = systemPrompt + thinkingRules;
       }
     }
 
