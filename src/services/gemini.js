@@ -440,11 +440,8 @@ class GeminiService {
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            if (isGemini3) {
-              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
-            } else {
-              generationConfig.thinkingConfig = { thinkingBudget: null };
-            }
+            // UBAHAN BARU: Hantar null (dynamic) untuk semua model termasuk Gemini 3.0
+            generationConfig.thinkingConfig = { thinkingBudget: null };
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
             if (isGemini3) {
