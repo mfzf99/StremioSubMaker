@@ -310,9 +310,9 @@ class GeminiService {
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
       
-      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL (MULTI-LANGUAGE & SET-AND-FORGET)
-      const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. SELECTIVE FOCUS: Reserve reasoning EXCLUSIVELY for complex idioms, slang, emotional tone, or difficult cultural nuances. Skip reasoning completely for simple, literal lines.\n4. INSTANT EXECUTION: Once the translation phrasing is conceptually resolved, terminate reasoning and output the XML immediately.\n';
-
+      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL V2.2 (STRICT ANTI-OVERTHINKING + PERFECT FLOW)
+      const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. HIGH-SPEED REASONING: Reserve reasoning ONLY for complex idioms, untranslatable slang, or wordplay to preserve translation quality. When reasoning is needed, STRICTLY limit it to 1-2 short sentences. DO NOT over-analyze emotions, literal dialogue, or overlapping conversations.\n4. SDH & TAG BYPASS: Sound effects, actions (e.g., [sighs], (music)), and speaker names must be translated or kept as-is INSTANTLY with ZERO reasoning.\n5. INSTANT EXECUTION: Once the translation phrasing is conceptually resolved, terminate reasoning and output the XML immediately.\n';
+      
       // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
         systemPrompt = systemPrompt.replace('<input>', universalReasoningChain + '\n<input>');
