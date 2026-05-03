@@ -310,8 +310,8 @@ class GeminiService {
     const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
     if (effectiveThinkingBudget !== 0) {
       
-      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL V3 (THE ZERO-THOUGHT BYPASS)
-const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL] - Do NOT overthink. Do NOT overplan. INSTANT EXECUTION: Once the translation phrasing is conceptually resolved, terminate reasoning and output the XML immediately.\n';
+      // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL
+const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL] - LIMIT REASONING TO LINGUISTIC BEAUTY ONLY. Focus your thoughts strictly on crafting natural and authentic dialogue in the target language. DO NOT reason about XML tags or formatting rules. Once the phrasing is elegant, terminate reasoning and output the XML immediately.\n';
       
       // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
