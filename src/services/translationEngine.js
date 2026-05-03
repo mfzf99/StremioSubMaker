@@ -2042,50 +2042,32 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
-   sealed container. Translate ONLY its own content — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs.
-   Fragment IN = Fragment OUT. NEVER complete a sentence by stealing 
-   words from the next ID.
+1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely sealed container. Translate ONLY its own content — in TOTAL ISOLATION. You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. NEVER complete a sentence by stealing words from the next ID.
 
-   ✅ CORRECT:
-   IN:  <s id="45">I really want to</s>
-        <s id="46">go home now.</s>
-   OUT: <s id="45">Saya betul-betul nak</s>
-        <s id="46">balik rumah sekarang.</s>
+✅ CORRECT:
+IN:  <s id="45">I really want to</s>
+     <s id="46">go home now.</s>
+OUT: <s id="45">Saya betul-betul nak</s>
+     <s id="46">balik rumah sekarang.</s>
 
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
-        <s id="46">.</s>
+❌ CATASTROPHICALLY WRONG:
+OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
+     <s id="46">.</s>
 
-   "Saya betul-betul nak" IS CORRECT — it is an intentional fragment.
-   Completing it by stealing from the next ID DESTROYS sync permanently.
+"Saya betul-betul nak" IS CORRECT — it is an intentional fragment. Completing it by stealing from the next ID DESTROYS sync permanently.
 
-2. ESCAPE HATCH: If you skip, don't understand, or the line contains 
-   only symbols/music notes — copy the EXACT ORIGINAL ENGLISH TEXT 
-   for that ID. DO NOT shift any entry below it.
+2. ESCAPE HATCH: If you skip, don't understand, or the line contains only symbols/music notes — copy the EXACT ORIGINAL ENGLISH TEXT for that ID. DO NOT shift any entry below it.
 
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly, starting from ID_${startId}. 
-   Non-sequential input (e.g. 45, 47, 50) = non-sequential output — 
-   never fill gaps, never invent an ID not in the input.
+3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. Output IDs MUST match input IDs exactly, starting from ID_${startId}. Non-sequential input (e.g. 45, 47, 50) = non-sequential output — never fill gaps, never invent an ID not in the input.
 
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (ID_${startId} to ID_${endId}). 
-   NEVER fabricate or hallucinate translations to fill a missing count — 
-   use Rule 2 instead.
+4. EXACT COUNT: Output EXACTLY ${expectedCount} entries (ID_${startId} to ID_${endId}). NEVER fabricate or hallucinate translations to fill a missing count — use Rule 2 instead.
 
 5. FORMAT: <s id="45">translated text</s>
-   Use the exact ID from input. Never write [original_id] or [N].
+Use the exact ID from input. Never write [original_id] or [N].
 
-6. PRESERVE FORMATTING: Every [br] tag MUST appear in the translation 
-   at the same relative sentence boundary — never shifted. 
-   Speaker dashes (-) MUST be preserved exactly as they appear in the source.
+6. PRESERVE FORMATTING: Every [br] tag MUST appear in the translation at the same relative sentence boundary — never shifted. Speaker dashes (-) MUST be preserved exactly as they appear in the source.
 
-7. CLEAN OUTPUT: Response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary — 
-   before, between, or after entries. Every translated word MUST be 
-   inside its corresponding tag. NOTHING floating outside.
+7. CLEAN OUTPUT: Response MUST start immediately with the first <s id="..."> tag. NO preamble, NO markdown, NO commentary — before, between, or after entries. Every translated word MUST be inside its corresponding tag. NOTHING floating outside.
 
 <input>
 ${batchText}
