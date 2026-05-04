@@ -311,7 +311,7 @@ class GeminiService {
     if (effectiveThinkingBudget !== 0) {
       
       // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL
-const universalReasoningChain = '\nDo NOT overthink. Do NOT overplan.\n';
+const universalReasoningChain = '';
       
       // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
