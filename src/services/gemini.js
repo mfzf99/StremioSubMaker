@@ -311,7 +311,7 @@ class GeminiService {
     if (effectiveThinkingBudget !== 0) {
       
       // 🚀 INJECT: THE UNIVERSAL REASONING PROTOCOL
-const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL] - LIMIT REASONING TO LINGUISTIC BEAUTY ONLY. Focus your thoughts strictly on crafting natural and authentic dialogue in the target language. DO NOT reason about XML tags or formatting rules. Once the phrasing is elegant, terminate reasoning and output the XML immediately.\n';
+const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. REASONING SCOPE: Your thoughts exist for ONE purpose only — crafting natural, authentic, beautiful dialogue in the target language. Nothing else justifies using the scratchpad.\n2. INSTANT BYPASS (EXECUTE WITHOUT THINKING): XML tags, ID numbers, entry count, formatting rules, fragment lines, speaker dashes (-), sound tags ([sighs], ♪). These are mechanical. Execute automatically.\n3. BEAUTY THRESHOLD: Only open the scratchpad if a word or phrase cannot be made natural without deliberation. Resolve it, then output immediately.\n4. TERMINATION RULE: The moment phrasing feels natural and authentic — stop thinking. Output the XML.\n';
       
       // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
