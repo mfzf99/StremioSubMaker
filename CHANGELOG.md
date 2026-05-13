@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.83
+
+**Bug Fixes:**
+
+- **Hardened OpenSubtitles Auth against production `429` bursts:** the shared Auth API limiter now uses a Redis-backed leaky gate instead of a fixed one-second bucket, so clustered deployments cannot burst across window boundaries while staying nominally under `4 req/sec`. All `/login`, `/subtitles`, and `/download` API calls, including token-refresh retries, now pass through the same limiter, upstream `429`/rate-limit headers push a short cooldown back into Redis for every pod, and the local no-Redis fallback is conservative at `1 req/sec`. OpenSubtitles credential validation also uses the normal validation endpoint limiter before it enters the upstream login queue.
+
+- **Fixed rate limiting failing open while Redis was late or unavailable:** the `express-rate-limit` Redis store no longer queues startup script loading behind the old 30-second Redis wait. The shared limiters now use Redis when the shared client is ready and immediately fall back to a per-process memory store when Redis is missing or a Redis command fails, so Stremio subtitle traffic no longer triggers `Redis not available for rate limiting after 30s` and no longer runs completely unmetered just because Redis is unavailable.
+
+- **Removed requests caused by cache-buster redirects:** versioned addon paths such as `/addon/{token}/v1.4.83/subtitles/...` are now accepted as internal aliases, while unversioned addon paths are served directly with `no-store` instead of a `307` hop. Configure and Quick Setup keep generating unversioned manifest install URLs so installed Stremio transports are not pinned to a release-specific path.
+
+## SubMaker v1.4.82
+
+**Improvements:**
+
+- **Added SCS Community/Auth modes:** SubMaker now allows an Auth mode where users can provide their own SCS auth key. Auth mode sends SCS the selected SubMaker languages through the upstream `langs` override so requests can avoid the broad all-languages search path (faster), while Community mode preserves the current shared-key behavior for users without an SCS key.
+
+- **Fixed partial provider timeout results becoming sticky in subtitle search cache:** timed-out provider searches can still return the providers that finished in time, but SubMaker now marks those responses as partial and avoids caching them. This prevents a temporary target-only result set from hiding source-backed translation entries such as `Make Serbian` on later refreshes.
+
+- **Fixed Stremio Firebase-hosted web app requests being rejected by the origin policy:** `https://stremio.web.app` is now included in the default known Stremio web frontend origins, and the official `*.stremio.com` wildcard allowlist is explicitly documented in the origin matcher so supported Stremio web clients follow the normal CORS path.
+
+- **Added SCS auth-key setup across Configure and Quick Setup:** the main provider settings and Quick Setup source picker now expose the SCS mode choice and auth-key field, validate that Auth mode has a key before saving, preserve the setting when restoring sessions, and encrypt the SCS auth key alongside the other subtitle-provider credentials.
+
+- **Fixed saved settings changing after refreshing Configure:** the normal page-load path no longer restores translation settings from an empty Just Fetch backup, so saved Learn Mode and other selections stay enabled unless the user is actually returning from Just Fetch mode.
+
 ## SubMaker v1.4.81
 
 **New Features:**
