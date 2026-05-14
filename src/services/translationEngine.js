@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural Malaysian ${targetLabel} that reflects authentic spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'.`,
+  primary: (targetLabel) => `Translate into natural Malaysian ${targetLabel} that reflects authentic spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'. Use full spelling for all words — write "ini" not "ni", "dekat" not "kat", "sudah" not "dah", "tidak" not "tak".`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural Malaysian ${targetLabel} that reflects authentic spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'.`
+ fallback: (targetLabel) => `Translate into natural Malaysian ${targetLabel} that reflects authentic spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'. Use full spelling for all words — write "ini" not "ni", "dekat" not "kat", "sudah" not "dah", "tidak" not "tak".`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
