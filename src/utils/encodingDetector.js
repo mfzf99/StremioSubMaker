@@ -256,6 +256,17 @@ function detectAndConvertEncoding(content, source = 'Unknown', languageHint = nu
       }
     }
 
+    // 🚀 INJECT: UJIAN KESAHIHAN UTF-8 (THE MAGIC BULLET) 🚀
+    // Kebanyakan sarikata moden adalah UTF-8 Tanpa BOM. 
+    // Kita cuba decode sebagai UTF-8 dulu. Kalau tak ada 'Replacement Character' (\uFFFD),
+    // maknanya fail ni memang 100% UTF-8 yang sihat. Tak payah pakai chardet!
+    const strictUtf8 = buffer.toString('utf-8');
+    if (!strictUtf8.includes('\uFFFD')) {
+      log.debug(() => `[${source}] Detected perfect UTF-8 without BOM. Bypassing chardet.`);
+      return strictUtf8;
+    }
+    // =========================================================
+
     // Use chardet to detect encoding
     // Sample first 4KB for detection (faster and usually accurate enough)
     const sampleSize = Math.min(buffer.length, 4096);
