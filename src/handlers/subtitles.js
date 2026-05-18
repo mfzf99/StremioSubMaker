@@ -5013,6 +5013,18 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
     }
 
+    // 🧹 INJECT: MESIN PENYAPU ALIEN (MOJIBAKE CLEANER) 🧹
+    // Kita sapu bersih teks mentah ni SEBELUM dia masuk ke dalam otak AI.
+    if (typeof sourceContent === 'string') {
+        sourceContent = sourceContent
+            .replace(/â€¦/g, '...')   // Titik tiga
+            .replace(/â€™/g, "'")     // Koma atas (Apostrophe)
+            .replace(/â€“/g, '-')     // Dash / Sempang
+            .replace(/â€œ/g, '"')     // Pembuka pengikat kata
+            .replace(/â€/g, '"');     // Penutup pengikat kata
+    }
+    // =======================================================
+
     // Get language names for better translation context
     const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
 
