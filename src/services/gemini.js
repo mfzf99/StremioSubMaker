@@ -434,14 +434,19 @@ const universalReasoningChain = '';
 
         // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5 vs GEMMA) 🚀
         const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
+        const isGemini31 = String(this.model).toLowerCase().includes('gemini-3.1');
 
         // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
         // Jadi, kita kecualikan Gemma dari hantar parameter ini.
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            // UBAHAN BARU: Hantar null (dynamic) untuk semua model termasuk Gemini 3.0
-            generationConfig.thinkingConfig = { thinkingBudget: null };
+            // MAZHAB API KETAT: Gemini 3.1 akan 'reject' kalau nampak thinkingBudget.
+            // Untuk Gemini 3.1, kita abaikan (tak hantar apa-apa) supaya dia guna Auto lalai.
+            if (!isGemini31) {
+              // Hantar null (dynamic) HANYA untuk model Gemini 2.x dan Gemini 3.0 yang masih menyokongnya.
+              generationConfig.thinkingConfig = { thinkingBudget: null };
+            }
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
             if (isGemini3) {
