@@ -1954,7 +1954,7 @@
                 thinkingBudget: geminiAdvancedDefaults.thinkingBudget,
                 temperature: geminiAdvancedDefaults.temperature,
                 topP: 0.95,
-                topK: 1,
+                topK: 40,
                 enableBatchContext: false,
                 contextSize: 15,
                 sendTimestampsToAI: false,
