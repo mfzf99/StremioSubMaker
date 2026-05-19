@@ -1956,7 +1956,7 @@
                 topP: 0.95,
                 topK: 40,
                 enableBatchContext: false,
-                contextSize: 50,
+                contextSize: 15,
                 sendTimestampsToAI: false,
                 translationWorkflow: 'xml',
                 enableJsonOutput: false,
