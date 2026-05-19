@@ -1280,7 +1280,7 @@ Translate to {target_language}.`;
                 thinkingBudget: modelDefaults.thinkingBudget,
                 temperature: modelDefaults.temperature,
                 topP: 0.95,
-                topK: 40,
+                topK: 1,
                 enableBatchContext: false, // Include original surrounding context and previous translations
                 contextSize: 15, // Number of preceding original entries to include as context
                 sendTimestampsToAI: false, // Let AI handle timestamps directly
