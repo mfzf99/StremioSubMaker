@@ -11038,7 +11038,7 @@ Translate to {target_language}.`;
                 thinkingBudget: (function () { const el = document.getElementById('advancedThinkingBudget'); return el ? parseInt(el.value) : 0; })(),
                 temperature: (function () { const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.8; })(),
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
-                topK: 40, // Keep default topK
+                topK: 1, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
                 contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 15; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
