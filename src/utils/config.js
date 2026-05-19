@@ -1184,7 +1184,7 @@ function getDefaultConfig(modelName = null) {
     temperature: process.env.GEMINI_TEMPERATURE !== undefined
       ? parseFloat(process.env.GEMINI_TEMPERATURE)
       : modelDefaults.temperature,
-    topK: process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 1,
+    topK: process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 40,
     topP: process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95,
     // Batch context: Include original surrounding context and previous translations for better coherence
     // Disabled by default for performance (can be enabled for improved translation quality)
