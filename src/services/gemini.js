@@ -85,7 +85,7 @@ class GeminiService {
     // Top-K (default: 40)
     this.topK = advancedSettings.topK !== undefined
       ? advancedSettings.topK
-      : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 40);
+      : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 1);
 
     // Top-P (default: 0.95)
     this.topP = advancedSettings.topP !== undefined
