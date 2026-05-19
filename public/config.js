@@ -6419,7 +6419,7 @@ Translate to {target_language}.`;
         const topPChanged = parseFloat(advTopPEl.value) !== defaults.topP;
         // Batch context changes are also considered advanced modifications
         const batchCtxChanged = batchCtxEl ? (batchCtxEl.checked !== (defaults.enableBatchContext === true)) : false;
-        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 50)) : false;
+        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 15)) : false;
         // Mismatch retries change
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
         const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 1)) : false;
