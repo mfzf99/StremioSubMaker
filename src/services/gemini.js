@@ -628,7 +628,9 @@ const universalReasoningChain = '';
           temperature: this.temperature,
           topK: this.topK,
           topP: this.topP,
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve
+          maxOutputTokens: estimatedOutputTokens + thinkingReserve,
+          frequencyPenalty: 0.0, // 👈 KUNCI MATI
+          presencePenalty: 0.0   // 👈 KUNCI MATI
         };
 
         // JSON structured output mode (incompatible with thinking — see translateSubtitle)
