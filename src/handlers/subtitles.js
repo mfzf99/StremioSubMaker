@@ -5362,7 +5362,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 advancedStats += `🛟 <b>Fallback Triggered:</b> ${stats.secondaryProviderName || 'Unknown'}\n`;
                 if (stats.primaryFailureReason) {
                     const shortReason = stats.primaryFailureReason.length > 50 ? stats.primaryFailureReason.substring(0, 50) + '...' : stats.primaryFailureReason;
-                    advancedStats += `   └ <i>Reason: ${shortReason}</i>\n`;
+                    advancedStats += `    └ <i>Reason: ${shortReason}</i>\n`;
                 }
             }
             
@@ -5413,6 +5413,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
             // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
             const pricing = {
+                "3.5-flash": { input: 1.50, output: 9.00, cache: 0.15 },
                 "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
                 "3.1-flash-lite": { input: 0.25, output: 1.50, cache: 0.025 },
                 "3.0-flash": { input: 0.50, output: 3.00, cache: 0.05 },
@@ -5426,7 +5427,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             let rateOutput = pricing["3.1-flash-lite"].output;
             let rateCache = pricing["3.1-flash-lite"].cache;
 
-            if (usedModel.includes('3.1-pro')) {
+            if (usedModel.includes('3.5-flash')) {
+                rateInput = pricing["3.5-flash"].input; rateOutput = pricing["3.5-flash"].output; rateCache = pricing["3.5-flash"].cache;
+            } else if (usedModel.includes('3.1-pro')) {
                 const isT2 = totalPromptSize > 200000;
                 rateInput = isT2 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
                 rateOutput = isT2 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
