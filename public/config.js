@@ -1285,7 +1285,7 @@ Translate to {target_language}.`;
                 contextSize: 5, // Number of preceding original entries to include as context
                 sendTimestampsToAI: false, // Let AI handle timestamps directly
                 translationWorkflow: 'xml', // 'original', 'ai', 'xml', or 'json'
-                mismatchRetries: 1 // Retries when AI returns wrong entry count (0-3)
+                mismatchRetries: 3 // Retries when AI returns wrong entry count (0-3)
             }
         };
     }
@@ -6422,7 +6422,7 @@ Translate to {target_language}.`;
         const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 5)) : false;
         // Mismatch retries change
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
-        const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 1)) : false;
+        const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 3)) : false;
         // Workflow change (default is 'xml')
         const workflowChanged = getSelectedTranslationWorkflow('xml') !== 'xml';
 
@@ -10690,7 +10690,7 @@ Translate to {target_language}.`;
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
         if (mismatchRetriesEl) {
             const val = parseInt(currentConfig.advancedSettings?.mismatchRetries);
-            mismatchRetriesEl.value = Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 1;
+            mismatchRetriesEl.value = Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 3;
         }
 
         // Check if advanced settings are modified and update bypass cache accordingly
@@ -11042,7 +11042,7 @@ Translate to {target_language}.`;
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
                 contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 5; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
-                mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 1)) : 1; })()
+                mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 3)) : 3; })()
             }
         };
         config.multiProviderEnabled = multiProviderToggleChecked;
