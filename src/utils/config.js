@@ -609,7 +609,7 @@ function normalizeConfig(config) {
     enableJsonOutput: advSettings.enableJsonOutput === true, // kept for one version (backward compat)
     mismatchRetries: (() => {
       const val = parseInt(advSettings.mismatchRetries);
-      return Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 1;
+      return Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 3;
     })()
   };
 
@@ -1191,7 +1191,7 @@ function getDefaultConfig(modelName = null) {
     enableBatchContext: process.env.ENABLE_BATCH_CONTEXT === 'true' ? true : false,
     contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE) || 5, // Number of preceding original entries to include as context
     // Mismatch retries: number of times to retry a batch when AI returns wrong entry count (0-3, default: 1)
-    mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES))) : 1
+    mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES))) : 3
   };
 
   // UI/results limits
