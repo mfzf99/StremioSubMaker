@@ -1960,7 +1960,7 @@
                 sendTimestampsToAI: false,
                 translationWorkflow: 'xml',
                 enableJsonOutput: false,
-                mismatchRetries: 1
+                mismatchRetries: 3
             }
         };
 
