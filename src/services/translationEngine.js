@@ -177,7 +177,7 @@ class TranslationEngine {
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
-    this.mismatchRetries = Number.isFinite(rawMismatchRetries) ? Math.max(0, Math.min(3, rawMismatchRetries)) : 1;
+    this.mismatchRetries = Number.isFinite(rawMismatchRetries) ? Math.max(0, Math.min(3, rawMismatchRetries)) : 3;
 
     // Translation workflow mode: 'original' (numbered list), 'ai' (send timestamps),
     //                           'xml' (XML-tagged entries), 'json' (JSON structured I/O)
