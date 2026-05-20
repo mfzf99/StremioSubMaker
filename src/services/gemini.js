@@ -434,30 +434,32 @@ const universalReasoningChain = '';
           generationConfig.responseMimeType = 'application/json';
         }
 
-        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5 vs GEMMA) 🚀
-        const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
-        const isGemini31 = String(this.model).toLowerCase().includes('gemini-3.1');
+        // 🚀 INJECT: ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
+        const modelNameLower = String(this.model).toLowerCase();
+        // Regex ni akan pegang nombor versi, cth: 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5, 'gemini-4.0' -> 4
+        const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
+        const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
 
         // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
-        // Jadi, kita kecualikan Gemma dari hantar parameter ini.
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            // MAZHAB API KETAT: Gemini 3.1 akan 'reject' kalau nampak thinkingBudget.
-            // Untuk Gemini 3.1, kita abaikan (tak hantar apa-apa) supaya dia guna Auto lalai.
-            if (!isGemini31) {
-              // Hantar null (dynamic) HANYA untuk model Gemini 2.x dan Gemini 3.0 yang masih menyokongnya.
+            // MAZHAB API KETAT: Mana-mana model bermula versi 3.1 ke atas (3.1, 3.5, 3.8, 4.0+) 
+            // akan 'reject' kalau nampak thinkingBudget. Jadi kita HANYA hantar untuk versi bawah 3.1.
+            if (geminiVersion < 3.1) {
               generationConfig.thinkingConfig = { thinkingBudget: null };
             }
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
-            if (isGemini3) {
+            // Semua keluarga Gemini 3.0 ke atas tak boleh off 100%, jadi kita paksa ke 'minimal'
+            if (geminiVersion >= 3.0) {
               generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
               log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
             }
           } else if (thinkingBudget > 0) {
             // MODE: FIXED BUDGET / LEVEL (>0)
-            if (isGemini3) {
+            // Model generasi 3.0 ke atas pakai format perkataan (Level), model lama pakai nombor (Budget)
+            if (geminiVersion >= 3.0) {
               let level = 'minimal';
               if (thinkingBudget >= 4096) level = 'high';
               else if (thinkingBudget >= 2048) level = 'medium';
@@ -469,6 +471,7 @@ const universalReasoningChain = '';
             }
           }
         }
+        // =====================================================================
         // If thinkingBudget is 0, don't add thinkingConfig at all (disabled)
 
         // Safety settings: disable all content filters for subtitle translation
@@ -638,30 +641,32 @@ const universalReasoningChain = '';
           generationConfig.responseMimeType = 'application/json';
         }
 
-        // 🚀 INJECT: LOGIK THINKING BERCABANG (GEMINI 3 vs GEMINI 2.5 vs GEMMA) 🚀
-        const isGemini3 = String(this.model).toLowerCase().includes('gemini-3');
-        const isGemini31 = String(this.model).toLowerCase().includes('gemini-3.1');
+        // 🚀 INJECT: ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
+        const modelNameLower = String(this.model).toLowerCase();
+        // Regex ni akan pegang nombor versi, cth: 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5, 'gemini-4.0' -> 4
+        const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
+        const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
 
         // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
-        // Jadi, kita kecualikan Gemma dari hantar parameter ini.
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            // MAZHAB API KETAT: Gemini 3.1 akan 'reject' kalau nampak thinkingBudget.
-            // Untuk Gemini 3.1, kita abaikan (tak hantar apa-apa) supaya dia guna Auto lalai.
-            if (!isGemini31) {
-              // Hantar null (dynamic) HANYA untuk model Gemini 2.x dan Gemini 3.0 yang masih menyokongnya.
+            // MAZHAB API KETAT: Mana-mana model bermula versi 3.1 ke atas (3.1, 3.5, 3.8, 4.0+) 
+            // akan 'reject' kalau nampak thinkingBudget. Jadi kita HANYA hantar untuk versi bawah 3.1.
+            if (geminiVersion < 3.1) {
               generationConfig.thinkingConfig = { thinkingBudget: null };
             }
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
-            if (isGemini3) {
+            // Semua keluarga Gemini 3.0 ke atas tak boleh off 100%, jadi kita paksa ke 'minimal'
+            if (geminiVersion >= 3.0) {
               generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
               log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
             }
           } else if (thinkingBudget > 0) {
             // MODE: FIXED BUDGET / LEVEL (>0)
-            if (isGemini3) {
+            // Model generasi 3.0 ke atas pakai format perkataan (Level), model lama pakai nombor (Budget)
+            if (geminiVersion >= 3.0) {
               let level = 'minimal';
               if (thinkingBudget >= 4096) level = 'high';
               else if (thinkingBudget >= 2048) level = 'medium';
@@ -673,6 +678,7 @@ const universalReasoningChain = '';
             }
           }
         }
+        // =====================================================================
         // Safety settings: disable all content filters for subtitle translation
         // Use 'OFF' threshold — stronger than 'BLOCK_NONE' and respected by newer models
         // HARM_CATEGORY_CIVIC_INTEGRITY is deprecated; use enableEnhancedCivicAnswers instead
