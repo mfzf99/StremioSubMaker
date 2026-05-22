@@ -48,6 +48,21 @@ Common issues and solutions for SubMaker.
 - **Reduce providers** — Disable unnecessary providers (Wyzie, SCS are slower)
 - **Increase timeout** — Higher values for reliable results from slow providers
 - **Wyzie sources** — Uncheck unused Wyzie sub-sources in More Providers section
+- **Search hang guard** — The provider timeout saved in the config page controls normal subtitle searches. Advanced deployments can tune the separate stuck-search guard with `SUBTITLE_SEARCH_HARD_TIMEOUT_MS` (default 60000ms) and `SUBTITLE_SEARCH_STALE_GRACE_MS`; cache lookups such as xEmbed, xSync, Auto, and SMDB are not hidden behind route-level fallback timers.
+- **Redis/cache stalls** — Redis commands are bounded by `REDIS_COMMAND_TIMEOUT_MS` (default 5000ms). xEmbed, xSync, and Auto subtitle-list reads use maintained per-video indexes and must not rebuild indexes with Redis `SCAN` during a subtitle request.
+
+### OpenSubtitles Auth 429 / Login Coordination
+
+OpenSubtitles limits API traffic per public IP, and `/login` is stricter than normal search traffic. In multi-instance deployments, use Redis storage so all SubMaker pods share the same JWT cache and login singleflight lock. Upstream `429` responses advance the next reservation from response headers; they do not create a separate multi-minute login cooldown.
+
+Useful environment knobs:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OPENSUBTITLES_LOGIN_MIN_INTERVAL_MS` | `1250` | Minimum spacing between `/login` sends across pods |
+| `OPENSUBTITLES_LOGIN_LOCK_TTL_MS` | `30000` | Distributed per-credential login lock TTL |
+
+If 429s persist on a public deployment using VPN/WARP/shared NAT egress, confirm no unrelated traffic shares the same OpenSubtitles-visible IP. Redis coordinates SubMaker pods, but it cannot coordinate other apps or other tenants using the same egress IP.
 
 ---
 

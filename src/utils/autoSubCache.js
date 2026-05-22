@@ -66,10 +66,16 @@ async function indexExists(videoHash, languageCode) {
 async function loadIndex(adapter, videoHash, languageCode) {
   const indexKey = getIndexKey(videoHash, languageCode);
   const index = await adapter.get(indexKey, CACHE_TYPE);
-  if (!index || index.version !== INDEX_VERSION || !Array.isArray(index.keys)) {
-    return { indexKey, keys: [] };
+  if (index && index.version === INDEX_VERSION && Array.isArray(index.keys)) {
+    return { indexKey, keys: index.keys, valid: true, present: true };
   }
-  return { indexKey, keys: index.keys };
+
+  return {
+    indexKey,
+    keys: [],
+    valid: false,
+    present: index !== null && index !== undefined
+  };
 }
 
 async function persistIndex(adapter, indexKey, keys) {
@@ -91,13 +97,6 @@ async function removeFromIndex(adapter, videoHash, languageCode, cacheKey) {
   const filtered = keys.filter(k => k !== cacheKey);
   if (filtered.length === keys.length) return;
   await persistIndex(adapter, indexKey, filtered);
-}
-
-async function rebuildIndexFromStorage(adapter, videoHash, languageCode) {
-  const pattern = `${videoHash}_${languageCode}_*`;
-  const keys = await adapter.list(CACHE_TYPE, pattern);
-  const { indexKey } = await loadIndex(adapter, videoHash, languageCode);
-  return persistIndex(adapter, indexKey, keys || []);
 }
 
 async function saveAutoSubtitle(videoHash, languageCode, sourceSubId, syncData) {
@@ -133,13 +132,13 @@ async function saveAutoSubtitle(videoHash, languageCode, sourceSubId, syncData) 
 async function getAutoSubtitles(videoHash, languageCode) {
   try {
     const adapter = await getStorageAdapter();
-    let { keys } = await loadIndex(adapter, videoHash, languageCode);
+    const { keys, valid, present } = await loadIndex(adapter, videoHash, languageCode);
 
-    if (!keys.length) {
-      const indexKey = getIndexKey(videoHash, languageCode);
-      const indexKeyExists = await adapter.exists(indexKey, CACHE_TYPE);
-      if (!indexKeyExists) return [];
-      keys = await rebuildIndexFromStorage(adapter, videoHash, languageCode);
+    if (!valid) {
+      if (present) {
+        log.warn(() => `[AutoSub Cache] Ignoring invalid index for ${normalizeIndexSegment(videoHash)}_${normalizeIndexSegment(languageCode)}`);
+      }
+      return [];
     }
 
     if (!keys.length) return [];

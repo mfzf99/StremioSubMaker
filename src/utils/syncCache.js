@@ -82,16 +82,20 @@ function getIndexKey(videoHash, languageCode) {
 async function loadIndex(adapter, videoHash, languageCode) {
   const indexKey = getIndexKey(videoHash, languageCode);
   const index = await adapter.get(indexKey, StorageAdapter.CACHE_TYPES.SYNC);
-  if (!index || index.version !== INDEX_VERSION || !Array.isArray(index.keys)) {
-    return { indexKey, keys: [] };
+  if (index && index.version === INDEX_VERSION && Array.isArray(index.keys)) {
+    return { indexKey, keys: index.keys, valid: true, present: true };
   }
-  return { indexKey, keys: index.keys };
+
+  return {
+    indexKey,
+    keys: [],
+    valid: false,
+    present: index !== null && index !== undefined
+  };
 }
 
 /**
  * Fast O(1) check if an index exists for a video hash + language.
- * Use this to short-circuit getSyncedSubtitles for new videos that have
- * never had synced subtitles, avoiding expensive SCAN operations.
  * @param {string} videoHash - Video file hash
  * @param {string} languageCode - Language code
  * @returns {Promise<boolean>} True if index exists (has cached entries)
@@ -107,29 +111,11 @@ async function indexExists(videoHash, languageCode) {
   }
 }
 
-async function persistIndex(adapter, indexKey, keys, previousKeys = [], scanPattern = null, options = {}) {
-  const { skipRescan = false } = options || {};
+async function persistIndex(adapter, indexKey, keys, previousKeys = []) {
   const unique = Array.from(new Set(keys)).slice(-MAX_INDEX_ENTRIES);
   const trimmed = Array.isArray(keys) ? keys.filter(k => k && !unique.includes(k)) : [];
   const removed = Array.isArray(previousKeys) ? previousKeys.filter(k => k && !unique.includes(k)) : [];
-  const stray = [];
-
-  if (scanPattern && !skipRescan) {
-    try {
-      const listed = await adapter.list(StorageAdapter.CACHE_TYPES.SYNC, scanPattern);
-      if (Array.isArray(listed)) {
-        for (const key of listed) {
-          if (key && !unique.includes(key)) {
-            stray.push(key);
-          }
-        }
-      }
-    } catch (error) {
-      handleCaughtError(error, `[Sync Cache] Failed to list for pruning (${scanPattern})`, log);
-    }
-  }
-
-  const toDelete = Array.from(new Set([...trimmed, ...removed, ...stray]));
+  const toDelete = Array.from(new Set([...trimmed, ...removed]));
 
   await adapter.set(indexKey, { version: INDEX_VERSION, keys: unique }, StorageAdapter.CACHE_TYPES.SYNC);
 
@@ -152,8 +138,7 @@ async function addToIndex(adapter, videoHash, languageCode, cacheKey) {
     return previousKeys;
   }
   const updated = [...previousKeys, cacheKey];
-  const pattern = `${videoHash}_${languageCode}_*`;
-  return persistIndex(adapter, indexKey, updated, previousKeys, pattern);
+  return persistIndex(adapter, indexKey, updated, previousKeys);
 }
 
 async function removeFromIndex(adapter, videoHash, languageCode, cacheKey) {
@@ -165,23 +150,7 @@ async function removeFromIndex(adapter, videoHash, languageCode, cacheKey) {
   if (filtered.length === previousKeys.length) {
     return;
   }
-  const pattern = `${videoHash}_${languageCode}_*`;
-  await persistIndex(adapter, indexKey, filtered, previousKeys, pattern);
-}
-
-async function rebuildIndexFromStorage(adapter, videoHash, languageCode) {
-  const pattern = `${videoHash}_${languageCode}_*`;
-  const keys = await adapter.list(StorageAdapter.CACHE_TYPES.SYNC, pattern);
-  const { indexKey, keys: previousKeys } = await loadIndex(adapter, videoHash, languageCode);
-  const saved = await persistIndex(
-    adapter,
-    indexKey,
-    keys || [],
-    previousKeys,
-    pattern,
-    { skipRescan: true } // Avoid double SCAN when we already listed keys above
-  );
-  return saved;
+  await persistIndex(adapter, indexKey, filtered, previousKeys);
 }
 
 /**
@@ -244,7 +213,7 @@ async function saveSyncedSubtitle(videoHash, languageCode, sourceSubId, syncData
 /**
  * Get all synced subtitles for a video hash and language
  * Uses the configured storage adapter (Redis or filesystem)
- * Performance: Uses O(1) EXISTS check before expensive SCAN fallback
+ * Performance: uses the maintained per-video index and never SCANs on subtitle-list reads.
  * @param {string} videoHash - Video file hash
  * @param {string} languageCode - Language code
  * @returns {Promise<Array>} Array of synced subtitle entries
@@ -252,23 +221,13 @@ async function saveSyncedSubtitle(videoHash, languageCode, sourceSubId, syncData
 async function getSyncedSubtitles(videoHash, languageCode) {
   try {
     const adapter = await getStorageAdapter();
-    let { keys } = await loadIndex(adapter, videoHash, languageCode);
+    const { keys, valid, present } = await loadIndex(adapter, videoHash, languageCode);
 
-    // If the index is empty, check if it ever existed before doing expensive SCAN
-    // For new videos (never synced), there's no point scanning - just return empty
-    if (!keys.length) {
-      // Quick EXISTS check on the index key - O(1) instead of SCAN O(n)
-      const indexKey = getIndexKey(videoHash, languageCode);
-      const indexKeyExists = await adapter.exists(indexKey, StorageAdapter.CACHE_TYPES.SYNC);
-
-      if (!indexKeyExists) {
-        // Index was never created = no synced subs exist for this video/lang
-        // Skip the expensive SCAN-based rebuild entirely
-        return [];
+    if (!valid) {
+      if (present) {
+        log.warn(() => `[Sync Cache] Ignoring invalid index for ${normalizeIndexSegment(videoHash)}_${normalizeIndexSegment(languageCode)}`);
       }
-
-      // Index key exists but returned empty content - rebuild once from storage
-      keys = await rebuildIndexFromStorage(adapter, videoHash, languageCode);
+      return [];
     }
 
     if (!keys.length) {

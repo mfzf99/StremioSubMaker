@@ -8,6 +8,14 @@ const { getRedisPassword } = require('../utils/redisHelper');
 const { handleCaughtError } = require('../utils/errorClassifier');
 
 const SESSION_INDEX_KEY = 'session:index';
+const DEFAULT_REDIS_COMMAND_TIMEOUT_MS = 5000;
+
+function parsePositiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 /**
  * Redis Storage Adapter
@@ -50,6 +58,7 @@ class RedisStorageAdapter extends StorageAdapter {
     // colon-suffixed value so reads/writes stay in the same namespace across
     // restarts and deployments.
     const { keyPrefix: _ignoredKeyPrefix, ...restOptions } = options || {};
+    const commandTimeout = parsePositiveIntEnv('REDIS_COMMAND_TIMEOUT_MS', DEFAULT_REDIS_COMMAND_TIMEOUT_MS);
 
     if (sentinelEnabled) {
       // Redis Sentinel configuration for HA deployments
@@ -68,6 +77,8 @@ class RedisStorageAdapter extends StorageAdapter {
         password: restOptions.password || getRedisPassword() || undefined,
         db: restOptions.db || process.env.REDIS_DB || 0,
         keyPrefix: canonicalPrefix,
+        commandTimeout,
+        enableOfflineQueue: false,
         maxRetriesPerRequest: 3,
         retryStrategy: (times) => {
           const delay = Math.min(times * 50, 2000);
@@ -88,6 +99,8 @@ class RedisStorageAdapter extends StorageAdapter {
         password: restOptions.password || getRedisPassword() || undefined,
         db: restOptions.db || process.env.REDIS_DB || 0,
         keyPrefix: canonicalPrefix,
+        commandTimeout,
+        enableOfflineQueue: false,
         maxRetriesPerRequest: 3,
         retryStrategy: (times) => {
           const delay = Math.min(times * 50, 2000);
@@ -125,9 +138,19 @@ class RedisStorageAdapter extends StorageAdapter {
       'connect ECONNREFUSED',
       'connect ETIMEDOUT',
       'Broken pipe',
-      'Connection reset by peer'
+      'Connection reset by peer',
+      'Command timed out',
+      "Stream isn't writeable"
     ];
     return transientPhrases.some(fragment => message.includes(fragment));
+  }
+
+  _shouldRetryRedisError(error = {}) {
+    const message = error?.message || '';
+    if (message.includes('Command timed out') || message.includes("Stream isn't writeable")) {
+      return false;
+    }
+    return this._isTransientRedisError(error);
   }
 
   /**
@@ -154,8 +177,9 @@ class RedisStorageAdapter extends StorageAdapter {
       } catch (err) {
         lastError = err;
         const isTransient = this._isTransientRedisError(err);
+        const shouldRetry = this._shouldRetryRedisError(err);
 
-        if (isTransient && attempt < maxAttempts) {
+        if (shouldRetry && attempt < maxAttempts) {
           const delay = Math.min(100 * attempt, 750);
           log.warn(() => `[RedisStorage] ${operationName} transient failure (${err.message || err}), retrying in ${delay}ms (${attempt}/${maxAttempts})`);
           await this._sleep(delay);

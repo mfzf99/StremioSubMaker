@@ -46,16 +46,20 @@ function getIndexKey(videoHash, type) {
 async function loadIndex(adapter, videoHash, type) {
   const indexKey = getIndexKey(videoHash, type);
   const index = await adapter.get(indexKey, StorageAdapter.CACHE_TYPES.EMBEDDED);
-  if (!index || index.version !== INDEX_VERSION || !Array.isArray(index.keys)) {
-    return { indexKey, keys: [] };
+  if (index && index.version === INDEX_VERSION && Array.isArray(index.keys)) {
+    return { indexKey, keys: index.keys, valid: true, present: true };
   }
-  return { indexKey, keys: index.keys };
+
+  return {
+    indexKey,
+    keys: [],
+    valid: false,
+    present: index !== null && index !== undefined
+  };
 }
 
 /**
  * Fast O(1) check if an index exists for a video hash + type.
- * Use this to short-circuit list operations for new videos that have
- * never had embedded subtitles, avoiding expensive SCAN operations.
  * @param {string} videoHash - Video file hash
  * @param {string} type - 'original' or 'translation'
  * @returns {Promise<boolean>} True if index exists (has cached entries)
@@ -71,29 +75,11 @@ async function indexExists(videoHash, type) {
   }
 }
 
-async function persistIndex(adapter, indexKey, keys, previousKeys = [], scanPattern = null, options = {}) {
-  const { skipRescan = false } = options || {};
+async function persistIndex(adapter, indexKey, keys, previousKeys = []) {
   const unique = Array.from(new Set(keys)).slice(-MAX_INDEX_ENTRIES);
   const trimmed = Array.isArray(keys) ? keys.filter(k => k && !unique.includes(k)) : [];
   const removed = Array.isArray(previousKeys) ? previousKeys.filter(k => k && !unique.includes(k)) : [];
-  const stray = [];
-
-  if (scanPattern && !skipRescan) {
-    try {
-      const listed = await adapter.list(StorageAdapter.CACHE_TYPES.EMBEDDED, scanPattern);
-      if (Array.isArray(listed)) {
-        for (const key of listed) {
-          if (key && !unique.includes(key)) {
-            stray.push(key);
-          }
-        }
-      }
-    } catch (error) {
-      handleCaughtError(error, `[Embedded Cache] Failed to list for pruning (${scanPattern})`, log);
-    }
-  }
-
-  const toDelete = Array.from(new Set([...trimmed, ...removed, ...stray]));
+  const toDelete = Array.from(new Set([...trimmed, ...removed]));
 
   await adapter.set(indexKey, { version: INDEX_VERSION, keys: unique }, StorageAdapter.CACHE_TYPES.EMBEDDED);
 
@@ -116,11 +102,7 @@ async function addToIndex(adapter, videoHash, type, cacheKey) {
     return previousKeys;
   }
   const updated = [...previousKeys, cacheKey];
-  const safeVideo = normalizeString(videoHash || 'unknown', 'unknown');
-  const pattern = type === 'translation'
-    ? `${safeVideo}_translation_*`
-    : `${safeVideo}_original_*`;
-  return persistIndex(adapter, indexKey, updated, previousKeys, pattern);
+  return persistIndex(adapter, indexKey, updated, previousKeys);
 }
 
 async function removeFromIndex(adapter, videoHash, type, cacheKey) {
@@ -128,25 +110,7 @@ async function removeFromIndex(adapter, videoHash, type, cacheKey) {
   if (!previousKeys.length) return;
   const filtered = previousKeys.filter(k => k !== cacheKey);
   if (filtered.length === previousKeys.length) return;
-  const safeVideo = normalizeString(videoHash || 'unknown', 'unknown');
-  const pattern = type === 'translation'
-    ? `${safeVideo}_translation_*`
-    : `${safeVideo}_original_*`;
-  await persistIndex(adapter, indexKey, filtered, previousKeys, pattern);
-}
-
-async function rebuildIndexFromStorage(adapter, videoHash, type, pattern) {
-  const keys = await adapter.list(StorageAdapter.CACHE_TYPES.EMBEDDED, pattern);
-  const { indexKey, keys: previousKeys } = await loadIndex(adapter, videoHash, type);
-  const saved = await persistIndex(
-    adapter,
-    indexKey,
-    keys || [],
-    previousKeys,
-    pattern,
-    { skipRescan: true } // Avoid double SCAN when we already listed keys above
-  );
-  return saved;
+  await persistIndex(adapter, indexKey, filtered, previousKeys);
 }
 
 function generateEmbeddedCacheKey(videoHash, trackId, languageCode, type = 'original', targetLanguageCode = '') {
@@ -255,28 +219,19 @@ async function getEmbeddedByCacheKey(cacheKey) {
 
 /**
  * List all embedded translations for a video hash
- * Performance: Uses O(1) EXISTS check before expensive SCAN fallback
+ * Performance: uses the maintained per-video index and never SCANs on subtitle-list reads.
  * @param {string} videoHash - Video file hash
  * @returns {Promise<Array>} Array of translation entries
  */
 async function listEmbeddedTranslations(videoHash) {
   const adapter = await getStorageAdapter();
-  const pattern = `${normalizeString(videoHash || 'unknown')}_translation_*`;
-  let { keys } = await loadIndex(adapter, videoHash, 'translation');
+  const { keys, valid, present } = await loadIndex(adapter, videoHash, 'translation');
 
-  // If index is empty, check if it ever existed before doing expensive SCAN
-  if (!keys.length) {
-    // Quick EXISTS check - O(1) instead of SCAN O(n)
-    const indexKey = getIndexKey(videoHash, 'translation');
-    const indexKeyExists = await adapter.exists(indexKey, StorageAdapter.CACHE_TYPES.EMBEDDED);
-
-    if (!indexKeyExists) {
-      // Index was never created = no translations exist for this video
-      return [];
+  if (!valid) {
+    if (present) {
+      log.warn(() => `[Embedded Cache] Ignoring invalid translation index for ${normalizeString(videoHash || 'unknown', 'unknown')}`);
     }
-
-    // Index key exists but returned empty - rebuild once from storage
-    keys = await rebuildIndexFromStorage(adapter, videoHash, 'translation', pattern);
+    return [];
   }
 
   if (!keys.length) {
@@ -300,28 +255,19 @@ async function listEmbeddedTranslations(videoHash) {
 
 /**
  * List all embedded originals for a video hash
- * Performance: Uses O(1) EXISTS check before expensive SCAN fallback
+ * Performance: uses the maintained per-video index and never SCANs on subtitle-list reads.
  * @param {string} videoHash - Video file hash
  * @returns {Promise<Array>} Array of original embedded entries
  */
 async function listEmbeddedOriginals(videoHash) {
   const adapter = await getStorageAdapter();
-  const pattern = `${normalizeString(videoHash || 'unknown')}_original_*`;
-  let { keys } = await loadIndex(adapter, videoHash, 'original');
+  const { keys, valid, present } = await loadIndex(adapter, videoHash, 'original');
 
-  // If index is empty, check if it ever existed before doing expensive SCAN
-  if (!keys.length) {
-    // Quick EXISTS check - O(1) instead of SCAN O(n)
-    const indexKey = getIndexKey(videoHash, 'original');
-    const indexKeyExists = await adapter.exists(indexKey, StorageAdapter.CACHE_TYPES.EMBEDDED);
-
-    if (!indexKeyExists) {
-      // Index was never created = no originals exist for this video
-      return [];
+  if (!valid) {
+    if (present) {
+      log.warn(() => `[Embedded Cache] Ignoring invalid original index for ${normalizeString(videoHash || 'unknown', 'unknown')}`);
     }
-
-    // Index key exists but returned empty - rebuild once from storage
-    keys = await rebuildIndexFromStorage(adapter, videoHash, 'original', pattern);
+    return [];
   }
 
   if (!keys.length) {

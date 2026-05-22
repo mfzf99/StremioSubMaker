@@ -18,8 +18,9 @@ const OPENSUBTITLES_VIP_API_URL = 'https://vip-api.opensubtitles.com/api/v1';
 const USER_AGENT = `SubMaker v${version}`;
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
 
-const AUTH_FAILURE_TTL_MS = 30 * 1000; // Keep invalid credentials blocked for 30 seconds
+const AUTH_FAILURE_TTL_MS = 30 * 1000; // Keep invalid credentials blocked briefly
 const credentialFailureCache = new Map();
+const AUTH_FAILURE_PREFIX = 'osauthfail:';
 
 // MULTI-INSTANCE FIX: Token cache is now backed by Redis for cross-pod sharing
 // Local Map is used as L1 cache for same-process performance
@@ -42,8 +43,8 @@ const RATE_LIMIT_MIN_INTERVAL_MS = Math.max(
   parseInt(process.env.OPENSUBTITLES_API_MIN_INTERVAL_MS || '250', 10) || 250
 );
 const LOGIN_MIN_INTERVAL_MS = Math.max(
-  1100,
-  parseInt(process.env.OPENSUBTITLES_LOGIN_MIN_INTERVAL_MS || '1100', 10) || 1100
+  1250,
+  parseInt(process.env.OPENSUBTITLES_LOGIN_MIN_INTERVAL_MS || '1250', 10) || 1250
 );
 const LOCAL_FALLBACK_MIN_INTERVAL_MS = Math.max(
   RATE_LIMIT_MIN_INTERVAL_MS,
@@ -73,16 +74,26 @@ const RATE_LIMIT_HEADER_REMAINING_FLOOR = Math.max(
   0,
   parseInt(process.env.OPENSUBTITLES_HEADER_REMAINING_FLOOR || '0', 10) || 0
 );
+const LOGIN_SINGLEFLIGHT_LOCK_TTL_MS = Math.max(
+  5000,
+  parseInt(process.env.OPENSUBTITLES_LOGIN_LOCK_TTL_MS || '30000', 10) || 30000
+);
+const LOGIN_SINGLEFLIGHT_POLL_MS = Math.max(
+  100,
+  parseInt(process.env.OPENSUBTITLES_LOGIN_LOCK_POLL_MS || '250', 10) || 250
+);
 // The Redis hash tag keeps the API and login keys in the same slot on Redis
 // Cluster/Sentinel deployments, so the multi-key Lua reservation remains valid.
 const DISTRIBUTED_RATE_LIMIT_KEY = '{opensubtitles}:api_next_at';
 const DISTRIBUTED_LOGIN_SEND_RATE_LIMIT_KEY = '{opensubtitles}:login_next_at';
+const DISTRIBUTED_LOGIN_SINGLEFLIGHT_PREFIX = '{opensubtitles}:login_singleflight:';
 const DISTRIBUTED_RATE_LIMIT_TTL_MS = Math.max(60000, RATE_LIMIT_MIN_INTERVAL_MS * 16);
 const DISTRIBUTED_LOGIN_SEND_RATE_LIMIT_TTL_MS = Math.max(60000, LOGIN_MIN_INTERVAL_MS * 16);
 let _localApiNextAllowedAt = 0;
 let _localLoginNextAllowedAt = 0;
 let _localRateLimitQueue = Promise.resolve();
 let _lastDistributedLimiterWarningAt = 0;
+const localLoginSingleflightLocks = new Map();
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -109,6 +120,205 @@ function isOpenSubtitlesRateLimitError(error) {
       error.response?.status === 429
     )
   );
+}
+
+function isOpenSubtitlesTransientProviderError(error) {
+  if (!error) {
+    return false;
+  }
+
+  if (isOpenSubtitlesRateLimitError(error)) {
+    return true;
+  }
+
+  const statusCode = error.statusCode || error.response?.status;
+  const type = error.type;
+  const code = error.code || error.originalError?.code;
+  return !!(
+    error.isRetryable === true ||
+    statusCode === 503 ||
+    statusCode === 502 ||
+    statusCode === 504 ||
+    type === 'service_unavailable' ||
+    type === 'timeout' ||
+    type === 'network' ||
+    code === 'ECONNABORTED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'EHOSTUNREACH' ||
+    code === 'ENETUNREACH'
+  );
+}
+
+async function getOpenSubtitlesRedisAdapter(options = {}) {
+  if (options._forceLocal) {
+    return null;
+  }
+
+  try {
+    const adapter = options.adapter || await require('../utils/sharedCache').getStorageAdapter();
+    if (!adapter?.client || typeof adapter._getKey !== 'function') {
+      return null;
+    }
+
+    if (adapter.client.status && adapter.client.status !== 'ready') {
+      return null;
+    }
+
+    return adapter;
+  } catch (error) {
+    log.debug(() => `[OpenSubtitles] Redis coordination unavailable: ${error.message}`);
+    return null;
+  }
+}
+
+function getSessionRedisKey(adapter, key) {
+  const { StorageAdapter } = require('../storage');
+  return adapter._getKey(key, StorageAdapter.CACHE_TYPES.SESSION);
+}
+
+function readLocalLoginSingleflightLock(lockKey) {
+  const existing = localLoginSingleflightLocks.get(lockKey);
+  if (!existing) {
+    return null;
+  }
+
+  if (existing.expiresAt <= Date.now()) {
+    localLoginSingleflightLocks.delete(lockKey);
+    return null;
+  }
+
+  return existing;
+}
+
+function buildLoginSingleflightLockKey(credentialsCacheKey) {
+  return `lock:${DISTRIBUTED_LOGIN_SINGLEFLIGHT_PREFIX}${credentialsCacheKey}`;
+}
+
+async function tryAcquireDistributedLoginSingleflightLock(credentialsCacheKey, options = {}) {
+  if (!credentialsCacheKey) {
+    return { acquired: true, ownerId: 'no-credentials', local: true, credentialsCacheKey };
+  }
+
+  const ttlMs = Math.max(1000, Number(options.ttlMs) || LOGIN_SINGLEFLIGHT_LOCK_TTL_MS);
+  const ownerId = `${process.pid}-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+  const lockKey = buildLoginSingleflightLockKey(credentialsCacheKey);
+
+  const adapter = await getOpenSubtitlesRedisAdapter(options);
+  if (!adapter) {
+    const existing = readLocalLoginSingleflightLock(lockKey);
+    if (existing) {
+      return {
+        acquired: false,
+        ownerId: null,
+        local: true,
+        credentialsCacheKey,
+        lockKey,
+        retryAfterMs: Math.max(0, Math.ceil(existing.expiresAt - Date.now()))
+      };
+    }
+
+    localLoginSingleflightLocks.set(lockKey, {
+      ownerId,
+      expiresAt: Date.now() + ttlMs
+    });
+    return { acquired: true, ownerId, local: true, credentialsCacheKey, lockKey, retryAfterMs: 0 };
+  }
+
+  try {
+    const fullKey = getSessionRedisKey(adapter, lockKey);
+    const result = await adapter.client.set(fullKey, ownerId, 'PX', ttlMs, 'NX');
+    if (result === 'OK') {
+      log.debug(() => `[OpenSubtitles] Acquired distributed login singleflight lock for credentials ${credentialsCacheKey.slice(0, 8)}...`);
+      return { acquired: true, ownerId, local: false, credentialsCacheKey, lockKey, retryAfterMs: 0 };
+    }
+
+    const ttl = await adapter.client.pttl(fullKey);
+    return {
+      acquired: false,
+      ownerId: null,
+      local: false,
+      credentialsCacheKey,
+      lockKey,
+      retryAfterMs: ttl > 0 ? ttl : LOGIN_SINGLEFLIGHT_POLL_MS
+    };
+  } catch (error) {
+    log.warn(() => `[OpenSubtitles] Distributed login singleflight unavailable; using local fallback: ${error.message}`);
+    const existing = readLocalLoginSingleflightLock(lockKey);
+    if (existing) {
+      return {
+        acquired: false,
+        ownerId: null,
+        local: true,
+        credentialsCacheKey,
+        lockKey,
+        retryAfterMs: Math.max(0, Math.ceil(existing.expiresAt - Date.now()))
+      };
+    }
+
+    localLoginSingleflightLocks.set(lockKey, {
+      ownerId,
+      expiresAt: Date.now() + ttlMs
+    });
+    return { acquired: true, ownerId, local: true, credentialsCacheKey, lockKey, retryAfterMs: 0 };
+  }
+}
+
+async function getDistributedLoginSingleflightLockTtl(credentialsCacheKey, options = {}) {
+  if (!credentialsCacheKey) {
+    return 0;
+  }
+
+  const lockKey = buildLoginSingleflightLockKey(credentialsCacheKey);
+  const adapter = await getOpenSubtitlesRedisAdapter(options);
+  if (!adapter) {
+    const existing = readLocalLoginSingleflightLock(lockKey);
+    return existing ? Math.max(0, Math.ceil(existing.expiresAt - Date.now())) : 0;
+  }
+
+  try {
+    const fullKey = getSessionRedisKey(adapter, lockKey);
+    const ttl = await adapter.client.pttl(fullKey);
+    return ttl > 0 ? ttl : 0;
+  } catch (error) {
+    log.debug(() => `[OpenSubtitles] Failed to read distributed login singleflight TTL: ${error.message}`);
+    return 0;
+  }
+}
+
+async function releaseDistributedLoginSingleflightLock(lock, options = {}) {
+  if (!lock?.acquired || !lock.lockKey || !lock.ownerId) {
+    return false;
+  }
+
+  if (lock.local) {
+    const existing = readLocalLoginSingleflightLock(lock.lockKey);
+    if (existing && existing.ownerId === lock.ownerId) {
+      localLoginSingleflightLocks.delete(lock.lockKey);
+      return true;
+    }
+    return false;
+  }
+
+  const adapter = await getOpenSubtitlesRedisAdapter(options);
+  if (!adapter) {
+    return false;
+  }
+
+  try {
+    const fullKey = getSessionRedisKey(adapter, lock.lockKey);
+    const released = await adapter.client.eval(`
+      local owner = redis.call('get', KEYS[1])
+      if owner == ARGV[1] then
+        return redis.call('del', KEYS[1])
+      end
+      return 0
+    `, 1, fullKey, lock.ownerId);
+    return Number(released) === 1;
+  } catch (error) {
+    log.debug(() => `[OpenSubtitles] Failed to release distributed login singleflight lock: ${error.message}`);
+    return false;
+  }
 }
 
 function logOpenSubtitlesRateLimitFailure(context, error) {
@@ -508,6 +718,7 @@ async function noteOpenSubtitlesRateLimit(error, context) {
     RATE_LIMIT_RETRY_AFTER_MAX_MS
   );
   const effectiveWaitMs = getRateLimitDelayMs(waitMs);
+
   await applyDistributedRateLimitDelay(effectiveWaitMs, `${context} upstream 429`, {
     includeLogin: context === 'login'
   });
@@ -566,6 +777,7 @@ function resetRateLimiterState() {
   _localLoginNextAllowedAt = 0;
   _localRateLimitQueue = Promise.resolve();
   _lastDistributedLimiterWarningAt = 0;
+  localLoginSingleflightLocks.clear();
 }
 // ─── End rate limiter ─────────────────────────────────────────────────────────
 
@@ -753,20 +965,65 @@ function hasCachedAuthFailure(cacheKey) {
   return true;
 }
 
-function cacheAuthFailure(cacheKey) {
+async function hasCachedAuthFailureAsync(cacheKey) {
+  if (hasCachedAuthFailure(cacheKey)) {
+    return true;
+  }
+
+  if (!cacheKey) {
+    return false;
+  }
+
+  try {
+    const { getShared } = require('../utils/sharedCache');
+    const { StorageAdapter } = require('../storage');
+    const cached = await getShared(`${AUTH_FAILURE_PREFIX}${cacheKey}`, StorageAdapter.CACHE_TYPES.SESSION);
+    if (cached) {
+      credentialFailureCache.set(cacheKey, Date.now());
+      return true;
+    }
+  } catch (err) {
+    log.debug(() => `[OpenSubtitles] Redis auth-failure lookup failed: ${err.message}`);
+  }
+
+  return false;
+}
+
+async function cacheAuthFailure(cacheKey) {
   if (!cacheKey) {
     return;
   }
 
   credentialFailureCache.set(cacheKey, Date.now());
+
+  try {
+    const { setShared } = require('../utils/sharedCache');
+    const { StorageAdapter } = require('../storage');
+    await setShared(
+      `${AUTH_FAILURE_PREFIX}${cacheKey}`,
+      String(Date.now()),
+      StorageAdapter.CACHE_TYPES.SESSION,
+      Math.ceil(AUTH_FAILURE_TTL_MS / 1000)
+    );
+  } catch (err) {
+    log.debug(() => `[OpenSubtitles] Redis auth-failure cache failed: ${err.message}`);
+  }
 }
 
-function clearCachedAuthFailure(cacheKey) {
+async function clearCachedAuthFailure(cacheKey) {
   if (!cacheKey) {
     return;
   }
 
   credentialFailureCache.delete(cacheKey);
+
+  try {
+    const { deleteShared } = require('../utils/sharedCache');
+    const { StorageAdapter } = require('../storage');
+    await deleteShared(`${AUTH_FAILURE_PREFIX}${cacheKey}`, StorageAdapter.CACHE_TYPES.SESSION);
+  } catch (err) {
+    log.debug(() => `[OpenSubtitles] Redis auth-failure clear failed: ${err.message}`);
+  }
 }
 
 /**
@@ -979,11 +1236,12 @@ class OpenSubtitlesService {
         }
       }
 
-      // Store in Redis for cross-pod sharing (fire and forget - don't block on this)
-      setCachedToken(this.credentialsCacheKey, this.token, this.tokenExpiry, vipBaseUrl).catch(() => { });
+      // Store before releasing the distributed login lock so other pods observe
+      // the token instead of starting a second login immediately after us.
+      await setCachedToken(this.credentialsCacheKey, this.token, this.tokenExpiry, vipBaseUrl);
 
       log.debug(() => '[OpenSubtitles] User authentication successful');
-      clearCachedAuthFailure(this.credentialsCacheKey);
+      await clearCachedAuthFailure(this.credentialsCacheKey);
       return this.token;
 
     } catch (error) {
@@ -1014,7 +1272,7 @@ class OpenSubtitlesService {
       // Never cache an auth failure for retryable cases like 429/503
       // Also skip caching if the error message looks like rate limiting regardless of status code
       if (parsed.type !== 'rate_limit' && parsed.statusCode !== 503 && parsed.statusCode !== 429 && !looksLikeRateLimit && isAuthenticationFailure(error)) {
-        cacheAuthFailure(this.credentialsCacheKey);
+        await cacheAuthFailure(this.credentialsCacheKey);
       }
 
       // For rate limits or service unavailability, bubble up so callers can render a proper message
@@ -1023,6 +1281,12 @@ class OpenSubtitlesService {
         e.statusCode = parsed.statusCode || 503;
         e.type = parsed.type || 'service_unavailable';
         e.isRetryable = true;
+        if (isOpenSubtitlesRateLimitError(error)) {
+          e.statusCode = 429;
+          e.type = 'rate_limit';
+          e.openSubtitlesRateLimit = true;
+          e.retryAfterMs = error.retryAfterMs || RATE_LIMIT_RETRY_AFTER_FALLBACK_MS;
+        }
         throw e;
       }
 
@@ -1052,38 +1316,132 @@ class OpenSubtitlesService {
 
   /**
    * Login to OpenSubtitles REST API (optional, for higher download limits)
-   * Uses mutex to serialize concurrent login attempts for the same credentials.
+   * Uses a process-local mutex plus a Redis singleflight lock so only one pod
+   * refreshes a given credential's JWT at a time.
    * @param {number} timeout - Optional timeout in ms for the login request
    * @returns {Promise<string|null>} - JWT token if credentials provided, null otherwise
    */
+  _applyCachedToken(cached, source = 'cache') {
+    if (!cached?.token) {
+      return null;
+    }
+
+    this.token = cached.token;
+    this.tokenExpiry = cached.expiry;
+    if (cached.baseUrl) {
+      this.baseUrl = cached.baseUrl;
+      this.client.defaults.baseURL = cached.baseUrl;
+      this.downloadClient.defaults.baseURL = cached.baseUrl;
+      log.debug(() => `[OpenSubtitles] VIP base URL applied from ${source}`);
+    }
+
+    return this.token;
+  }
+
+  _createAuthFailureError() {
+    const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
+    authErr.statusCode = 401;
+    authErr.authError = true;
+    return authErr;
+  }
+
+  _resolveLoginDeadlineAt(timeout) {
+    const timeoutMs = Number(timeout) || this.client.defaults.timeout || 12000;
+    return Date.now() + Math.max(1000, timeoutMs - Math.min(1000, RATE_LIMIT_REQUEST_RESERVE_MS));
+  }
+
+  async _waitForDistributedLoginResult(deadlineAt) {
+    while (Date.now() < deadlineAt) {
+      const cached = await getCachedToken(this.credentialsCacheKey);
+      if (cached) {
+        return this._applyCachedToken(cached, 'distributed login owner');
+      }
+
+      if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
+        throw this._createAuthFailureError();
+      }
+
+      const lockTtlMs = await getDistributedLoginSingleflightLockTtl(this.credentialsCacheKey);
+      if (lockTtlMs <= 0) {
+        return null;
+      }
+
+      const remainingMs = Math.max(0, deadlineAt - Date.now());
+      if (remainingMs <= 0) {
+        break;
+      }
+
+      await sleep(Math.min(LOGIN_SINGLEFLIGHT_POLL_MS, lockTtlMs, remainingMs));
+    }
+
+    const retryAfterMs = await getDistributedLoginSingleflightLockTtl(this.credentialsCacheKey);
+    throw createOpenSubtitlesRateLimitError(
+      'OpenSubtitles login refresh is already in progress and exceeded this request budget',
+      retryAfterMs || LOGIN_SINGLEFLIGHT_POLL_MS
+    );
+  }
+
+  async _performDistributedLogin(timeout) {
+    const deadlineAt = this._resolveLoginDeadlineAt(timeout);
+
+    while (Date.now() < deadlineAt) {
+      if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
+        log.warn(() => '[OpenSubtitles] Authentication blocked: cached invalid credentials detected');
+        throw this._createAuthFailureError();
+      }
+
+      const cached = await getCachedToken(this.credentialsCacheKey);
+      if (cached) {
+        log.debug(() => '[OpenSubtitles] Using cached token (cross-pod Redis cache)');
+        return this._applyCachedToken(cached, 'cross-pod cache');
+      }
+
+      const remainingMs = Math.max(0, deadlineAt - Date.now());
+      const lock = await tryAcquireDistributedLoginSingleflightLock(this.credentialsCacheKey, {
+        ttlMs: Math.max(LOGIN_SINGLEFLIGHT_LOCK_TTL_MS, remainingMs + 2000)
+      });
+
+      if (lock.acquired) {
+        try {
+          const cachedAfterLock = await getCachedToken(this.credentialsCacheKey);
+          if (cachedAfterLock) {
+            return this._applyCachedToken(cachedAfterLock, 'cache after login lock');
+          }
+          return await this.loginWithCredentials(this.config.username, this.config.password, timeout);
+        } finally {
+          await releaseDistributedLoginSingleflightLock(lock);
+        }
+      }
+
+      log.debug(() => `[OpenSubtitles] Waiting for distributed login owner (${Math.ceil((lock.retryAfterMs || 0) / 1000)}s lock TTL)`);
+      const token = await this._waitForDistributedLoginResult(deadlineAt);
+      if (token) {
+        return token;
+      }
+    }
+
+    throw createOpenSubtitlesRateLimitError(
+      'OpenSubtitles login refresh could not acquire a distributed slot within this request budget',
+      LOGIN_SINGLEFLIGHT_POLL_MS
+    );
+  }
+
   async login(timeout) {
     if (!this.config.username || !this.config.password) {
       // No credentials provided, use basic API access
       return null;
     }
 
-    if (hasCachedAuthFailure(this.credentialsCacheKey)) {
+    if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
       log.warn(() => '[OpenSubtitles] Authentication blocked: cached invalid credentials detected');
-      const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
-      authErr.statusCode = 401;
-      authErr.authError = true;
-      throw authErr;
+      throw this._createAuthFailureError();
     }
 
     // Check if there's already a valid token in cache (local + Redis)
     const cached = await getCachedToken(this.credentialsCacheKey);
     if (cached) {
-      this.token = cached.token;
-      this.tokenExpiry = cached.expiry;
-      // Apply VIP base_url if cached (for VIP members)
-      if (cached.baseUrl) {
-        this.baseUrl = cached.baseUrl;
-        this.client.defaults.baseURL = cached.baseUrl;
-        this.downloadClient.defaults.baseURL = cached.baseUrl;
-        log.debug(() => '[OpenSubtitles] VIP base URL applied from cache');
-      }
       log.debug(() => '[OpenSubtitles] Using cached token (cross-pod Redis cache)');
-      return this.token;
+      return this._applyCachedToken(cached, 'cross-pod cache');
     }
 
     // Check if another request is already logging in with these credentials
@@ -1095,45 +1453,13 @@ class OpenSubtitlesService {
         // After mutex resolves, check cache again
         const freshCached = await getCachedToken(this.credentialsCacheKey);
         if (freshCached) {
-          this.token = freshCached.token;
-          this.tokenExpiry = freshCached.expiry;
-          // Apply VIP base_url if cached
-          if (freshCached.baseUrl) {
-            this.baseUrl = freshCached.baseUrl;
-            this.client.defaults.baseURL = freshCached.baseUrl;
-            this.downloadClient.defaults.baseURL = freshCached.baseUrl;
-          }
-          return this.token;
+          return this._applyCachedToken(freshCached, 'process mutex');
         }
         return result;
       } catch (err) {
-        // If the original login failed due to bad credentials (cached auth failure), return null gracefully
-        // For rate limits and other retryable errors, also return null to allow graceful degradation
-        // instead of propagating errors that would become unhandled rejections
-        if (hasCachedAuthFailure(this.credentialsCacheKey)) {
-          const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
-          authErr.statusCode = 401;
-          authErr.authError = true;
-          throw authErr;
+        if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
+          throw this._createAuthFailureError();
         }
-        // For rate limits (429/503) and queue congestion, return null to degrade gracefully
-        // The login will be retried on the next request after the rate limit window
-        if (err && (err.type === 'rate_limit' || err.statusCode === 429 || err.statusCode === 503)) {
-          log.warn(() => `[OpenSubtitles] Login mutex caught rate limit error: ${err.message}`);
-          return null;
-        }
-        // For queue congestion/timeout errors, also return null for graceful degradation
-        // These are transient issues that will resolve when the queue clears
-        if (err && err.message && (err.message.includes('queue timeout') || err.message.includes('queue congestion'))) {
-          log.warn(() => `[OpenSubtitles] Login mutex caught queue congestion: ${err.message}`);
-          return null;
-        }
-        // For timeout/network errors, re-throw so they propagate with proper error type
-        // instead of being misinterpreted as invalid credentials
-        if (err && (err.type === 'timeout' || err.type === 'network' || err.type === 'dns')) {
-          throw err;
-        }
-        // For unexpected errors, throw to let the caller handle
         throw err;
       }
     }
@@ -1151,7 +1477,7 @@ class OpenSubtitlesService {
     loginMutex.set(this.credentialsCacheKey, mutexPromise);
 
     try {
-      const result = await this.loginWithCredentials(this.config.username, this.config.password, timeout);
+      const result = await this._performDistributedLogin(timeout);
       resolveMutex(result);
       return result;
     } catch (err) {
@@ -1190,30 +1516,19 @@ class OpenSubtitlesService {
 
       // Check for cached authentication failure (known bad credentials)
       if (hasCachedAuthFailure(this.credentialsCacheKey)) {
-        const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
-        authErr.statusCode = 401;
-        authErr.authError = true;
-        throw authErr;
+        throw this._createAuthFailureError();
       }
 
       if (await this.isTokenExpired()) {
-        // login() throws for timeout/network/dns errors
-        // login() returns null for rate limits (graceful degradation) or if credentials just failed
+        // login() coordinates Redis singleflight and throws typed
+        // transient errors so orchestration does not cache incomplete results.
         const loginResult = await this.login(providerTimeout);
 
         if (!loginResult) {
-          // If we got here with null, check WHY:
-          // - If credentials are now cached as failed, it's a real auth failure
-          // - Otherwise, it was likely a rate limit - return empty for now
-          if (hasCachedAuthFailure(this.credentialsCacheKey)) {
-            const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
-            authErr.statusCode = 401;
-            authErr.authError = true;
-            throw authErr;
-          }
-          // Rate limit or other transient issue - return empty, user can try again
-          log.warn(() => '[OpenSubtitles] Authentication temporarily unavailable (rate limited). Try again later.');
-          return [];
+          throw createOpenSubtitlesRateLimitError(
+            'OpenSubtitles login did not return a token',
+            RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
+          );
         }
       }
 
@@ -1367,8 +1682,10 @@ class OpenSubtitlesService {
           // Note: login() will check cache first, but we just cleared it, so it will force a new login
           const freshToken = await this.login(providerTimeout);
           if (!freshToken) {
-            log.warn(() => '[OpenSubtitles] Token refresh unavailable during search retry; skipping OpenSubtitles for this request');
-            return [];
+            throw createOpenSubtitlesRateLimitError(
+              'OpenSubtitles token refresh unavailable during search retry',
+              RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
+            );
           }
 
           // 3. Retry search with new token through the same API gate
@@ -1438,7 +1755,11 @@ class OpenSubtitlesService {
     } catch (error) {
       if (isOpenSubtitlesRateLimitError(error)) {
         logOpenSubtitlesRateLimitFailure('Search', error);
-        return [];
+        throw error;
+      }
+      if (isOpenSubtitlesTransientProviderError(error)) {
+        log.warn(() => `[OpenSubtitles] Search transient provider failure: ${error.message || error}`);
+        throw error;
       }
       return handleSearchError(error, 'OpenSubtitles');
     }
@@ -1576,6 +1897,7 @@ class OpenSubtitlesService {
       if (hasCachedAuthFailure(this.credentialsCacheKey)) {
         const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
         authErr.statusCode = 401;
+        authErr.authError = true;
         throw authErr;
       }
 
@@ -1583,7 +1905,7 @@ class OpenSubtitlesService {
         const loginResult = await this.login(timeout);
         if (!loginResult) {
           // Check if credentials are now cached as failed
-          if (hasCachedAuthFailure(this.credentialsCacheKey)) {
+          if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
             throw new Error('OpenSubtitles authentication failed: invalid username/password');
           }
           // Rate limit, queue congestion, or other transient issue
@@ -1987,7 +2309,9 @@ module.exports.__testing = {
   isOpenSubtitlesRateLimitError,
   requestOpenSubtitlesApi,
   resolveRateLimitDeadline,
+  releaseDistributedLoginSingleflightLock,
   tryAcquireDistributedLoginRateLimitSlot,
+  tryAcquireDistributedLoginSingleflightLock,
   tryAcquireDistributedRateLimitSlot,
   resetRateLimiterState
 };

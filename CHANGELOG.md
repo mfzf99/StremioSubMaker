@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.86
+
+**Bug Fixes:**
+
+- **Removed route/cache fallback timers from subtitle list generation:** provider orchestration still uses the user's configured subtitle-provider timeout, while a separate 60s stuck-search guard only catches provider-search dedup/orchestration that truly hangs. Cache lookups for search revisions, local hashes, xEmbed, xSync, Auto, and SMDB are no longer hidden behind route-level fallback timers.
+
+- **Stopped local subtitle cache indexes from rebuilding with Redis SCAN during subtitle requests:** xEmbed, xSync, and Auto now treat valid empty indexes as empty and invalid indexes as unusable instead of scanning the whole Redis keyspace on hot subtitle-list reads. Redis storage commands also have a bounded `REDIS_COMMAND_TIMEOUT_MS` default of 5000ms and do not retry command-timeout failures into long route stalls.
+
+- **Hardened OpenSubtitles Auth login refresh coordination across replicas:** expired or missing Auth JWTs now refresh through a Redis-backed per-credential singleflight lock, so only one SubMaker instance performs `/login` for the same credentials while other requests wait for the shared token. The refreshed JWT is written to Redis before the lock is released, and invalid-credential suppression is now shared across pods.
+
+- **Stopped OpenSubtitles Auth transient failures from being cached as complete subtitle results:** login/search rate limits, network failures, and temporary upstream failures now propagate as typed provider failures instead of silently returning an empty OpenSubtitles result set. Subtitle aggregation marks provider failures and skipped providers as partial results, preventing temporary OpenSubtitles outages from poisoning the normal subtitle search cache.
+
+- **Removed OpenSubtitles Auth login cooldown/backoff:** `/login` `429` responses and rate-limit-like `403` responses only advance the next OpenSubtitles reservation according to the parsed retry window. They no longer write or read a separate shared cooldown that can block later searches for minutes, and invalid-credential suppression is back to a short 30-second window.
+
 ## SubMaker v1.4.84
 
 **Improvements:**
