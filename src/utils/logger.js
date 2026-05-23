@@ -69,9 +69,22 @@ const LOG_LEVEL = (process.env.LOG_LEVEL || 'warn').toLowerCase();
 const LEVELS = { debug: 0, warn: 1, error: 2 };
 const currentLevel = LEVELS[LOG_LEVEL] !== undefined ? LEVELS[LOG_LEVEL] : LEVELS.warn;
 
+function parseLogSampleRate(value) {
+    if (value === undefined || value === null || value === '') {
+        return 1;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        return 1;
+    }
+    return Math.max(0, Math.min(1, parsed));
+}
+
 // Log sampling configuration (for high-load scenarios)
-const LOG_SAMPLE_RATE = Math.max(0, Math.min(1, Number(process.env.LOG_SAMPLE_RATE) || 1)); // 0.0 to 1.0, default 1.0 (no sampling)
-const LOG_SAMPLE_DEBUG_ONLY = process.env.LOG_SAMPLE_DEBUG_ONLY === 'true'; // Only sample debug logs
+const LOG_SAMPLE_RATE = parseLogSampleRate(process.env.LOG_SAMPLE_RATE); // 0.0 to 1.0, default 1.0 (no sampling)
+// Protect warning/error visibility by default. Set LOG_SAMPLE_ALL_LEVELS=true
+// only if a deployment explicitly wants to sample operational warnings/errors.
+const LOG_SAMPLE_ALL_LEVELS = process.env.LOG_SAMPLE_ALL_LEVELS === 'true';
 let logCounter = 0;
 
 /**
@@ -81,7 +94,8 @@ let logCounter = 0;
  */
 function shouldSample(level) {
     if (LOG_SAMPLE_RATE >= 1) return true; // No sampling
-    if (LOG_SAMPLE_DEBUG_ONLY && level !== 'debug') return true; // Only sample debug logs
+    if (level !== 'debug' && !LOG_SAMPLE_ALL_LEVELS) return true; // Never drop warn/error by default
+    if (LOG_SAMPLE_RATE <= 0) return false; // Fully suppress sampled levels
 
     // Simple counter-based sampling (deterministic and fast)
     logCounter++;

@@ -12,6 +12,12 @@ const {
 } = require('../../utils/languages');
 const { resolveLanguageDisplayName } = require('../../utils/languageResolver');
 const { normalizeTargetLanguageForPrompt } = require('../utils/normalizeTargetLanguageForPrompt');
+const {
+  getProviderAuthFailureCacheKey,
+  hasCachedProviderAuthFailure,
+  cacheProviderAuthFailure,
+  clearCachedProviderAuthFailure
+} = require('../../utils/providerAuthFailureCache');
 
 /**
  * Minimal OpenAI-compatible provider wrapper.
@@ -24,6 +30,7 @@ class OpenAICompatibleProvider {
     this.model = options.model || '';
     this.baseUrl = (options.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
     this.providerName = options.providerName || 'openai';
+    this.authFailureCacheKey = getProviderAuthFailureCacheKey(this.providerName, this.apiKey);
     this.headers = options.headers || {};
     this.temperature = options.temperature !== undefined ? options.temperature : 0.4;
     this.maxOutputTokens = options.maxOutputTokens || 4096;
@@ -492,6 +499,15 @@ class OpenAICompatibleProvider {
     return this.providerName === 'cfWorkers';
   }
 
+  shouldUseAuthFailureCache() {
+    return this.providerName !== 'custom' && !!this.authFailureCacheKey;
+  }
+
+  isAuthFailure(error) {
+    const status = error?.response?.status || error?.statusCode || error?.status;
+    return status === 401 || status === 403;
+  }
+
   normalizeLanguageCode(code) {
     const raw = String(code || '').trim();
     if (!raw) return 'en';
@@ -555,6 +571,11 @@ class OpenAICompatibleProvider {
   }
 
   async getAvailableModels() {
+    if (this.shouldUseAuthFailureCache() && await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+      log.warn(() => `[${this.providerName}] Fetch models blocked: cached invalid API key detected`);
+      return [];
+    }
+
     try {
       const isCfWorkers = this.providerName === 'cfWorkers';
       const baseModelsUrl = isCfWorkers
@@ -631,8 +652,14 @@ class OpenAICompatibleProvider {
         throw error;
       }
 
+      if (this.shouldUseAuthFailureCache()) {
+        await clearCachedProviderAuthFailure(this.authFailureCacheKey);
+      }
       return models;
     } catch (error) {
+      if (this.shouldUseAuthFailureCache() && this.isAuthFailure(error)) {
+        await cacheProviderAuthFailure(this.authFailureCacheKey);
+      }
       logApiError(error, this.providerName, 'Fetch models', { skipResponseData: true });
       if (this.providerName === 'cfWorkers') {
         throw error;

@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## SubMaker v1.4.88
+
+**Improvements:**
+
+- **Hardened public add-on request handling against Stremio manifest polling and noisy installs:** configured manifest responses now use a short in-process cache and singleflight deduplication while still returning `no-store` headers to clients/CDNs, so repeated Stremio manifest refreshes no longer repeatedly resolve the same session/config. Missing session-token lookups now also use a short negative cache, and manifest caches are invalidated on session create/update/delete/pubsub events.
+
+- **Protected provider fan-out from public subtitle-search bursts:** `/addon/:config/subtitles` now has a per-config Redis-backed limiter before SDK router construction and provider searches, returning an empty subtitle list when limited instead of spending provider/API budget.
+
+- **Reduced request-log noise without hiding real warnings:** high-volume manifest request trace logging is now opt-in (`TRACE_MANIFEST_REQUESTS=true`), subtitle search tracing can be disabled separately, request-trace logs can be sampled independently, and token-shaped add-on/config URLs are redacted before request/manifest logging.
+
+**Bug Fixes:**
+
+- **Extended OpenSubtitles Auth invalid-credential suppression:** Known bad OpenSubtitles username/password pairs are now cached for 10 minutes, preventing repeated `/login` attempts while credentials remain wrong.
+
+- **Suppressed repeated SubDL and Wyzie invalid-key searches:** SubDL `Not Authorized` responses and Wyzie `Invalid API key` responses now mark the hashed API key as invalid for 10 minutes in local memory and shared storage, so later subtitle searches skip the provider without calling upstream again until the cache expires.
+
+- **Suppressed repeated AI model-list calls with invalid keys:** OpenAI-compatible provider model fetches (`/models`) and Gemini model discovery/validation now use the same 10-minute hashed invalid-key cache, avoiding repeated upstream calls after clear `401`/`403` authentication failures or Gemini `API key not valid` responses.
+
+- **Skipped unconfigured API-key subtitle providers before search fan-out:** Wyzie and Subs.ro are now treated as disabled when they have no usable API key, preventing missing-key provider tasks and warnings from random/public requests.
+
+## SubMaker v1.4.87
+
+**Bug Fixes:**
+
+- **Stopped OpenSubtitles Auth download quota errors from causing login storms:** `/download` `406` responses now only trigger a JWT refresh when OpenSubtitles explicitly says the token is invalid. Real daily-quota and invalid-file responses keep the existing JWT, do not clear the Redis token cache, and do not call `/login` again. Internal OpenSubtitles API queue pressure is now surfaced as transient `503` provider unavailability instead of a user-facing `429`, and subtitle download/resolve/content routes are no longer behind SubMaker's generic search limiter.
+
 ## SubMaker v1.4.86
 
 **Bug Fixes:**

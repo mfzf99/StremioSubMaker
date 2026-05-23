@@ -74,6 +74,12 @@ const smdbCache = require('./src/utils/smdbCache');
 const { deriveVideoHash } = require('./src/utils/videoHash');
 const { registerFileUploadRoutes } = require('./src/routes/fileUploadRoutes');
 const {
+    getProviderAuthFailureCacheKey,
+    hasCachedProviderAuthFailure,
+    cacheProviderAuthFailure,
+    clearCachedProviderAuthFailure
+} = require('./src/utils/providerAuthFailureCache');
+const {
     validateRequest,
     subtitleParamsSchema,
     subtitleContentParamsSchema,
@@ -105,6 +111,11 @@ const PORT = process.env.PORT || 7001;
 // Allow alphanumeric, dots, hyphens, underscores, and optional port
 const HOST_HEADER_REGEX = /^[A-Za-z0-9._-]+(?::\d+)?$/;
 const TRACE_CONFIG_RESOLVE = process.env.TRACE_CONFIG_RESOLVE === 'true';
+
+function parsePositiveIntEnv(name, fallback) {
+    const parsed = Number.parseInt(process.env[name], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 function normalizeSubtitleQueryExtras(req) {
     if (!req || typeof req.url !== 'string') return false;
@@ -187,6 +198,22 @@ const routerCache = new LRUCache({
 const resolveConfigCache = new LRUCache({
     max: 1000,
     ttl: 1000 * 120, // 2 minutes
+    updateAgeOnGet: true
+});
+
+const MANIFEST_CACHE_TTL_MS = parsePositiveIntEnv('MANIFEST_CACHE_TTL_MS', 30 * 1000);
+const MANIFEST_CACHE_MAX = parsePositiveIntEnv('MANIFEST_CACHE_MAX', 5000);
+const manifestResponseCache = new LRUCache({
+    max: MANIFEST_CACHE_MAX,
+    ttl: MANIFEST_CACHE_TTL_MS,
+    updateAgeOnGet: true
+});
+
+const MISSING_SESSION_TOKEN_CACHE_TTL_MS = parsePositiveIntEnv('MISSING_SESSION_TOKEN_CACHE_TTL_MS', 30 * 1000);
+const MISSING_SESSION_TOKEN_CACHE_MAX = parsePositiveIntEnv('MISSING_SESSION_TOKEN_CACHE_MAX', 10000);
+const missingSessionTokenCache = new LRUCache({
+    max: MISSING_SESSION_TOKEN_CACHE_MAX,
+    ttl: MISSING_SESSION_TOKEN_CACHE_TTL_MS,
     updateAgeOnGet: true
 });
 
@@ -274,6 +301,30 @@ function invalidateResolveConfigCache(token) {
     if (removed) {
         log.debug(() => `[ResolveConfigCache] Invalidated config for ${redactToken(token)}`);
     }
+}
+
+function getManifestCacheKey(configStr, baseUrl) {
+    return `${String(configStr || '')}\u0000${String(baseUrl || '')}\u0000${version}`;
+}
+
+function invalidateManifestCache(token) {
+    if (!token) return;
+    const prefix = `${String(token)}\u0000`;
+    let removed = 0;
+    for (const key of manifestResponseCache.keys()) {
+        if (String(key).startsWith(prefix)) {
+            manifestResponseCache.delete(key);
+            removed++;
+        }
+    }
+    if (removed > 0) {
+        log.debug(() => `[ManifestCache] Invalidated ${removed} manifest cache entr${removed === 1 ? 'y' : 'ies'} for ${redactToken(token)}`);
+    }
+}
+
+function invalidateMissingSessionTokenCache(token) {
+    if (!token) return;
+    missingSessionTokenCache.delete(token);
 }
 
 // SECURITY: Scan caches for contamination and purge suspicious entries
@@ -982,17 +1033,27 @@ function checkStremioCommunityPrefetchCooldown(configHash, req) {
 
 // Keep router cache aligned with latest session config across updates/deletes (including Redis pub/sub events)
 if (typeof sessionManager.on === 'function') {
+    sessionManager.on('sessionCreated', ({ token }) => {
+        invalidateMissingSessionTokenCache(token);
+        invalidateManifestCache(token);
+    });
     sessionManager.on('sessionUpdated', ({ token, source }) => {
         invalidateRouterCache(token, `${source || 'local'} update`);
         invalidateResolveConfigCache(token);
+        invalidateManifestCache(token);
+        invalidateMissingSessionTokenCache(token);
     });
     sessionManager.on('sessionDeleted', ({ token, source }) => {
         invalidateRouterCache(token, `${source || 'local'} delete`);
         invalidateResolveConfigCache(token);
+        invalidateManifestCache(token);
+        invalidateMissingSessionTokenCache(token);
     });
     sessionManager.on('sessionInvalidated', ({ token, action, source }) => {
         invalidateRouterCache(token, `${action || 'invalidate'} via ${source || 'pubsub'}`);
         invalidateResolveConfigCache(token);
+        invalidateManifestCache(token);
+        invalidateMissingSessionTokenCache(token);
     });
 }
 
@@ -1777,13 +1838,84 @@ async function shouldBlockCacheReset(clickKey, sourceFileId, config, targetLang)
     }
 }
 
+const REQUEST_TRACE_URL_LIMIT = 180;
+const TRACE_SUBTITLE_SEARCH_REQUESTS = process.env.TRACE_SUBTITLE_SEARCH_REQUESTS !== 'false';
+const TRACE_MANIFEST_REQUESTS = process.env.TRACE_MANIFEST_REQUESTS === 'true';
+const TRACE_SUBTITLE_DELIVERY_REQUESTS = process.env.TRACE_SUBTITLE_DELIVERY_REQUESTS === 'true';
+const REQUEST_TRACE_SAMPLE_RATE = parseRequestTraceSampleRate(
+    process.env.REQUEST_TRACE_SAMPLE_RATE ?? process.env.LOG_SAMPLE_RATE
+);
+let requestTraceCounter = 0;
+
+function parseRequestTraceSampleRate(value) {
+    if (value === undefined || value === null || value === '') {
+        return 1;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        return 1;
+    }
+    return Math.max(0, Math.min(1, parsed));
+}
+
+function shouldLogRequestTrace() {
+    if (REQUEST_TRACE_SAMPLE_RATE >= 1) return true;
+    if (REQUEST_TRACE_SAMPLE_RATE <= 0) return false;
+
+    requestTraceCounter++;
+    return (requestTraceCounter % Math.ceil(1 / REQUEST_TRACE_SAMPLE_RATE)) === 0;
+}
+
+function logRequestTrace(messageFn) {
+    if (!shouldLogRequestTrace()) return;
+    log.warn(messageFn);
+}
+
+function redactRequestUrlForLogs(value) {
+    return String(value || '')
+        .replace(/(\/addon\/)([a-f0-9]{8})[a-f0-9]{20}([a-f0-9]{4})(?=\/|$|\?)/gi, '$1$2...$3')
+        .replace(/([?&]config=)([a-f0-9]{8})[a-f0-9]{20}([a-f0-9]{4})(?=&|$)/gi, '$1$2...$3');
+}
+
+function formatRequestTraceUrl(req, limit = REQUEST_TRACE_URL_LIMIT) {
+    const raw = redactRequestUrlForLogs(req?.originalUrl || req?.url || req?.path || 'unknown');
+    if (raw.length <= limit) {
+        return raw;
+    }
+    return `${raw.substring(0, limit)}... [truncated ${raw.length - limit} chars]`;
+}
+
+function isSubtitleDeliveryPath(pathname) {
+    const p = String(pathname || '');
+    return p.includes('/subtitle/')
+        || p.includes('/subtitle-resolve/')
+        || p.includes('/subtitle-content/');
+}
+
 // FIRST-IN-CHAIN request trace: fires BEFORE any middleware (helmet, CORS, compression, etc.)
 // If a subtitle request doesn't produce this log, it truly never reached the server.
 app.use((req, res, next) => {
     const p = req.path || '';
-    if (p.includes('/subtitles/') || p.includes('/manifest.json')) {
-        log.warn(() => `[Request Trace] >>> ${req.method} ${req.originalUrl?.substring(0, 120) || p.substring(0, 120)}`);
+    const isSubtitleSearch = p.includes('/subtitles/');
+    const isManifestRequest = p.includes('/manifest.json');
+    const traceSearchOrManifest =
+        (TRACE_SUBTITLE_SEARCH_REQUESTS && isSubtitleSearch) ||
+        (TRACE_MANIFEST_REQUESTS && isManifestRequest);
+    const traceDelivery = isSubtitleDeliveryPath(p);
+
+    if (traceSearchOrManifest || (TRACE_SUBTITLE_DELIVERY_REQUESTS && traceDelivery)) {
+        logRequestTrace(() => `[Request Trace] >>> ${req.method} ${formatRequestTraceUrl(req)}`);
     }
+
+    if (isSubtitleSearch || isManifestRequest || traceDelivery) {
+        const startedAt = Date.now();
+        res.on('finish', () => {
+            if (res.statusCode >= 400) {
+                log.warn(() => `[Request Trace] <<< ${res.statusCode} ${req.method} ${formatRequestTraceUrl(req)} (${Date.now() - startedAt}ms)`);
+            }
+        });
+    }
+
     next();
 });
 
@@ -1819,6 +1951,40 @@ app.use(helmet({
 // Security: Rate limiting for subtitle searches and translations
 // Uses session ID or config hash instead of IP for better HA deployment support
 // This prevents all users behind a load balancer from sharing the same rate limit
+function getConfigScopedRateLimitKey(req) {
+    // Try session ID first (if sessions are enabled)
+    if (req.session?.id) {
+        return `session:${req.session.id}`;
+    }
+    // Try config hash from params (most common for Stremio addons)
+    if (req.params?.config) {
+        try {
+            return `config:${computeConfigHash(req.params.config)}`;
+        } catch (e) {
+            // Fall through to body/query/IP if config parsing fails
+        }
+    }
+    // Try config from body (for API endpoints)
+    if (req.body?.configStr) {
+        try {
+            return `config:${computeConfigHash(req.body.configStr)}`;
+        } catch (e) {
+            // Fall through to query/IP if config parsing fails
+        }
+    }
+    // Try config from query (GET API endpoints like stream metadata/title resolvers)
+    if (req.query?.config) {
+        try {
+            return `config:${computeConfigHash(req.query.config)}`;
+        } catch (e) {
+            // Fall through to IP if config parsing fails
+        }
+    }
+    // Fallback to IP address for non-authenticated requests
+    // Use ipKeyGenerator to properly handle IPv6 subnet masking
+    return `ip:${ipKeyGenerator(req.ip)}`;
+}
+
 const searchLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
     max: 100, // 100 requests per minute per user (increased from 20 for HA support)
@@ -1827,43 +1993,26 @@ const searchLimiter = rateLimit({
     legacyHeaders: false,
     store: createRateLimitRedisStore('rl:search:'),
     passOnStoreError: true, // Last-resort fail-open; Redis outages use local-memory fallback in the store
-    keyGenerator: (req) => {
-        // Try session ID first (if sessions are enabled)
-        if (req.session?.id) {
-            return `session:${req.session.id}`;
-        }
-        // Try config hash from params (most common for Stremio addons)
-        if (req.params?.config) {
-            try {
-                return `config:${computeConfigHash(req.params.config)}`;
-            } catch (e) {
-                // Fall through to IP if config parsing fails
-            }
-        }
-        // Try config from body (for API endpoints)
-        if (req.body?.configStr) {
-            try {
-                return `config:${computeConfigHash(req.body.configStr)}`;
-            } catch (e) {
-                // Fall through to IP if config parsing fails
-            }
-        }
-        // Try config from query (GET API endpoints like stream metadata/title resolvers)
-        if (req.query?.config) {
-            try {
-                return `config:${computeConfigHash(req.query.config)}`;
-            } catch (e) {
-                // Fall through to IP if config parsing fails
-            }
-        }
-        // Fallback to IP address for non-authenticated requests
-        // Use ipKeyGenerator to properly handle IPv6 subnet masking
-        return `ip:${ipKeyGenerator(req.ip)}`;
-    },
+    keyGenerator: getConfigScopedRateLimitKey,
     skip: (req) => {
         // Skip rate limiting for cached subtitle search results
         // This check is performed after cache lookup in the handler
         return req.fromSubtitleCache === true;
+    }
+});
+
+const addonSubtitleSearchLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: parsePositiveIntEnv('ADDON_SUBTITLE_SEARCH_RATE_LIMIT_PER_MINUTE', 100),
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: createRateLimitRedisStore('rl:addonsearch:'),
+    passOnStoreError: true,
+    keyGenerator: getConfigScopedRateLimitKey,
+    handler: (req, res, _next, options) => {
+        setNoStore(res);
+        log.warn(() => `[RateLimit] Addon subtitle search limited for ${redactToken(req.params?.config || 'unknown')} from ${getClientIp(req)}`);
+        return res.status(options.statusCode).json({ subtitles: [] });
     }
 });
 
@@ -3272,11 +3421,21 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
     try {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         const { apiKey } = req.body || {};
+        const geminiApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
 
-        if (!apiKey) {
+        if (!geminiApiKey) {
             return res.status(400).json({
                 valid: false,
                 error: t('server.errors.apiKeyRequired', {}, 'API key is required')
+            });
+        }
+
+        const geminiAuthFailureCacheKey = getProviderAuthFailureCacheKey('gemini', geminiApiKey);
+        if (await hasCachedProviderAuthFailure(geminiAuthFailureCacheKey)) {
+            return res.json({
+                valid: false,
+                error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed'),
+                cached: true
             });
         }
 
@@ -3288,11 +3447,13 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
 
         try {
             const response = await axios.get(geminiUrl, {
-                headers: { 'x-goog-api-key': String(apiKey || '').trim() },
+                headers: { 'x-goog-api-key': geminiApiKey },
                 timeout: 10000,
                 httpAgent,
                 httpsAgent
             });
+
+            await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
 
             // If we got here without errors, API key is valid
             if (response.data && response.data.models) {
@@ -3309,6 +3470,7 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
         } catch (apiError) {
             // Check for authentication errors
             if (apiError.response?.status === 401 || apiError.response?.status === 403) {
+                await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
                 res.json({
                     valid: false,
                     error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
@@ -3321,6 +3483,9 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
                     errorMessage = errorData;
                 } else if (errorData && typeof errorData === 'object') {
                     errorMessage = errorData.message || JSON.stringify(errorData);
+                }
+                if (String(errorMessage || '').toLowerCase().includes('api key')) {
+                    await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
                 }
                 res.json({
                     valid: false,
@@ -4527,6 +4692,14 @@ async function regenerateDefaultConfig() {
     };
 }
 
+function createMissingSessionConfig(configStr) {
+    const defaultConfig = getDefaultConfig();
+    defaultConfig.__sessionTokenError = true;
+    defaultConfig.__originalToken = configStr;
+    ensureConfigHash(defaultConfig, configStr);
+    return defaultConfig;
+}
+
 // Resolve config synchronously for base64, and asynchronously for session tokens
 async function resolveConfigAsync(configStr, req) {
     const localhost = isLocalhost(req);
@@ -4597,6 +4770,11 @@ async function resolveConfigAsync(configStr, req) {
         return deepCloneConfig(config);
     }
 
+    if (missingSessionTokenCache.has(configStr)) {
+        log.debug(() => `[ConfigResolver] Using short missing-session cache for ${redactToken(configStr)}`);
+        return createMissingSessionConfig(configStr);
+    }
+
     // Token path: getSession now automatically checks cache first, then storage
     const cfg = await sessionManager.getSession(configStr);
     if (cfg) {
@@ -4654,13 +4832,10 @@ async function resolveConfigAsync(configStr, req) {
     // NOTE: We do NOT create a new session here - that should only happen via /api/get-session?autoRegenerate=true
     // Creating tokens here would result in multiple tokens being generated during page load
     log.warn(() => `[ConfigResolver] Session token not found: ${configStr.substring(0, 8)}..., returning default config with error flag`);
+    missingSessionTokenCache.set(configStr, true);
 
-    const defaultConfig = getDefaultConfig();
-    defaultConfig.__sessionTokenError = true;
-    defaultConfig.__originalToken = configStr; // Keep track of the failed token
-    ensureConfigHash(defaultConfig, configStr);
     // SECURITY: Do NOT cache error/fallback configs
-    return defaultConfig;
+    return createMissingSessionConfig(configStr);
 }
 
 // Custom route: Download subtitle (BEFORE SDK router to take precedence)
@@ -4919,11 +5094,14 @@ const subtitleContentHandler = async (req, res) => {
 
 // Register subtitle download routes for all supported extensions
 // Route priority: Express matches routes in order of registration
-app.get('/addon/:config/subtitle/:fileId/:language.srt', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
-app.get('/addon/:config/subtitle/:fileId/:language.sub', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
-app.get('/addon/:config/subtitle/:fileId/:language', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
-app.get('/addon/:config/subtitle-resolve/:fileId/:language', searchLimiter, validateRequest(subtitleParamsSchema, 'params'), subtitleResolveHandler);
-app.get('/addon/:config/subtitle-content/:fileId/:language.:ext', searchLimiter, validateRequest(subtitleContentParamsSchema, 'params'), subtitleContentHandler);
+// Do not put these behind the generic SubMaker search limiter. Stremio clients
+// may retry or probe subtitle URLs aggressively, and download delivery should
+// not create a SubMaker-side 429 before provider/auth handling gets a chance.
+app.get('/addon/:config/subtitle/:fileId/:language.srt', validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
+app.get('/addon/:config/subtitle/:fileId/:language.sub', validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
+app.get('/addon/:config/subtitle/:fileId/:language', validateRequest(subtitleParamsSchema, 'params'), subtitleDownloadHandler);
+app.get('/addon/:config/subtitle-resolve/:fileId/:language', validateRequest(subtitleParamsSchema, 'params'), subtitleResolveHandler);
+app.get('/addon/:config/subtitle-content/:fileId/:language.:ext', validateRequest(subtitleContentParamsSchema, 'params'), subtitleContentHandler);
 
 // Custom route: Serve error subtitles for config errors (BEFORE SDK router to take precedence)
 app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
@@ -8021,14 +8199,15 @@ app.use('/addon/:config', (req, res, next) => {
         || requestPath.includes('/subtitle-resolve/')
         || requestPath.includes('/subtitle-content/')
         || requestPath.includes('/translate/');
+    const safeRequestPath = redactRequestUrlForLogs(requestPath);
 
     // REQUEST TRACE: Log all incoming addon requests (helps diagnose "Stremio not sending requests" issues)
     // This runs BEFORE any processing, so if this doesn't log, the request never reached the server
     if (isSubtitlesRequest || isManifestRequest) {
-        log.info(() => `[Addon Request] ${req.method} ${requestPath.substring(0, 100)} (UA: ${(req.get('user-agent') || 'none').substring(0, 50)})`);
+        log.info(() => `[Addon Request] ${req.method} ${safeRequestPath.substring(0, 100)} (UA: ${(req.get('user-agent') || 'none').substring(0, 50)})`);
     } else if (isDownloadRequest) {
         // Log download requests at DEBUG level (these are frequent)
-        log.debug(() => `[Addon Request] ${req.method} ${requestPath.substring(0, 100)}`);
+        log.debug(() => `[Addon Request] ${req.method} ${safeRequestPath.substring(0, 100)}`);
     }
 
     if (req.__subtitleQueryExtraNormalized?.length) {
@@ -8195,15 +8374,9 @@ app.get('/addon/:config/manifest.json', async (req, res) => {
         let t = res.locals?.t || getTranslatorFromRequest(req, res);
 
         const rawUrl = req.originalUrl || req.url || '';
+        const safeRawUrl = redactRequestUrlForLogs(rawUrl);
         const hasVersionSegment = /\/v[0-9.]+(\/|$)/.test(rawUrl);
-        log.info(() => `[Manifest] Request meta ip=${getClientIp(req)} cf=${req.get('cf-connecting-ip') || 'n/a'} xff=${req.get('x-forwarded-for') || 'n/a'} xri=${req.get('x-real-ip') || 'n/a'} ua=${req.get('user-agent') || 'n/a'} origin=${req.get('origin') || 'n/a'} referer=${req.get('referer') || 'n/a'} host=${req.get('host') || 'n/a'} url=${rawUrl || 'n/a'} versioned=${hasVersionSegment}`);
-        log.debug(() => `[Manifest] Parsing config for manifest request`);
-        const config = await resolveConfigGuarded(req.params.config, req, res, '[Manifest] config', t);
-        if (!config) return;
-        t = getTranslatorFromRequest(req, res, config);
-        ensureConfigHash(config, req.params.config);
-
-        // Construct base URL from request
+        log.info(() => `[Manifest] Request meta ip=${getClientIp(req)} cf=${req.get('cf-connecting-ip') || 'n/a'} xff=${req.get('x-forwarded-for') || 'n/a'} xri=${req.get('x-real-ip') || 'n/a'} ua=${req.get('user-agent') || 'n/a'} origin=${req.get('origin') || 'n/a'} referer=${req.get('referer') || 'n/a'} host=${req.get('host') || 'n/a'} url=${safeRawUrl || 'n/a'} versioned=${hasVersionSegment}`);
         const host = getSafeHost(req);
         const localhost = isLocalhost(req);
         // For remote hosts, enforce HTTPS unless proxy header specifies otherwise.
@@ -8211,10 +8384,43 @@ app.get('/addon/:config/manifest.json', async (req, res) => {
             ? (req.get('x-forwarded-proto') || req.protocol)
             : (req.get('x-forwarded-proto') || 'https');
         const baseUrl = `${protocol}://${host}`;
+        const manifestCacheKey = getManifestCacheKey(req.params.config, baseUrl);
+        const cachedManifest = manifestResponseCache.get(manifestCacheKey);
+        if (cachedManifest) {
+            res.setHeader('X-SubMaker-Manifest-Cache', 'hit');
+            return res.json(deepCloneConfig(cachedManifest));
+        }
+
+        log.debug(() => `[Manifest] Parsing config for manifest request`);
         log.debug(() => `[Manifest] Using base URL: ${baseUrl}`);
 
-        const builder = createAddonWithConfig(config, baseUrl);
-        const manifest = builder.getInterface().manifest;
+        const payload = await deduplicate(`manifest:${manifestCacheKey}`, async () => {
+            const config = await resolveConfigAsync(req.params.config, req);
+            if (!config) return null;
+            if (isDisabledSessionConfig(config)) {
+                return { disabled: true, config };
+            }
+
+            ensureConfigHash(config, req.params.config);
+            const builder = createAddonWithConfig(config, baseUrl);
+            return {
+                manifest: builder.getInterface().manifest,
+                cacheable: isSafeToCache(config) || isInvalidSessionConfig(config)
+            };
+        });
+
+        if (!payload) return;
+        if (payload.disabled) {
+            return respondDisabledSession(req, res, payload.config, t);
+        }
+
+        const manifest = payload.manifest;
+        if (payload.cacheable && manifest) {
+            manifestResponseCache.set(manifestCacheKey, deepCloneConfig(manifest));
+            res.setHeader('X-SubMaker-Manifest-Cache', 'miss-store');
+        } else {
+            res.setHeader('X-SubMaker-Manifest-Cache', 'miss');
+        }
 
         res.json(manifest);
     } catch (error) {
@@ -8243,6 +8449,11 @@ app.get('/addon/:config', (req, res, next) => {
         res.status(500).send(t('server.errors.configPageFailed', {}, 'Failed to load configuration page'));
     }
 });
+
+// Stremio subtitle list requests are the only SDK route that fans out to providers.
+// Limit them before router construction/config resolution so one noisy install cannot
+// monopolize provider queues or shared upstream quotas.
+app.use('/addon/:config/subtitles', addonSubtitleSearchLimiter);
 
 // Mount Stremio SDK router for each configuration
 app.use('/addon/:config', async (req, res, next) => {
@@ -8401,6 +8612,16 @@ app.use('/addon/:config', async (req, res, next) => {
         log.error(() => ['[Router] Error:', error]);
         next(error);
     }
+});
+
+app.use('/addon/:config/subtitles', (req, res, next) => {
+    if (res.headersSent) {
+        return next();
+    }
+
+    log.warn(() => `[Subtitles] Unmatched subtitle route after SDK routing: ${req.method} ${formatRequestTraceUrl(req)} (expected /subtitles/{type}/{id}[/{extra}].json)`);
+    setNoStore(res);
+    return res.status(404).json({ subtitles: [] });
 });
 
 // Error handling middleware - Route-specific handlers

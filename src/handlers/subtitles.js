@@ -3023,15 +3023,16 @@ function createSubtitleHandler(config) {
           log.debug(() => '[Subtitles] SCS provider is disabled');
         }
 
-        // Check if Wyzie Subs is enabled (user toggle)
-        if (config.subtitleProviders?.wyzie?.enabled) {
+        // Check if Wyzie Subs is enabled and configured
+        const wyzieApiKey = normalizeProviderApiKey(config.subtitleProviders?.wyzie?.apiKey);
+        if (config.subtitleProviders?.wyzie?.enabled && wyzieApiKey) {
           const wyzieHealth = isProviderHealthy('wyzie');
           if (!wyzieHealth.healthy) {
             log.debug(() => `[Subtitles] Skipping Wyzie Subs: ${wyzieHealth.reason} (retry in ${wyzieHealth.retryInSec}s)`);
             skippedProviders.push({ provider: 'WyzieSubs', reason: wyzieHealth.reason });
           } else {
             log.debug(() => '[Subtitles] Wyzie Subs provider is enabled');
-            const wyzie = new WyzieSubsService(config.subtitleProviders.wyzie.apiKey);
+            const wyzie = new WyzieSubsService(wyzieApiKey);
             // Pass sources config so Wyzie only queries user-selected sources
             const wyzieParams = { ...searchParams, sources: config.subtitleProviders.wyzie.sources };
             addSearchTask('WyzieSubs',
@@ -3047,21 +3048,24 @@ function createSubtitleHandler(config) {
                   }
                   return { provider: 'WyzieSubs', results: [], error };
                 })
-            );
+              );
           }
+        } else if (config.subtitleProviders?.wyzie?.enabled) {
+          log.debug(() => '[Subtitles] Wyzie Subs provider has no API key; treating it as not selected');
         } else {
           log.debug(() => '[Subtitles] Wyzie Subs provider is disabled');
         }
 
-        // Check if Subs.ro is enabled (user toggle) - Romanian subtitle database, requires API key
-        if (config.subtitleProviders?.subsro?.enabled) {
+        // Check if Subs.ro is enabled and configured - Romanian subtitle database, requires API key
+        const subsroApiKey = normalizeProviderApiKey(config.subtitleProviders?.subsro?.apiKey);
+        if (config.subtitleProviders?.subsro?.enabled && subsroApiKey) {
           const subsroHealth = isProviderHealthy('subsro');
           if (!subsroHealth.healthy) {
             log.debug(() => `[Subtitles] Skipping Subs.ro: ${subsroHealth.reason} (retry in ${subsroHealth.retryInSec}s)`);
             skippedProviders.push({ provider: 'SubsRo', reason: subsroHealth.reason });
           } else {
             log.debug(() => '[Subtitles] Subs.ro provider is enabled');
-            const subsro = new SubsRoService(config.subtitleProviders.subsro.apiKey);
+            const subsro = new SubsRoService(subsroApiKey);
             addSearchTask('SubsRo',
               subsro.searchSubtitles(searchParams)
                 .then(results => {
@@ -3075,8 +3079,10 @@ function createSubtitleHandler(config) {
                   }
                   return { provider: 'SubsRo', results: [], error };
                 })
-            );
+              );
           }
+        } else if (config.subtitleProviders?.subsro?.enabled) {
+          log.debug(() => '[Subtitles] Subs.ro provider has no API key; treating it as not selected');
         } else {
           log.debug(() => '[Subtitles] Subs.ro provider is disabled');
         }

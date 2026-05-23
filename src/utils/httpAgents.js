@@ -446,7 +446,7 @@ async function runGatedKeepAlive(providerKey, provider) {
     log.debug(() => `[HTTP Agents] Gated keep-alive ping to ${provider.name} OK`);
     circuitBreaker.recordSuccess(providerKey);
   } catch (error) {
-    if (error?.openSubtitlesRateLimit || error?.statusCode === 429 || error?.response?.status === 429) {
+    if (error?.openSubtitlesQueueBusy || error?.openSubtitlesRateLimit || error?.statusCode === 429 || error?.response?.status === 429) {
       log.debug(() => `[HTTP Agents] Gated keep-alive ping to ${provider.name} skipped by API gate: ${error.message}`);
       return;
     }

@@ -8,11 +8,50 @@ const { redactSensitiveData } = require('../utils/logger');
 const log = require('../utils/logger');
 const { detectArchiveType, extractSubtitleFromArchive, isArchive, createEpisodeNotFoundSubtitle, createZipTooLargeSubtitle } = require('../utils/archiveExtractor');
 const { analyzeResponseContent, createInvalidResponseSubtitle } = require('../utils/responseAnalyzer');
+const {
+  getProviderAuthFailureCacheKey,
+  hasCachedProviderAuthFailure,
+  cacheProviderAuthFailure
+} = require('../utils/providerAuthFailureCache');
 
 
 const SUBDL_API_URL = 'https://api.subdl.com/api/v1';
 const USER_AGENT = 'StremioSubtitleTranslator v1.0';
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
+
+function getSubDLUpstreamMessage(payload, fallback = '') {
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload.trim();
+  }
+
+  if (payload && typeof payload === 'object') {
+    const message = typeof payload.message === 'string' ? payload.message.trim() : '';
+    const error = typeof payload.error === 'string' ? payload.error.trim() : '';
+    return message || error || fallback;
+  }
+
+  return fallback;
+}
+
+function isSubDLAuthFailure(error) {
+  const status = error?.response?.status;
+  if (status === 401) {
+    return true;
+  }
+
+  if (status !== 403) {
+    return false;
+  }
+
+  const message = getSubDLUpstreamMessage(error.response?.data, error.message || '').toLowerCase();
+  return (
+    message.includes('not authorized') ||
+    message.includes('unauthorized') ||
+    message.includes('invalid api') ||
+    message.includes('api key') ||
+    message.includes('authentication')
+  );
+}
 
 class SubDLService {
   // Static/singleton axios client - shared across all instances for connection reuse
@@ -48,7 +87,8 @@ class SubDLService {
 
   constructor(apiKey = null) {
     // Ensure apiKey is always a string (protect against objects/undefined)
-    this.apiKey = (typeof apiKey === 'string') ? apiKey : '';
+    this.apiKey = (typeof apiKey === 'string') ? apiKey.trim() : '';
+    this.authFailureCacheKey = getProviderAuthFailureCacheKey('subdl', this.apiKey);
 
     // Use static client for all instances (connection pooling optimization)
     this.client = SubDLService.client;
@@ -75,6 +115,11 @@ class SubDLService {
       // Check if API key is provided
       if (!this.apiKey || this.apiKey.trim() === '') {
         log.debug(() => '[SubDL] API key is missing; skipping search');
+        return [];
+      }
+
+      if (await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+        log.warn(() => '[SubDL] Search blocked: cached invalid API key detected');
         return [];
       }
 
@@ -325,6 +370,9 @@ class SubDLService {
       return limitedSubtitles;
 
     } catch (error) {
+      if (isSubDLAuthFailure(error)) {
+        await cacheProviderAuthFailure(this.authFailureCacheKey);
+      }
       return handleSearchError(error, 'SubDL');
     }
   }
@@ -603,3 +651,7 @@ class SubDLService {
 }
 
 module.exports = SubDLService;
+module.exports.__testing = {
+  getSubDLUpstreamMessage,
+  isSubDLAuthFailure
+};

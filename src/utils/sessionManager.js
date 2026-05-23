@@ -752,11 +752,16 @@ class SessionManager extends EventEmitter {
                     return;
                 }
 
-                if (token && this.cache.has(token)) {
-                    this.cache.delete(token);
+                if (token) {
+                    const hadSessionCache = this.cache.has(token);
+                    if (hadSessionCache) {
+                        this.cache.delete(token);
+                    }
                     this.decryptedCache?.delete(token);
                     this.emit('sessionInvalidated', { token, action, source: 'pubsub' });
-                    log.debug(() => `[SessionManager] Invalidated cached session from pub/sub: ${redactToken(token)} (action: ${action}) via ${channel}`);
+                    if (hadSessionCache) {
+                        log.debug(() => `[SessionManager] Invalidated cached session from pub/sub: ${redactToken(token)} (action: ${action}) via ${channel}`);
+                    }
                 }
             } catch (err) {
                 log.error(() => ['[SessionManager] Failed to process pub/sub message:', err.message]);

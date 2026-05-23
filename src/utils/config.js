@@ -485,6 +485,7 @@ function normalizeConfig(config) {
 
   normalizeApiKeySubtitleProvider(mergedConfig, config, 'subdl');
   normalizeApiKeySubtitleProvider(mergedConfig, config, 'subsource');
+  normalizeApiKeySubtitleProvider(mergedConfig, config, 'subsro');
 
   // Model-aware default for DeepSeek max output tokens:
   // - deepseek-chat: 8k
@@ -1023,14 +1024,16 @@ function normalizeConfig(config) {
 
     const previousApiKey = typeof wyzieConfig.apiKey === 'string' ? wyzieConfig.apiKey.trim() : '';
     const normalizedApiKey = normalizeWyzieValue(wyzieConfig.apiKey, '');
+    const normalizedEnabled = wyzieConfig.enabled === true && !!normalizedApiKey;
     const needsPersist =
       previousApiKey !== normalizedApiKey
+      || (wyzieConfig.enabled === true && !normalizedApiKey)
       || rawSources.opensubs === true
       || (rawSources.opensubs !== undefined && rawSources.opensubtitles !== true);
 
     mergedConfig.subtitleProviders.wyzie = {
       ...wyzieConfig,
-      enabled: wyzieConfig.enabled === true,
+      enabled: normalizedEnabled,
       apiKey: normalizedApiKey,
       sources: normalizedSources
     };

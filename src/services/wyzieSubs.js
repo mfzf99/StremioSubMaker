@@ -54,6 +54,12 @@ const { convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const { redactApiKey } = require('../utils/security');
 const log = require('../utils/logger');
 const { version } = require('../utils/version');
+const {
+    getProviderAuthFailureCacheKey,
+    hasCachedProviderAuthFailure,
+    cacheProviderAuthFailure,
+    clearCachedProviderAuthFailure
+} = require('../utils/providerAuthFailureCache');
 
 const WYZIE_API_URL = 'https://sub.wyzie.io';
 const USER_AGENT = `SubMaker v${version}`;
@@ -188,6 +194,7 @@ class WyzieSubsService {
 
     constructor(apiKey = null) {
         this.apiKey = normalizeWyzieApiKey(apiKey);
+        this.authFailureCacheKey = getProviderAuthFailureCacheKey('wyzie', this.apiKey);
         this.client = axios.create({
             baseURL: WYZIE_API_URL,
             headers: {
@@ -226,6 +233,11 @@ class WyzieSubsService {
 
             if (!this.apiKey) {
                 log.warn(() => '[WyzieSubs] API key is required for Wyzie search requests');
+                return [];
+            }
+
+            if (await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+                log.warn(() => '[WyzieSubs] Search blocked: cached invalid API key detected');
                 return [];
             }
 
@@ -454,9 +466,11 @@ class WyzieSubsService {
         } catch (error) {
             // Use warn instead of error for operational failures
             if (error.response?.status === 401) {
+                await cacheProviderAuthFailure(this.authFailureCacheKey);
                 const details = error.response?.data?.details || error.response?.data?.message || 'API key required';
                 log.warn(() => `[WyzieSubs] Search rejected: ${details}`);
             } else if (error.response?.status === 403) {
+                await cacheProviderAuthFailure(this.authFailureCacheKey);
                 const details = error.response?.data?.details || error.response?.data?.message || 'Invalid API key';
                 log.warn(() => `[WyzieSubs] Search rejected: ${details}`);
             } else if (error.response?.status === 404) {
@@ -484,7 +498,25 @@ class WyzieSubsService {
             return { valid: false, error: 'API key is required' };
         }
 
+        if (await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+            return { valid: false, error: 'Invalid API key', status: 403, cached: true };
+        }
+
         try {
+            const finalizeValidationResult = async (result) => {
+                if (!result) {
+                    return null;
+                }
+
+                if (result.valid === false && (result.status === 401 || result.status === 403)) {
+                    await cacheProviderAuthFailure(this.authFailureCacheKey);
+                } else if (result.valid === true) {
+                    await clearCachedProviderAuthFailure(this.authFailureCacheKey);
+                }
+
+                return result;
+            };
+
             const runValidationProbe = async (params, { label, probeTimeout = timeout } = {}) => {
                 const probeStartedAt = Date.now();
                 const response = await this.client.get('/search', {
@@ -566,7 +598,7 @@ class WyzieSubsService {
                 label: 'auth probe',
                 probeTimeout: authProbeTimeout
             });
-            const authResult = interpretProbeResult(authProbe, 'auth-probe');
+            const authResult = await finalizeValidationResult(interpretProbeResult(authProbe, 'auth-probe'));
             if (authResult) {
                 return authResult;
             }
@@ -581,7 +613,7 @@ class WyzieSubsService {
             }, {
                 label: 'fallback search probe'
             });
-            const searchResult = interpretProbeResult(searchProbe, 'search-probe');
+            const searchResult = await finalizeValidationResult(interpretProbeResult(searchProbe, 'search-probe'));
             if (searchResult) {
                 return searchResult;
             }
@@ -596,6 +628,7 @@ class WyzieSubsService {
             const upstream = getWyzieUpstreamMessage(error.response?.data, error.message || 'Request failed');
 
             if (status === 401 || status === 403) {
+                await cacheProviderAuthFailure(this.authFailureCacheKey);
                 return { valid: false, error: upstream, status };
             }
 
@@ -731,3 +764,6 @@ class WyzieSubsService {
 }
 
 module.exports = WyzieSubsService;
+module.exports.__testing = {
+    normalizeWyzieApiKey
+};

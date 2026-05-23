@@ -18,7 +18,7 @@ const OPENSUBTITLES_VIP_API_URL = 'https://vip-api.opensubtitles.com/api/v1';
 const USER_AGENT = `SubMaker v${version}`;
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
 
-const AUTH_FAILURE_TTL_MS = 30 * 1000; // Keep invalid credentials blocked briefly
+const AUTH_FAILURE_TTL_MS = 10 * 60 * 1000; // Suppress repeated bad-credential logins for 10 minutes
 const credentialFailureCache = new Map();
 const AUTH_FAILURE_PREFIX = 'osauthfail:';
 
@@ -107,6 +107,17 @@ function createOpenSubtitlesRateLimitError(message, retryAfterMs = 0) {
   error.isRetryable = true;
   error.retryAfterMs = retryMs;
   error.openSubtitlesRateLimit = true;
+  return error;
+}
+
+function createOpenSubtitlesQueueBusyError(message, retryAfterMs = 0) {
+  const retryMs = Math.max(0, Math.ceil(Number(retryAfterMs) || 0));
+  const error = new Error(message || 'OpenSubtitles API queue is busy');
+  error.statusCode = 503;
+  error.type = 'service_unavailable';
+  error.isRetryable = true;
+  error.retryAfterMs = retryMs;
+  error.openSubtitlesQueueBusy = true;
   return error;
 }
 
@@ -411,8 +422,8 @@ function assertRateLimitWaitAllowed(waitMs, deadlineAt, context, reason = 'queue
   }
 
   if (waitMs > 0 && (budgetMs <= 0 || waitMs > budgetMs)) {
-    throw createOpenSubtitlesRateLimitError(
-      `OpenSubtitles API ${reason} would exceed request budget for ${context}; skipping upstream call`,
+    throw createOpenSubtitlesQueueBusyError(
+      `OpenSubtitles API ${reason} would exceed request budget for ${context}; leaving upstream untouched`,
       Math.max(waitMs, budgetMs)
     );
   }
@@ -672,8 +683,8 @@ async function acquireOpenSubtitlesRateLimitSlot(kind, options = {}) {
   }
 
   if (!reservation.acquired) {
-    throw createOpenSubtitlesRateLimitError(
-      `OpenSubtitles API queue wait would exceed request budget for ${context}; skipping upstream call`,
+    throw createOpenSubtitlesQueueBusyError(
+      `OpenSubtitles API queue wait would exceed request budget for ${context}; leaving upstream untouched`,
       reservation.retryAfterMs
     );
   }
@@ -1375,7 +1386,7 @@ class OpenSubtitlesService {
     }
 
     const retryAfterMs = await getDistributedLoginSingleflightLockTtl(this.credentialsCacheKey);
-    throw createOpenSubtitlesRateLimitError(
+    throw createOpenSubtitlesQueueBusyError(
       'OpenSubtitles login refresh is already in progress and exceeded this request budget',
       retryAfterMs || LOGIN_SINGLEFLIGHT_POLL_MS
     );
@@ -1420,7 +1431,7 @@ class OpenSubtitlesService {
       }
     }
 
-    throw createOpenSubtitlesRateLimitError(
+    throw createOpenSubtitlesQueueBusyError(
       'OpenSubtitles login refresh could not acquire a distributed slot within this request budget',
       LOGIN_SINGLEFLIGHT_POLL_MS
     );
@@ -1525,7 +1536,7 @@ class OpenSubtitlesService {
         const loginResult = await this.login(providerTimeout);
 
         if (!loginResult) {
-          throw createOpenSubtitlesRateLimitError(
+          throw createOpenSubtitlesQueueBusyError(
             'OpenSubtitles login did not return a token',
             RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
           );
@@ -1682,7 +1693,7 @@ class OpenSubtitlesService {
           // Note: login() will check cache first, but we just cleared it, so it will force a new login
           const freshToken = await this.login(providerTimeout);
           if (!freshToken) {
-            throw createOpenSubtitlesRateLimitError(
+            throw createOpenSubtitlesQueueBusyError(
               'OpenSubtitles token refresh unavailable during search retry',
               RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
             );
@@ -1908,9 +1919,10 @@ class OpenSubtitlesService {
           if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
             throw new Error('OpenSubtitles authentication failed: invalid username/password');
           }
-          // Rate limit, queue congestion, or other transient issue
-          throw createOpenSubtitlesRateLimitError(
-            'OpenSubtitles temporarily unavailable because the API limiter is busy',
+          // Queue congestion or another transient issue. This is not a user
+          // rate limit and should not be rendered as a provider 429 subtitle.
+          throw createOpenSubtitlesQueueBusyError(
+            'OpenSubtitles temporarily unavailable because the API queue is busy',
             RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
           );
         }
@@ -1941,8 +1953,11 @@ class OpenSubtitlesService {
         const status = downloadErr?.response?.status;
         const errMsg = String(downloadErr?.response?.data?.message || downloadErr?.message || '').toLowerCase();
 
-        // RETRY LOGIC: Handle invalid token (401 Unauthorized or 500 "invalid")
-        if (status === 401 || (status === 500 && errMsg.includes('invalid'))) {
+        // RETRY LOGIC: Handle invalid token only. OpenSubtitles may return
+        // 406 for real daily quota exhaustion too; that must not trigger a
+        // fresh /login on every download attempt.
+        const isInvalidToken406 = status === 406 && errMsg.includes('invalid token');
+        if (status === 401 || (status === 500 && errMsg.includes('invalid')) || isInvalidToken406) {
           log.warn(() => `[OpenSubtitles] Download token rejected (${status}), clearing cache and retrying...`);
 
           // 1. Clear invalid token from cache (local + Redis)
@@ -1956,7 +1971,7 @@ class OpenSubtitlesService {
           // 2. Login again (implicitly handles token refresh and rate limiting)
           const freshToken = await this.login(timeout);
           if (!freshToken) {
-            const retryUnavailable = createOpenSubtitlesRateLimitError(
+            const retryUnavailable = createOpenSubtitlesQueueBusyError(
               'OpenSubtitles token refresh unavailable during download retry',
               RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
             );
@@ -1971,45 +1986,13 @@ class OpenSubtitlesService {
             });
           }, 'download-link-retry-after-login', { timeoutMs: timeout });
         }
-        // RETRY LOGIC: Handle 406 quota exceeded when user HAS credentials
-        // This catches the race condition where the token expired just before the request,
-        // causing the API to see an unauthenticated request and apply the free-tier 20/day limit.
-        // If the user has credentials configured, a 406 likely means the token was silently dropped.
+        // Do not relogin on normal 406 responses. They include real daily
+        // quota exhaustion and invalid file IDs; another /login cannot fix
+        // those and can create login-rate storms.
         else if (status === 406 && this.config.username && this.config.password) {
           const quotaMsg = String(downloadErr?.response?.data?.message || '');
-          log.warn(() => `[OpenSubtitles] Got 406 quota error despite having credentials. API message: "${quotaMsg}". Forcing re-login and retry...`);
-
-          // 1. Clear potentially stale/expired token
-          await clearCachedToken(this.credentialsCacheKey);
-          this.token = null;
-          this.tokenExpiry = null;
-          this.baseUrl = null;
-          this.client.defaults.baseURL = OPENSUBTITLES_API_URL;
-          this.downloadClient.defaults.baseURL = OPENSUBTITLES_API_URL;
-
-          // 2. Force fresh login
-          const freshToken = await this.login(timeout);
-          if (freshToken) {
-            log.info(() => '[OpenSubtitles] Re-login successful after 406, retrying download with fresh token...');
-
-            // 3. Retry download with fresh token through the same API gate
-            try {
-              downloadResponse = await requestOpenSubtitlesApi(() => {
-                logDownloadAuthState();
-                return this.client.post('/download', {
-                  file_id: parseInt(baseFileId)
-                });
-              }, 'download-link-retry-after-406', { timeoutMs: timeout });
-            } catch (retryErr) {
-              // If retry also fails with 406, this is a genuine quota limit — don't loop
-              log.warn(() => `[OpenSubtitles] Retry after 406 re-login also failed: ${retryErr?.response?.status || retryErr.message}`);
-              throw retryErr;
-            }
-          } else {
-            // Re-login failed — throw original error
-            log.warn(() => '[OpenSubtitles] Re-login after 406 failed, propagating original quota error');
-            throw downloadErr;
-          }
+          log.warn(() => `[OpenSubtitles] /download returned 406 with configured credentials; not re-authenticating. API message: "${quotaMsg}"`);
+          throw downloadErr;
         } else {
           throw downloadErr;
         }
@@ -2303,8 +2286,10 @@ module.exports.keepAliveOpenSubtitlesAuthApi = keepAliveOpenSubtitlesAuthApi;
 module.exports.__testing = {
   acquireToken,
   applyDistributedRateLimitDelay,
+  AUTH_FAILURE_TTL_MS,
   buildOpenSubtitlesQueryString,
   createOpenSubtitlesRateLimitError,
+  createOpenSubtitlesQueueBusyError,
   keepAliveOpenSubtitlesAuthApi,
   isOpenSubtitlesRateLimitError,
   requestOpenSubtitlesApi,

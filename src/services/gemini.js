@@ -5,6 +5,12 @@ const { httpAgent, httpsAgent } = require('../utils/httpAgents');
 const log = require('../utils/logger');
 const { resolveLanguageDisplayName } = require('../utils/languageResolver');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
+const {
+  getProviderAuthFailureCacheKey,
+  hasCachedProviderAuthFailure,
+  cacheProviderAuthFailure,
+  clearCachedProviderAuthFailure
+} = require('../utils/providerAuthFailureCache');
 
 // Use v1beta endpoint - v1 endpoint doesn't support /models/{model} operations
 const GEMINI_API_URL = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
@@ -16,6 +22,35 @@ function normalizeTargetName(name) {
 
   const resolved = resolveLanguageDisplayName(raw) || raw;
   return normalizeTargetLanguageForPrompt(resolved);
+}
+
+function getGeminiErrorMessage(error) {
+  const dataError = error?.response?.data?.error;
+  if (typeof dataError === 'string') {
+    return dataError;
+  }
+  if (dataError && typeof dataError === 'object') {
+    return dataError.message || JSON.stringify(dataError);
+  }
+  return String(error?.response?.data?.message || error?.message || '');
+}
+
+function isGeminiAuthFailure(error) {
+  const status = error?.response?.status || error?.statusCode;
+  if (status === 401 || status === 403) {
+    return true;
+  }
+  if (status !== 400) {
+    return false;
+  }
+
+  const message = getGeminiErrorMessage(error).toLowerCase();
+  return message.includes('api key') && (
+    message.includes('invalid') ||
+    message.includes('not valid') ||
+    message.includes('permission') ||
+    message.includes('authentication')
+  );
 }
 
 // Default translation prompt (base - thinking rules added conditionally)
@@ -35,7 +70,8 @@ Output ONLY the translated content, nothing else.`;
 
 class GeminiService {
   constructor(apiKey, model = '', advancedSettings = {}) {
-    this.apiKey = apiKey;
+    this.apiKey = typeof apiKey === 'string' ? apiKey.trim() : apiKey;
+    this.authFailureCacheKey = getProviderAuthFailureCacheKey('gemini', this.apiKey);
     // Fallback to default if model not provided (config.js handles env var override)
     this.model = model || 'gemini-flash-lite-latest';
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
@@ -144,6 +180,11 @@ class GeminiService {
    */
   async getAvailableModels(options = {}) {
     const silent = !!options.silent;
+    if (await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+      log.warn(() => '[Gemini] Fetch models blocked: cached invalid API key detected');
+      return [];
+    }
+
     try {
       const response = await axios.get(`${this.baseUrl}/models`, {
         // Use header form for API key to avoid query parsing/proxy quirks
@@ -166,9 +207,13 @@ class GeminiService {
           maxTokens: model.inputTokenLimit || 30000
         }));
 
+      await clearCachedProviderAuthFailure(this.authFailureCacheKey);
       return models;
 
     } catch (error) {
+      if (isGeminiAuthFailure(error)) {
+        await cacheProviderAuthFailure(this.authFailureCacheKey);
+      }
       if (!silent) {
         // Log response details to help diagnose issues when not in config UI
         logApiError(error, 'Gemini', 'Fetch models', { skipResponseData: true });
@@ -986,3 +1031,7 @@ const universalReasoningChain = '';
 
 module.exports = GeminiService;
 module.exports.DEFAULT_TRANSLATION_PROMPT = DEFAULT_TRANSLATION_PROMPT;
+module.exports.__testing = {
+  getGeminiErrorMessage,
+  isGeminiAuthFailure
+};

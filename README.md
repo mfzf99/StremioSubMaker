@@ -248,7 +248,7 @@ Click the **Reset** button at the bottom of the config page.
 ---
 
 <p align="center">
-  <b>SubMaker</b> — Watch anything. Understand everything. Any language.<br/>
+  <b>SubMaker</b> — Watch anything. Understand everything.<br/>
   <sub>Made with ❤️ for the Stremio community</sub>
 </p>
 
