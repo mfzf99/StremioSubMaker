@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}. Maintain natural dialogue flow for ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}.`,
+  primary: (targetLabel) => `You are an expert subtitle localizer. Translate into appropriate colloquialisms for ${targetLabel}.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}. Maintain natural dialogue flow for ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}.`
+ fallback: (targetLabel) => `You are an expert subtitle localizer. Translate into appropriate colloquialisms for ${targetLabel}.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
