@@ -1492,13 +1492,64 @@ class TranslationEngine {
                 // TIER 2: Ugut Manja (Header sahaja)
                 finalPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTICIOUS\n\n${pendingPrompt}`;
             } else if (stage === 2) {
-                // TIER 3: Censor Keras (Tukar prompt & Mask words)
+                // TIER 3: Censor Keras (Tukar prompt & Mask words dengan Kamus Gergasi)
                 const targetLabelForFallback = normalizeTargetLanguageForPrompt(targetLanguage);
                 const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback);
                 const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback);
 
+                // 🚀 KAMUS SENSOR GERGASI (Kalis Semua Genre: Aksi, Seram, Drama Matang)
                 const maskToxicWords = (text) => {
                   return String(text)
+                    // --- Kategori Seksual / Cabul / Penderaan (Sensitiviti Tinggi Google) ---
+                    .replace(/sexual harassment/gi, 'severe misconduct')
+                    .replace(/sexual assault/gi, 'physical conflict')
+                    .replace(/sexual abuse/gi, 'mistreatment')
+                    .replace(/sexual predator/gi, 'dangerous person')
+                    .replace(/sexual(ly)?/gi, 'inappropriate')
+                    .replace(/grop(e|ed|ing)/gi, 'touch$1 inappropriately')
+                    .replace(/molest(ed|ing)?/gi, 'abuse$1')
+                    .replace(/incest/gi, 'inappropriate relationship')
+                    .replace(/pedophil(e|ia)/gi, 'bad criminal')
+                    .replace(/rape(d|ing|st)?/gi, 'harm$1')
+                    .replace(/prostitut(e|ion)/gi, 'escort')
+                    
+                    // --- Kategori Bunuh Diri / Sifat Mencederakan Diri ---
+                    .replace(/suicid(e|al)/gi, 'fatal tragedy')
+                    .replace(/kill myself/gi, 'end my journey')
+                    .replace(/want to die/gi, 'feel very down')
+                    .replace(/slit my wrists/gi, 'harm myself')
+                    .replace(/hang myself/gi, 'harm myself')
+                    .replace(/overdos(e|ed|ing)/gi, 'medical emergency')
+                    
+                    // --- Kategori Keganasan Ekstrem / Senjata / Perang ---
+                    .replace(/bomb(s|ed|ing|er)?/gi, 'device$1')
+                    .replace(/terrorist(s|m)?/gi, 'hostile agent$1')
+                    .replace(/hostage(s)?/gi, 'captive$1')
+                    .replace(/tortur(e|ed|ing)/gi, 'mistreat$1')
+                    .replace(/massacr(e|ed)/gi, 'tragedy')
+                    .replace(/slaughter(ed|ing)?/gi, 'destroy$1')
+                    .replace(/assassin(ate|ated|ation)?/gi, 'eliminate$1')
+                    .replace(/kill(ed|ing|er)?/gi, 'eliminate$1')
+                    .replace(/murder(ed|ing|er)?/gi, 'destroy$1')
+                    .replace(/decapitat(e|ed|ion)/gi, 'attack')
+                    .replace(/execute(d|ing|ion)/gi, 'terminate$1')
+                    
+                    // --- Kategori Dadah / Bahan Terlarang ---
+                    .replace(/(cocaine|heroin|meth|fentanyl|marijuana|weed)/gi, 'substance')
+                    .replace(/drug dealer/gi, 'illegal trader')
+                    
+                    // --- Kategori Carutan / Makian Kasar Semesta ---
+                    .replace(/motherfucker/gi, 'jerk')
+                    .replace(/fucking/gi, 'very')
+                    .replace(/fuck(ed|ing|er)?/gi, 'damn')
+                    .replace(/bitch(es)?/gi, 'jerk$1')
+                    .replace(/bastard(s)?/gi, 'scoundrel$1')
+                    .replace(/asshole(s)?/gi, 'fool$1')
+                    .replace(/whore(s)?|slut(s)?/gi, 'companion$1')
+                    .replace(/cunt(s)?|dick(s)?|pussy/gi, 'jerk')
+                    .replace(/shit(ted|ting)?/gi, 'crap')
+                    
+                    // --- Pengekalan Penapis Asal (Context Safe Guard) ---
                     .replace(/younger men/gi, 'younger adults')
                     .replace(/younger women/gi, 'younger adults')
                     .replace(/quiet room/gi, 'meeting room')
@@ -1507,21 +1558,6 @@ class TranslationEngine {
                     .replace(/\bkid\b/gi, 'young adult')
                     .replace(/\bboy\b/gi, 'young man')
                     .replace(/\bgirl\b/gi, 'young woman')
-                    .replace(/sexual harassment/gi, 'severe misconduct')
-                    .replace(/sexual predator/gi, 'dangerous person')
-                    .replace(/sexual/gi, 'inappropriate')
-                    .replace(/predator/gi, 'attacker')
-                    .replace(/groping/gi, 'inappropriate touching')
-                    .replace(/harassment/gi, 'bothering')
-                    .replace(/bitch/gi, 'jerk')
-                    .replace(/bastard/gi, 'scoundrel')
-                    .replace(/rape/gi, 'terrible crime')
-                    .replace(/suicide/gi, 'fatal tragedy')
-                    .replace(/fuck/gi, 'damn')
-                    .replace(/shit/gi, 'crap')
-                    .replace(/kill/gi, 'eliminate')
-                    .replace(/murder/gi, 'destroy')
-                    .replace(/assault/gi, 'physical conflict')
                     .replace(/grabbed/gi, 'pulled')
                     .replace(/accusing/gi, 'blaming')
                     .replace(/accused/gi, 'blamed')
