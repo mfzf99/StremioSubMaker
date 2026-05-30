@@ -2135,8 +2135,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
-   * Each entry is a {"id": N, "text": "..."} object.
-   * Context (when enabled) is wrapped in a separate __context key.
+   * [SIMETRI MUTLAK XML]: Mengekalkan Global ID (entry.id) asal untuk keselarasan sejagat.
    */
   _prepareJsonBatchContent(batch, context = null) {
     let result = {};
@@ -2148,9 +2147,8 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
       })).filter(m => m.translation);
     }
 
-    // 🚨 KUNCI: Gunakan i + 1 untuk local array indexing yang stabil bagi JSON workflow
-    result.entries_to_translate = batch.map((entry, i) => ({
-      id: i + 1, 
+    result.entries_to_translate = batch.map((entry) => ({
+      id: entry.id, // 🚨 Kekal Global ID fail srt (contoh: 81, 82, 83)
       text: entry.text.trim().replace(/\n+/g, ' [br] ')
     }));
 
@@ -2159,29 +2157,31 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 
   /**
    * Build a translation prompt for the 'json' workflow.
-   * Input is JSON, output must be JSON — no format ambiguity.
+   * [SIMETRI MUTLAK XML]: Scan startId/endId secara dinamik dan pancing pakai sauh Global ID.
    */
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    // Sentiasa sauhkan dari 1 untuk pemformatan array JSON tempatan
-    const startId = '1';
+    let startId = 'START';
+    let endId = 'END';
 
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
-
-    let contextInstructions = '';
-    if (context?.previousMemory?.length > 0) {
-      contextInstructions = `
-CONTEXT PROVIDED:
-- The input includes a "previous_translation_memory" array with preceding lines for reference.
-- Use context to understand dialogue flow, character names, and consistency.
-- DO NOT include previous_translation_memory in your output — translate ONLY the "entries_to_translate" array.
-
-`;
+    // 🚨 LANGKAH XML 1: Halang baca ID dari memori, fokus pada entries_to_translate sahaja
+    let targetSection = batchText;
+    if (batchText.includes('"entries_to_translate":')) {
+      targetSection = batchText.split('"entries_to_translate":')[1];
     }
 
+    // 🚨 LANGKAH XML 2: Ekstrak Global ID pertama dan terakhir menggunakan Regex Scanner
+    const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
+    startId = idMatches.length > 0 ? idMatches[0] : '1';
+    endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
+
+    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE UTAMA 🛑
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
+
+    // 🚨 LANGKAH XML 3: Bentuk tubuh prompt yang bersih tanpa berleter pasal context
     const promptBody = `${introInstruction}
-${contextInstructions}
+
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. ISOLATED BOX LAW (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
@@ -2190,21 +2190,23 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    NEVER complete a sentence by stealing words from the next ID.
 
    ✅ CORRECT:
-   IN:  [{"id": 1, "text": "I really want to"}, {"id": 2, "text": "go home now."}]
-   OUT: [{"id": 1, "text": "Saya betul-betul nak"}, {"id": 2, "text": "balik rumah sekarang."}]
+   IN:  [{"id": ${startId}, "text": "I really want to"}, {"id": ${parseInt(startId)+1}, "text": "go home now."}]
+   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak"}, {"id": ${parseInt(startId)+1}, "text": "balik rumah sekarang."}]
 
    ❌ CATASTROPHICALLY WRONG:
-   OUT: [{"id": 1, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": 2, "text": "."}]
+   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId)+1}, "text": "."}]
 
 2. ESCAPE HATCH: If you cannot translate, or the "text" field contains ONLY 
    symbols/music notes — copy the EXACT ORIGINAL TEXT for that ID. 
    NEVER shift any remaining entry.
 
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order from 1 to ${expectedCount}. 
+3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
+   Output IDs MUST match input IDs exactly from id: ${startId}. 
    Never fill gaps, reorder, or invent an ID not in the input.
 
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries (id: 1 to id: ${expectedCount}). 
-   NEVER fabricate content — use Rule 2 instead.
+4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   (id: ${startId} to id: ${endId}). NEVER fabricate content — use 
+   Rule 2 instead.
 
 5. FORMAT: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
    Ensure JSON is strictly valid: escape double quotes with backslash (\\") and use \\n for line breaks. 
@@ -2225,7 +2227,7 @@ ${batchText}
 
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
-[{"id":1,"text":`;
+[{"id":${startId},"text":`; // 🚨 SAUH PANCINGAN: Paksa AI kunci mata pada Global ID pertama!
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
