@@ -2135,7 +2135,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
-   * [SIMETRI MUTLAK XML]: Mengekalkan Global ID (entry.id) asal untuk keselarasan sejagat.
+   * [GLOBAL ID UNIFIED]: Mengekalkan entry.id asal untuk keselarasan sejagat dengan XML.
    */
   _prepareJsonBatchContent(batch, context = null) {
     let result = {};
@@ -2148,7 +2148,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
     }
 
     result.entries_to_translate = batch.map((entry) => ({
-      id: entry.id, // 🚨 Kekal Global ID fail srt (contoh: 81, 82, 83)
+      id: entry.id, // 🚨 KUNCI MUTLAK: Gunakan Global ID asal srt, buang sistem local (i + 1)
       text: entry.text.trim().replace(/\n+/g, ' [br] ')
     }));
 
@@ -2157,7 +2157,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 
   /**
    * Build a translation prompt for the 'json' workflow.
-   * [SIMETRI MUTLAK XML]: Scan startId/endId secara dinamik dan pancing pakai sauh Global ID.
+   * [GLOBAL ID UNIFIED]: Dinamik mengikut skalan ID global srt dan sauh pancingan ketat.
    */
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
@@ -2171,15 +2171,13 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
       targetSection = batchText.split('"entries_to_translate":')[1];
     }
 
-    // 🚨 LANGKAH XML 2: Ekstrak Global ID pertama dan terakhir menggunakan Regex Scanner
+    // 🚨 LANGKAH XML 2: Ekstrak Global ID pertama dan terakhir secara dinamik menggunakan Regex Scanner
     const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
     startId = idMatches.length > 0 ? idMatches[0] : '1';
     endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
 
-    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE UTAMA 🛑
     const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
 
-    // 🚨 LANGKAH XML 3: Bentuk tubuh prompt yang bersih tanpa berleter pasal context
     const promptBody = `${introInstruction}
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
@@ -2190,11 +2188,11 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    NEVER complete a sentence by stealing words from the next ID.
 
    ✅ CORRECT:
-   IN:  [{"id": ${startId}, "text": "I really want to"}, {"id": ${parseInt(startId)+1}, "text": "go home now."}]
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak"}, {"id": ${parseInt(startId)+1}, "text": "balik rumah sekarang."}]
+   IN:  [{"id": ${startId}, "text": "I really want to"}, {"id": ${parseInt(startId) + 1}, "text": "go home now."}]
+   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak"}, {"id": ${parseInt(startId) + 1}, "text": "balik rumah sekarang."}]
 
    ❌ CATASTROPHICALLY WRONG:
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId)+1}, "text": "."}]
+   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId) + 1}, "text": "."}]
 
 2. ESCAPE HATCH: If you cannot translate, or the "text" field contains ONLY 
    symbols/music notes — copy the EXACT ORIGINAL TEXT for that ID. 
@@ -2227,7 +2225,7 @@ ${batchText}
 
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
-[{"id":${startId},"text":`; // 🚨 SAUH PANCINGAN: Paksa AI kunci mata pada Global ID pertama!
+[{"id":${startId},"text":`; // 🚨 SAUH PANCINGAN: Paksa AI bermula terus dengan Global ID pertama!
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
@@ -2381,23 +2379,18 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
 
   /**
    * Parse JSON structured output response
-   * [UPGRADED]: Menggunakan Global ID Map untuk memetakan ID terus ke kedudukan index asal,
-   * kebal daripada ralat index shifting, halusinasi baris, dan penyinggiran teks.
+   * [GLOBAL ID UNIFIED]: Menggunakan perisai Global ID Map yang sekufu dengan logik XML tags parser.
    */
   parseJsonResponse(translatedText, expectedCount, batch = []) {
     try {
       let cleaned = String(translatedText || '').trim();
 
-      // 🚨 PANCINGAN UTAMA: Jika AI menyambung terus dari partial pre-fill array tanpa '[', jahit semula
       if (!cleaned.startsWith('[')) {
         const startId = batch && batch.length > 0 ? batch[0].id : '1';
         cleaned = `[{"id":${startId},"text":` + cleaned;
       }
 
-      // Bersihkan markdown code blocks jika terlepas masuk
       cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-      
-      // Cari kedudukan sempadan payload JSON array
       const arrayStart = cleaned.indexOf('[');
       const arrayEnd = cleaned.lastIndexOf(']');
       if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
@@ -2407,16 +2400,12 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
       }
 
       let parsed = null;
-
-      // Cubaan 1: Direct JSON.parse
       try {
         parsed = JSON.parse(cleaned);
       } catch (_directErr) {
-        // Cubaan 2: Pembaikan ralat struktur tanda koma/newline lewah oleh LLM
         parsed = this.repairAndParseJson(cleaned);
       }
 
-      // Cubaan 3: Jika gagal parse keseluruhan array, ekstrak unit objek menggunakan regex parser
       if (!parsed) {
         const extracted = this.extractJsonEntries(cleaned);
         if (extracted && extracted.length > 0) {
@@ -2424,7 +2413,6 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
         }
       }
 
-      // Kupas dari sampul envelope jika objek dibalut kunci entries_to_translate / entries
       if (!Array.isArray(parsed) && parsed && typeof parsed === 'object') {
         if (Array.isArray(parsed.entries_to_translate)) {
           parsed = parsed.entries_to_translate;
@@ -2434,7 +2422,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
       }
       if (!Array.isArray(parsed)) return null;
 
-      // 🛡️ PERISAI KEBALAN GLOBAL ID: Bina Peta ID daripada batch asal filem
+      // 🛡️ PERISAI GLOBAL ID: Petakan Global ID srt asal ke index tempatan batch
       const validIds = new Map();
       if (batch && batch.length > 0) {
         batch.forEach((entry, idx) => {
@@ -2444,12 +2432,14 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
 
       const entriesMap = new Map();
       for (const item of parsed) {
-        if (item && typeof item.id === 'number' && typeof item.text === 'string') {
+        if (item && (typeof item.id === 'number' || typeof item.id === 'string') && typeof item.text === 'string') {
+          const numericId = parseInt(item.id, 10);
+          if (Number.isNaN(numericId)) continue;
+
+          // Cari padanan ID global yang sah sahaja (Menepis halusinasi AI)
           if (validIds.size > 0) {
-            // Jika ID sepadan dengan ID asal fail srt, kunci masuk kedudukan indeks tempatan
-            if (validIds.has(item.id)) {
-              const localIndex = validIds.get(item.id);
-              // Hanya simpan entri kejadian pertama untuk hapus isu data duplikat secara automatik
+            if (validIds.has(numericId)) {
+              const localIndex = validIds.get(numericId);
               if (!entriesMap.has(localIndex)) {
                 entriesMap.set(localIndex, {
                   index: localIndex,
@@ -2458,8 +2448,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
               }
             }
           } else {
-            // Fallback asas sekiranya array batch tidak dibekalkan
-            const index = item.id >= 1 ? item.id - 1 : 0;
+            const index = numericId >= 1 ? numericId - 1 : 0;
             entriesMap.set(index, { index, text: item.text.trim() });
           }
         }
