@@ -2139,20 +2139,21 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
    * Context (when enabled) is wrapped in a separate __context key.
    */
   _prepareJsonBatchContent(batch, context = null) {
-    const entries = batch.map((entry, i) => ({
-      id: i + 1,
-      text: entry.text.trim().replace(/\n+/g, '\n')
-    }));
+    let result = {};
 
-    // Include context as structured metadata when provided
-    if (context?.surroundingOriginal?.length > 0) {
-      const ctx = {
-        preceding: context.surroundingOriginal.map(e => e.text.trim().replace(/\n+/g, '\n'))
-      };
-      return JSON.stringify({ __context: ctx, entries }, null, 0);
+    if (context?.previousMemory?.length > 0) {
+      result.previous_translation_memory = context.previousMemory.map((entry) => ({
+        id: entry.id,
+        translation: entry.translation ? entry.translation.trim().replace(/\n+/g, ' [br] ') : ''
+      })).filter(m => m.translation);
     }
 
-    return JSON.stringify(entries, null, 0);
+    result.entries_to_translate = batch.map((entry) => ({
+      id: entry.id, 
+      text: entry.text.trim().replace(/\n+/g, ' [br] ')
+    }));
+
+    return JSON.stringify(result, null, 0);
   }
 
   /**
