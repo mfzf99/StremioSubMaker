@@ -2379,82 +2379,91 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
 
   /**
    * Parse JSON structured output response
-   * Expects: [{"id": 1, "text": "translated"}, ...]
-   * Includes repair logic for common LLM JSON mistakes.
+   * [UPGRADED]: Menggunakan Global ID Map untuk memetakan ID terus ke kedudukan index asal,
+   * kebal daripada ralat index shifting, halusinasi baris, dan penyinggiran teks.
    */
-  parseJsonResponse(translatedText, expectedCount) {
+  parseJsonResponse(translatedText, expectedCount, batch = []) {
     try {
       let cleaned = String(translatedText || '').trim();
-      // Remove markdown code blocks
+
+      // 🚨 PANCINGAN UTAMA: Jika AI menyambung terus dari partial pre-fill array tanpa '[', jahit semula
+      if (!cleaned.startsWith('[')) {
+        const startId = batch && batch.length > 0 ? batch[0].id : '1';
+        cleaned = `[{"id":${startId},"text":` + cleaned;
+      }
+
+      // Bersihkan markdown code blocks jika terlepas masuk
       cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-      // Find JSON payload in the response. Prefer array form; accept object envelope.
+      
+      // Cari kedudukan sempadan payload JSON array
       const arrayStart = cleaned.indexOf('[');
       const arrayEnd = cleaned.lastIndexOf(']');
       if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
         cleaned = cleaned.slice(arrayStart, arrayEnd + 1);
       } else {
-        const objectStart = cleaned.indexOf('{');
-        const objectEnd = cleaned.lastIndexOf('}');
-        if (objectStart === -1 || objectEnd === -1 || objectEnd <= objectStart) {
-          return null;
-        }
-        cleaned = cleaned.slice(objectStart, objectEnd + 1);
+        return null;
       }
 
       let parsed = null;
 
-      // Attempt 1: direct parse
+      // Cubaan 1: Direct JSON.parse
       try {
         parsed = JSON.parse(cleaned);
       } catch (_directErr) {
-        // Attempt 2: repair common LLM JSON mistakes and retry
+        // Cubaan 2: Pembaikan ralat struktur tanda koma/newline lewah oleh LLM
         parsed = this.repairAndParseJson(cleaned);
       }
 
-      // Attempt 3: if full-array parse failed, extract individual objects via regex
+      // Cubaan 3: Jika gagal parse keseluruhan array, ekstrak unit objek menggunakan regex parser
       if (!parsed) {
         const extracted = this.extractJsonEntries(cleaned);
         if (extracted && extracted.length > 0) {
-          log.debug(() => `[TranslationEngine] JSON repair: extracted ${extracted.length} entries via regex fallback`);
           parsed = extracted;
         }
       }
 
+      // Kupas dari sampul envelope jika objek dibalut kunci entries_to_translate / entries
       if (!Array.isArray(parsed) && parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.entries)) {
+        if (Array.isArray(parsed.entries_to_translate)) {
+          parsed = parsed.entries_to_translate;
+        } else if (Array.isArray(parsed.entries)) {
           parsed = parsed.entries;
-        } else if (Array.isArray(parsed.items)) {
-          parsed = parsed.items;
-        } else if (Array.isArray(parsed.data)) {
-          parsed = parsed.data;
         }
       }
       if (!Array.isArray(parsed)) return null;
 
-      const entries = [];
+      // 🛡️ PERISAI KEBALAN GLOBAL ID: Bina Peta ID daripada batch asal filem
+      const validIds = new Map();
+      if (batch && batch.length > 0) {
+        batch.forEach((entry, idx) => {
+          validIds.set(entry.id, idx);
+        });
+      }
+
+      const entriesMap = new Map();
       for (const item of parsed) {
         if (item && typeof item.id === 'number' && typeof item.text === 'string') {
-          // Accept both 0-indexed and 1-indexed IDs from the model
-          const index = item.id >= 1 ? item.id - 1 : (item.id === 0 ? 0 : -1);
-          if (index >= 0) {
-            entries.push({
-              index,
-              text: item.text.trim()
-            });
+          if (validIds.size > 0) {
+            // Jika ID sepadan dengan ID asal fail srt, kunci masuk kedudukan indeks tempatan
+            if (validIds.has(item.id)) {
+              const localIndex = validIds.get(item.id);
+              // Hanya simpan entri kejadian pertama untuk hapus isu data duplikat secara automatik
+              if (!entriesMap.has(localIndex)) {
+                entriesMap.set(localIndex, {
+                  index: localIndex,
+                  text: item.text.trim()
+                });
+              }
+            }
+          } else {
+            // Fallback asas sekiranya array batch tidak dibekalkan
+            const index = item.id >= 1 ? item.id - 1 : 0;
+            entriesMap.set(index, { index, text: item.text.trim() });
           }
         }
       }
 
-      entries.sort((a, b) => a.index - b.index);
-
-      if (entries.length === 0) return null;
-
-      // Warn if the count doesn't match expectations (helps diagnose issues early)
-      if (expectedCount && entries.length !== expectedCount) {
-        log.debug(() => `[TranslationEngine] JSON response entry count: ${entries.length}, expected: ${expectedCount}`);
-      }
-
-      return entries;
+      return Array.from(entriesMap.values()).sort((a, b) => a.index - b.index);
     } catch (err) {
       log.debug(() => `[TranslationEngine] JSON response parse error: ${err.message}`);
       return null;
