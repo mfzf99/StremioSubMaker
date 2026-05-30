@@ -2163,45 +2163,70 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let contextInstructions = '';
-    if (context?.surroundingOriginal?.length > 0) {
-      contextInstructions = `
-CONTEXT PROVIDED:
-- The input includes a "__context" object with the preceding original source text
-- Use context to understand dialogue flow, character names, and consistency
-- DO NOT include __context in your output — translate ONLY the "entries" array
+    let startId = '1';
+    let endId = expectedCount;
 
-`;
+    let targetSection = batchText;
+    if (batchText.includes('"entries_to_translate":')) {
+      targetSection = batchText.split('"entries_to_translate":')[1];
     }
 
-    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the "text" field of each entry into ${targetLabel}
-2. Preserve the "id" field exactly as given with no modification
-3. Return EXACTLY ${expectedCount} entries
-4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
-5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
-6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
+    const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
+    startId = idMatches.length > 0 ? idMatches[0] : '1';
+    endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
 
-TRANSLATION STYLE:
-1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
-2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
-3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
-4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
-5. Preserve any existing formatting tags
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
+    const promptBody = `${introInstruction}
 
-YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
-Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-INPUT (${expectedCount} entries):
+1. ISOLATED BOX LAW (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
+   sealed container. Translate ONLY its own "text" field — in TOTAL ISOLATION. 
+   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
+   NEVER complete a sentence by stealing words from the next ID.
 
+   ✅ CORRECT:
+   IN:  [{"id": 45, "text": "I really want to"}, {"id": 46, "text": "go home now."}]
+   OUT: [{"id": 45, "text": "Saya betul-betul nak"}, {"id": 46, "text": "balik rumah sekarang."}]
+
+   ❌ CATASTROPHICALLY WRONG:
+   OUT: [{"id": 45, "text": "Saya betul-2 nak balik rumah sekarang."}, {"id": 46, "text": "."}]
+
+2. ESCAPE HATCH: If you cannot translate, or the "text" field contains ONLY 
+   symbols/music notes — copy the EXACT ORIGINAL TEXT for that ID. 
+   NEVER shift any remaining entry.
+
+3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
+   Output IDs MUST match input IDs exactly from ID_${startId}. 
+   Non-sequential input = non-sequential output. Never fill gaps or 
+   invent an ID not in the input.
+
+4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   (ID_${startId} to ID_${endId}). NEVER fabricate content — use 
+   Rule 2 instead.
+
+5. FORMAT: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
+   Ensure JSON is strictly valid: escape double quotes with backslash (\\") and use \\n for line breaks. 
+   No trailing commas. Do NOT wrap in \`\`\`json markdown code blocks.
+
+6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
+   inline tag MUST be preserved in the translation — same position, 
+   same structure, unchanged. Speaker dashes (-) MUST also be preserved 
+   exactly as they appear in the source.
+
+7. CLEAN OUTPUT: Response MUST start immediately with the opening bracket '[' of the JSON array. 
+   NO preamble, NO markdown, NO commentary — before, between, or after entries. 
+   Every translated word MUST be inside its corresponding object.
+
+<input>
 ${batchText}
+</input>
 
-OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
+[{"id":${startId},"text":`;
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
