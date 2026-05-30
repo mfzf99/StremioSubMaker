@@ -2465,11 +2465,15 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
    * Attempt to repair common LLM JSON mistakes and parse.
    * Handles: trailing commas, missing commas between objects, unescaped newlines in strings,
    * single quotes instead of double quotes, unescaped control characters.
+   * [UPGRADED]: Ditambah Perisai Magis untuk mencantas lambakan tanda petik lewah akibat kes petik bersarang.
    * @returns {Array|null}
    */
   repairAndParseJson(jsonStr) {
     try {
       let repaired = jsonStr;
+
+      // 🛡️ PERISAI MAGIS: Cari lambakan tanda petik berkembar yang tidak sah di hujung string (contoh: ""粉" atau """}) dan runtuhkan jadi satu ketul " sahaja
+      repaired = repaired.replace(/(?<!\\)"{2,}(?=\s*[,\]\}])/g, '"');
 
       // Fix unescaped newlines/tabs inside string values (between quotes)
       // Replace literal newlines/tabs inside JSON strings with escaped versions
