@@ -2148,8 +2148,9 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
       })).filter(m => m.translation);
     }
 
-    result.entries_to_translate = batch.map((entry) => ({
-      id: entry.id, 
+    // 🚨 KUNCI: Gunakan i + 1 untuk local array indexing yang stabil bagi JSON workflow
+    result.entries_to_translate = batch.map((entry, i) => ({
+      id: i + 1, 
       text: entry.text.trim().replace(/\n+/g, ' [br] ')
     }));
 
@@ -2163,22 +2164,24 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = '1';
-    let endId = expectedCount;
-
-    let targetSection = batchText;
-    if (batchText.includes('"entries_to_translate":')) {
-      targetSection = batchText.split('"entries_to_translate":')[1];
-    }
-
-    const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
-    startId = idMatches.length > 0 ? idMatches[0] : '1';
-    endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
+    // Sentiasa sauhkan dari 1 untuk pemformatan array JSON tempatan
+    const startId = '1';
 
     const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
 
-    const promptBody = `${introInstruction}
+    let contextInstructions = '';
+    if (context?.previousMemory?.length > 0) {
+      contextInstructions = `
+CONTEXT PROVIDED:
+- The input includes a "previous_translation_memory" array with preceding lines for reference.
+- Use context to understand dialogue flow, character names, and consistency.
+- DO NOT include previous_translation_memory in your output — translate ONLY the "entries_to_translate" array.
 
+`;
+    }
+
+    const promptBody = `${introInstruction}
+${contextInstructions}
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. ISOLATED BOX LAW (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
@@ -2187,24 +2190,21 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    NEVER complete a sentence by stealing words from the next ID.
 
    ✅ CORRECT:
-   IN:  [{"id": 45, "text": "I really want to"}, {"id": 46, "text": "go home now."}]
-   OUT: [{"id": 45, "text": "Saya betul-betul nak"}, {"id": 46, "text": "balik rumah sekarang."}]
+   IN:  [{"id": 1, "text": "I really want to"}, {"id": 2, "text": "go home now."}]
+   OUT: [{"id": 1, "text": "Saya betul-betul nak"}, {"id": 2, "text": "balik rumah sekarang."}]
 
    ❌ CATASTROPHICALLY WRONG:
-   OUT: [{"id": 45, "text": "Saya betul-2 nak balik rumah sekarang."}, {"id": 46, "text": "."}]
+   OUT: [{"id": 1, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": 2, "text": "."}]
 
 2. ESCAPE HATCH: If you cannot translate, or the "text" field contains ONLY 
    symbols/music notes — copy the EXACT ORIGINAL TEXT for that ID. 
    NEVER shift any remaining entry.
 
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly from ID_${startId}. 
-   Non-sequential input = non-sequential output. Never fill gaps or 
-   invent an ID not in the input.
+3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order from 1 to ${expectedCount}. 
+   Never fill gaps, reorder, or invent an ID not in the input.
 
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (ID_${startId} to ID_${endId}). NEVER fabricate content — use 
-   Rule 2 instead.
+4. EXACT COUNT: Output EXACTLY ${expectedCount} entries (id: 1 to id: ${expectedCount}). 
+   NEVER fabricate content — use Rule 2 instead.
 
 5. FORMAT: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
    Ensure JSON is strictly valid: escape double quotes with backslash (\\") and use \\n for line breaks. 
@@ -2225,7 +2225,7 @@ ${batchText}
 
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
-[{"id":${startId},"text":`;
+[{"id":1,"text":`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
