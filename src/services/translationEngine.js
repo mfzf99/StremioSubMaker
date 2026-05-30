@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms over literal word-for-word translation. Allow common loanwords. Default to 'saya'/'awak'. Do not assume titles or genders unless explicitly stated.`,
+  primary: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms over literal word-for-word translation. Allow common loanwords.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms over literal word-for-word translation. Allow common loanwords. Default to 'saya'/'awak'. Do not assume titles or genders unless explicitly stated.`
+ fallback: (targetLabel) => `You are a professional subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms over literal word-for-word translation. Allow common loanwords.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
