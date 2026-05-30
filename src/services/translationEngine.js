@@ -2695,13 +2695,25 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     let parsedEntries = [];
 
     if (this.translationWorkflow === 'json') {
-      const rawCleaned = String(partialText).trim()
+      let rawCleaned = String(partialText).trim()
         .replace(/```json\s*/gi, '').replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
+      
+      if (!rawCleaned.startsWith('[') && originalBatch && originalBatch.length > 0) {
+        const startId = originalBatch[0].id;
+        rawCleaned = `{"id":${startId},"text":` + rawCleaned;
+      }
+
       const extracted = this.extractJsonEntries(rawCleaned);
       if (extracted && extracted.length > 0) {
         parsedEntries = extracted.map(item => {
-          const index = item.id >= 1 ? item.id - 1 : (item.id === 0 ? 0 : -1);
-          return index >= 0 ? { index, text: String(item.text).trim() } : null;
+          const numericId = parseInt(item.id, 10);
+          if (Number.isNaN(numericId)) return null;
+
+          // Semak silang menggunakan Global ID map (Menghalang kemalangan streaming desync)
+          if (validIds.has(numericId)) {
+            return { index: validIds.get(numericId), text: String(item.text).trim() };
+          }
+          return null;
         }).filter(Boolean);
       }
     }
