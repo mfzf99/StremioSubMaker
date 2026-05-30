@@ -1282,7 +1282,7 @@ Translate to {target_language}.`;
                 topP: 0.95,
                 topK: 40,
                 enableBatchContext: false, // Include original surrounding context and previous translations
-                contextSize: 5, // Number of preceding original entries to include as context
+                contextSize: 10, // Number of preceding original entries to include as context
                 sendTimestampsToAI: false, // Let AI handle timestamps directly
                 translationWorkflow: 'xml', // 'original', 'ai', 'xml', or 'json'
                 mismatchRetries: 3 // Retries when AI returns wrong entry count (0-3)
