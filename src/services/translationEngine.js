@@ -130,12 +130,12 @@ function getBatchSizeForModel(model) {
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 250;
+    return 100;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 250;
+    return 200;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
@@ -209,7 +209,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 250;
+    const JSON_MAX_BATCH_SIZE = 200;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
