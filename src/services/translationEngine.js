@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use 'saya' for 'I' and 'awak' for 'you'.`,
+  primary: (targetLabel) => `Translate into appropriate colloquialisms that reflects authentic spoken dialogue for ${targetLabel}. Use 'saya' for 'I' and 'awak' for 'you'.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into appropriate colloquialisms for ${targetLabel}. Use 'saya' for 'I' and 'awak' for 'you'.`
+ fallback: (targetLabel) => `Translate into appropriate colloquialisms that reflects authentic spoken dialogue for ${targetLabel}. Use 'saya' for 'I' and 'awak' for 'you'.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
