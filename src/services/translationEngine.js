@@ -1366,7 +1366,7 @@ class TranslationEngine {
             // Stats: count each failed retry as an additional rate-limit error
             this.translationStats.rateLimitErrors++;
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
-              this._recordKeyError(this.gemini.apiKey);
+              this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
             }
             log.warn(() => `[TranslationEngine] 429/503 key-rotation retry failed for batch ${batchIndex + 1} on attempt ${httpRetryAttempts}/${maxHttpRotationRetries}: ${retryError.message}`);
             if (!this._isRetryableHttpError(retryError)) {
@@ -1444,7 +1444,7 @@ class TranslationEngine {
           log.info(() => `[TranslationEngine] MAX_TOKENS retry succeeded for batch ${batchIndex + 1}`);
         } catch (retryError) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
-            this._recordKeyError(this.gemini.apiKey);
+            this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
           }
           // Retry also failed, give up and throw the original error
           log.warn(() => `[TranslationEngine] MAX_TOKENS retry also failed for batch ${batchIndex + 1}: ${retryError.message}`);
@@ -1615,7 +1615,7 @@ class TranslationEngine {
               break; // Berjaya! Terus keluar dari loop.
             } catch (retryError) {
               if (this.retryRotationEnabled && this.gemini?.apiKey) {
-                this._recordKeyError(this.gemini.apiKey);
+                this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
               }
               log.warn(() => `[TranslationEngine] Retry Stage ${stage} failed: ${retryError.message}`);
               currentError = retryError;
