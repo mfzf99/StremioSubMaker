@@ -336,14 +336,24 @@ class TranslationEngine {
   static KEY_HEALTH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
   
   /**
-   * Record an error for the current API key (distributed key health tracking).
+   * Record an error for the current API key (Dah dipasang Perisai Kunci Suci)
    * MULTI-INSTANCE FIX: Uses Redis via sharedCache for cross-pod state sharing.
    * Falls back to local Map if Redis is unavailable.
    * @param {string} apiKey - The key that errored
+   * @param {Error} error - Objek ralat untuk semakan silang jenis ralat (Suntikan Baru)
    * @returns {Promise<void>}
    */
-  async _recordKeyError(apiKey) {
+  async _recordKeyError(apiKey, error = null) {
     if (!this.retryRotationEnabled || !apiKey) return;
+
+    // 🛡️ PERISAI KUNCI SUCI: Kalau ralat sbb safety filter / kandungan terlarang, JANGAN HUKUM KEY NI!
+    if (error && error.message) {
+      const msg = String(error.message).toLowerCase();
+      if (msg.includes('prohibited_content') || msg.includes('safety') || msg.includes('recitation')) {
+        log.debug(() => `[TranslationEngine] 🛡️ Perisai aktif: Skip kuarantin untuk key ${this._redactKey(apiKey)} sbb ralat isu kandungan teks.`);
+        return; // Terus keluar, selamatkan key dari masuk lokap 1 jam!
+      }
+    }
 
     // Update local cache immediately for fast in-process lookups
     const now = Date.now();
