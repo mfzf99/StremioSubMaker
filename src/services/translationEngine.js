@@ -332,9 +332,9 @@ class TranslationEngine {
   /**
    * Key health tracking constants
    */
-  static KEY_HEALTH_ERROR_THRESHOLD = 5;
+  static KEY_HEALTH_ERROR_THRESHOLD = 1; // 🚀 TUKAR JADI 1! 1 kali ralat, terus masuk lokap 1 jam!
   static KEY_HEALTH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
-
+  
   /**
    * Record an error for the current API key (distributed key health tracking).
    * MULTI-INSTANCE FIX: Uses Redis via sharedCache for cross-pod state sharing.
