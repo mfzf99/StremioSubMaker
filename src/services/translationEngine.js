@@ -107,12 +107,6 @@ const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/
  * Priority: Environment variable > Model-specific > Default (250)
  *
  * Model-specific batch sizes are hardcoded in backend and safe from client manipulation.
- * Different models have different processing speeds and capabilities:
- * - Flash models: 250 entries (faster, more capable)
- * - Flash-lite models: 200 entries (more conservative for stability)
- *
- * @param {string} model - Gemini model name
- * @returns {number} - Batch size for this model
  */
 function getBatchSizeForModel(model) {
   // Environment variable override (highest priority)
@@ -123,14 +117,9 @@ function getBatchSizeForModel(model) {
   // Model-specific batch sizes (hardcoded, safe from client manipulation)
   const modelStr = String(model || '').toLowerCase();
 
-  // Gemini 3.0 Flash: Large context window, higher batch size for throughput
-  if (modelStr.includes('gemini-3-flash')) {
-    return 250;
-  }
-
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 100;
+    return 200;
   }
 
   // Flash-lite models: More conservative batch size for stability
@@ -138,8 +127,18 @@ function getBatchSizeForModel(model) {
     return 200;
   }
 
-  // Flash models (non-lite): Larger batch size for better throughput
+  // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
   if (modelStr.includes('flash')) {
+    // Sedut nombor versi (contoh: 'gemini-1.5-flash' -> 1.5, 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5)
+    const versionMatch = modelStr.match(/gemini-(\d+(?:\.\d+)?)/);
+    const geminiVersion = versionMatch ? parseFloat(versionMatch[1]) : 0;
+
+    // Versi 3.0 dan ke atas dapat batch size 400
+    if (geminiVersion >= 3.0) {
+      return 400;
+    }
+    
+    // Versi bawah 3.0 atau legacy Flash models kekal 250
     return 250;
   }
 
