@@ -1317,12 +1317,12 @@ class TranslationEngine {
     } : null;
 
     try {
-      translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);
-    } catch (error) {
-      // Track the error against the current key for health tracking
-      if (this.retryRotationEnabled && this.gemini?.apiKey) {
-        this._recordKeyError(this.gemini.apiKey);
-      }
+  translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);
+} catch (error) {
+  // Track the error against the current key for health tracking
+  if (this.retryRotationEnabled && this.gemini?.apiKey) {
+    this._recordKeyError(this.gemini.apiKey, error); // 🚀 Pasang 'error' kat sini!
+  }
 
       // If JSON structured mode itself appears unsupported by provider/model, immediately
       // retry this batch in XML mode for robust ID-based recovery.
