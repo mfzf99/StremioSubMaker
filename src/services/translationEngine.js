@@ -567,18 +567,22 @@ class TranslationEngine {
   }
 
   /**
-   * Check if an error is a retryable HTTP error (429 Too Many Requests or 503 Service Unavailable).
+   * Check if an error is a retryable HTTP error (Mod Ganas - 1 Strike Terus Rotate)
    * @param {Error} error
    * @returns {boolean}
    */
   _isRetryableHttpError(error) {
     if (!error) return false;
-    const msg = error.message || '';
+    const msg = String(error.message || '');
     const status = error.statusCode || error.status || error.response?.status || 0;
-    return status === 429 || status === 503 ||
+    
+    // 🚀 MOD GANAS: Janji ada status code ralat HTTP (4xx, 5xx) ATAU string ralat API/Network, terus paksa rotate key!
+    return status >= 400 || 
       msg.includes('429') || msg.includes('Too Many Requests') ||
       msg.includes('503') || msg.includes('Service Unavailable') ||
-      msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit');
+      msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit') ||
+      msg.includes('fetch failed') || msg.includes('network') ||
+      msg.includes('timeout');
   }
 
   _isStructuredOutputCapabilityError(error) {
