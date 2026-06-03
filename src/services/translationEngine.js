@@ -567,20 +567,26 @@ class TranslationEngine {
   }
 
   /**
-   * Check if an error is a retryable HTTP error (Mod Ganas - 1 Strike Terus Rotate)
+   * Check if an error is a retryable HTTP error (Mod Ganas + Perisai Prohibited Content)
    * @param {Error} error
    * @returns {boolean}
    */
   _isRetryableHttpError(error) {
     if (!error) return false;
-    const msg = String(error.message || '');
+    const msg = String(error.message || '').toLowerCase();
     const status = error.statusCode || error.status || error.response?.status || 0;
     
+    // 🛡️ PERISAI KHAS: Jangan hijack ralat Prohibited Content / Safety Filter!
+    // Jika ralat ada unsur sensitiviti, pulangkan false supaya litar 'else if' di bawah yang uruskan Stage 1 & 2.
+    if (msg.includes('prohibited_content') || msg.includes('safety') || msg.includes('recitation')) {
+      return false;
+    }
+
     // 🚀 MOD GANAS: Janji ada status code ralat HTTP (4xx, 5xx) ATAU string ralat API/Network, terus paksa rotate key!
     return status >= 400 || 
-      msg.includes('429') || msg.includes('Too Many Requests') ||
-      msg.includes('503') || msg.includes('Service Unavailable') ||
-      msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit') ||
+      msg.includes('429') || msg.includes('too many requests') ||
+      msg.includes('503') || msg.includes('service unavailable') ||
+      msg.includes('resource_exhausted') || msg.includes('rate limit') ||
       msg.includes('fetch failed') || msg.includes('network') ||
       msg.includes('timeout');
   }
