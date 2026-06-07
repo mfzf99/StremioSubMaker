@@ -2095,51 +2095,16 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Preserve any existing formatting tags
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
-   sealed container. Translate ONLY its own content — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
-   NEVER complete a sentence by stealing words from the next ID.
-
-   ✅ CORRECT:
-   IN:  <s id="45">I really want to</s>
-        <s id="46">go home now.</s>
-   OUT: <s id="45">Saya betul-betul nak</s>
-        <s id="46">balik rumah sekarang.</s>
-
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
-        <s id="46">.</s>
-
-   "Saya betul-betul nak" IS CORRECT — intentional fragment.
-   Completing it by stealing from the next ID DESTROYS sync permanently.
-
-2. ESCAPE HATCH: If you cannot translate, or the line contains ONLY 
-   symbols/music notes — copy the EXACT ORIGINAL TEXT for that ID. 
-   NEVER shift any remaining entry.
-
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly from ID_${startId}. 
-   Non-sequential input = non-sequential output. Never fill gaps or 
-   invent an ID not in the input.
-
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (ID_${startId} to ID_${endId}). NEVER fabricate content — use 
-   Rule 2 instead.
-
-5. FORMAT: <s id="45">translated text</s>
-   Use exact ID from input. Never write [original_id] or [N].
-
-6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
-   inline tag MUST be preserved in the translation — same position, 
-   same structure, unchanged. Speaker dashes (-) MUST also be preserved 
-   exactly as they appear in the source.
-
-7. CLEAN OUTPUT: Response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary — before, 
-   between, or after entries. Every translated word MUST be inside its 
-   corresponding tag. NOTHING floating outside.
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
 
 <input>
 ${batchText}
