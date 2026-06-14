@@ -44,24 +44,14 @@ function isSubDLAuthFailure(error) {
   }
 
   const message = getSubDLUpstreamMessage(error.response?.data, error.message || '').toLowerCase();
-  return (
-    message.includes('not authorized') ||
-    message.includes('unauthorized') ||
-    message.includes('invalid api') ||
-    message.includes('api key') ||
-    message.includes('authentication')
-  );
+  return message.includes('invalid api') || message.includes('invalid api key');
 }
 
-class SubDLService {
-  // Static/singleton axios client - shared across all instances for connection reuse
-  static client = axios.create({
+static client = axios.create({
     baseURL: SUBDL_API_URL,
     headers: {
-      'User-Agent': USER_AGENT,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Accept-Encoding': 'gzip, deflate, br'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json'
     },
     httpAgent,
     httpsAgent,
