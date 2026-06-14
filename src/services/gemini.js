@@ -743,17 +743,26 @@ const response = await axios.post(
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        const response = await axios.post(
-          `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
-          {
-            contents: [{
-              parts: [{
-                text: userPrompt
-              }]
-            }],
-            generationConfig,
-            safetySettings
-          },
+        // 🚀 INJECT: Ekstrak ID global pertama secara dinamik dari string pembungkusan JSON
+const firstIdMatch = String(subtitleContent || '').match(/"id"\s*:\s*(\d+)/);
+const dynamicStartId = firstIdMatch ? firstIdMatch[1] : "1";
+
+const response = await axios.post(
+  `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
+  {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: userPrompt }]
+      },
+      {
+        role: "model",
+        parts: [{ text: "Sure, I can help you with that.\n[{\"id\":" + dynamicStartId + ",\"text\":" }]
+      }
+    ],
+    generationConfig,
+    safetySettings
+  },
           {
             headers: {
               'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
