@@ -205,19 +205,36 @@ class SubDLService {
 
       log.debug(() => ['[SubDL] Searching with params:', JSON.stringify(redactSensitiveData(queryParams))]);
 
-      // Use providerTimeout from config if provided, otherwise use client default
-      const requestConfig = { params: queryParams };
-      if (providerTimeout) requestConfig.timeout = providerTimeout;
-      const response = await this.client.get('/subtitles', requestConfig);
+      // Sediakan konfigurasi parameter berasingan untuk Page 1 dan Page 2
+      const requestConfigPage1 = { params: { ...queryParams, page: 1 } };
+      const requestConfigPage2 = { params: { ...queryParams, page: 2 } };
 
-      if (!response.data || response.data.status !== true || !response.data.subtitles || response.data.subtitles.length === 0) {
+      if (providerTimeout) {
+        requestConfigPage1.timeout = providerTimeout;
+        requestConfigPage2.timeout = providerTimeout;
+      }
+
+      // Tembak API SubDL serentak secara asenkrong (Asynchronous Parallel Fetch)
+      const [responsePage1, responsePage2] = await Promise.all([
+        this.client.get('/subtitles', requestConfigPage1),
+        this.client.get('/subtitles', requestConfigPage2)
+      ]);
+
+      // Pastikan data respond wujud dan berbentuk array sebelum digabung secara selamat
+      const subsPage1 = (responsePage1.data && responsePage1.data.status === true && Array.isArray(responsePage1.data.subtitles)) ? responsePage1.data.subtitles : [];
+      const subsPage2 = (responsePage2.data && responsePage2.data.status === true && Array.isArray(responsePage2.data.subtitles)) ? responsePage2.data.subtitles : [];
+
+      // Gabungkan hasil tangkapan kedua-dua halaman menjadi satu array hibrid
+      const combinedSubtitles = [...subsPage1, ...subsPage2];
+
+      if (combinedSubtitles.length === 0) {
         log.debug(() => '[SubDL] No subtitles found in response');
         return [];
       }
 
       const effectiveSeason = season || 1;
 
-      let subtitles = response.data.subtitles.map(sub => {
+      let subtitles = combinedSubtitles.map(sub => {
         const originalLang = sub.lang || 'en';
         const normalizedLang = this.normalizeLanguageCode(originalLang);
 
