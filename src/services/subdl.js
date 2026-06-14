@@ -185,7 +185,7 @@ class SubDLService {
         api_key: this.apiKey,
         imdb_id: imdb_id,
         type: type,
-        subs_per_page: 100
+        subs_per_page: 30
       };
 
       // Only add languages parameter if languages are specified (for "just fetch" mode)
