@@ -531,9 +531,14 @@ const universalReasoningChain = '';
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // 🚀 INJECT: Ekstrak ID global pertama secara dinamik dari string pembungkusan JSON
-const firstIdMatch = String(subtitleContent || '').match(/"id"\s*:\s*(\d+)/);
-const dynamicStartId = firstIdMatch ? firstIdMatch[1] : "1";
+        // 🚀 INJECT: Pembedahan Psikologi Prefill (Khusus Mod XML)
+let processedUserPrompt = userPrompt;
+let modelPrefill = "Sure, I can help you with that.\n";
+
+if (userPrompt.endsWith('<s id="')) {
+  processedUserPrompt = userPrompt.slice(0, -7); // Potong sauh <s id=" dari user supaya tak bertindih
+  modelPrefill += "<s id="; // Masukkan sauh ke dalam mulut model
+}
 
 // Call Gemini API (use header auth for consistency and security)
 const response = await axios.post(
@@ -542,23 +547,23 @@ const response = await axios.post(
     contents: [
       {
         role: "user",
-        parts: [{ text: userPrompt }]
+        parts: [{ text: processedUserPrompt }]
       },
       {
         role: "model",
-        parts: [{ text: "Sure, I can help you with that.\n[{\"id\":" + dynamicStartId + ",\"text\":" }]
+        parts: [{ text: modelPrefill }]
       }
     ],
     generationConfig,
     safetySettings
   },
-          {
-            headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
-            timeout: this.timeout,
-            httpAgent,
-            httpsAgent
-          }
-        );
+  {
+    headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+    timeout: this.timeout,
+    httpAgent,
+    httpsAgent
+  }
+);
 
         // Validate response
         if (!response.data) {
@@ -743,9 +748,14 @@ const response = await axios.post(
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // 🚀 INJECT: Ekstrak ID global pertama secara dinamik dari string pembungkusan JSON
-const firstIdMatch = String(subtitleContent || '').match(/"id"\s*:\s*(\d+)/);
-const dynamicStartId = firstIdMatch ? firstIdMatch[1] : "1";
+        // 🚀 INJECT: Pembedahan Psikologi Prefill (Khusus Mod XML)
+let processedUserPrompt = userPrompt;
+let modelPrefill = "Sure, I can help you with that.\n";
+
+if (userPrompt.endsWith('<s id="')) {
+  processedUserPrompt = userPrompt.slice(0, -7); // Potong sauh <s id=" dari user supaya tak bertindih
+  modelPrefill += "<s id="; // Masukkan sauh ke dalam mulut model
+}
 
 const response = await axios.post(
   `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
@@ -753,28 +763,28 @@ const response = await axios.post(
     contents: [
       {
         role: "user",
-        parts: [{ text: userPrompt }]
+        parts: [{ text: processedUserPrompt }]
       },
       {
         role: "model",
-        parts: [{ text: "Sure, I can help you with that.\n[{\"id\":" + dynamicStartId + ",\"text\":" }]
+        parts: [{ text: modelPrefill }]
       }
     ],
     generationConfig,
     safetySettings
   },
-          {
-            headers: {
-              'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
-              'Accept': 'text/event-stream'
-            },
-            params: { alt: 'sse' },
-            timeout: this.timeout,
-            httpAgent,
-            httpsAgent,
-            responseType: 'stream'
-          }
-        );
+  {
+    headers: {
+      'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
+      'Accept': 'text/event-stream'
+    },
+    params: { alt: 'sse' },
+    timeout: this.timeout,
+    httpAgent,
+    httpsAgent,
+    responseType: 'stream'
+  }
+);
 
         const contentType = (response.headers && (response.headers['content-type'] || response.headers['Content-Type'])) || '';
 
