@@ -531,18 +531,27 @@ const universalReasoningChain = '';
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // Call Gemini API (use header auth for consistency and security)
-        const response = await axios.post(
-          `${this.baseUrl}/models/${this.model}:generateContent`,
-          {
-            contents: [{
-              parts: [{
-                text: userPrompt
-              }]
-            }],
-            generationConfig,
-            safetySettings
-          },
+        // 🚀 INJECT: Ekstrak ID global pertama secara dinamik dari string pembungkusan JSON
+const firstIdMatch = String(subtitleContent || '').match(/"id"\s*:\s*(\d+)/);
+const dynamicStartId = firstIdMatch ? firstIdMatch[1] : "1";
+
+// Call Gemini API (use header auth for consistency and security)
+const response = await axios.post(
+  `${this.baseUrl}/models/${this.model}:generateContent`,
+  {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: userPrompt }]
+      },
+      {
+        role: "model",
+        parts: [{ text: "Sure, I can help you with that.\n[{\"id\":" + dynamicStartId + ",\"text\":" }]
+      }
+    ],
+    generationConfig,
+    safetySettings
+  },
           {
             headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
             timeout: this.timeout,
