@@ -47,6 +47,7 @@ function isSubDLAuthFailure(error) {
   return message.includes('invalid api') || message.includes('invalid api key');
 }
 
+class SubDLService {
 static client = axios.create({
     baseURL: SUBDL_API_URL,
     headers: {
