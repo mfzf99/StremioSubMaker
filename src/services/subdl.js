@@ -120,6 +120,17 @@ static client = axios.create({
 
       const { imdb_id, type, season, episode, languages, providerTimeout } = params;
 
+      // 🎯 Penapis Spam Request Kedua Stremio (Local RAM Hit)
+      const localCacheKey = `${imdb_id}:${type}:${season || 1}:${episode}:${languages.join(',')}`;
+      if (typeof subdlMemoryCache !== 'undefined' && subdlMemoryCache.has(localCacheKey)) {
+        const cachedEntry = subdlMemoryCache.get(localCacheKey);
+        if (Date.now() - cachedEntry.timestamp < 30000) { // 30 saat TTL
+          log.debug(() => `[SubDL] Local RAM hit untuk ${localCacheKey} - Memancung spam request kedua Stremio`);
+          return cachedEntry.data;
+        }
+        subdlMemoryCache.delete(localCacheKey);
+      }
+
       // SubDL requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
       if (!imdb_id || imdb_id === 'undefined') {
         log.debug(() => '[SubDL] No IMDB ID available, skipping search');
