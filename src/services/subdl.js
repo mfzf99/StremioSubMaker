@@ -390,6 +390,15 @@ static client = axios.create({
       }
 
       const limitedSubtitles = Object.values(groupedByLanguage).flat();
+      
+      // 🎯 Simpan hasil carian penuh ke dalam RAM cache sebelum dipulangkan
+      if (limitedSubtitles.length > 0 && typeof subdlMemoryCache !== 'undefined') {
+        subdlMemoryCache.set(localCacheKey, {
+          timestamp: Date.now(),
+          data: limitedSubtitles
+        });
+      }
+
       return limitedSubtitles;
 
     } catch (error) {
