@@ -19,6 +19,10 @@ const SUBDL_API_URL = 'https://api.subdl.com/api/v1';
 const USER_AGENT = 'StremioSubtitleTranslator v1.0';
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
 
+// 🎯 SELITKAN DUA BARIS INI KAT SINI:
+const subdlMemoryCache = new Map();
+const DEBOUNCE_TTL_MS = 30000; // Simpan dalam RAM 30 saat untuk pancung spam Stremio
+
 function getSubDLUpstreamMessage(payload, fallback = '') {
   if (typeof payload === 'string' && payload.trim()) {
     return payload.trim();
