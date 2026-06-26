@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate into natural ${targetLabel}. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate into natural ${targetLabel}. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -119,12 +119,12 @@ function getBatchSizeForModel(model) {
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 80;
+    return 50;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 80;
+    return 50;
   }
 
   // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
@@ -135,15 +135,15 @@ function getBatchSizeForModel(model) {
 
     // Versi 3.0 dan ke atas dapat batch size 400
     if (geminiVersion >= 3.0) {
-      return 80;
+      return 50;
     }
     
     // Versi bawah 3.0 atau legacy Flash models kekal 250
-    return 80;
+    return 50;
   }
 
   // Default batch size for unknown models
-  return 80;
+  return 50;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -208,7 +208,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 80;
+    const JSON_MAX_BATCH_SIZE = 50;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
