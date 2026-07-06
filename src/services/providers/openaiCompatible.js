@@ -274,7 +274,7 @@ class OpenAICompatibleProvider {
       }
     }
 
-    if (!isCfRun && this.providerName === 'openai') {
+        if (!isCfRun && this.providerName === 'openai') {
       const effort = this.getOpenAIReasoningEffortForRequest();
       if (effort) {
         if (useResponsesApi) {
@@ -282,6 +282,14 @@ class OpenAICompatibleProvider {
         } else {
           body.reasoning_effort = effort;
         }
+      }
+    }
+
+    // DeepSeek reasoning effort (high / max)
+    if (!isCfRun && this.providerName === 'deepseek') {
+      const effort = this.reasoningEffort;
+      if (effort) {
+        body.reasoning_effort = effort;
       }
     }
 
