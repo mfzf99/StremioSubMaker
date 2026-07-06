@@ -2438,6 +2438,14 @@
                                 <input type="number" id="provider-deepseek-temperature" min="0" max="2" step="0.05"
                                     value="0.4">
                             </div>
+                            <!-- 🆕 Reasoning Effort -->
+                            <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                                <label for="provider-deepseek-reasoning">Reasoning Effort</label>
+                                <select id="provider-deepseek-reasoning" class="styled-select">
+                                    <option value="high" selected>High (default)</option>
+                                    <option value="max">Max (deepest)</option>
+                                </select>
+                            </div>
                             <div style="display:flex; flex-direction:column; gap:0.25rem;">
                                 <label for="provider-deepseek-topP"
                                     data-i18n="config.providerAdvanced.labels.topP">Top-P</label>
