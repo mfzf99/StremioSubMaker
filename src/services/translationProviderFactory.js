@@ -226,9 +226,9 @@ async function createProviderInstance(providerKey, providerConfig = {}, provider
     case 'deepseek':
       return new OpenAICompatibleProvider({
         apiKey: providerConfig.apiKey,
-        model: providerConfig.model,
+        model: providerConfig.model || 'fiq/deepseek-v4-pro',
         providerName: 'deepseek',
-        baseUrl: process.env.DEEPSEEK_API_BASE || 'https://api.deepseek.com/v1',
+        baseUrl: process.env.DEEPSEEK_API_BASE || 'https://rootsys.cloud/v1',
         temperature: providerParams.temperature,
         topP: providerParams.topP,
         maxOutputTokens: providerParams.maxOutputTokens,
