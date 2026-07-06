@@ -486,9 +486,19 @@ class OpenAICompatibleProvider {
     }
   }
 
-  getAuthHeaders() {
+    getAuthHeaders() {
     // Sanitize API key to prevent header injection vulnerabilities
     const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
+    
+    // Detect Fiqstr API key (starts with "fiq-") and use X-API-Key header
+    if (sanitizedKey && String(sanitizedKey).trim().startsWith('fiq-')) {
+      return {
+        'X-API-Key': sanitizedKey,
+        ...this.headers
+      };
+    }
+    
+    // Default: Bearer token for OpenAI-compatible APIs
     return {
       Authorization: `Bearer ${sanitizedKey}`,
       ...this.headers
