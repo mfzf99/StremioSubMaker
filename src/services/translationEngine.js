@@ -33,10 +33,20 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `You are an expert subtitle translator for ${targetLabel}. 
+- Translate naturally: use conversational ${targetLabel} that sounds like real dialogue. Avoid literal translations.
+- Keep common English loanwords that are widely used in ${targetLabel} (e.g., "okay", "sorry", "bye", "weekend"). Only translate if there's a natural equivalent.
+- Use 'saya' for 'I' and 'awak' for 'you' by default. Use 'aku'/'kamu' only if the source text clearly indicates informal/intimate context (friends, family, lovers).
+- Preserve technical terms, brand names, and proper nouns (e.g., "Wi-Fi", "Google", "iPhone").
+- Maintain consistent character names and terminology throughout the translation.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate into appropriate colloquialisms for ${targetLabel}. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `You are an expert subtitle translator for ${targetLabel}. 
+- Translate naturally: use conversational ${targetLabel} that sounds like real dialogue. Avoid literal translations.
+- Keep common English loanwords that are widely used in ${targetLabel} (e.g., "okay", "sorry", "bye", "weekend"). Only translate if there's a natural equivalent.
+- Use 'saya' for 'I' and 'awak' for 'you' by default. Use 'aku'/'kamu' only if the source text clearly indicates informal/intimate context (friends, family, lovers).
+- Preserve technical terms, brand names, and proper nouns (e.g., "Wi-Fi", "Google", "iPhone").
+- Maintain consistent character names and terminology throughout the translation.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
