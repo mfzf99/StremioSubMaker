@@ -3443,57 +3443,64 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
         const GeminiService = require('./src/services/gemini');
         const gemini = new GeminiService(geminiApiKey);
         
+        let validationPassed = false;
+        let models = [];
+        
+        // Try 1: Get model list (works for Google, may fail for CrazyRouter due to null supportedGenerationMethods)
         try {
-            const models = await gemini.getAvailableModels({ silent: true });
-            
-            // If we got models, key is valid (works for both Google and CrazyRouter)
-            await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
-            
+            models = await gemini.getAvailableModels({ silent: true });
             if (models && models.length > 0) {
-                return res.json({
-                    valid: true,
-                    message: t('server.validation.apiKeyValid', {}, 'API key is valid'),
-                    models: models
-                });
+                validationPassed = true;
+                log.debug(() => '[ValidateGemini] Model list fetch succeeded.');
             } else {
-                return res.json({
-                    valid: false,
-                    error: t('server.errors.noModelsFound', {}, 'No models available for this API key')
-                });
+                log.debug(() => '[ValidateGemini] Model list fetch returned empty (normal for CrazyRouter).');
             }
-        } catch (apiError) {
-            // Check for authentication errors (GeminiService may throw)
-            const status = apiError.response?.status || apiError.statusCode;
-            const isAuth = status === 401 || status === 403 ||
-                (apiError.message && (apiError.message.toLowerCase().includes('api key') || apiError.message.toLowerCase().includes('invalid')));
-            
-            if (isAuth) {
-                await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
-                return res.json({
-                    valid: false,
-                    error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
-                });
+        } catch (listError) {
+            log.debug(() => `[ValidateGemini] Model list fetch failed: ${listError.message}. Trying fallback probe.`);
+        }
+        
+        // Try 2: If model list failed/empty, do a lightweight probe (count tokens)
+        // This hits the real generateContent endpoint, which CrazyRouter supports.
+        if (!validationPassed) {
+            try {
+                // Use a tiny prompt to validate the key (minimal cost, just 1 token)
+                await gemini.countTokensForTranslation('Hi', 'en', 'Translate this');
+                validationPassed = true;
+                log.debug(() => '[ValidateGemini] Fallback probe succeeded. Key is valid (CrazyRouter or Google).');
+            } catch (probeError) {
+                log.debug(() => `[ValidateGemini] Fallback probe failed: ${probeError.message}`);
             }
-            
-            // Other errors
-            const errorMsg = apiError.message || 'Validation failed';
+        }
+        
+        // If validation passed, clear cache and return success
+        if (validationPassed) {
+            await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
             return res.json({
-                valid: false,
-                error: t('server.validation.apiError', { reason: errorMsg }, `API error: ${errorMsg}`)
+                valid: true,
+                message: t('server.validation.apiKeyValid', {}, 'API key is valid'),
+                models: models || []
             });
         }
+        
+        // If both attempts failed, report invalid
+        return res.json({
+            valid: false,
+            error: t('server.errors.noModelsFound', {}, 'No models available for this API key')
+        });
+        
     } catch (error) {
         const isAuthError = error.response?.status === 401 ||
             error.response?.status === 403 ||
             error.message?.toLowerCase().includes('api key') ||
             error.message?.toLowerCase().includes('invalid') ||
-            error.message?.toLowerCase().includes('permission');
+            error.message?.toLowerCase().includes('permission') ||
+            error.message?.toLowerCase().includes('authentication');
 
         res.json({
             valid: false,
             error: isAuthError
-                ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKey', {}, 'Invalid API key')
-                : (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)
+                ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
+                : (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message || 'Unknown error' }, `Validation failed: ${error.message || 'Unknown error'}`)
         });
     }
 });
