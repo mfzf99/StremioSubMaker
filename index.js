@@ -3439,61 +3439,48 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
             });
         }
 
-        const axios = require('axios');
-        const { httpAgent, httpsAgent } = require('./src/utils/httpAgents');
-
-        // Use v1 endpoint and API key header for validation
-        const geminiUrl = 'https://generativelanguage.googleapis.com/v1/models';
-
+        // 🔥 Use GeminiService (hybrid) instead of hardcoding Google endpoint
+        const GeminiService = require('./src/services/gemini');
+        const gemini = new GeminiService(geminiApiKey);
+        
         try {
-            const response = await axios.get(geminiUrl, {
-                headers: { 'x-goog-api-key': geminiApiKey },
-                timeout: 10000,
-                httpAgent,
-                httpsAgent
-            });
-
+            const models = await gemini.getAvailableModels({ silent: true });
+            
+            // If we got models, key is valid (works for both Google and CrazyRouter)
             await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
-
-            // If we got here without errors, API key is valid
-            if (response.data && response.data.models) {
-                res.json({
+            
+            if (models && models.length > 0) {
+                return res.json({
                     valid: true,
-                    message: t('server.validation.apiKeyValid', {}, 'API key is valid')
+                    message: t('server.validation.apiKeyValid', {}, 'API key is valid'),
+                    models: models
                 });
             } else {
-                res.json({
-                    valid: true,
-                    message: t('server.validation.apiKeyValid', {}, 'API key is valid')
+                return res.json({
+                    valid: false,
+                    error: t('server.errors.noModelsFound', {}, 'No models available for this API key')
                 });
             }
         } catch (apiError) {
-            // Check for authentication errors
-            if (apiError.response?.status === 401 || apiError.response?.status === 403) {
+            // Check for authentication errors (GeminiService may throw)
+            const status = apiError.response?.status || apiError.statusCode;
+            const isAuth = status === 401 || status === 403 ||
+                (apiError.message && (apiError.message.toLowerCase().includes('api key') || apiError.message.toLowerCase().includes('invalid')));
+            
+            if (isAuth) {
                 await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
-                res.json({
+                return res.json({
                     valid: false,
                     error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
                 });
-            } else if (apiError.response?.status === 400) {
-                // Extract error message, handling both string and object responses
-                let errorMessage = 'Invalid API key';
-                const errorData = apiError.response?.data?.error || apiError.response?.data?.message;
-                if (typeof errorData === 'string') {
-                    errorMessage = errorData;
-                } else if (errorData && typeof errorData === 'object') {
-                    errorMessage = errorData.message || JSON.stringify(errorData);
-                }
-                if (String(errorMessage || '').toLowerCase().includes('api key')) {
-                    await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
-                }
-                res.json({
-                    valid: false,
-                    error: t('server.errors.invalidApiKey', {}, errorMessage)
-                });
-            } else {
-                throw apiError;
             }
+            
+            // Other errors
+            const errorMsg = apiError.message || 'Validation failed';
+            return res.json({
+                valid: false,
+                error: t('server.validation.apiError', { reason: errorMsg }, `API error: ${errorMsg}`)
+            });
         }
     } catch (error) {
         const isAuthError = error.response?.status === 401 ||
