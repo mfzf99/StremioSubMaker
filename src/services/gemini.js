@@ -784,9 +784,9 @@ const response = await axios.post(
   },
   {
     headers: {
-      'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
-      'Accept': 'text/event-stream'
-    },
+  ...this.getAuthHeaders(),
+  'Accept': 'text/event-stream'
+},
     params: { alt: 'sse' },
     timeout: this.timeout,
     httpAgent,
