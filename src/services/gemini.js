@@ -567,7 +567,7 @@ const response = await axios.post(
     safetySettings
   },
   {
-    headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+    headers: this.getAuthHeaders(),
     timeout: this.timeout,
     httpAgent,
     httpsAgent
