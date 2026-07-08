@@ -148,8 +148,25 @@ class GeminiService {
       };
     }
 
-    // JSON structured output mode (set by TranslationEngine when enabled)
+        // JSON structured output mode (set by TranslationEngine when enabled)
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
+  }
+
+  // 🔥 Auto-detect key type (Google vs CrazyRouter)
+  detectKeyType(apiKey) {
+    if (!apiKey) return 'google';
+    const key = String(apiKey).trim();
+    if (key.startsWith('sk-')) return 'crazyrouter';
+    return 'google';
+  }
+
+  // 🔥 Get authentication headers based on key type
+  getAuthHeaders() {
+    const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
+    if (this.keyType === 'crazyrouter') {
+      return { 'Authorization': `Bearer ${sanitizedKey}`, 'Content-Type': 'application/json' };
+    }
+    return { 'x-goog-api-key': sanitizedKey, 'Content-Type': 'application/json' };
   }
 
   // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V14 MULTI-BATCH LEDGER) 🚨
