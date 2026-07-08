@@ -69,13 +69,22 @@ Do NOT include acknowledgements, explanations, notes or alternative translations
 Output ONLY the translated content, nothing else.`;
 
 class GeminiService {
-  constructor(apiKey, model = '', advancedSettings = {}) {
+    constructor(apiKey, model = '', advancedSettings = {}) {
     this.apiKey = typeof apiKey === 'string' ? apiKey.trim() : apiKey;
     this.authFailureCacheKey = getProviderAuthFailureCacheKey('gemini', this.apiKey);
     // Fallback to default if model not provided (config.js handles env var override)
     this.model = model || 'gemini-flash-lite-latest';
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
-    this.baseUrl = GEMINI_API_URL;
+    
+    // 🔥 Auto-detect key type (Google vs CrazyRouter)
+    this.keyType = this.detectKeyType(this.apiKey);
+    
+    // 🔥 Set base URL based on key type
+    if (this.keyType === 'crazyrouter') {
+      this.baseUrl = process.env.GEMINI_API_BASE || 'https://api.crazyrouter.com/v1beta';
+    } else {
+      this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
+    }
 
     // 🚨 BUKU REKOD FINOPS (UNTUK TELEGRAM) 🚨
     this.usageStats = {
