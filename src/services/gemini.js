@@ -241,7 +241,7 @@ class GeminiService {
 
     try {
       const response = await axios.get(`${this.baseUrl}/models/${this.model}`, {
-        headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+        headers: this.getAuthHeaders(),
         timeout: 10000,
         httpAgent,
         httpsAgent
