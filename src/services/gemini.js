@@ -411,7 +411,7 @@ const universalReasoningChain = '';
           }]
         },
         {
-          headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+          headers: this.getAuthHeaders(),
           timeout: 10000,
           httpAgent,
           httpsAgent
