@@ -197,7 +197,7 @@ class GeminiService {
     try {
       const response = await axios.get(`${this.baseUrl}/models`, {
         // Use header form for API key to avoid query parsing/proxy quirks
-        headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+        headers: this.getAuthHeaders(),
         timeout: 10000,
         httpAgent,
         httpsAgent
