@@ -77,17 +77,14 @@ class GeminiService {
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
     
     // 🔥 Auto-detect key type (Google vs CrazyRouter)
-  this.keyType = this.detectKeyType(this.apiKey);
-
-  // 🔥 CrazyRouter doesn't support efficient streaming (causes double API calls)
-  this.supportsStreaming = this.keyType !== 'crazyrouter';
-
-  // 🔥 Set base URL based on key type
-  if (this.keyType === 'crazyrouter') {
-    this.baseUrl = process.env.GEMINI_API_BASE || 'https://api.crazyrouter.com/v1beta';
-  } else {
-    this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
-  }
+    this.keyType = this.detectKeyType(this.apiKey);
+    
+    // 🔥 Set base URL based on key type
+    if (this.keyType === 'crazyrouter') {
+      this.baseUrl = process.env.GEMINI_API_BASE || 'https://api.crazyrouter.com/v1beta';
+    } else {
+      this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
+    }
 
     // 🚨 BUKU REKOD FINOPS (UNTUK TELEGRAM) 🚨
     this.usageStats = {
@@ -690,15 +687,6 @@ const response = await axios.post(
    * Stream subtitle translation and yield partial text
    */
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onChunk = null) {
-  // 🔥 FALLBACK UNTUK CRAZYROUTER – tambah ini di awal
-  if (!this.supportsStreaming) {
-    log.debug(() => '[Gemini] Streaming disabled for CrazyRouter, using non-stream fallback');
-    const result = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
-    if (typeof onChunk === 'function') {
-      try { await onChunk(result); } catch (_) { }
-    }
-    return result;
-  }
     return this.retryWithBackoff(async () => {
       try {
         const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
