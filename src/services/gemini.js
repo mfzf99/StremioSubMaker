@@ -690,6 +690,15 @@ const response = await axios.post(
    * Stream subtitle translation and yield partial text
    */
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onChunk = null) {
+  // 🔥 FALLBACK UNTUK CRAZYROUTER – tambah ini di awal
+  if (!this.supportsStreaming) {
+    log.debug(() => '[Gemini] Streaming disabled for CrazyRouter, using non-stream fallback');
+    const result = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt);
+    if (typeof onChunk === 'function') {
+      try { await onChunk(result); } catch (_) { }
+    }
+    return result;
+  }
     return this.retryWithBackoff(async () => {
       try {
         const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
