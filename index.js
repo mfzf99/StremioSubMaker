@@ -3446,29 +3446,66 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
         let validationPassed = false;
         let models = [];
         
-        // Try 1: Get model list (works for Google, may fail for CrazyRouter due to null supportedGenerationMethods)
-        try {
-            models = await gemini.getAvailableModels({ silent: true });
-            if (models && models.length > 0) {
-                validationPassed = true;
-                log.debug(() => '[ValidateGemini] Model list fetch succeeded.');
-            } else {
-                log.debug(() => '[ValidateGemini] Model list fetch returned empty (normal for CrazyRouter).');
-            }
-        } catch (listError) {
-            log.debug(() => `[ValidateGemini] Model list fetch failed: ${listError.message}. Trying fallback probe.`);
-        }
-        
-        // Try 2: If model list failed/empty, do a lightweight probe (count tokens)
-        // This hits the real generateContent endpoint, which CrazyRouter supports.
-        if (!validationPassed) {
+        // =====================================================================
+        // 🟡 CABANG 1: STRATEGI VALIDASI ACTIVE PROBE UNTUK CRAZYROUTER (sk-)
+        // =====================================================================
+        if (gemini.keyType === 'crazyrouter') {
             try {
-                // Use a tiny prompt to validate the key (minimal cost, just 1 token)
-                await gemini.countTokensForTranslation('Hi', 'en', 'Translate this');
+                const axios = require('axios');
+                const { httpAgent, httpsAgent } = require('./src/utils/httpAgents');
+                
+                log.debug(() => '[ValidateGemini] Initiating active endpoint check for CrazyRouter key...');
+                
+                // Ketukan ringan: generateContent 1 token ("Ping") untuk test keaktifan key & kredit proxy
+                await axios.post(
+                    `${gemini.baseUrl}/models/gemini-2.5-flash:generateContent`,
+                    { contents: [{ parts: [{ text: 'Ping' }] }] },
+                    {
+                        headers: gemini.getAuthHeaders(), // Mengandungi Authorization Bearer token
+                        timeout: 7000, // 7 saat gred industri, tak perlu tersedak 10 saat kaku
+                        httpAgent,
+                        httpsAgent
+                    }
+                );
+                
                 validationPassed = true;
-                log.debug(() => '[ValidateGemini] Fallback probe succeeded. Key is valid (CrazyRouter or Google).');
+                log.debug(() => '[ValidateGemini] CrazyRouter active probe successful. Key is ALIVE.');
+                // Dapatkan dynamic hardcoded registry yang kita jahit dalam gemini.js
+                models = await gemini.getAvailableModels({ silent: true });
+                
             } catch (probeError) {
-                log.debug(() => `[ValidateGemini] Fallback probe failed: ${probeError.message}`);
+                log.debug(() => `[ValidateGemini] CrazyRouter active probe failed: ${probeError.message}`);
+                throw probeError; // Lempar ke catch block luar untuk mapping status 401/403 otomatis
+            }
+        } 
+        // =====================================================================
+        // 🟢 CABANG 2: LALUAN RASMI GOOGLE OFFICIAL (Kekal Asal Tanpa Usik)
+        // =====================================================================
+        else {
+            // Try 1: Get model list (works for Google, may fail for CrazyRouter due to null supportedGenerationMethods)
+            try {
+                models = await gemini.getAvailableModels({ silent: true });
+                if (models && models.length > 0) {
+                    validationPassed = true;
+                    log.debug(() => '[ValidateGemini] Google model list fetch succeeded.');
+                } else {
+                    log.debug(() => '[ValidateGemini] Google model list fetch returned empty.');
+                }
+            } catch (listError) {
+                log.debug(() => `[ValidateGemini] Google model list fetch failed: ${listError.message}. Trying fallback probe.`);
+            }
+            
+            // Try 2: If model list failed/empty, do a lightweight probe (count tokens)
+            // This hits the real generateContent endpoint, which CrazyRouter supports.
+            if (!validationPassed) {
+                try {
+                    // Use a tiny prompt to validate the key (minimal cost, just 1 token)
+                    await gemini.countTokensForTranslation('Hi', 'en', 'Translate this');
+                    validationPassed = true;
+                    log.debug(() => '[ValidateGemini] Google fallback probe succeeded.');
+                } catch (probeError) {
+                    log.debug(() => `[ValidateGemini] Google fallback probe failed: ${probeError.message}`);
+                }
             }
         }
         
