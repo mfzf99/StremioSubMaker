@@ -2099,8 +2099,6 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. ISOLATED BOX (MOST CRITICAL): Each <s id="N"> is sealed. Translate 
    ONLY its content in TOTAL ISOLATION. Fragment IN = Fragment OUT.
-   ✅ <s id="45">I really want to</s> → <s id="45">Saya betul-betul nak</s>
-   ❌ <s id="45">Saya betul-betul nak balik rumah sekarang.</s>
    Stealing from the next ID DESTROYS subtitle sync permanently.
 
 2. ESCAPE HATCH: Cannot translate or symbols/notes only → copy EXACT 
