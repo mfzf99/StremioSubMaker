@@ -730,7 +730,6 @@ const response = await axios.post(
 
         // 🚀 INJECT: ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
         const modelNameLower = String(this.model).toLowerCase();
-        // Regex ni akan pegang nombor versi, cth: 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5, 'gemini-4.0' -> 4
         const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
         const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
 
@@ -738,21 +737,17 @@ const response = await axios.post(
         if (!this.isGemmaModel) {
           if (thinkingBudget === -1) {
             // MODE: AUTO (-1)
-            // MAZHAB API KETAT: Mana-mana model bermula versi 3.1 ke atas (3.1, 3.5, 3.8, 4.0+) 
-            // akan 'reject' kalau nampak thinkingBudget. Jadi kita HANYA hantar untuk versi bawah 3.1.
             if (geminiVersion < 3.1) {
               generationConfig.thinkingConfig = { thinkingBudget: null };
             }
           } else if (thinkingBudget === 0) {
             // MODE: OFF (0)
-            // Semua keluarga Gemini 3.0 ke atas tak boleh off 100%, jadi kita paksa ke 'minimal'
             if (geminiVersion >= 3.0) {
               generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
               log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
             }
           } else if (thinkingBudget > 0) {
             // MODE: FIXED BUDGET / LEVEL (>0)
-            // Model generasi 3.0 ke atas pakai format perkataan (Level), model lama pakai nombor (Budget)
             if (geminiVersion >= 3.0) {
               let level = 'minimal';
               if (thinkingBudget >= 4096) level = 'high';
@@ -766,9 +761,8 @@ const response = await axios.post(
           }
         }
         // =====================================================================
+
         // Safety settings: disable all content filters for subtitle translation
-        // Use 'OFF' threshold — stronger than 'BLOCK_NONE' and respected by newer models
-        // HARM_CATEGORY_CIVIC_INTEGRITY is deprecated; use enableEnhancedCivicAnswers instead
         const safetySettings = [
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'OFF' },
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'OFF' },
@@ -777,42 +771,42 @@ const response = await axios.post(
         ];
 
         // 🚀 INJECT: Pembedahan Psikologi Prefill XML (Versi Kalis Double-Quote)
-let processedUserPrompt = userPrompt;
-let modelPrefill = "Task confirmed. Executing the strictly isolated raw data pipe localization stream now.\n";
+        let processedUserPrompt = userPrompt;
+        let modelPrefill = "Task confirmed. Executing the strictly isolated raw data pipe localization stream now.\n";
 
-if (userPrompt.endsWith('<s id="')) {
-  processedUserPrompt = userPrompt.slice(0, -7); // Potong 7 huruf: <s id="
-  modelPrefill += "<s id=\""; // 🔥 KUNCI MATI: Pulangkan balik pembuka petik [ " ] supaya Gemini terus taip nombor ID!
-}
+        if (userPrompt.endsWith('<s id="')) {
+          processedUserPrompt = userPrompt.slice(0, -7); // Potong 7 huruf: <s id="
+          modelPrefill += "<s id=\""; // 🔥 KUNCI MATI: Pulangkan balik pembuka petik [ " ] supaya Gemini terus taip nombor ID!
+        }
 
-const response = await axios.post(
-  `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
-  {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: processedUserPrompt }]
-      },
-      {
-        role: "model",
-        parts: [{ text: modelPrefill }]
-      }
-    ],
-    generationConfig,
-    safetySettings
-  },
-  {
-    headers: {
-  ...this.getAuthHeaders(),
-  'Accept': 'text/event-stream'
-},
-    params: { alt: 'sse' },
-    timeout: this.timeout,
-    httpAgent,
-    httpsAgent,
-    responseType: 'stream'
-  }
-);
+        const response = await axios.post(
+          `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
+          {
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: processedUserPrompt }]
+              },
+              {
+                role: "model",
+                parts: [{ text: modelPrefill }]
+              }
+            ],
+            generationConfig,
+            safetySettings
+          },
+          {
+            headers: {
+              ...this.getAuthHeaders(),
+              'Accept': 'text/event-stream'
+            },
+            params: { alt: 'sse' },
+            timeout: this.timeout,
+            httpAgent,
+            httpsAgent,
+            responseType: 'stream'
+          }
+        );
 
         const contentType = (response.headers && (response.headers['content-type'] || response.headers['Content-Type'])) || '';
 
@@ -839,12 +833,10 @@ const response = await axios.post(
             
             // 🚨 KUTIP RESIT KOS (STREAMING CHUNKS) - SECARA SENYAP 🚨
             if (data.usageMetadata) {
-                // Cipta ID unik untuk batch ni kalau belum ada
-                if (!processPayload.streamId) processPayload.streamId = 'batch_' + Date.now() + Math.random();
-                this.updateUsageStats(data.usageMetadata, processPayload.streamId);
+              if (!processPayload.streamId) processPayload.streamId = 'batch_' + Date.now() + Math.random();
+              this.updateUsageStats(data.usageMetadata, processPayload.streamId);
             }
 
-            // Capture safety metadata so we can classify empty streams
             if (data.promptFeedback) {
               blockReason = data.promptFeedback.blockReason || blockReason;
               if (Array.isArray(data.promptFeedback.safetyRatings) && data.promptFeedback.safetyRatings.length > 0) {
@@ -909,7 +901,6 @@ const response = await axios.post(
 
               const cleaned = this.cleanTranslatedSubtitle(aggregated);
 
-              // If Gemini blocked the request, surface a classified error
               if (!cleaned && (blockReason || safetyRatings)) {
                 const reason = blockReason || 'SAFETY';
                 const err = new Error(`PROHIBITED_CONTENT: ${reason}`);
@@ -918,7 +909,6 @@ const response = await axios.post(
                 return;
               }
 
-              // Handle finish reasons like the non-stream path
               if (finishReason && finishReason !== 'STOP') {
                 if (finishReason === 'SAFETY' || finishReason === 'RECITATION' || finishReason === 'PROHIBITED_CONTENT') {
                   const err = new Error(finishReason === 'RECITATION'
@@ -938,7 +928,6 @@ const response = await axios.post(
                   }
                   log.warn(() => '[Gemini] MAX_TOKENS reached in stream - continuing with partial translation');
                 } else {
-                  // OTHER and unknown finish reasons are likely transient - mark as retryable
                   const err = new Error(`Translation stopped with reason: ${finishReason}`);
                   err.isRetryable = true;
                   reject(err);
