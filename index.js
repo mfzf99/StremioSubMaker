@@ -8086,8 +8086,20 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const costInput = (inputTokens / 1000000) * rateInput;
                         const costCache = (cachedTokens / 1000000) * rateCache;
                         const costOutput = (outputTokens / 1000000) * rateOutput;
-                        const totalUSD = costInput + costCache + costOutput;
+                        
+                        const retailUSD = costInput + costCache + costOutput;
+                        let totalUSD = retailUSD;
+
+                        // 🔥 INJECT AUTOMATIK: Kesan key CrazyRouter (sk-) untuk diskaun 45% khusus kluster xEmbed
+                        const geminiKey = (typeof selectGeminiApiKey === 'function') ? (await selectGeminiApiKey(workingConfig) || process.env.GEMINI_API_KEY || '') : '';
+                        const isCrazyRouter = String(geminiKey).trim().startsWith('sk-');
+
+                        if (isCrazyRouter) {
+                            totalUSD = retailUSD * 0.55; // Bayar 55% sahaja (Diskaun 45% mutlak!)
+                        }
+
                         const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
+                        const retailMYR = retailUSD * KADAR_TUKARAN_MYR;
 
                         const fmt = (num) => (num || 0).toLocaleString();
                         let cleanModelName = usedModel.replace('gemini-', '').replace('-preview', '');
@@ -8103,9 +8115,16 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const keyCount = validKeys.length > 0 ? validKeys.length : 1;
                         const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
 
-                        const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
-                                            tokenBreakdown +
-                                            `  └ <b>Retail Value:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+                        // STRUKTUR KOS EMBEDDED BARU (TALLY DENGAN WALLET CRAZYROUTER)
+                        let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
+                        
+                        if (isCrazyRouter) {
+                            costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
+                                           `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
+                                           `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+                        } else {
+                            costSection += `  └ <b>Retail Value:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+                        }
 
                         const teleMsg = `✅ <b>Subtitle Translation Report (xEmbed)</b> 🎬\n\n` +
                                         `🍿 <b>Title:</b> <code>${movieTitle}</code>\n` +
