@@ -69,7 +69,7 @@ Do NOT include acknowledgements, explanations, notes or alternative translations
 Output ONLY the translated content, nothing else.`;
 
 class GeminiService {
-    constructor(apiKey, model = '', advancedSettings = {}) {
+  constructor(apiKey, model = '', advancedSettings = {}) {
     this.apiKey = typeof apiKey === 'string' ? apiKey.trim() : apiKey;
     this.authFailureCacheKey = getProviderAuthFailureCacheKey('gemini', this.apiKey);
     // Fallback to default if model not provided (config.js handles env var override)
@@ -79,9 +79,11 @@ class GeminiService {
     // 🔥 Auto-detect key type (Google vs CrazyRouter)
     this.keyType = this.detectKeyType(this.apiKey);
     
-    // 🔥 Set base URL based on key type
+    // 🔥 FIX MUKTAMAD: Pisahkan variable base URL supaya tak berlaku contamination!
+    // Nota: Kedua-dua key tetap menyokong penuh fungsi streaming tanpa sebarang sekatan.
     if (this.keyType === 'crazyrouter') {
-      this.baseUrl = process.env.GEMINI_API_BASE || 'https://api.crazyrouter.com/v1beta';
+      // Menggunakan endpoint cn. untuk routing trafik yang jauh lebih stabil dan laju dari Malaysia
+      this.baseUrl = process.env.CRAZYROUTER_API_BASE || 'https://cn.crazyrouter.com/v1beta';
     } else {
       this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
     }
