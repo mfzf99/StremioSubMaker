@@ -419,6 +419,12 @@ const universalReasoningChain = '';
    * Falls back to null when unavailable so callers can use estimates.
    */
   async countTokensForTranslation(subtitleContent, targetLanguage, customPrompt = null) {
+    // 🔥 FIX MUKTAMAD: Jika guna CrazyRouter, pintas terus untuk elakkan double billing & timeout.
+    // Laluan rasmi Google tetap akan berjalan 100% asal untuk bekalkan data ke kalkulator Telegram kau.
+    if (this.keyType === 'crazyrouter') {
+      return null;
+    }
+
     const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
     try {
@@ -448,7 +454,7 @@ const universalReasoningChain = '';
       return null;
     }
   }
-
+  
   /**
    * Translate subtitle content (single API call)
    * @param {string} subtitleContent - Content to translate
