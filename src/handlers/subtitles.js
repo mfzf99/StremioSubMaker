@@ -5585,11 +5585,25 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const costCache = (cachedTokens / 1000000) * rateCache;
             const costOutput = (outputTokens / 1000000) * rateOutput;
             
-            const totalUSD = costInput + costCache + costOutput;
-            const totalMYR = totalUSD * KADAR_TUKARAN_MYR;
+            const retailUSD = costInput + costCache + costOutput;
+            let finalUSD = retailUSD;
 
-            // Format paparan
-            const displayUSD = `$${totalUSD.toFixed(5)}`;
+            // 🔥 DEFENSI FINOPS: Tarik utiliti selectGeminiApiKey secara inline untuk elakkan ReferenceError
+            const { selectGeminiApiKey } = require('../utils/config');
+            const geminiKey = (typeof selectGeminiApiKey === 'function') ? (await selectGeminiApiKey(config) || '') : '';
+            
+            // Semak cap jari: Jika guna CrazyRouter (sk-), aktifkan litar potongan harga
+            const isCrazyRouter = (providerName === 'gemini' || !providerName) && String(geminiKey).trim().startsWith('sk-');
+
+            if (isCrazyRouter) {
+                finalUSD = retailUSD * 0.55; // Bayar 55% sahaja (Diskaun 45% mutlak!)
+            }
+
+            const totalMYR = finalUSD * KADAR_TUKARAN_MYR;
+            const retailMYR = retailUSD * KADAR_TUKARAN_MYR;
+
+            // Format paparan mengikut status kos akhir selepas diskaun
+            const displayUSD = `$${finalUSD.toFixed(5)}`;
             const displayMYR = `RM ${totalMYR.toFixed(4)}`;
             const fmt = (num) => (num || 0).toLocaleString(); // Fungsi pendek untuk format nombor
 
@@ -5616,10 +5630,16 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const keyCount = validKeys.length > 0 ? validKeys.length : 1;
             const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
 
-            // Bina paparan FinOps untuk Telegram
-            const costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` +
-                                tokenBreakdown +
-                                `  └ <b>Retail Value:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+            // Bina paparan FinOps untuk Telegram (Tally dengan Wallet!)
+            let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
+            
+            if (isCrazyRouter) {
+                costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
+                               `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
+                               `  └ <b>Actual Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+            } else {
+                costSection += `  └ <b>Retail Value:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+            }
 
             // ====================================================================
 
