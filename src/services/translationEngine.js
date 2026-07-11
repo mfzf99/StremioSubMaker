@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 70;
   }
 
   // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
