@@ -1414,7 +1414,7 @@
         },
         "contextSize": {
           "label": "Context Size",
-          "description": "Number of surrounding entries to include as context (1-10). Default: 3"
+          "description": "Number of surrounding entries to include as context (1-20). Default: 20"
         },
         "mismatchRetries": {
           "label": "Mismatch Retries",
