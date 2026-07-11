@@ -1414,7 +1414,7 @@
         },
         "contextSize": {
           "label": "حجم السياق",
-          "description": "عدد الإدخالات المحيطة لتضمينها كسياق (1-10). الافتراضي: 3"
+          "description": "عدد الإدخالات المحيطة لتضمينها كسياق (1-20). الافتراضي: 20"
         },
         "mismatchRetries": {
           "label": "Mismatch Retries",
