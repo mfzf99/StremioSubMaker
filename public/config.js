@@ -6419,7 +6419,7 @@ Translate to {target_language}.`;
         const topPChanged = parseFloat(advTopPEl.value) !== defaults.topP;
         // Batch context changes are also considered advanced modifications
         const batchCtxChanged = batchCtxEl ? (batchCtxEl.checked !== (defaults.enableBatchContext === true)) : false;
-        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 10)) : false;
+        const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 20)) : false;
         // Mismatch retries change
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
         const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 3)) : false;
@@ -10675,7 +10675,7 @@ Translate to {target_language}.`;
                 contextSizeGroupEl.style.display = enableBatchContextEl.checked ? 'block' : 'none';
             }
         }
-        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 10;
+        if (contextSizeEl) contextSizeEl.value = currentConfig.advancedSettings?.contextSize || 20;
         {
             let workflow = currentConfig.advancedSettings?.translationWorkflow ||
                 ((currentConfig.advancedSettings?.sendTimestampsToAI === true) ? 'ai' : 'xml');
@@ -11040,7 +11040,7 @@ Translate to {target_language}.`;
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
                 topK: 40, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
-                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 10; })(),
+                contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 20; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
                 mismatchRetries: (function () { const el = document.getElementById('mismatchRetries'); return el ? Math.max(0, Math.min(3, parseInt(el.value) || 3)) : 3; })()
             }
