@@ -1414,7 +1414,7 @@
         },
         "contextSize": {
           "label": "Tamaño de contexto",
-          "description": "Número de entradas alrededor a incluir (1-10). Por defecto: 3"
+          "description": "Número de entradas alrededor a incluir (1-20). Por defecto: 20"
         },
         "mismatchRetries": {
           "label": "Mismatch Retries",
