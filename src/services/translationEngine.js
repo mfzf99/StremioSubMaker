@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 70;
+    return 50;
   }
 
   // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
@@ -135,7 +135,7 @@ function getBatchSizeForModel(model) {
 
     // Versi 3.0 dan ke atas dapat batch size 400
     if (geminiVersion >= 3.0) {
-      return 100;
+      return 50;
     }
     
     // Versi bawah 3.0 atau legacy Flash models kekal 250
