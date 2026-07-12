@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are a professional subtitle translator. Translate into natural ${targetLabel} that reflects native spoken dialogue. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `You are an expert subtitle localizer. Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are a professional subtitle translator. Translate into natural ${targetLabel} that reflects native spoken dialogue. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `You are an expert subtitle localizer. Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Always use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 70;
   }
 
   // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
@@ -135,11 +135,11 @@ function getBatchSizeForModel(model) {
 
     // Versi 3.0 dan ke atas dapat batch size 400
     if (geminiVersion >= 3.0) {
-      return 50;
+      return 100;
     }
     
     // Versi bawah 3.0 atau legacy Flash models kekal 250
-    return 50;
+    return 70;
   }
 
   // Default batch size for unknown models
