@@ -258,6 +258,30 @@ class GeminiService {
       return this._modelLimits;
     }
 
+    const modelName = String(this.model).toLowerCase();
+
+    // 🔥 INTERCEPT MUKTAMAD UNTUK PROXY CRAZYROUTER
+    // Menyayat ralat 404 noisy sepenuhnya dan menetapkan siling output 65k untuk kluster Gemini 2.5, 3 & 4
+    if (this.keyType === 'crazyrouter') {
+      let outputLimit = 8192;
+      if (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) {
+        outputLimit = 65535;
+      }
+      const limits = {
+        inputTokenLimit: undefined,
+        outputTokenLimit: outputLimit
+      };
+      log.debug(() => `[Gemini] CrazyRouter proxy bypass applied for ${this.model}. Output limit forced to: ${limits.outputTokenLimit}`);
+      
+      // Log Gemini API configuration untuk debug lokal kekal berfungsi penuh
+      const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
+      const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget;
+      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
+      
+      this._modelLimits = limits;
+      return limits;
+    }
+
     try {
       const response = await axios.get(`${this.baseUrl}/models/${this.model}`, {
         headers: this.getAuthHeaders(),
@@ -272,13 +296,12 @@ class GeminiService {
         outputTokenLimit: data.outputTokenLimit
       };
 
-      // Fallback heuristics by model family if not provided
+      // Fallback heuristics by model family if not provided (Kini menyokong Gemini 3 & 4)
       if (!limits.outputTokenLimit) {
-        const modelName = String(this.model).toLowerCase();
-        // Gemini 2.0 models have 8k output, 2.5 models have 65k output
+        // Gemini 2.0 models have 8k output, 2.5/3/4 models have 65k output
         if (modelName.includes('2.0') || modelName.includes('-flash-001') || modelName.includes('-flash-lite-001')) {
           limits.outputTokenLimit = 8192;
-        } else if (modelName.includes('2.5')) {
+        } else if (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) {
           limits.outputTokenLimit = 65536;
         } else {
           // Unknown model - use conservative 8k limit for safety
@@ -299,10 +322,9 @@ class GeminiService {
       return limits;
     } catch (error) {
       log.warn(() => ['[Gemini] Could not fetch model limits, using conservative defaults:', error.message]);
-      const modelName = String(this.model).toLowerCase();
       const limits = {
         inputTokenLimit: undefined,
-        outputTokenLimit: modelName.includes('2.5') ? 65536 : 8192 // 2.0 = 8k, 2.5 = 65k
+        outputTokenLimit: (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) ? 65536 : 8192
       };
       log.debug(() => `[Gemini] Fallback limits for ${this.model}: ${limits.outputTokenLimit} output tokens`);
       this._modelLimits = limits;
