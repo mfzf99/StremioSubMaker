@@ -2096,6 +2096,7 @@ class TranslationEngine {
     const promptBody = `${introInstruction}
 
 CRITICAL RULES:
+
 1. ISOLATED BOX (MOST CRITICAL): Each <s id="N"> is sealed. Translate 
    ONLY its content in TOTAL ISOLATION. Fragment IN = Fragment OUT.
    Stealing from the next ID DESTROYS subtitle sync permanently.
