@@ -859,14 +859,6 @@ const response = await axios.post(
               return; 
             }
             
-            // 🚨 SUNTIKAN PENGINTIP: Trace & intip semua json keys dari proxy secara live!
-            log.debug(() => `[Gemini Spy] Chunk Keys: ${Object.keys(data).join(', ')} | Has usageMetadata: ${!!data.usageMetadata}`);
-
-            // Buka isi perut chunk kalau ada metadata ATAU kalau chunk tu tiada data teks (candidates)
-            if (data.usageMetadata || !data.candidates) {
-              log.debug(() => `[Gemini Spy] RAW CHUNK CONTENT: ${JSON.stringify(data)}`);
-            }
-            
             // 🚨 KUTIP RESIT KOS (STREAMING CHUNKS) - SECARA SENYAP 🚨
             if (data.usageMetadata) {
               if (!processPayload.streamId) processPayload.streamId = 'batch_' + Date.now() + Math.random();
@@ -1046,17 +1038,8 @@ const response = await axios.post(
         return;
       }
 
-      // 🚨 SUNTIKAN PENGINTIP (FALLBACK ROUTE): Trace & intip data yang di-recover dari raw stream!
-      log.debug(() => `[Gemini Spy Fallback] Chunk Keys: ${Object.keys(data).join(', ')} | Has usageMetadata: ${!!data.usageMetadata}`);
-
-      // Buka isi perut chunk kalau ada metadata ATAU kalau chunk tu tiada data teks (candidates)
-      if (data.usageMetadata || !data.candidates) {
-        log.debug(() => `[Gemini Spy Fallback] RAW RECOVERED CONTENT: ${JSON.stringify(data)}`);
-      }
-
       // 🚨 KUTIP RESIT KOS (FALLBACK) - SECARA SENYAP 🚨
       if (data.usageMetadata) {
-          // Cipta ID unik untuk batch ni kalau belum ada
           if (!processPayload.streamId) processPayload.streamId = 'recv_' + Date.now() + Math.random();
           this.updateUsageStats(data.usageMetadata, processPayload.streamId);
       }
