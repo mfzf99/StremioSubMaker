@@ -1046,6 +1046,14 @@ const response = await axios.post(
         return;
       }
 
+      // 🚨 SUNTIKAN PENGINTIP (FALLBACK ROUTE): Trace & intip data yang di-recover dari raw stream!
+      log.debug(() => `[Gemini Spy Fallback] Chunk Keys: ${Object.keys(data).join(', ')} | Has usageMetadata: ${!!data.usageMetadata}`);
+
+      // Buka isi perut chunk kalau ada metadata ATAU kalau chunk tu tiada data teks (candidates)
+      if (data.usageMetadata || !data.candidates) {
+        log.debug(() => `[Gemini Spy Fallback] RAW RECOVERED CONTENT: ${JSON.stringify(data)}`);
+      }
+
       // 🚨 KUTIP RESIT KOS (FALLBACK) - SECARA SENYAP 🚨
       if (data.usageMetadata) {
           // Cipta ID unik untuk batch ni kalau belum ada
