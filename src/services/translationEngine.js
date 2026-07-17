@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms for ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel}. Use appropriate colloquialisms for ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2108,10 +2108,7 @@ CRITICAL RULES:
    ID_${endId}). IDs must match input exactly — never invent, skip, or 
    fill gaps. Use Rule 2 for untranslatable entries.
 
-4. TRANSLATION STYLE: Render dialogue in natural, colloquial ${targetLabel} 
-   that flows like real spoken conversation.
-
-5. OUTPUT PURITY: Format: <s id="45">text</s>. Preserve ALL inline tags 
+4. OUTPUT PURITY: Format: <s id="45">text</s>. Preserve ALL inline tags 
    ([br], <i>, etc.) and speaker dashes (-) exactly as source. Start 
    response immediately with first <s> tag. Nothing floating outside tags.
    Zero preamble, markdown, or commentary.
