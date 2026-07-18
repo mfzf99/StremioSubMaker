@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate into appropriate colloquialisms for ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise. Strictly write 'ini' in full; the shortened token 'ni' is strictly prohibited.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise. Strictly write 'ini' in full; the shortened token 'ni' is strictly prohibited.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate into appropriate colloquialisms for ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise. Strictly write 'ini' in full; the shortened token 'ni' is strictly prohibited.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate into natural ${targetLabel} that reflects native spoken dialogue. Allow common English loanwords. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise. Strictly write 'ini' in full; the shortened token 'ni' is strictly prohibited.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
