@@ -5131,6 +5131,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     // Kita sapu bersih teks mentah ni SEBELUM dia masuk ke dalam otak AI.
     if (typeof sourceContent === 'string') {
         sourceContent = sourceContent
+            .replace(/â™«/g, '♫')     // Nota Muzik (Mojibake Fix)
             .replace(/â€¦/g, '...')   // Titik tiga
             .replace(/â€™/g, "'")     // Koma atas (Apostrophe)
             .replace(/â€“/g, '-')     // Dash / Sempang
