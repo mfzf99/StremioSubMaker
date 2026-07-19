@@ -5633,12 +5633,12 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 var tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
             }
 
-            // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang)
+            // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang) - DOMAIN UTAMA FIXED!
             let walletSection = '';
             if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
                 try {
                     const axios = require('axios');
-                    const walletRes = await axios.get("https://api.crazyrouter.com/api/user/self", {
+                    const walletRes = await axios.get("https://crazyrouter.com/api/user/self", {
                         headers: {
                             "Authorization": `Bearer ${process.env.CRAZYROUTER_ACCESS_TOKEN}`,
                             "New-Api-User": process.env.CRAZYROUTER_USER_ID
@@ -5655,7 +5655,6 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                         walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
                     }
                 } catch (err) {
-                    // Tembak log amaran ke terminal Docker supaya tak buta!
                     console.error(`[Wallet Error] Gagal dapatkan baki CrazyRouter: ${err.message}`);
                 }
             }
