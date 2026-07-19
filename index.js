@@ -8134,7 +8134,8 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                     walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
                                 }
                             } catch (err) {
-                                // Biar log senyap kalau request gagal, janji skrip utama tak crash
+                                // Tembak log amaran ke terminal Docker supaya tak buta!
+                                console.error(`[Wallet Error] Gagal dapatkan baki CrazyRouter: ${err.message}`);
                             }
                         }
 
