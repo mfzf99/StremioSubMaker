@@ -8109,11 +8109,34 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         tokenBreakdown += `\n`;
                         if (thoughtTokens > 0) tokenBreakdown += `  ├ <b>Thought:</b> ${fmt(thoughtTokens)}\n`;
                         tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
-                                          `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
+                                           `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
                         const validKeys = Array.isArray(workingConfig.geminiApiKeys) ? workingConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
                         const keyCount = validKeys.length > 0 ? validKeys.length : 1;
                         const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+
+                        // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Adik)
+                        let walletSection = '';
+                        if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
+                            try {
+                                const axios = require('axios');
+                                const walletRes = await axios.get("https://api.crazyrouter.com/api/user/self", {
+                                    headers: {
+                                        "Authorization": `Bearer ${process.env.CRAZYROUTER_ACCESS_TOKEN}`,
+                                        "New-Api-User": process.env.CRAZYROUTER_USER_ID
+                                    },
+                                    timeout: 5000
+                                });
+                                if (walletRes?.data?.success && walletRes?.data?.data) {
+                                    const quota = walletRes.data.data.quota || 0;
+                                    const balanceUSD = quota / 500000;
+                                    const balanceMYR = balanceUSD * KADAR_TUKARAN_MYR;
+                                    walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
+                                }
+                            } catch (err) {
+                                // Biar log senyap kalau request gagal, janji skrip utama tak crash
+                            }
+                        }
 
                         // STRUKTUR KOS EMBEDDED BARU (TALLY DENGAN WALLET CRAZYROUTER)
                         let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
@@ -8121,6 +8144,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         if (isCrazyRouter) {
                             costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(2)} (RM ${retailMYR.toFixed(2)})\n` +
                                            `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
+                                           walletSection + // 👈 AUTOMATIK MASUK CUN KAT SINI!
                                            `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         } else {
                             costSection += `  └ <b>Retail Value:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
