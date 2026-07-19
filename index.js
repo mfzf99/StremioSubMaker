@@ -8111,16 +8111,19 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                                            `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
-                        const validKeys = Array.isArray(workingConfig.geminiApiKeys) ? workingConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
-                        const keyCount = validKeys.length > 0 ? validKeys.length : 1;
-                        const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+                        // 🛡️ PERISAI PELINDUNG: Pastikan tierBadge sentiasa wujud & takkan buat skrip crash
+                        if (typeof tierBadge === 'undefined') {
+                            const validKeys = Array.isArray(workingConfig?.geminiApiKeys) ? workingConfig.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
+                            const keyCount = validKeys.length > 0 ? validKeys.length : 1;
+                            var tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+                        }
 
-                        // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Adik)
+                        // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Adik) - FIXED URL DOMAIN UTAMA!
                         let walletSection = '';
                         if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
                             try {
                                 const axios = require('axios');
-                                const walletRes = await axios.get("https://api.crazyrouter.com/api/user/self", {
+                                const walletRes = await axios.get("https://crazyrouter.com/api/user/self", {
                                     headers: {
                                         "Authorization": `Bearer ${process.env.CRAZYROUTER_ACCESS_TOKEN}`,
                                         "New-Api-User": process.env.CRAZYROUTER_USER_ID
@@ -8145,10 +8148,10 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         if (isCrazyRouter) {
                             costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(2)} (RM ${retailMYR.toFixed(2)})\n` +
                                            `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
-                                           walletSection + // 👈 AUTOMATIK MASUK CUN KAT SINI!
+                                           walletSection + 
                                            `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         } else {
-                            costSection += `  └ <b>Retail Value:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
+                            costSection += `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         }
 
                         const teleMsg = `✅ <b>Subtitle Translation Report (xEmbed)</b> 🎬\n\n` +
