@@ -5626,17 +5626,39 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                               `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
-            // 🎛️ DETEKSI JUMLAH KEY (TRANSPARENT FINOPS)
-            const validKeys = Array.isArray(config.geminiApiKeys) ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
-            const keyCount = validKeys.length > 0 ? validKeys.length : 1;
-            const tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+            // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang)
+            let walletSection = '';
+            if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
+                try {
+                    const axios = require('axios');
+                    const walletRes = await axios.get("https://api.crazyrouter.com/api/user/self", {
+                        headers: {
+                            "Authorization": `Bearer ${process.env.CRAZYROUTER_ACCESS_TOKEN}`,
+                            "New-Api-User": process.env.CRAZYROUTER_USER_ID
+                        },
+                        timeout: 5000
+                    });
+                    if (walletRes?.data?.success && walletRes?.data?.data) {
+                        const quota = walletRes.data.data.quota || 0;
+                        const balanceUSD = quota / 500000;
+                        
+                        const activeRate = (typeof retailUSD !== 'undefined' && retailUSD > 0 && typeof retailMYR !== 'undefined') ? (retailMYR / retailUSD) : 4.40;
+                        const balanceMYR = balanceUSD * activeRate;
+                        
+                        walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
+                    }
+                } catch (err) {
+                    // Biar log senyap kalau request gagal, janji skrip utama tak crash
+                }
+            }
 
             // Bina paparan FinOps untuk Telegram (Tally dengan Wallet!)
             let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
-            
+                        
             if (isCrazyRouter) {
                 costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
                                `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
+                               walletSection + 
                                `  └ <b>Actual Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
             } else {
                 costSection += `  └ <b>Retail Value:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
