@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that reflects authentic native spoken dialogue while preserving the original tone, intent, and characterization.`,
+  primary: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that sounds native while preserving the original meaning, tone, and speaker identity.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that reflects authentic native spoken dialogue while preserving the original tone, intent, and characterization.`
+ fallback: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that sounds native while preserving the original meaning, tone, and speaker identity.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
