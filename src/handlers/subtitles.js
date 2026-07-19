@@ -5626,6 +5626,13 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             tokenBreakdown += `  ├ <b>Output:</b> ${fmt(baseOutputTokens)}\n` +
                               `  ├ <b>Total Tokens:</b> ±${fmt(totalTokens)}\n`;
 
+            // 🛡️ PERISAI PELINDUNG: Pastikan tierBadge sentiasa wujud & takkan buat skrip crash
+            if (typeof tierBadge === 'undefined') {
+                const validKeys = Array.isArray(config?.geminiApiKeys) ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim()) : [];
+                const keyCount = validKeys.length > 0 ? validKeys.length : 1;
+                var tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
+            }
+
             // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang)
             let walletSection = '';
             if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
@@ -5655,7 +5662,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
             // Bina paparan FinOps untuk Telegram (Tally dengan Wallet!)
             let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
-                        
+                                
             if (isCrazyRouter) {
                 costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
                                `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
