@@ -5633,7 +5633,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 var tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
             }
 
-            // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang) - DOMAIN UTAMA FIXED!
+            // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Abang) - WALLET DI BAWAH SEKALI
             let walletSection = '';
             if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
                 try {
@@ -5652,7 +5652,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                         const activeRate = (typeof retailUSD !== 'undefined' && retailUSD > 0 && typeof retailMYR !== 'undefined') ? (retailMYR / retailUSD) : 4.40;
                         const balanceMYR = balanceUSD * activeRate;
                         
-                        walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
+                        // 👈 Karakter ditukar ke └ sebab dah jadi penutup lantai
+                        walletSection = `  └ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
                     }
                 } catch (err) {
                     console.error(`[Wallet Error] Gagal dapatkan baki CrazyRouter: ${err.message}`);
@@ -5664,9 +5665,14 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                                 
             if (isCrazyRouter) {
                 costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
-                               `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
-                               walletSection + 
-                               `  └ <b>Actual Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+                               `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n`;
+                
+                // 🔄 SUSUNAN DINAMIK: Kalau wallet wujud, Actual Cost pakai ├, kalau takde pakai └
+                if (walletSection) {
+                    costSection += `  ├ <b>Actual Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n` + walletSection;
+                } else {
+                    costSection += `  └ <b>Actual Cost:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
+                }
             } else {
                 costSection += `  └ <b>Retail Value:</b> ${displayUSD} (${displayMYR} | <i>${rateIndicator}</i>)\n`;
             }
