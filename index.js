@@ -8118,7 +8118,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             var tierBadge = keyCount > 1 ? `${keyCount} Keys Active` : `1 Key Active`;
                         }
 
-                        // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Adik) - FIXED URL DOMAIN UTAMA!
+                        // 🌐 ENJIN AUTOMATIK SEDUT BAKI WALLET CRAZYROUTER (Adik) - WALLET DI BAWAH SEKALI
                         let walletSection = '';
                         if (isCrazyRouter && process.env.CRAZYROUTER_ACCESS_TOKEN && process.env.CRAZYROUTER_USER_ID) {
                             try {
@@ -8134,7 +8134,9 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                     const quota = walletRes.data.data.quota || 0;
                                     const balanceUSD = quota / 500000;
                                     const balanceMYR = balanceUSD * KADAR_TUKARAN_MYR;
-                                    walletSection = `  ├ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
+                                    
+                                    // 👈 Tukar ke └ sebab wallet dah jadi garisan penutup lantai
+                                    walletSection = `  └ <b>Wallet Balance:</b> RM ${balanceMYR.toFixed(2)} ($${balanceUSD.toFixed(2)}) 💳\n`;
                                 }
                             } catch (err) {
                                 // Tembak log amaran ke terminal Docker supaya tak buta!
@@ -8147,9 +8149,14 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         
                         if (isCrazyRouter) {
                             costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(2)} (RM ${retailMYR.toFixed(2)})\n` +
-                                           `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
-                                           walletSection + 
-                                           `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
+                                           `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n`;
+                            
+                            // 🔄 SUSUNAN DINAMIK: Kalau wallet wujud, Actual Cost guna ├, disusuli Wallet Balance (└)
+                            if (walletSection) {
+                                costSection += `  ├ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n` + walletSection;
+                            } else {
+                                costSection += `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
+                            }
                         } else {
                             costSection += `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         }
