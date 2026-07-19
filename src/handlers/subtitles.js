@@ -5604,8 +5604,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const retailMYR = retailUSD * KADAR_TUKARAN_MYR;
 
             // Format paparan mengikut status kos akhir selepas diskaun
-            const displayUSD = `$${finalUSD.toFixed(5)}`;
-            const displayMYR = `RM ${totalMYR.toFixed(4)}`;
+            const displayUSD = `$${finalUSD.toFixed(2)}`;
+            const displayMYR = `RM ${totalMYR.toFixed(2)}`;
             const fmt = (num) => (num || 0).toLocaleString(); // Fungsi pendek untuk format nombor
 
             // Buat label cantik
