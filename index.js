@@ -8119,11 +8119,11 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         let costSection = `\n💰 <b>API Cost Estimate (${cleanModelName}):</b>\n` + tokenBreakdown;
                         
                         if (isCrazyRouter) {
-                            costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(5)} (RM ${retailMYR.toFixed(4)})\n` +
+                            costSection += `  ├ <b>Retail Price:</b> $${retailUSD.toFixed(2)} (RM ${retailMYR.toFixed(2)})\n` +
                                            `  ├ <b>Discount:</b> 45% (CrazyRouter Proxy) 📉\n` +
-                                           `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+                                           `  └ <b>Actual Cost:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         } else {
-                            costSection += `  └ <b>Retail Value:</b> $${totalUSD.toFixed(5)} (RM ${totalMYR.toFixed(4)} | <i>${rateIndicator}</i>)\n`;
+                            costSection += `  └ <b>Retail Value:</b> $${totalUSD.toFixed(2)} (RM ${totalMYR.toFixed(2)} | <i>${rateIndicator}</i>)\n`;
                         }
 
                         const teleMsg = `✅ <b>Subtitle Translation Report (xEmbed)</b> 🎬\n\n` +
