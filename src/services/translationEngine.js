@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that sounds native, while strictly preserving the original meaning and tone. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `Translate to ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate to ${targetLabel}. Use natural, context-appropriate language that sounds native, while strictly preserving the original meaning and tone. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `Translate to ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
