@@ -2993,8 +2993,12 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       .replace(/\bNi\b/g, 'Ini')
       .replace(/\btu\b/g, 'itu')
       .replace(/\bTu\b/g, 'Itu')
+      .replace(/\bje\b/g, 'saja')
+      .replace(/\bJe\b/g, 'Saja')
       .replace(/\bdgn\b/gi, 'dengan')
       .replace(/\byg\b/gi, 'yang')
+      .replace(/\bkat\b/g, 'dekat')
+      .replace(/\bKat\b/g, 'Dekat')
       .replace(/\bdkt\b/gi, 'dekat')
       .replace(/\bkt\b/gi, 'dekat');
 
