@@ -2995,6 +2995,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
       .replace(/\bTu\b/g, 'Itu')
       .replace(/\bje\b/g, 'saja')
       .replace(/\bJe\b/g, 'Saja')
+      .replace(/\bjap\b/g, 'sekejap')
+      .replace(/\bJap\b/g, 'Sekejap')
       .replace(/\bdgn\b/gi, 'dengan')
       .replace(/\byg\b/gi, 'yang')
       .replace(/\bkat\b/g, 'dekat')
