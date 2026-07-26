@@ -2968,7 +2968,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Clean translated text (remove timecodes, normalize line endings)
-   * [UPDATED - FASA 2]: Added Auto-Closer for tags & Poisonous Character Sanitizer
+   * [UPDATED - FASA 3]: Added Auto-Closer, Poisonous Character Sanitizer & Malay Spelling Sanitizer
    */
   cleanTranslatedText(text) {
     let cleaned = String(text || '').trim();
@@ -2985,6 +2985,18 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
     // 🚨 UBAHAN BARU 2: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
+
+    // 🧹 INJECT: ENJIN SANITASI EJAAN BM (Post-Processing Filter) 🧹
+    // Gunakan \b (Word Boundary) supaya tidak merosakkan perkataan berangkai (contoh: "berani", "batu")
+    cleaned = cleaned
+      .replace(/\bni\b/g, 'ini')
+      .replace(/\bNi\b/g, 'Ini')
+      .replace(/\btu\b/g, 'itu')
+      .replace(/\bTu\b/g, 'Itu')
+      .replace(/\bdgn\b/gi, 'dengan')
+      .replace(/\byg\b/gi, 'yang')
+      .replace(/\bdkt\b/gi, 'dekat')
+      .replace(/\bkt\b/gi, 'dekat');
 
     // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
     // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
@@ -3014,7 +3026,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
     return cleaned;
   }
-
+  
   /**
    * Remove timecodes/timeranges from arbitrary text (defensive post-clean)
    */
