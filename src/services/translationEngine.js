@@ -2968,7 +2968,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Clean translated text (remove timecodes, normalize line endings)
-   * [UPDATED - FASA 3]: Added Auto-Closer, Poisonous Character Sanitizer & Malay Spelling Sanitizer
+   * [UPDATED - FASA 3]: Added Auto-Closer, Poisonous Character Sanitizer, ASS Tag & XML Garbage Cleanup & Malay Spelling Sanitizer
    */
   cleanTranslatedText(text) {
     let cleaned = String(text || '').trim();
@@ -2977,13 +2977,16 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
     cleaned = cleaned.replace(timecodePattern, '').trim();
 
-    // Strip ASS/SSA override tags
-    cleaned = cleaned.replace(/\{\\[^}]*\}/g, '').trim();
+    // 🚨 UBAHAN BARU 1: Strip ALL ASS/SSA override tags mutlak (contoh: {\an8}, {\b1}, {an8})
+    cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
 
-    // 🚨 UBAHAN BARU 1: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
+    // 🚨 UBAHAN BARU 2: Pembersih tahi tag XML/HTML/Petik kat permulaan ayat (contoh: ">, >, ">, '>)
+    cleaned = cleaned.replace(/^["'>\s]+/, '').trim();
+
+    // 🚨 UBAHAN BARU 3: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
     cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
 
-    // 🚨 UBAHAN BARU 2: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
+    // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
     // 🧹 INJECT: ENJIN SANITASI EJAAN BM (Post-Processing Filter) 🧹
