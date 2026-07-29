@@ -5127,16 +5127,23 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       sourceContent = ensureSRTForTranslation(sourceContent, '[Translation]');
     }
 
-    // 🧹 INJECT: MESIN PENYAPU ALIEN (MOJIBAKE CLEANER) 🧹
-    // Kita sapu bersih teks mentah ni SEBELUM dia masuk ke dalam otak AI.
+    // 🧹 INJECT: MESIN PENYAPU ALIEN (MOJIBAKE & RAW PRE-PROCESSOR CLEANER) 🧹
+    // Kita sapu bersih teks mentah ini SEBELUM dia masuk ke dalam otak AI (Jimat Token + Elak Simbol Pelik)
     if (typeof sourceContent === 'string') {
         sourceContent = sourceContent
+            // 1. Pembersih Mojibake (Simbol Rosak)
             .replace(/â™«/g, '♫')     // Nota Muzik (Mojibake Fix)
             .replace(/â€¦/g, '...')   // Titik tiga
             .replace(/â€™/g, "'")     // Koma atas (Apostrophe)
             .replace(/â€“/g, '-')     // Dash / Sempang
             .replace(/â€œ/g, '"')     // Pembuka pengikat kata
-            .replace(/â€/g, '"');     // Penutup pengikat kata
+            .replace(/â€/g, '"')      // Penutup pengikat kata
+
+            // 2. Pembersih Tag ASS/SSA Override (contoh: {\an8}, {\b1}, {an8})
+            .replace(/\{[^}]*\}/g, '')
+
+            // 3. Pembersih Tahi Tag XML/HTML/Petik kat permulaan setiap baris (contoh: ">, >, '>)
+            .replace(/^[ \t]*["'>]+/gm, '');
     }
     // =======================================================
 
