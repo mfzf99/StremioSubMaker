@@ -3022,6 +3022,10 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     cleaned = cleaned
       .replace(/\bni\b/g, 'ini')
       .replace(/\bNi\b/g, 'Ini')
+      .replace(/\bnilah\b/g, 'inilah')
+      .replace(/\bNilah\b/g, 'Inilah')
+      .replace(/\btulah\b/g, 'itulah')
+      .replace(/\bTulah\b/g, 'Itulah')
       .replace(/\btu\b/g, 'itu')
       .replace(/\bTu\b/g, 'Itu')
       .replace(/\bje\b/g, 'saja')
