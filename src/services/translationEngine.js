@@ -2119,27 +2119,24 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    symbols/music notes/song lyrics (♪) — copy the EXACT ORIGINAL TEXT 
    for that ID. NEVER shift any remaining entry.
 
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly from ID_${startId}. 
+3. STRUCTURE & COUNT: Every ID appears EXACTLY ONCE in strict input 
+   order, matching input IDs exactly from ID_${startId} to ID_${endId}. 
    Non-sequential input (e.g. gaps like X, X+2, X+5) = non-sequential 
-   output — never fill gaps, never invent an ID not in the input.
+   output — never fill gaps or invent an ID not in the input. Output 
+   EXACTLY ${expectedCount} entries total. NEVER fabricate content to 
+   hit the count — use Rule 2 instead.
 
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (ID_${startId} to ID_${endId}). NEVER fabricate content — use 
-   Rule 2 instead.
-
-5. FORMAT: <s id="N">translated text</s>
-   Use exact ID from input. Never write [original_id] or [N].
-
-6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
    inline tag MUST be preserved in the translation — same position, 
    same structure, unchanged. Speaker dashes (-) MUST also be preserved 
    exactly as they appear in the source.
 
-7. CLEAN OUTPUT: Response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary — before, 
-   between, or after entries. Every translated word MUST be inside its 
-   corresponding tag. NOTHING floating outside.
+5. OUTPUT FORMAT: <s id="N">translated text</s> — use exact ID from 
+   input, never write [original_id] or [N] literally. Response MUST 
+   start immediately with the first <s id="..."> tag. NO preamble, NO 
+   markdown, NO commentary — before, between, or after entries. Every 
+   translated word MUST be inside its corresponding tag. NOTHING 
+   floating outside.
 
 <input>
 ${batchText}
