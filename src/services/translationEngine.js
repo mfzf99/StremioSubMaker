@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate into ${targetLabel} using appropriate colloquialisms. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords where they reflect how Malaysians actually speak. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate into ${targetLabel} using appropriate colloquialisms. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords where they reflect how Malaysians actually speak. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2121,8 +2121,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
    Output IDs MUST match input IDs exactly from ID_${startId}. 
-   Non-sequential input = non-sequential output. Never fill gaps or 
-   invent an ID not in the input.
+   Non-sequential input (e.g. 45, 47, 50) = non-sequential output — 
+   never fill gaps, never invent an ID not in the input.
 
 4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    (ID_${startId} to ID_${endId}). NEVER fabricate content — use 
