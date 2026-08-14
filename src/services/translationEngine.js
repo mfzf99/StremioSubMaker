@@ -135,7 +135,7 @@ function getBatchSizeForModel(model) {
 
     // Versi 3.0 dan ke atas dapat batch size 400
     if (geminiVersion >= 3.0) {
-      return 400;
+      return 60;
     }
     
     // Versi bawah 3.0 atau legacy Flash models kekal 250
