@@ -2181,8 +2181,8 @@ const statsLimiter = rateLimit({
 // Prevents users from hammering external APIs during validation
 const validationLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 15, // 15 validation attempts per 5 minutes per IP
-    message: 'Too many validation requests. Please wait a few minutes before trying again.',
+    max: 500, // Dinaikkan kepada 500 cubaan untuk sokong ratusan API keys
+    message: { error: 'Too many validation requests. Please wait a few minutes before trying again.' },
     standardHeaders: true,
     legacyHeaders: false,
     store: createRateLimitRedisStore('rl:validation:'),
