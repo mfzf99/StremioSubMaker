@@ -6,7 +6,7 @@
 
     function loadConfigJs(versionQuery) {
         var script = document.createElement('script');
-        script.src = 'config.js' + versionQuery;
+        script.src = '/config.js' + versionQuery;
         script.defer = false;
         document.body.appendChild(script);
     }
