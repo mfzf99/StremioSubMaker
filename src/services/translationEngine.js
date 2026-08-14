@@ -33,10 +33,18 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.
 
- // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
+CRITICAL PRONOUN & ADDRESS RULES:
+1. PRONOUN CONSISTENCY: Maintain strict consistency for 1st and 2nd person pronouns within the same dialogue scene. NEVER randomly alternate between formal/soft (saya/awak) and informal/direct (aku/kau) between the same conversation partners. Default to natural, balanced conversational pronouns (saya/awak) unless the relationship is explicitly established as close peers/aggressive (aku/kau) or formal.
+2. CONTEXTUAL HONORIFICS & TITLES: Translate terms of address, familial terms, and honorifics based on conversational dynamics and social hierarchy, not literal word-for-word translation (e.g., do not translate "brother/sister/boss" literally if it sounds unnatural in dialogue).`,
+
+  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
+  fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Tone down extreme profanity if flagged by safety filters while maintaining natural flow. Keep translations concise for subtitle reading speed.
+
+CRITICAL PRONOUN & ADDRESS RULES:
+1. PRONOUN CONSISTENCY: Maintain strict consistency for 1st and 2nd person pronouns within the same dialogue scene. NEVER randomly alternate between formal/soft (saya/awak) and informal/direct (aku/kau) between the same conversation partners. Default to natural, balanced conversational pronouns (saya/awak) unless the relationship is explicitly established as close peers/aggressive (aku/kau) or formal.
+2. CONTEXTUAL HONORIFICS & TITLES: Translate terms of address, familial terms, and honorifics based on conversational dynamics and social hierarchy, not literal word-for-word translation.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
