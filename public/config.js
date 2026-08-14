@@ -1438,7 +1438,15 @@ Translate to {target_language}.`;
     function getUrlSessionToken() {
         try {
             const raw = new URLSearchParams(window.location.search).get('config');
-            return isValidSessionToken(raw) ? raw : '';
+            if (isValidSessionToken(raw)) {
+                return raw;
+            }
+            // Fallback: baca token 32-hex daripada laluan Stremio (/addon/<hash>/configure)
+            const pathMatch = (window.location.pathname || '').match(/\/addon\/([a-f0-9]{32})(?:\/|$)/i);
+            if (pathMatch && isValidSessionToken(pathMatch[1])) {
+                return pathMatch[1].toLowerCase();
+            }
+            return '';
         } catch (_) {
             return '';
         }
