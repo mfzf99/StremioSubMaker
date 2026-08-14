@@ -75,23 +75,6 @@
             notifyLocaleUpdated();
         }
     }
-            const query = [];
-            if (configParam) query.push('config=' + encodeURIComponent(configParam));
-            if (langParam) query.push('lang=' + encodeURIComponent(langParam));
-            const resp = await fetch('/api/locale' + (query.length ? ('?' + query.join('&')) : ''), { cache: 'no-store' });
-            const data = await resp.json();
-            bootstrapTranslator(data || DEFAULT_LOCALE);
-            applyUiLanguageCopy();
-            applyStaticCopy();
-            notifyLocaleUpdated();
-        } catch (err) {
-            console.warn('[i18n] Failed to load locale, falling back to English', err);
-            bootstrapTranslator(DEFAULT_LOCALE);
-            applyUiLanguageCopy();
-            applyStaticCopy();
-            notifyLocaleUpdated();
-        }
-    }
     localeReadyPromise = initLocale();
 
     function notifyLocaleUpdated() {
