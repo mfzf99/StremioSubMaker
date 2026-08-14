@@ -44,7 +44,13 @@
     async function initLocale(langOverride) {
         try {
             const url = new URL(window.location.href);
-            const configParam = url.searchParams.get('config');
+            let configParam = url.searchParams.get('config');
+            if (!configParam) {
+                const pathMatch = (url.pathname || '').match(/\/addon\/([a-f0-9]{32})(?:\/|$)/i);
+                if (pathMatch && isValidSessionToken(pathMatch[1])) {
+                    configParam = pathMatch[1].toLowerCase();
+                }
+            }
             let langParam = langOverride || url.searchParams.get('lang');
             if (!langParam) {
                 try {
@@ -52,6 +58,23 @@
                     if (stored) langParam = stored;
                 } catch (_) { }
             }
+            const query = [];
+            if (configParam) query.push('config=' + encodeURIComponent(configParam));
+            if (langParam) query.push('lang=' + encodeURIComponent(langParam));
+            const resp = await fetch('/api/locale' + (query.length ? ('?' + query.join('&')) : ''), { cache: 'no-store' });
+            const data = await resp.json();
+            bootstrapTranslator(data || DEFAULT_LOCALE);
+            applyUiLanguageCopy();
+            applyStaticCopy();
+            notifyLocaleUpdated();
+        } catch (err) {
+            console.warn('[i18n] Failed to load locale, falling back to English', err);
+            bootstrapTranslator(DEFAULT_LOCALE);
+            applyUiLanguageCopy();
+            applyStaticCopy();
+            notifyLocaleUpdated();
+        }
+    }
             const query = [];
             if (configParam) query.push('config=' + encodeURIComponent(configParam));
             if (langParam) query.push('lang=' + encodeURIComponent(langParam));
