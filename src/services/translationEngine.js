@@ -25,20 +25,7 @@ const { handleCaughtError } = require('../utils/errorClassifier');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 const { recordKeyError: recordKeyErrorRedis, isKeyCoolingDown: isKeyCoolingDownRedis, getNextRotationIndex, resetKeyHealth } = require('../utils/sharedCache');
 const { executeParallelTranslation } = require('../utils/parallelTranslation');
-// 🛑 BINA PEDAL BREK ANGIN (5.0 SAAT)
-//const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ============================================================================
-// 🛠️ ZON TEMPLATE PROMPT (EDIT DI SINI BILA-BILA MASA UNTUK EKSPERIMEN)
-// ============================================================================
-const PROMPT_TEMPLATES = {
-  // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using appropriate colloquialisms that reflect native spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'.`,
-
- // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using appropriate colloquialisms that reflect native spoken dialogue. Use 'saya' for 'I' and 'awak' for 'you'.`
-};
-// ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
   return String(value || '')
@@ -107,6 +94,12 @@ const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/
  * Priority: Environment variable > Model-specific > Default (250)
  *
  * Model-specific batch sizes are hardcoded in backend and safe from client manipulation.
+ * Different models have different processing speeds and capabilities:
+ * - Flash models: 250 entries (faster, more capable)
+ * - Flash-lite models: 200 entries (more conservative for stability)
+ *
+ * @param {string} model - Gemini model name
+ * @returns {number} - Batch size for this model
  */
 function getBatchSizeForModel(model) {
   // Environment variable override (highest priority)
@@ -117,33 +110,28 @@ function getBatchSizeForModel(model) {
   // Model-specific batch sizes (hardcoded, safe from client manipulation)
   const modelStr = String(model || '').toLowerCase();
 
-  // Gemma models: Lower batch size for stability (200)
+  // Gemini 3.0 Flash: Large context window, higher batch size for throughput
+  if (modelStr.includes('gemini-3-flash')) {
+    return 400;
+  }
+
+  // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 50;
+    return 200;
   }
 
-  // Flash-lite models: More conservative batch size for stability (200)
+  // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 50;
+    return 200;
   }
 
-  // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
+  // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    // Sedut nombor versi (contoh: 'gemini-1.5-flash' -> 1.5, 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5)
-    const versionMatch = modelStr.match(/gemini-(\d+(?:\.\d+)?)/);
-    const geminiVersion = versionMatch ? parseFloat(versionMatch[1]) : 0;
-
-    // Versi 3.0 dan ke atas dapat batch size (400)
-    if (geminiVersion >= 3.0) {
-      return 50;
-    }
-    
-    // Versi bawah 3.0 atau legacy Flash models kekal (250)
-    return 50;
+    return 250;
   }
 
-  // Default batch size for unknown models (250)
-  return 50;
+  // Default batch size for unknown models
+  return 250;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -172,11 +160,11 @@ class TranslationEngine {
 
     // Context settings (disabled by default)
     this.enableBatchContext = this.advancedSettings.enableBatchContext === true;
-    this.contextSize = parseInt(this.advancedSettings.contextSize) || 20;
+    this.contextSize = parseInt(this.advancedSettings.contextSize) || 8;
 
     // Mismatch retry: number of retries when AI returns wrong entry count (default: 1)
     const rawMismatchRetries = parseInt(this.advancedSettings.mismatchRetries);
-    this.mismatchRetries = Number.isFinite(rawMismatchRetries) ? Math.max(0, Math.min(3, rawMismatchRetries)) : 3;
+    this.mismatchRetries = Number.isFinite(rawMismatchRetries) ? Math.max(0, Math.min(3, rawMismatchRetries)) : 1;
 
     // Translation workflow mode: 'original' (numbered list), 'ai' (send timestamps),
     //                           'xml' (XML-tagged entries), 'json' (JSON structured I/O)
@@ -208,7 +196,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 50;
+    const JSON_MAX_BATCH_SIZE = 200;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
@@ -280,8 +268,8 @@ class TranslationEngine {
     // isNativeBatchProvider already set above during JSON/workflow normalization
 
     const rotationLabel = this.perBatchRotationEnabled ? 'per-batch' : (this.retryRotationEnabled ? 'per-request' : '');
-    log.debug(() => `[TranslationEngine] Initialized with model: ${model || 'unknown'}, batch size: ${this.batchSize}, batch context: ${this.enableBatchContext ? 'enabled (' + this.contextSize + ' lines)' : 'disabled'}, workflow: ${this.translationWorkflow}, mode: ${this.singleBatchMode ? 'single-batch' : 'batched'}, mismatchRetries: ${this.mismatchRetries}${rotationLabel ? `, key-rotation: ${rotationLabel}, keys: ${this.keyRotationConfig.keys.length}` : ''}${this.isNativeBatchProvider ? ', native-batch: true' : ''}`);
-    
+    log.debug(() => `[TranslationEngine] Initialized with model: ${model || 'unknown'}, batch size: ${this.batchSize}, batch context: ${this.enableBatchContext ? 'enabled' : 'disabled'}, workflow: ${this.translationWorkflow}, mode: ${this.singleBatchMode ? 'single-batch' : 'batched'}, mismatchRetries: ${this.mismatchRetries}${rotationLabel ? `, key-rotation: ${rotationLabel}, keys: ${this.keyRotationConfig.keys.length}` : ''}${this.isNativeBatchProvider ? ', native-batch: true' : ''}`);
+
     // Translation diagnostics — accumulated during translation, read by caller after completion.
     // These stats are surfaced on the Translation History cards in Sub Toolbox.
     this.translationStats = {
@@ -332,28 +320,18 @@ class TranslationEngine {
   /**
    * Key health tracking constants
    */
-  static KEY_HEALTH_ERROR_THRESHOLD = 1; // 🚀 TUKAR JADI 1! 1 kali ralat, terus masuk lokap 1 jam!
+  static KEY_HEALTH_ERROR_THRESHOLD = 5;
   static KEY_HEALTH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
-  
+
   /**
-   * Record an error for the current API key (Dah dipasang Perisai Kunci Suci)
+   * Record an error for the current API key (distributed key health tracking).
    * MULTI-INSTANCE FIX: Uses Redis via sharedCache for cross-pod state sharing.
    * Falls back to local Map if Redis is unavailable.
    * @param {string} apiKey - The key that errored
-   * @param {Error} error - Objek ralat untuk semakan silang jenis ralat (Suntikan Baru)
    * @returns {Promise<void>}
    */
-  async _recordKeyError(apiKey, error = null) {
+  async _recordKeyError(apiKey) {
     if (!this.retryRotationEnabled || !apiKey) return;
-
-    // 🛡️ PERISAI KUNCI SUCI: Kalau ralat sbb safety filter / kandungan terlarang, JANGAN HUKUM KEY NI!
-    if (error && error.message) {
-      const msg = String(error.message).toLowerCase();
-      if (msg.includes('prohibited_content') || msg.includes('safety') || msg.includes('recitation')) {
-        log.debug(() => `[TranslationEngine] 🛡️ Perisai aktif: Skip kuarantin untuk key ${this._redactKey(apiKey)} sbb ralat isu kandungan teks.`);
-        return; // Terus keluar, selamatkan key dari masuk lokap 1 jam!
-      }
-    }
 
     // Update local cache immediately for fast in-process lookups
     const now = Date.now();
@@ -577,28 +555,18 @@ class TranslationEngine {
   }
 
   /**
-   * Check if an error is a retryable HTTP error (Mod Ganas + Perisai Prohibited Content)
+   * Check if an error is a retryable HTTP error (429 Too Many Requests or 503 Service Unavailable).
    * @param {Error} error
    * @returns {boolean}
    */
   _isRetryableHttpError(error) {
     if (!error) return false;
-    const msg = String(error.message || '').toLowerCase();
+    const msg = error.message || '';
     const status = error.statusCode || error.status || error.response?.status || 0;
-    
-    // 🛡️ PERISAI KHAS: Jangan hijack ralat Prohibited Content / Safety Filter!
-    // Jika ralat ada unsur sensitiviti, pulangkan false supaya litar 'else if' di bawah yang uruskan Stage 1 & 2.
-    if (msg.includes('prohibited_content') || msg.includes('safety') || msg.includes('recitation')) {
-      return false;
-    }
-
-    // 🚀 MOD GANAS: Janji ada status code ralat HTTP (4xx, 5xx) ATAU string ralat API/Network, terus paksa rotate key!
-    return status >= 400 || 
-      msg.includes('429') || msg.includes('too many requests') ||
-      msg.includes('503') || msg.includes('service unavailable') ||
-      msg.includes('resource_exhausted') || msg.includes('rate limit') ||
-      msg.includes('fetch failed') || msg.includes('network') ||
-      msg.includes('timeout');
+    return status === 429 || status === 503 ||
+      msg.includes('429') || msg.includes('Too Many Requests') ||
+      msg.includes('503') || msg.includes('Service Unavailable') ||
+      msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit');
   }
 
   _isStructuredOutputCapabilityError(error) {
@@ -848,13 +816,6 @@ class TranslationEngine {
           if (batchIndex === 0 || batchIndex === batches.length - 1 || progress % 25 === 0) {
             log.info(() => `[TranslationEngine] Progress: ${progress}% (${translatedEntries.length}/${entries.length} entries, batch ${batchIndex + 1}/${batches.length})`);
           }
-
-          // 🛑 INJECT BREK 5.0 SAAT DI SINI
-          //if (batchIndex < batches.length - 1) {
-            //log.debug(() => `[⏳ RATE LIMIT] Brek angin 5.0 saat sebelum batch seterusnya...`);
-            //await sleep(5000);
-          //}
-
         } catch (error) {
           // Only log if not already logged by upstream handler
           if (!error._alreadyLogged) {
@@ -1026,14 +987,7 @@ class TranslationEngine {
           log.warn(() => ['[TranslationEngine] Progress callback error (single-batch):', err.message]);
         }
       }
-
-      // 🛑 INJECT BREK 5.0 SAAT DI SINI (UNTUK CHUNKING)
-      //if (batchIndex < chunks.length - 1) {
-        //log.debug(() => `[⏳ RATE LIMIT] Brek angin 5.0 saat sebelum chunk seterusnya...`);
-        //await sleep(5000);
-      //}
-
-    } // <-- Ini kurungan yang tutup gelung 'for'
+    }
 
     if (translatedEntries.length !== entries.length) {
       log.warn(() => `[TranslationEngine] Single-batch entry count mismatch: expected ${entries.length}, got ${translatedEntries.length}`);
@@ -1090,36 +1044,28 @@ class TranslationEngine {
     }
 
     const firstEntryId = batch[0].id;
+    const lastEntryId = batch[batch.length - 1].id;
+
+    // Get surrounding context from original entries (before the batch)
     const surroundingStartIdx = Math.max(0, firstEntryId - 1 - this.contextSize);
     const surroundingEndIdx = firstEntryId - 2;
-    const memoryContext = [];
-
-    // Bina 'Kamus' carian pantas untuk terjemahan yang dah siap
-    const translatedMap = new Map();
-    for (const t of translatedSoFar) {
-      translatedMap.set(t.id, t.text);
-    }
+    const surroundingContext = [];
 
     for (let i = surroundingStartIdx; i <= surroundingEndIdx && i < allOriginalEntries.length; i++) {
       if (allOriginalEntries[i]) {
-        const origEntry = allOriginalEntries[i];
-        const translatedText = translatedMap.get(origEntry.id);
-        
-        // Cuma masukkan dalam memori kalau terjemahan tu berjaya (bukan ralat)
-        if (translatedText && !translatedText.startsWith('[⚠]')) {
-          memoryContext.push({
-            id: origEntry.id,
-            source: origEntry.text,
-            translation: translatedText
-          });
-        }
+        surroundingContext.push({
+          id: allOriginalEntries[i].id,
+          text: allOriginalEntries[i].text,
+          timecode: allOriginalEntries[i].timecode
+        });
       }
     }
 
-    const hasContext = batchIndex > 0 && memoryContext.length > 0;
+    // Only include context if this is NOT the first batch
+    const hasContext = batchIndex > 0 && surroundingContext.length > 0;
 
     return hasContext ? {
-      previousMemory: memoryContext
+      surroundingOriginal: surroundingContext
     } : null;
   }
 
@@ -1264,18 +1210,10 @@ class TranslationEngine {
       }
 
       // Fix #7: Build context for second half from first half's translations
-      // [UPDATED]: Added previousMemory mapping for XML workflow to prevent Amnesia Auto-Chunking
+      // This ensures coherence is maintained across auto-chunked batches
       const contextCount = Math.min(this.contextSize, firstHalf.length);
       const secondHalfContext = this.enableBatchContext && contextCount > 0 ? {
-        surroundingOriginal: firstHalf.slice(-contextCount),
-        previousMemory: firstHalf.slice(-contextCount).map((orig, i) => {
-          const transIdx = firstTranslated.length - contextCount + i;
-          return {
-            id: orig.id,
-            source: orig.text,
-            translation: firstTranslated[transIdx] ? firstTranslated[transIdx].text : ''
-          };
-        })
+        surroundingOriginal: firstHalf.slice(-contextCount)
       } : null;
 
       const secondTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches, secondHalfContext, opts);
@@ -1294,14 +1232,8 @@ class TranslationEngine {
       : 0;
     let httpRetryAttempts = 0;
 
-    // 🚀 INJECT: VARIABEL UNTUK CHECKPOINT RECOVERY
-    let lastStreamedText = '';
-
     // Build a streaming callback for reuse in retry paths (Bug 1 fix: retries preserve streaming)
     const streamCallback = streamingRequested ? async (partialText) => {
-      // 🚀 INJECT: TANGKAP STREAM
-      lastStreamedText = partialText;
-
       if (typeof opts.onStreamProgress !== 'function') return;
       const payload = this.buildStreamingProgress(partialText, batch);
       if (!payload) return;
@@ -1317,12 +1249,12 @@ class TranslationEngine {
     } : null;
 
     try {
-  translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);
-} catch (error) {
-  // Track the error against the current key for health tracking
-  if (this.retryRotationEnabled && this.gemini?.apiKey) {
-    this._recordKeyError(this.gemini.apiKey, error); // 🚀 Pasang 'error' kat sini!
-  }
+      translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);
+    } catch (error) {
+      // Track the error against the current key for health tracking
+      if (this.retryRotationEnabled && this.gemini?.apiKey) {
+        this._recordKeyError(this.gemini.apiKey);
+      }
 
       // If JSON structured mode itself appears unsupported by provider/model, immediately
       // retry this batch in XML mode for robust ID-based recovery.
@@ -1366,7 +1298,7 @@ class TranslationEngine {
             // Stats: count each failed retry as an additional rate-limit error
             this.translationStats.rateLimitErrors++;
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
-              this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
+              this._recordKeyError(this.gemini.apiKey);
             }
             log.warn(() => `[TranslationEngine] 429/503 key-rotation retry failed for batch ${batchIndex + 1} on attempt ${httpRetryAttempts}/${maxHttpRotationRetries}: ${retryError.message}`);
             if (!this._isRetryableHttpError(retryError)) {
@@ -1394,57 +1326,12 @@ class TranslationEngine {
         await this._rotateToNextKey(`MAX_TOKENS retry for batch ${batchIndex + 1}`);
         log.warn(() => `[TranslationEngine] MAX_TOKENS error detected, retrying batch ${batchIndex + 1} with next key`);
 
-        // 🚀 INJECT: CHECKPOINT RECOVERY UNTUK MAX_TOKENS 🚀
-        let checkpointEntries = [];
-        if (lastStreamedText) {
-          const parsedPartial = this.parseResponseForWorkflow(lastStreamedText, batch.length, batch);
-          if (parsedPartial && parsedPartial.length > 1) {
-            parsedPartial.pop(); 
-            checkpointEntries = parsedPartial;
-          }
-        }
-
-        let pendingBatch = batch;
-        let pendingBatchText = batchText;
-        let pendingPromptCount = batch.length;
-        let pendingContext = context;
-
-        if (checkpointEntries.length > 0) {
-            const { missingIndices } = this.alignTranslatedEntries(checkpointEntries, batch);
-            if (missingIndices.length > 0 && missingIndices.length < batch.length) {
-                pendingBatch = missingIndices.map(i => batch[i]);
-                log.warn(() => `[TranslationEngine] Checkpoint saved ${checkpointEntries.length} entries. Resuming remaining ${pendingBatch.length} entries.`);
-                pendingBatchText = this.prepareBatchContent(pendingBatch, context);
-                pendingPromptCount = pendingBatch.length;
-            }
-        }
-
-        const pendingPrompt = this.createPromptForWorkflow(pendingBatchText, targetLanguage, customPrompt, pendingPromptCount, pendingContext, batchIndex, totalBatches);
-
         try {
-          const retryText = await this._translateCall(pendingBatchText, targetLanguage, pendingPrompt, streamingRequested, streamCallback);
-          
-          // 🚀 INJECT: JAHIT BALIK KALAU GUNA CHECKPOINT
-          if (checkpointEntries.length > 0 && pendingBatch.length < batch.length) {
-              const retryEntries = this.parseResponseForWorkflow(retryText, pendingBatch.length, pendingBatch);
-              const mergedMap = new Map();
-              for (const e of checkpointEntries) mergedMap.set(e.index, e);
-              for (const e of retryEntries) {
-                  const originalEntry = pendingBatch[e.index];
-                  if (originalEntry) {
-                      const globalIdx = batch.indexOf(originalEntry);
-                      if (globalIdx !== -1) mergedMap.set(globalIdx, { ...e, index: globalIdx });
-                  }
-              }
-              translatedEntries = Array.from(mergedMap.values()).sort((a,b) => a.index - b.index);
-          } else {
-              translatedText = retryText; // Fallback jika bukan checkpoint
-          }
-
+          translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);
           log.info(() => `[TranslationEngine] MAX_TOKENS retry succeeded for batch ${batchIndex + 1}`);
         } catch (retryError) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
-            this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
+            this._recordKeyError(this.gemini.apiKey);
           }
           // Retry also failed, give up and throw the original error
           log.warn(() => `[TranslationEngine] MAX_TOKENS retry also failed for batch ${batchIndex + 1}: ${retryError.message}`);
@@ -1461,188 +1348,27 @@ class TranslationEngine {
         prohibitedRetryAttempted = true;
         // Stats: PROHIBITED_CONTENT error
         if (!this.translationStats.errorTypes.includes('PROHIBITED_CONTENT')) this.translationStats.errorTypes.push('PROHIBITED_CONTENT');
-        
-        let retrySuccess = false;
-        let currentError = error;
+        this.translationStats.keyRotationRetries++;
+        await this._rotateToNextKey(`PROHIBITED_CONTENT retry for batch ${batchIndex + 1}`);
+        log.warn(() => `[TranslationEngine] PROHIBITED_CONTENT detected, retrying batch with next key and modified prompt`);
 
-        // 🚀 THE 2-STAGE RECOVERY PROTOCOL 🚀
-        // Stage 1: Rotate Key + Fictitious Header (No Word Masking)
-        // Stage 2: Rotate Key + Fictitious Header + Word Masking + Fallback Prompt
-        for (let stage = 1; stage <= 2; stage++) {
-            this.translationStats.keyRotationRetries++;
-            await this._rotateToNextKey(`PROHIBITED_CONTENT retry Stage ${stage} for batch ${batchIndex + 1}`);
-            
-            if (stage === 1) {
-                log.warn(() => `[TranslationEngine] PROHIBITED_CONTENT detected! Stage 1: Retrying with next key & FICTITIOUS header only (No text masking).`);
-            } else {
-                log.warn(() => `[TranslationEngine] PROHIBITED_CONTENT still blocking! Stage 2: Retrying with next key, Full Text Masking, and Fallback Prompt.`);
-            }
+        // Create modified prompt with disclaimer
+        const modifiedPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTICIOUS\n\n${prompt}`;
 
-            // 🚀 INJECT: CHECKPOINT RECOVERY UNTUK PROHIBITED 🚀
-            let checkpointEntries = [];
-            if (lastStreamedText) {
-              const parsedPartial = this.parseResponseForWorkflow(lastStreamedText, batch.length, batch);
-              if (parsedPartial && parsedPartial.length > 1) {
-                parsedPartial.pop(); 
-                checkpointEntries = parsedPartial;
-              }
-            }
-
-            let pendingBatch = batch;
-            let pendingBatchText = batchText;
-            let pendingPromptCount = batch.length;
-            let pendingContext = context;
-
-            if (checkpointEntries.length > 0) {
-                const { missingIndices } = this.alignTranslatedEntries(checkpointEntries, batch);
-                if (missingIndices.length > 0 && missingIndices.length < batch.length) {
-                    pendingBatch = missingIndices.map(i => batch[i]);
-                    log.warn(() => `[TranslationEngine] Checkpoint saved ${checkpointEntries.length} entries. Resuming remaining ${pendingBatch.length} entries for Stage ${stage}.`);
-                    pendingBatchText = this.prepareBatchContent(pendingBatch, context);
-                    pendingPromptCount = pendingBatch.length;
-                }
-            }
-
-            let pendingPrompt = this.createPromptForWorkflow(pendingBatchText, targetLanguage, customPrompt, pendingPromptCount, pendingContext, batchIndex, totalBatches);
-            let finalPrompt = pendingPrompt;
-            let finalBatchText = pendingBatchText;
-
-            if (stage === 1) {
-                // TIER 2: Ugut Manja (Header sahaja)
-                finalPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTICIOUS\n\n${pendingPrompt}`;
-            } else if (stage === 2) {
-                // TIER 3: Censor Keras (Tukar prompt & Mask words dengan Kamus Gergasi)
-                const targetLabelForFallback = normalizeTargetLanguageForPrompt(targetLanguage);
-                const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback);
-                const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback);
-
-                // 🚀 KAMUS SENSOR GERGASI (Kalis Semua Genre: Aksi, Seram, Drama Matang)
-                const maskToxicWords = (text) => {
-                  return String(text)
-                    // --- Kategori Seksual / Cabul / Penderaan (Sensitiviti Tinggi Google) ---
-                    .replace(/sexual harassment/gi, 'severe misconduct')
-                    .replace(/sexual assault/gi, 'physical conflict')
-                    .replace(/sexual abuse/gi, 'mistreatment')
-                    .replace(/sexual predator/gi, 'dangerous person')
-                    .replace(/sexual(ly)?/gi, 'inappropriate')
-                    .replace(/grop(e|ed|ing)/gi, 'touch$1 inappropriately')
-                    .replace(/molest(ed|ing)?/gi, 'abuse$1')
-                    .replace(/incest/gi, 'inappropriate relationship')
-                    .replace(/pedophil(e|ia)/gi, 'bad criminal')
-                    .replace(/rape(d|ing|st)?/gi, 'harm$1')
-                    .replace(/prostitut(e|ion)/gi, 'escort')
-                    
-                    // --- Kategori Bunuh Diri / Sifat Mencederakan Diri ---
-                    .replace(/suicid(e|al)/gi, 'fatal tragedy')
-                    .replace(/kill myself/gi, 'end my journey')
-                    .replace(/want to die/gi, 'feel very down')
-                    .replace(/slit my wrists/gi, 'harm myself')
-                    .replace(/hang myself/gi, 'harm myself')
-                    .replace(/overdos(e|ed|ing)/gi, 'medical emergency')
-                    
-                    // --- Kategori Keganasan Ekstrem / Senjata / Perang ---
-                    .replace(/bomb(s|ed|ing|er)?/gi, 'device$1')
-                    .replace(/terrorist(s|m)?/gi, 'hostile agent$1')
-                    .replace(/hostage(s)?/gi, 'captive$1')
-                    .replace(/tortur(e|ed|ing)/gi, 'mistreat$1')
-                    .replace(/massacr(e|ed)/gi, 'tragedy')
-                    .replace(/slaughter(ed|ing)?/gi, 'destroy$1')
-                    .replace(/assassin(ate|ated|ation)?/gi, 'eliminate$1')
-                    .replace(/kill(ed|ing|er)?/gi, 'eliminate$1')
-                    .replace(/murder(ed|ing|er)?/gi, 'destroy$1')
-                    .replace(/decapitat(e|ed|ion)/gi, 'attack')
-                    .replace(/execute(d|ing|ion)/gi, 'terminate$1')
-                    
-                    // --- Kategori Dadah / Bahan Terlarang ---
-                    .replace(/(cocaine|heroin|meth|fentanyl|marijuana|weed)/gi, 'substance')
-                    .replace(/drug dealer/gi, 'illegal trader')
-                    
-                    // --- Kategori Carutan / Makian Kasar Semesta ---
-                    .replace(/motherfucker/gi, 'jerk')
-                    .replace(/fucking/gi, 'very')
-                    .replace(/fuck(ed|ing|er)?/gi, 'damn')
-                    .replace(/bitch(es)?/gi, 'jerk$1')
-                    .replace(/bastard(s)?/gi, 'scoundrel$1')
-                    .replace(/asshole(s)?/gi, 'fool$1')
-                    .replace(/whore(s)?|slut(s)?/gi, 'companion$1')
-                    .replace(/cunt(s)?|dick(s)?|pussy/gi, 'jerk')
-                    .replace(/shit(ted|ting)?/gi, 'crap')
-                    
-                    // --- Pengekalan Penapis Asal (Context Safe Guard) ---
-                    .replace(/younger men/gi, 'younger adults')
-                    .replace(/younger women/gi, 'younger adults')
-                    .replace(/quiet room/gi, 'meeting room')
-                    .replace(/elder gentleman/gi, 'manager')
-                    .replace(/\bthe kid\b/gi, 'the young adult') 
-                    .replace(/\bkid\b/gi, 'young adult')
-                    .replace(/\bboy\b/gi, 'young man')
-                    .replace(/\bgirl\b/gi, 'young woman')
-                    .replace(/grabbed/gi, 'pulled')
-                    .replace(/accusing/gi, 'blaming')
-                    .replace(/accused/gi, 'blamed')
-                    .replace(/victim/gi, 'target');
-                };
-
-                let softenedPrompt = pendingPrompt.replace(primaryIntro, fallbackIntro);
-                softenedPrompt = maskToxicWords(softenedPrompt);
-                finalBatchText = maskToxicWords(pendingBatchText);
-
-                finalPrompt = `YOU'RE TRANSLATING SUBTITLES - EVERYTHING WRITTEN BELOW IS FICTICIOUS\n\n${softenedPrompt}`;
-            }
-            
-            try {
-              const retryText = await this._translateCall(finalBatchText, targetLanguage, finalPrompt, streamingRequested, streamCallback);
-              
-              // 🚀 INJECT: JAHIT BALIK KALAU GUNA CHECKPOINT
-              if (checkpointEntries.length > 0 && pendingBatch.length < batch.length) {
-                  const retryEntries = this.parseResponseForWorkflow(retryText, pendingBatch.length, pendingBatch);
-                  const mergedMap = new Map();
-                  for (const e of checkpointEntries) mergedMap.set(e.index, e);
-                  for (const e of retryEntries) {
-                      const originalEntry = pendingBatch[e.index];
-                      if (originalEntry) {
-                          const globalIdx = batch.indexOf(originalEntry);
-                          if (globalIdx !== -1) mergedMap.set(globalIdx, { ...e, index: globalIdx });
-                      }
-                  }
-                  translatedEntries = Array.from(mergedMap.values()).sort((a,b) => a.index - b.index);
-              } else {
-                  translatedText = retryText; // Fallback jika bukan checkpoint
-              }
-
-              log.info(() => `[TranslationEngine] Retry Stage ${stage} succeeded for batch ${batchIndex + 1}!`);
-              retrySuccess = true;
-              break; // Berjaya! Terus keluar dari loop.
-            } catch (retryError) {
-              if (this.retryRotationEnabled && this.gemini?.apiKey) {
-                this._recordKeyError(this.gemini.apiKey, retryError); // 🚀 Letak 'retryError'
-              }
-              log.warn(() => `[TranslationEngine] Retry Stage ${stage} failed: ${retryError.message}`);
-              currentError = retryError;
-              // Rehat 1 saat sebelum masuk Stage 2 (jika berada di Stage 1)
-              if (stage === 1) await new Promise(res => setTimeout(res, 1000));
-            }
-        }
-
-        // TIER 4 & 5: DeepL Fallback & Give Up
-        if (!retrySuccess) {
-          log.warn(() => `[TranslationEngine] Both Gemini recovery stages failed. Initiating Fallback Provider for batch ${batchIndex + 1}`);
-          const fallbackResult = await tryFallback(currentError);
+        try {
+          translatedText = await this._translateCall(batchText, targetLanguage, modifiedPrompt, streamingRequested, streamCallback);
+          log.info(() => `[TranslationEngine] Retry with modified prompt succeeded for batch ${batchIndex + 1}`);
+        } catch (retryError) {
+          if (this.retryRotationEnabled && this.gemini?.apiKey) {
+            this._recordKeyError(this.gemini.apiKey);
+          }
+          // Retry also failed, give up and throw the original error
+          log.warn(() => `[TranslationEngine] Retry with modified prompt also failed: ${retryError.message}`);
+          const fallbackResult = await tryFallback(error);
           if (fallbackResult.handled) {
             translatedText = fallbackResult.text;
-            
-            // 🚀 INJECT: JAHIT HASIL DEEPL (SRT) SUPAYA TAK MASUK PARSER XML 🚀
-            const fallbackName = String(this.fallbackProviderName || '').toLowerCase();
-            if (NATIVE_BATCH_PROVIDER_NAMES.has(fallbackName) || String(fallbackResult.text).includes('-->')) {
-                const trimmed = String(translatedText || '').trim();
-                if (trimmed.includes('-->')) {
-                    translatedEntries = this.parseBatchSrtResponse(trimmed, batch.length, batch);
-                } else {
-                    translatedEntries = this.parseBatchResponse(trimmed, batch.length);
-                }
-            }
           } else {
-            throw fallbackResult.error; // TIER 5: Fallback pun gagal, give up & crash.
+            throw fallbackResult.error; // Throw original/fallback-combined error
           }
         }
       } else if (!translatedEntries) {
@@ -1686,7 +1412,7 @@ class TranslationEngine {
           }
         }
       }
-    } // <--- KURUNGAN PALING PENTING! (Menutup blok catch)
+    }
 
     // Parse translated text back into entries
     if (!translatedEntries) {
@@ -1718,92 +1444,61 @@ class TranslationEngine {
       this.translationStats.mismatchDetected = true;
 
       // Pass 1: Align what we can by index, identify missing entries
-      let { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
-      
-      // 🚀 UBAHAN BARU: Simpan rekod jumlah hilang asal untuk kiraan Recovered
-      const initialMissingCount = missingIndices.length;
-      this.translationStats.missingEntries += initialMissingCount;
+      const { aligned, missingIndices } = this.alignTranslatedEntries(translatedEntries, batch);
+      this.translationStats.missingEntries += missingIndices.length;
 
-      // 🚀 INJECT: OTAK SUPER GENIUS (SHIFT DETECTOR) 🚀
-      let isShiftedError = false;
-      if (missingIndices.length > 0) {
-        const lastExpectedIndices = [];
-        // Buat senarai index yang patut berada di hujung
-        for (let i = batch.length - missingIndices.length; i < batch.length; i++) {
-          lastExpectedIndices.push(i);
-        }
-        // Kalau yang hilang tu SEBIJI macam senarai di hujung, ini sah KES GESERAN!
-        isShiftedError = JSON.stringify(missingIndices) === JSON.stringify(lastExpectedIndices);
-      }
-
-      if (isShiftedError) {
-         log.warn(() => `[TranslationEngine] 🚨 SHIFT DETECTED 🚨 Missing indices are at the exact end of the batch. Bypassing targeted retry and forcing FULL BATCH RETRY to prevent subtitle desync!`);
-      }
-
-      // Pass 2: Targeted Retry (Hanya jalan kalau BUKAN kes Geseran, dan hilang kurang 30%)
-      if (!isShiftedError && missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
+      if (missingIndices.length > 0 && missingIndices.length <= Math.ceil(batch.length * 0.3)) {
+        // Pass 2: Re-translate only the missing entries individually
         log.info(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} missing entries, attempting targeted re-translation`);
         try {
+          // Fix #4: Don't rotate key for parse-failure recovery — the API succeeded, only parsing failed.
+          // Key rotation should only occur for actual API errors (429, 503, etc.), not content issues.
           const missingBatch = missingIndices.map(i => batch[i]);
           const missingText = this.prepareBatchContent(missingBatch, null);
           const missingPrompt = this.createPromptForWorkflow(missingText, targetLanguage, customPrompt, missingBatch.length, null, batchIndex, totalBatches);
           const retryText = await this._translateCall(missingText, targetLanguage, missingPrompt, false, null);
-          
           const retryEntries = this.parseResponseForWorkflow(retryText, missingBatch.length, missingBatch);
-          
-          // 🚀 UBAHAN DEWA: KITA HAPUSKAN BEKAS LAMA (NO MUTATION)! 🚀
-          // Kita bina bekas baru dari kosong dan susun ID dari awal sampai akhir.
-          const freshAlignedContainer = {};
+
+          // Merge recovered entries back into aligned result
+          // Use ID-based matching when available (JSON/XML parsers provide meaningful indices),
+          // fall back to positional mapping for numbered-list responses
           const retryHasIds = retryEntries.some(e => typeof e.index === 'number' && e.index >= 0);
-
-          for (let i = 0; i < batch.length; i++) {
-            // 1. Jika kerusi ini adalah kerusi yang tercicir (Missing)
-            if (missingIndices.includes(i)) {
-              let recoveredText = null;
-              let recoveredTimecode = undefined;
-
-              if (retryHasIds) {
-                 // Cari padanan ID yang tepat dalam hasil Retry
-                 const retryHit = retryEntries.find(r => r.index === missingIndices.indexOf(i));
-                 if (retryHit && retryHit.text) {
-                    recoveredText = retryHit.text;
-                    recoveredTimecode = retryHit.timecode;
-                 }
-              } else {
-                 // Fallback posisi
-                 const positionalHit = retryEntries[missingIndices.indexOf(i)];
-                 if (positionalHit && positionalHit.text) {
-                    recoveredText = positionalHit.text;
-                    recoveredTimecode = positionalHit.timecode;
-                 }
+          if (retryHasIds && retryEntries.length === missingBatch.length) {
+            // Map retry entry indices (0-based within the mini-batch) back to original batch positions
+            for (let i = 0; i < retryEntries.length; i++) {
+              const retryIdx = retryEntries[i].index;
+              // retryIdx is relative to the mini-batch (0..missingBatch.length-1)
+              if (retryIdx >= 0 && retryIdx < missingIndices.length) {
+                const targetIdx = missingIndices[retryIdx];
+                if (retryEntries[i].text) {
+                  aligned[targetIdx] = {
+                    index: targetIdx,
+                    text: retryEntries[i].text,
+                    timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
+                  };
+                }
               }
-
-              if (recoveredText) {
-                 freshAlignedContainer[i] = {
-                    index: i,
-                    text: recoveredText,
-                    timecode: recoveredTimecode || batch[i].timecode
-                 };
-              } else {
-                 freshAlignedContainer[i] = aligned[i]; // Gagal recover, salin amaran [⚠]
+            }
+          } else {
+            // Positional fallback: map sequentially
+            for (let i = 0; i < missingIndices.length && i < retryEntries.length; i++) {
+              const targetIdx = missingIndices[i];
+              if (retryEntries[i] && retryEntries[i].text) {
+                aligned[targetIdx] = {
+                  index: targetIdx,
+                  text: retryEntries[i].text,
+                  timecode: retryEntries[i].timecode || (batch[targetIdx] ? batch[targetIdx].timecode : undefined)
+                };
               }
-            } 
-            // 2. Jika kerusi ini memang dah elok dari Pass 1, salin masuk ke bekas baru
-            else {
-              freshAlignedContainer[i] = aligned[i];
             }
           }
-
-          // 🚨 TUKAR BEKAS SEKARANG! Buang terus memori 'aligned' yang lama!
-          aligned = freshAlignedContainer;
-
-          // Semak semula berapa yang masih missing lepas dijahit
-          missingIndices = Object.keys(aligned).map(Number).filter(i => aligned[i].text.startsWith('[⚠]'));
-
-          if (missingIndices.length > 0) {
-            log.warn(() => `[TranslationEngine] Two-pass recovery: ${missingIndices.length} entries still missing after targeted retry`);
+          const stillMissing = missingIndices.filter(i => !aligned[i] || aligned[i].text.startsWith('[⚠]'));
+          if (stillMissing.length > 0) {
+            log.warn(() => `[TranslationEngine] Two-pass recovery: ${stillMissing.length} entries still missing after targeted retry`);
+            this.translationStats.recoveredEntries += (missingIndices.length - stillMissing.length);
           } else {
-            log.info(() => `[TranslationEngine] Two-pass recovery succeeded: all missing entries recovered`);
+            log.info(() => `[TranslationEngine] Two-pass recovery succeeded: all ${missingIndices.length} missing entries recovered`);
+            this.translationStats.recoveredEntries += missingIndices.length;
           }
         } catch (retryErr) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
@@ -1811,27 +1506,24 @@ class TranslationEngine {
           }
           log.warn(() => `[TranslationEngine] Two-pass targeted retry failed: ${retryErr.message}`);
         }
-      }
-
-      // Pass 3: Full Batch Retry (Akan trigger kalau Targeted gagal, mismatch besar, ATAU kes GESERAN/SHIFT tadi!)
-      if (missingIndices.length > 0) {
+        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
+      } else if (missingIndices.length > 0) {
+        // Too many missing entries for targeted retry, fall back to full batch retry
         let retrySuccess = false;
         for (let retryAttempt = 0; retryAttempt < this.mismatchRetries; retryAttempt++) {
-          log.info(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1}/${this.mismatchRetries} (${missingIndices.length} missing entries)`);
+          log.info(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1}/${this.mismatchRetries} (${missingIndices.length} missing entries too many for targeted recovery)`);
           try {
+            // Fix #4: Don't rotate key for parse-failure recovery — the API call succeeded.
+            // Key rotation wastes healthy keys on content/parsing issues, not API problems.
             await new Promise(resolve => setTimeout(resolve, 500));
             const retryText = await this._translateCall(batchText, targetLanguage, prompt, false, null);
             const retryEntries = this.parseResponseForWorkflow(retryText, batch.length, batch);
-            
-            const { aligned: newAligned, missingIndices: newMissing } = this.alignTranslatedEntries(retryEntries, batch);
-            
-            if (newMissing.length < missingIndices.length) {
-              aligned = newAligned;
-              missingIndices = newMissing;
-              if (missingIndices.length === 0) {
-                retrySuccess = true;
-                break;
-              }
+            if (retryEntries.length === batch.length) {
+              translatedEntries = retryEntries;
+              retrySuccess = true;
+              // Stats: full batch recovered all missing entries
+              this.translationStats.recoveredEntries += missingIndices.length;
+              break;
             }
           } catch (retryErr) {
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
@@ -1840,27 +1532,20 @@ class TranslationEngine {
             log.warn(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1} failed: ${retryErr.message}`);
           }
         }
-        
-        if (!retrySuccess && missingIndices.length > 0) {
-           log.warn(() => `[TranslationEngine] Marked ${missingIndices.length} entries as untranslated after all retries`);
+        if (!retrySuccess) {
+          // Use the aligned result with markers for missing entries
+          translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
+          const markedCount = translatedEntries.filter(e => e.text.startsWith('[⚠]')).length;
+          if (markedCount > 0) {
+            log.warn(() => `[TranslationEngine] Marked ${markedCount} entries as untranslated after all retries`);
+          }
         }
+      } else {
+        // All entries aligned despite count mismatch (extras were trimmed)
+        translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
       }
-
-      // 🚀 UBAHAN BARU: KIRAAN RECOVERED ENTRIES TEPAT 🚀
-      // Selepas Pass 2 & Pass 3 selesai, kita bandingkan baki missingIndices dengan initialMissingCount
-      const recoveredCount = initialMissingCount - missingIndices.length;
-      if (recoveredCount > 0) {
-        this.translationStats.recoveredEntries += recoveredCount;
-        log.info(() => `[TranslationEngine] Total recovered entries for this batch: ${recoveredCount}`);
-      }
-
-      translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
-
-    } else {
-      const { aligned } = this.alignTranslatedEntries(translatedEntries, batch);
-      translatedEntries = Object.values(aligned).sort((a, b) => a.index - b.index);
     }
-    
+
     // If JSON mismatch recovery still leaves warning placeholders, try XML once.
     if (this.translationWorkflow === 'json' && !jsonXmlFallbackAttempted) {
       const markedCount = translatedEntries.filter(entry =>
@@ -1881,8 +1566,7 @@ class TranslationEngine {
         );
         if (xmlFallback?.entries?.length > 0) {
           translatedText = xmlFallback.translatedText;
-          const { aligned: fallbackAligned } = this.alignTranslatedEntries(xmlFallback.entries, batch);
-          translatedEntries = Object.values(fallbackAligned).sort((a, b) => a.index - b.index);
+          translatedEntries = xmlFallback.entries;
         }
       }
     }
@@ -1895,6 +1579,8 @@ class TranslationEngine {
     }
 
     // ISSUE #5 FIX: Reset key health on successful translation
+    // This allows keys that had errors to recover immediately after a successful translation
+    // instead of waiting for the full 1-hour cooldown
     if (this.retryRotationEnabled && this.gemini?.apiKey) {
       this._resetKeyHealthOnSuccess(this.gemini.apiKey);
     }
@@ -2038,21 +1724,20 @@ class TranslationEngine {
   prepareBatchXml(batch, context = null) {
     let result = '';
 
-    if (context?.previousMemory?.length > 0) {
-      result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n\n';
-      context.previousMemory.forEach((entry) => {
-        if (entry.translation) {
-           result += `<s id="${entry.id}">${entry.translation}</s>\n`;
-        }
+    // Add context section if provided
+    if (context?.surroundingOriginal?.length > 0) {
+      result += '=== CONTEXT (FOR REFERENCE ONLY - DO NOT TRANSLATE) ===\n\n';
+      context.surroundingOriginal.forEach((entry, index) => {
+        const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+        result += `[Context ${index + 1}] ${cleanText}\n\n`;
       });
-      result += '=== END OF MEMORY ===\n\n';
+      result += '=== END OF CONTEXT ===\n\n';
       result += '=== ENTRIES TO TRANSLATE ===\n\n';
     }
 
-    const xmlEntries = batch.map((entry) => {
-      // 🚨 PENGGUNAAN GLOBAL ID: Jangan reset ke 1,2,3. Guna ID asal!
-      const num = entry.id; 
-      const cleanText = entry.text.trim().replace(/\n+/g, ' [br] ');
+    const xmlEntries = batch.map((entry, index) => {
+      const num = index + 1;
+      const cleanText = entry.text.trim().replace(/\n+/g, '\n');
       return `<s id="${num}">${cleanText}</s>`;
     }).join('\n');
 
@@ -2066,262 +1751,171 @@ class TranslationEngine {
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = 'START';
-    let endId = 'END';
+    let contextInstructions = '';
+    if (context?.surroundingOriginal?.length > 0) {
+      contextInstructions = `
+CONTEXT PROVIDED:
+- Context entries are provided for reference to maintain coherence and consistency
+- DO NOT translate context entries - they are for reference only
+- ONLY translate entries inside <s id="N"> tags
 
-    // 🚨 Halang baca ID dari memori, fokus pada teks sasaran sahaja
-    let targetSection = batchText;
-    if (batchText.includes('=== ENTRIES TO TRANSLATE ===')) {
-      targetSection = batchText.split('=== ENTRIES TO TRANSLATE ===')[1];
+`;
     }
 
-    if (totalBatches === 1) {
-        const firstMatch = targetSection.match(/<s id="([^"]+)">/);
-        if (firstMatch) startId = firstMatch[1];
+    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
+${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the text inside each <s id="N"> tag
+2. PRESERVE the XML tags exactly: <s id="N">translated text</s>
+3. Return EXACTLY ${expectedCount} tagged entries
+4. Keep line breaks within each entry
+5. Maintain natural dialogue flow for ${targetLabel}
+6. Use appropriate colloquialisms for ${targetLabel}
+7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
 
-        const lastIndex = targetSection.lastIndexOf('<s id="');
-        if (lastIndex !== -1) {
-            const endMatch = targetSection.substring(lastIndex).match(/<s id="([^"]+)">/);
-            if (endMatch) endId = endMatch[1];
-        }
-    } else {
-        const idMatches = [...targetSection.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-        startId = idMatches.length > 0 ? idMatches[0] : 'START';
-        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
-    }
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
+Do not include any timestamps/timecodes.
 
-    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE DI ATAS 🛑
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
+YOUR RESPONSE MUST:
+- Start with <s id="1"> and end with </s> after entry ${expectedCount}
+- Contain ONLY the XML-tagged translated entries
 
-    const promptBody = `${introInstruction}
+INPUT (${expectedCount} entries):
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
-
-1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
-   sealed container. Translate ONLY its own content — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
-   NEVER complete a sentence by stealing words from the next ID.
-
-   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
-   IN:  <s id="X">I really want to</s>
-        <s id="Y">go home now.</s>
-   OUT: <s id="X">Saya betul-betul nak</s>
-        <s id="Y">balik rumah sekarang.</s>
-
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: <s id="X">Saya betul-betul nak balik rumah sekarang.</s>
-        <s id="Y">.</s>
-
-   "Saya betul-betul nak" IS CORRECT — intentional fragment.
-   Completing it by stealing from the next ID DESTROYS sync permanently.
-   
-2. ESCAPE HATCH: If you cannot translate, or the line contains ONLY 
-   symbols/music notes/song lyrics (♪) — copy the EXACT ORIGINAL TEXT 
-   for that ID. NEVER shift any remaining entry.
-
-3. ID INTEGRITY & COUNT: Every ID appears EXACTLY ONCE in strict input 
-   order, matching input IDs exactly from ID_${startId} to ID_${endId}. 
-   Non-sequential input = non-sequential output — never fill gaps, 
-   never invent an ID. Output EXACTLY ${expectedCount} entries total. 
-   NEVER fabricate content to hit the count — use Rule 2 instead.
-
-4. FORMAT: <s id="N">translated text</s>
-   Use exact ID from input. Never write [original_id] or [N] literally.
-
-5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
-   inline tag MUST be preserved — same position, same structure, 
-   unchanged. Speaker dashes (-) MUST also be preserved exactly as 
-   they appear in the source.
-
-6. CLEAN OUTPUT: Response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary. Every 
-   translated word MUST be inside its corresponding tag. NOTHING 
-   floating outside.
-
-<input>
 ${batchText}
-</input>
 
-[OUTPUT_FORMAT]
-RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
-<s id="`;
-
+OUTPUT (EXACTLY ${expectedCount} XML-tagged entries):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
-  
+
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
-   * [GLOBAL ID UNIFIED]: Mengekalkan entry.id asal untuk keselarasan sejagat dengan XML.
+   * Each entry is a {"id": N, "text": "..."} object.
+   * Context (when enabled) is wrapped in a separate __context key.
    */
   _prepareJsonBatchContent(batch, context = null) {
-    let result = {};
-
-    if (context?.previousMemory?.length > 0) {
-      result.previous_translation_memory = context.previousMemory.map((entry) => ({
-        id: entry.id,
-        translation: entry.translation ? entry.translation.trim().replace(/\n+/g, ' [br] ') : ''
-      })).filter(m => m.translation);
-    }
-
-    result.entries_to_translate = batch.map((entry) => ({
-      id: entry.id, // 🚨 KUNCI MUTLAK: Gunakan Global ID asal srt, buang sistem local (i + 1)
-      text: entry.text.trim().replace(/\n+/g, ' [br] ')
+    const entries = batch.map((entry, i) => ({
+      id: i + 1,
+      text: entry.text.trim().replace(/\n+/g, '\n')
     }));
 
-    return JSON.stringify(result, null, 0);
+    // Include context as structured metadata when provided
+    if (context?.surroundingOriginal?.length > 0) {
+      const ctx = {
+        preceding: context.surroundingOriginal.map(e => e.text.trim().replace(/\n+/g, '\n'))
+      };
+      return JSON.stringify({ __context: ctx, entries }, null, 0);
+    }
+
+    return JSON.stringify(entries, null, 0);
   }
 
   /**
    * Build a translation prompt for the 'json' workflow.
-   * [GLOBAL ID UNIFIED]: Dinamik mengikut skalan ID global srt dan sauh pancingan ketat.
+   * Input is JSON, output must be JSON — no format ambiguity.
    */
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
 
-    let startId = 'START';
-    let endId = 'END';
+    let contextInstructions = '';
+    if (context?.surroundingOriginal?.length > 0) {
+      contextInstructions = `
+CONTEXT PROVIDED:
+- The input includes a "__context" object with the preceding original source text
+- Use context to understand dialogue flow, character names, and consistency
+- DO NOT include __context in your output — translate ONLY the "entries" array
 
-    // 🚨 LANGKAH XML 1: Halang baca ID dari memori, fokus pada entries_to_translate sahaja
-    let targetSection = batchText;
-    if (batchText.includes('"entries_to_translate":')) {
-      targetSection = batchText.split('"entries_to_translate":')[1];
+`;
     }
 
-    // 🚨 LANGKAH XML 2: Ekstrak Global ID pertama dan terakhir secara dinamik menggunakan Regex Scanner
-    const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
-    startId = idMatches.length > 0 ? idMatches[0] : '1';
-    endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
+    const promptBody = `You are a professional subtitle translator operating in an automated localization environment. Translate to ${targetLabel}.
+${contextInstructions}
+CRITICAL RULES:
+1. Translate ONLY the "text" field of each entry into ${targetLabel}
+2. Preserve the "id" field exactly as given with no modification
+3. Return EXACTLY ${expectedCount} entries
+4. Maintain natural dialogue flow with consistency in character gender, pronouns, and honorifics throughout the batch
+5. Every entry must be fully translated; never return original source text unless it is a proper noun (e.g., names, places, brands). If the source text appears corrupted or contains only symbols/numbers, return it unchanged
+6. If a text field is empty, contains only whitespace, or only formatting tags, return it unchanged${context ? '\n7. Use the provided context to ensure consistency' : ''}
 
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
+TRANSLATION STYLE:
+1. Maintain perfect, machine-parseable JSON format matching the input schema exactly. Ensure JSON is valid: escape double quotes with backslash (\\") and use \\n for line breaks within the text field, no trailing commas
+2. Do NOT add, remove, reorder, or modify JSON keys, fields, or data types
+3. Use concise, conversational, cinematic subtitle style suitable for professional streaming platforms. Preserve Unicode characters and punctuation (e.g., ellipses, em dashes) appropriate for the target language
+4. For lyrics, prioritize maintaining rhythm and intent; if preserving rhythm conflicts with literal meaning, opt for natural phrasing that captures the essence. For non-dialogue text (e.g., [sigh]), preserve meaning and tags
+5. Preserve any existing formatting tags
 
-    const promptBody = `${introInstruction}
+Do NOT add acknowledgements, explanations, notes, or commentary.
+Do not skip, merge, or split entries. NEVER output markdown.
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+YOUR RESPONSE MUST be a JSON array: [{"id":1,"text":"..."},{"id":2,"text":"..."}]
+Return ONLY the JSON array with EXACTLY ${expectedCount} entries, no other text.
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
-   sealed container. Translate ONLY its own "text" field — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
-   NEVER complete a sentence by stealing words from the next ID.
+INPUT (${expectedCount} entries):
 
-   ✅ CORRECT:
-   IN:  [{"id": ${startId}, "text": "I really want to"}, {"id": ${parseInt(startId) + 1}, "text": "go home now."}]
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak"}, {"id": ${parseInt(startId) + 1}, "text": "balik rumah sekarang."}]
-
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId) + 1}, "text": "."}]
-
-2. ESCAPE HATCH: If you cannot translate, or the line contains ONLY 
-   symbols/music notes/song lyrics (♪) — copy the EXACT ORIGINAL TEXT 
-   for that ID. NEVER shift any remaining entry.
-
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly from id: ${startId}. 
-   Never fill gaps, reorder, or invent an ID not in the input.
-
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (id: ${startId} to id: ${endId}). NEVER fabricate content — use 
-   Rule 2 instead.
-
-5. FORMAT: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
-   Ensure JSON is strictly valid: escape double quotes with backslash (\\") and use \\n for line breaks. 
-   No trailing commas. Do NOT wrap in \`\`\`json markdown code blocks.
-
-6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
-   inline tag MUST be preserved in the translation — same position, 
-   same structure, unchanged. Speaker dashes (-) MUST also be preserved 
-   exactly as they appear in the source.
-
-7. CLEAN OUTPUT: Response MUST start immediately with the opening bracket '[' of the JSON array. 
-   NO preamble, NO markdown, NO commentary — before, between, or after entries. 
-   Every translated word MUST be inside its corresponding object.
-
-<input>
 ${batchText}
-</input>
 
-[OUTPUT_FORMAT]
-RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
-[{"id":${startId},"text":`; // 🚨 SAUH PANCINGAN: Paksa AI bermula terus dengan Global ID pertama!
-
+OUTPUT (EXACTLY ${expectedCount} entries as JSON array):`;
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
   /**
    * Parse XML-tagged translation response
-   * Matches <s id="N">text</s> patterns and recovers entries by ID.
-   * [UPGRADED]: Single-pass Regex for blazing speed, handles both normal and self-closing tags.
-   * [GLOBAL ID FIX]: Maps global IDs back to local batch indices and filters AI hallucinations.
+   * Matches <s id="N">text</s> patterns and recovers entries by ID
    */
-  parseXmlBatchResponse(translatedText, expectedCount, batch = []) {
+  parseXmlBatchResponse(translatedText, expectedCount) {
     let cleaned = String(translatedText || '').trim();
+    // Remove markdown code blocks
+    cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
 
-    // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
-    // AI menyambung terus dari pancing `<s id="` yang kita hantar.
-    if (!cleaned.startsWith('<s')) {
-      cleaned = '<s id="' + cleaned;
+    // Strip any trailing content after the last </s> tag.
+    // AI models sometimes append commentary after the entries (e.g. "Hope this helps!").
+    // This ensures the $ anchor in our lookahead matches correctly for the final entry.
+    const lastClosingTag = cleaned.lastIndexOf('</s>');
+    if (lastClosingTag !== -1) {
+      cleaned = cleaned.slice(0, lastClosingTag + 4); // 4 = '</s>'.length
     }
-
-    // Remove markdown code blocks (Guna hex \x60 untuk elak UI markdown pecah)
-    const mdRegex = new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi');
-    cleaned = cleaned.replace(mdRegex, '');
-    cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
-
-    // ⚠️ KITA BUANG KOD 'lastClosingTag' & 'slice' DI SINI ⚠️
-    // (Ini adalah punca utama ayat terakhir yang terputus dibuang terus dari memori)
 
     // Fix #15 (v1.4.38+): Remove any content between </s> and <s tags before parsing.
+    // AI models sometimes insert commentary (e.g. "Note: informal" or "Hope this helps!")
+    // between entries. The old lookahead-based regex failed to match entries followed by
+    // such content. By stripping inter-tag content first, we allow a simpler greedy regex.
     cleaned = cleaned.replace(/<\/s>\s*(?:(?!<s[\s>])[\s\S])*?(?=<s[\s>])/gi, '</s>\n');
 
-    // 🛡️ PETA GLOBAL ID KE INDEX TEMPATAN 🛡️
-    // Petakan ID sebenar dari filem ke index tempatan (0 hingga 99)
-    const validIds = new Map();
-    if (batch && batch.length > 0) {
-      batch.forEach((entry, idx) => {
-        validIds.set(entry.id, idx);
-      });
-    }
-
-    // Guna Map terus untuk auto-deduplicate tanpa perlu loop kedua
-    const entriesMap = new Map(); 
-    
-    // 🚀 THE GOD-TIER REGEX (One Pass to Rule Them All)
-    // Tangkap tag normal & self-closing serentak dalam satu pusingan.
-    const superXmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*?(?:\/>|>([\s\S]*?)(?:<\/s>|(?=<s\b)|$))/gi;
+    const entries = [];
+    // Simpler regex now that inter-tag content is stripped
+    const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
     let match;
-    
-    while ((match = superXmlPattern.exec(cleaned)) !== null) {
+    while ((match = xmlPattern.exec(cleaned)) !== null) {
       const id = parseInt(match[1], 10);
-      
+      const text = match[2].trim();
       // Fix #14: Accept entries with empty text (legitimate for "♪", sound effects, etc.)
+      // Only require a valid positive ID. Empty translations are preserved to avoid
+      // count mismatches in alignTranslatedEntries().
       if (id > 0) {
-        let localIndex = id - 1; // Fallback jika map kosong
-
-        if (validIds.size > 0) {
-          if (validIds.has(id)) {
-            localIndex = validIds.get(id); // Dapatkan kedudukan sebenar dari peta
-          } else {
-            // 🚨 PISAU PEMOTONG: Buang ID halusinasi yang AI cipta!
-            continue; 
-          }
-        }
-
-        // Kalau match[2] wujud, ia tag normal. Kalau undefined, ia tag self-closing (teks kosong).
-        const text = match[2] !== undefined ? match[2].trim() : "";
-
-        // Hanya simpan kejadian PERTAMA (buang duplikat automatik dengan Map)
-        if (!entriesMap.has(localIndex)) {
-          entriesMap.set(localIndex, {
-            index: localIndex,
-            text: text
-          });
-        }
+        entries.push({
+          index: id - 1,
+          text: text
+        });
       }
     }
 
-    // Tukar Map kepada Array dan susun ikut index
-    return Array.from(entriesMap.values()).sort((a, b) => a.index - b.index);
+    // Sort by index and deduplicate (keep first occurrence per ID)
+    const seen = new Set();
+    const deduped = [];
+    entries.sort((a, b) => a.index - b.index);
+    for (const entry of entries) {
+      if (!seen.has(entry.index)) {
+        seen.add(entry.index);
+        deduped.push(entry);
+      }
+    }
+
+    return deduped;
   }
-  
+
+
   /**
    * Route to the correct batch content preparation method based on workflow
    */
@@ -2387,90 +1981,89 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
       return this.parseBatchSrtResponse(translatedText, expectedCount, batch);
     }
     if (this.translationWorkflow === 'xml') {
-      // 🚨 Hantar 'batch' supaya parser boleh faham Global ID
-      return this.parseXmlBatchResponse(translatedText, expectedCount, batch);
+      return this.parseXmlBatchResponse(translatedText, expectedCount);
     }
     return this.parseBatchResponse(translatedText, expectedCount);
   }
 
   /**
    * Parse JSON structured output response
-   * [GLOBAL ID UNIFIED]: Menggunakan perisai Global ID Map yang sekufu dengan logik XML tags parser.
+   * Expects: [{"id": 1, "text": "translated"}, ...]
+   * Includes repair logic for common LLM JSON mistakes.
    */
-  parseJsonResponse(translatedText, expectedCount, batch = []) {
+  parseJsonResponse(translatedText, expectedCount) {
     try {
       let cleaned = String(translatedText || '').trim();
-
-      if (!cleaned.startsWith('[')) {
-        const startId = batch && batch.length > 0 ? batch[0].id : '1';
-        cleaned = `[{"id":${startId},"text":` + cleaned;
-      }
-
+      // Remove markdown code blocks
       cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+      // Find JSON payload in the response. Prefer array form; accept object envelope.
       const arrayStart = cleaned.indexOf('[');
       const arrayEnd = cleaned.lastIndexOf(']');
       if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
         cleaned = cleaned.slice(arrayStart, arrayEnd + 1);
       } else {
-        return null;
+        const objectStart = cleaned.indexOf('{');
+        const objectEnd = cleaned.lastIndexOf('}');
+        if (objectStart === -1 || objectEnd === -1 || objectEnd <= objectStart) {
+          return null;
+        }
+        cleaned = cleaned.slice(objectStart, objectEnd + 1);
       }
 
       let parsed = null;
+
+      // Attempt 1: direct parse
       try {
         parsed = JSON.parse(cleaned);
       } catch (_directErr) {
+        // Attempt 2: repair common LLM JSON mistakes and retry
         parsed = this.repairAndParseJson(cleaned);
       }
 
+      // Attempt 3: if full-array parse failed, extract individual objects via regex
       if (!parsed) {
         const extracted = this.extractJsonEntries(cleaned);
         if (extracted && extracted.length > 0) {
+          log.debug(() => `[TranslationEngine] JSON repair: extracted ${extracted.length} entries via regex fallback`);
           parsed = extracted;
         }
       }
 
       if (!Array.isArray(parsed) && parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.entries_to_translate)) {
-          parsed = parsed.entries_to_translate;
-        } else if (Array.isArray(parsed.entries)) {
+        if (Array.isArray(parsed.entries)) {
           parsed = parsed.entries;
+        } else if (Array.isArray(parsed.items)) {
+          parsed = parsed.items;
+        } else if (Array.isArray(parsed.data)) {
+          parsed = parsed.data;
         }
       }
       if (!Array.isArray(parsed)) return null;
 
-      // 🛡️ PERISAI GLOBAL ID: Petakan Global ID srt asal ke index tempatan batch
-      const validIds = new Map();
-      if (batch && batch.length > 0) {
-        batch.forEach((entry, idx) => {
-          validIds.set(entry.id, idx);
-        });
-      }
-
-      const entriesMap = new Map();
+      const entries = [];
       for (const item of parsed) {
-        if (item && (typeof item.id === 'number' || typeof item.id === 'string') && typeof item.text === 'string') {
-          const numericId = parseInt(item.id, 10);
-          if (Number.isNaN(numericId)) continue;
-
-          // Cari padanan ID global yang sah sahaja (Menepis halusinasi AI)
-          if (validIds.size > 0) {
-            if (validIds.has(numericId)) {
-              const localIndex = validIds.get(numericId);
-              if (!entriesMap.has(localIndex)) {
-                entriesMap.set(localIndex, {
-                  index: localIndex,
-                  text: item.text.trim()
-                });
-              }
-            }
-          } else {
-            const index = numericId >= 1 ? numericId - 1 : 0;
-            entriesMap.set(index, { index, text: item.text.trim() });
+        if (item && typeof item.id === 'number' && typeof item.text === 'string') {
+          // Accept both 0-indexed and 1-indexed IDs from the model
+          const index = item.id >= 1 ? item.id - 1 : (item.id === 0 ? 0 : -1);
+          if (index >= 0) {
+            entries.push({
+              index,
+              text: item.text.trim()
+            });
           }
         }
       }
 
-      return Array.from(entriesMap.values()).sort((a, b) => a.index - b.index);
+      entries.sort((a, b) => a.index - b.index);
+
+      if (entries.length === 0) return null;
+
+      // Warn if the count doesn't match expectations (helps diagnose issues early)
+      if (expectedCount && entries.length !== expectedCount) {
+        log.debug(() => `[TranslationEngine] JSON response entry count: ${entries.length}, expected: ${expectedCount}`);
+      }
+
+      return entries;
     } catch (err) {
       log.debug(() => `[TranslationEngine] JSON response parse error: ${err.message}`);
       return null;
@@ -2481,15 +2074,11 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
    * Attempt to repair common LLM JSON mistakes and parse.
    * Handles: trailing commas, missing commas between objects, unescaped newlines in strings,
    * single quotes instead of double quotes, unescaped control characters.
-   * [UPGRADED]: Ditambah Perisai Magis untuk mencantas lambakan tanda petik lewah akibat kes petik bersarang.
    * @returns {Array|null}
    */
   repairAndParseJson(jsonStr) {
     try {
       let repaired = jsonStr;
-
-      // 🛡️ PERISAI MAGIS: Cari lambakan tanda petik berkembar yang tidak sah di hujung string (contoh: ""粉" atau """}) dan runtuhkan jadi satu ketul " sahaja
-      repaired = repaired.replace(/(?<!\\)"{2,}(?=\s*[,\]\}])/g, '"');
 
       // Fix unescaped newlines/tabs inside string values (between quotes)
       // Replace literal newlines/tabs inside JSON strings with escaped versions
@@ -2566,7 +2155,6 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
   /**
    * Align translated entries to original batch by index, identifying missing entries
    * Used by two-pass mismatch recovery
-   * [UPGRADED]: Smart Context Awareness - ignores empty/symbol-only lines for retries
    */
   alignTranslatedEntries(translatedEntries, originalBatch) {
     const aligned = {};
@@ -2579,46 +2167,19 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
     }
 
     const missingIndices = [];
-
-    // 🚀 THE UPGRADE: Fungsi penilai ayat (Adakah ayat ini patut diterjemah?)
-    const isUntranslatable = (text) => {
-      if (!text) return true;
-      const t = text.trim();
-      if (!t) return true;
-      // Abai kalau cuma ada simbol muzik, sengkang, atau space sahaja
-      if (/^[♪♫♬\-\s_]+$/.test(t)) return true; 
-      // Abai tag HTML kosong macam <i></i> atau tag yang takde teks <font color="#fff">
-      if (/^<[^>]+>\s*<\/[^>]+>$/.test(t) || /^<[^>]+>$/.test(t)) return true;
-      
-      return false;
-    };
-
     for (let i = 0; i < originalBatch.length; i++) {
       const existing = translatedMap.get(i);
-      const originalText = originalBatch[i].text || '';
-
-      // 1. Kalau terjemahan wujud dan elok
-      if (existing && typeof existing.text === 'string') {
+      if (existing && existing.text) {
         aligned[i] = {
           index: i,
           text: existing.text,
           timecode: existing.timecode || undefined
         };
-      } 
-      // 2. 🛡️ THE UPGRADE: Kalau AI tertinggal, tapi ayat tu tak perlu diterjemah pun
-      else if (isUntranslatable(originalText)) {
-        aligned[i] = {
-          index: i,
-          text: originalText, // Pakai ayat asal tanpa tanda amaran
-          timecode: originalBatch[i].timecode || undefined
-        };
-      } 
-      // 3. Kalau AI tertinggal dan ayat tu penting (Mismatch Sebenar!)
-      else {
+      } else {
         missingIndices.push(i);
         aligned[i] = {
           index: i,
-          text: `[⚠] ${originalText}`,
+          text: `[⚠] ${originalBatch[i].text}`,
           timecode: originalBatch[i].timecode || undefined
         };
       }
@@ -2646,7 +2207,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
     if (context?.surroundingOriginal?.length > 0) {
       contextInstructions = `
 CONTEXT PROVIDED:
-- Context entries are provided for reference to ensure coherence and consistency
+- Context entries are provided for reference to maintain coherence and consistency
 - Context entries are marked with [Context N]
 - DO NOT translate context entries - they are for reference only
 - Use the context to understand dialogue flow, character names, and references
@@ -2694,8 +2255,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Build streaming progress payload from partial text
-   * [UPDATED - FASA 3]: Applied robust XML parsing for real-time truncated strings.
-   * [GLOBAL ID FIX]: Maps global IDs back to local batch indices for streaming progress.
    */
   buildStreamingProgress(partialText, originalBatch = []) {
     if (!partialText) return null;
@@ -2703,41 +2262,29 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     const batchStartId = originalBatch?.[0]?.id || 1;
     const batchEndId = originalBatch?.[originalBatch.length - 1]?.id || batchStartId;
 
-    // 🛡️ PETA GLOBAL ID KE INDEX TEMPATAN 🛡️
-    // Digunakan untuk padankan ID sebenar dari filem (contoh: 101) ke index array batch ini (0-99)
-    const validIds = new Map();
-    if (originalBatch && originalBatch.length > 0) {
-      originalBatch.forEach((entry, idx) => {
-        validIds.set(entry.id, idx);
-      });
-    }
-
     let parsedEntries = [];
 
+    // JSON workflow: extract completed entries from partial JSON during streaming.
+    // Use extractJsonEntries() directly instead of parseJsonResponse() because
+    // streaming chunks are almost always incomplete JSON (e.g. [{"id":1,"text":"hello"},{"id":2,"te)
+    // that will always fail JSON.parse(), generating noise in logs and wasting cycles.
+    // The regex extractor reliably pulls out fully-formed {"id":N,"text":"..."} objects
+    // from partial text without needing the overall array to be valid JSON.
     if (this.translationWorkflow === 'json') {
-      let rawCleaned = String(partialText).trim()
-        .replace(/```json\s*/gi, '').replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
-      
-      if (!rawCleaned.startsWith('[') && originalBatch && originalBatch.length > 0) {
-        const startId = originalBatch[0].id;
-        rawCleaned = `{"id":${startId},"text":` + rawCleaned;
-      }
-
+      const rawCleaned = String(partialText).trim()
+        .replace(/```json\s*/gi, '').replace(/```\s*/g, '');
       const extracted = this.extractJsonEntries(rawCleaned);
       if (extracted && extracted.length > 0) {
         parsedEntries = extracted.map(item => {
-          const numericId = parseInt(item.id, 10);
-          if (Number.isNaN(numericId)) return null;
-
-          // Semak silang menggunakan Global ID map (Menghalang kemalangan streaming desync)
-          if (validIds.has(numericId)) {
-            return { index: validIds.get(numericId), text: String(item.text).trim() };
-          }
-          return null;
+          const index = item.id >= 1 ? item.id - 1 : (item.id === 0 ? 0 : -1);
+          return index >= 0 ? { index, text: String(item.text).trim() } : null;
         }).filter(Boolean);
       }
     }
 
+    // Fall back to workflow-specific parsing if JSON didn't yield results.
+    // For JSON workflow, partial streams may have no complete JSON objects,
+    // so we let other parsers provide some streaming feedback rather than none.
     if (parsedEntries.length === 0) {
       if (this.translationWorkflow === 'ai') {
         const parsed = parseSRT(partialText) || [];
@@ -2747,67 +2294,21 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
           timecode: entry.timecode || ''
         }));
       } else if (this.translationWorkflow === 'xml') {
-        // 🛡️ FASA 3: REGEX KEBAL UNTUK STREAMING 🛡️
-        let cleaned = partialText;
-        
-        // Pancing penyambung untuk streaming
-        if (!cleaned.startsWith('<s')) {
-          cleaned = '<s id="' + cleaned;
-        }
-        
-        // Buang markdown (guna hex untuk elak UI pecah)
-        const mdRegex = new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi');
-        cleaned = cleaned.replace(mdRegex, '');
-        cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60', 'g'), '');
-
-        // Tangkap ayat normal & terputus (real-time typing)
-        // Kebal quote, space, dan atribut haram.
-        const xmlPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*(?<!\/)>([\s\S]*?)(?:<\/s>|$)/gi;
+        // Parse partial XML tags from streaming output
+        const xmlPattern = /<s\s+id\s*=\s*"?(\d+)"?\s*>([\s\S]*?)<\/s>/gi;
         let match;
-        while ((match = xmlPattern.exec(cleaned)) !== null) {
+        while ((match = xmlPattern.exec(partialText)) !== null) {
           const id = parseInt(match[1], 10);
           const text = match[2].trim();
-          
-          // Mesti ada teks kalau bukan tag senyap
           if (id > 0 && text) {
-            let localIndex = id - 1; // Default/Fallback
-
-            // Padankan dengan Peta Global ID
-            if (validIds.size > 0) {
-              if (validIds.has(id)) {
-                localIndex = validIds.get(id); // Ambil index sebenar dari batch ini
-              } else {
-                continue; // Abaikan ID halusinasi yang dicipta AI
-              }
-            }
-
-            parsedEntries.push({ index: localIndex, text });
-          }
-        }
-        
-        // Tangkap tag senyap / self-closing (<s id="15"/>)
-        const selfClosingPattern = /<s\s+[^>]*id\s*=\s*["']?(\d+)["']?[^>]*\/>/gi;
-        while ((match = selfClosingPattern.exec(cleaned)) !== null) {
-          const id = parseInt(match[1], 10);
-          if (id > 0) {
-            let localIndex = id - 1;
-
-            // Padankan dengan Peta Global ID
-            if (validIds.size > 0) {
-              if (validIds.has(id)) {
-                localIndex = validIds.get(id);
-              } else {
-                continue; // Abaikan ID halusinasi
-              }
-            }
-
-            // Teks kosong dibenarkan untuk tag self-closing
-            parsedEntries.push({ index: localIndex, text: "" });
+            parsedEntries.push({ index: id - 1, text });
           }
         }
       } else {
+        // Use the same robust parsing as parseBatchResponse:
+        // line-by-line to handle multi-line entries, with context stripping and dedup
         let cleaned = partialText.trim();
-        cleaned = cleaned.replace(new RegExp('\\x60\\x60\\x60[a-z]*(?:\\r?\\n)?', 'gi'), '');
+        cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
         // Strip echoed context sections
         cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
         cleaned = cleaned.replace(/===\s*ENTRIES TO TRANSLATE[^=]*===/gi, '');
@@ -2838,15 +2339,15 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
             parsedEntries.push({ index: currentNum - 1, text });
           }
         }
+
+        // Deduplicate by index (keep first occurrence)
+        const seen = new Set();
+        parsedEntries = parsedEntries.filter(entry => {
+          if (seen.has(entry.index)) return false;
+          seen.add(entry.index);
+          return true;
+        });
       }
-      
-      // Deduplicate by index (keep first occurrence)
-      const seen = new Set();
-      parsedEntries = parsedEntries.filter(entry => {
-        if (seen.has(entry.index)) return false;
-        seen.add(entry.index);
-        return true;
-      });
     }
 
     if (!parsedEntries || parsedEntries.length === 0) {
@@ -2857,8 +2358,6 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     for (const entry of parsedEntries) {
       const original = originalBatch[entry.index];
       if (!original) continue;
-      
-      // Bersihkan teks secara real-time
       const cleanedText = this.cleanTranslatedText(entry.text || original.text);
       const timecode = (this.sendTimestampsToAI && entry.timecode) ? entry.timecode : original.timecode;
       merged.push({
@@ -2930,8 +2429,10 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
    */
   parseBatchResponse(translatedText, expectedCount) {
     let cleaned = translatedText.trim();
+
+    // Remove markdown code blocks
     cleaned = cleaned.replace(/```[a-z]*(?:\r?\n)?/g, '');
-    
+
     // --- Fix #8: Strip context sections before parsing ---
     // Remove entire context blocks the AI may have echoed back
     cleaned = cleaned.replace(/===\s*CONTEXT\s*\(FOR REFERENCE ONLY[^=]*===[\s\S]*?===\s*END OF CONTEXT\s*===/gi, '');
@@ -2991,9 +2492,9 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     return deduped;
   }
 
+
   /**
    * Clean translated text (remove timecodes, normalize line endings)
-   * [UPDATED - FASA 3]: Added Auto-Closer, Poisonous Character Sanitizer, ASS Tag & XML Garbage Cleanup & Malay Spelling Sanitizer
    */
   cleanTranslatedText(text) {
     let cleaned = String(text || '').trim();
@@ -3002,69 +2503,21 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
     cleaned = cleaned.replace(timecodePattern, '').trim();
 
-    // 🚨 UBAHAN BARU 1: Strip ALL ASS/SSA override tags mutlak (contoh: {\an8}, {\b1}, {an8})
-    cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
-
-    // 🚨 UBAHAN BARU 2: Pembersih tahi tag XML/HTML/Petik kat permulaan ayat (contoh: ">, >, ">, '>)
-    cleaned = cleaned.replace(/^["'>\s]+/, '').trim();
-
-    // 🚨 UBAHAN BARU 3: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
-    cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
-
-    // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
-    cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
-
-    // 🧹 INJECT: ENJIN SANITASI EJAAN BM (Post-Processing Filter) 🧹
-    // Gunakan \b (Word Boundary) supaya tidak merosakkan perkataan berangkai (contoh: "berani", "batu")
-    cleaned = cleaned
-      .replace(/\bni\b/g, 'ini')
-      .replace(/\bNi\b/g, 'Ini')
-      .replace(/\bnilah\b/g, 'inilah')
-      .replace(/\bNilah\b/g, 'Inilah')
-      .replace(/\btulah\b/g, 'itulah')
-      .replace(/\bTulah\b/g, 'Itulah')
-      .replace(/\btu\b/g, 'itu')
-      .replace(/\bTu\b/g, 'Itu')
-      .replace(/\bje\b/g, 'saja')
-      .replace(/\bJe\b/g, 'Saja')
-      .replace(/\bjap\b/g, 'sekejap')
-      .replace(/\bJap\b/g, 'Sekejap')
-      .replace(/\bdgn\b/gi, 'dengan')
-      .replace(/\byg\b/gi, 'yang')
-      .replace(/\bkat\b/g, 'dekat')
-      .replace(/\bKat\b/g, 'Dekat')
-      .replace(/\bdkt\b/gi, 'dekat')
-      .replace(/\bkt\b/gi, 'dekat');
-
-    // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
-    // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
-    const formattingTags = ['i', 'b', 'u'];
-    formattingTags.forEach(tag => {
-      const openCount = (cleaned.match(new RegExp(`<${tag}>`, 'gi')) || []).length;
-      const closeCount = (cleaned.match(new RegExp(`</${tag}>`, 'gi')) || []).length;
-      
-      // Kalau tag pembuka lebih banyak dari penutup, kita tambah penutup
-      if (openCount > closeCount) {
-        cleaned += `</${tag}>`.repeat(openCount - closeCount);
-      }
-    });
-
-    // 🛡️ FASA 2 (B): PEMBERSIH KARAKTER BERACUN 🛡️
-    // Tukar simbol `<` yang digunakan secara rawak (contoh: A < B atau 10 < 20) 
-    // supaya tak disalah anggap sebagai permulaan tag XML oleh video player.
-    cleaned = cleaned.replace(/<(?=[\s\d])/g, '&lt;');
+    // Strip ASS/SSA override tags that LLMs sometimes hallucinate into translated text
+    // Matches {\anX}, {\an8}, {\pos(x,y)}, {\fad(...)}, {\b1}, {\i1}, etc.
+    cleaned = cleaned.replace(/\{\\[^}]*\}/g, '').trim();
 
     // Normalize line endings (CRLF → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // For RTL targets
+    // For RTL targets, wrap lines with embedding markers so punctuation renders on the correct side
     if (this.isRtlTarget) {
       cleaned = wrapRtlText(cleaned);
     }
 
     return cleaned;
   }
-  
+
   /**
    * Remove timecodes/timeranges from arbitrary text (defensive post-clean)
    */
