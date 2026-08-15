@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords where they reflect how Malaysians actually speak. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords where they reflect how Malaysians actually speak. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Use 'saya' for 'I' and 'awak' for 'you'. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -117,14 +117,14 @@ function getBatchSizeForModel(model) {
   // Model-specific batch sizes (hardcoded, safe from client manipulation)
   const modelStr = String(model || '').toLowerCase();
 
-  // Gemma models: Lower batch size for stability
+  // Gemma models: Lower batch size for stability (200)
   if (modelStr.includes('gemma')) {
-    return 200;
+    return 50;
   }
 
-  // Flash-lite models: More conservative batch size for stability
+  // Flash-lite models: More conservative batch size for stability (200)
   if (modelStr.includes('flash-lite')) {
-    return 200;
+    return 50;
   }
 
   // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
@@ -133,17 +133,17 @@ function getBatchSizeForModel(model) {
     const versionMatch = modelStr.match(/gemini-(\d+(?:\.\d+)?)/);
     const geminiVersion = versionMatch ? parseFloat(versionMatch[1]) : 0;
 
-    // Versi 3.0 dan ke atas dapat batch size 400
+    // Versi 3.0 dan ke atas dapat batch size (400)
     if (geminiVersion >= 3.0) {
-      return 60;
+      return 80;
     }
     
-    // Versi bawah 3.0 atau legacy Flash models kekal 250
-    return 250;
+    // Versi bawah 3.0 atau legacy Flash models kekal (250)
+    return 50;
   }
 
-  // Default batch size for unknown models
-  return 250;
+  // Default batch size for unknown models (250)
+  return 50;
 }
 
 // Module-level shared key health tracking across engine instances.
@@ -208,7 +208,7 @@ class TranslationEngine {
 
     // JSON workflow caps batch size — large JSON arrays (300-400 objects)
     // are extremely error-prone for LLMs. Keep batches at ≤200 entries.
-    const JSON_MAX_BATCH_SIZE = 200;
+    const JSON_MAX_BATCH_SIZE = 50;
     if (this.translationWorkflow === 'json' && this.batchSize > JSON_MAX_BATCH_SIZE) {
       log.debug(() => `[TranslationEngine] Capping batch size from ${this.batchSize} to ${JSON_MAX_BATCH_SIZE} for JSON workflow`);
       this.batchSize = JSON_MAX_BATCH_SIZE;
