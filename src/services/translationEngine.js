@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Use 'saya' for 'I' and 'awak' for 'you'.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Consistently use 'saya' for 'I' and 'awak' for 'you', unless the source text context strongly implies otherwise.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents, and match the original speaker's tone, emotion, and register. Use 'saya' for 'I' and 'awak' for 'you'.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
