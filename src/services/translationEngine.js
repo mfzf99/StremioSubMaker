@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate into natural colloquialisms for ${targetLabel} that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents while matching the original speaker's tone, emotion, and register. Strictly use 'saya' for 'I' and 'awak' for 'you' to maintain consistent pronouns throughout. Keep translations concise for subtitle reading speed.`,
+  primary: (targetLabel) => `Translate to natural, spoken ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate into natural colloquialisms for ${targetLabel} that reflect native spoken dialogue, prioritizing meaning and flow over literal translation. Naturally integrate common English loanwords when contextually appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents while matching the original speaker's tone, emotion, and register. Strictly use 'saya' for 'I' and 'awak' for 'you' to maintain consistent pronouns throughout. Keep translations concise for subtitle reading speed.`
+ fallback: (targetLabel) => `Translate to natural, spoken ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
