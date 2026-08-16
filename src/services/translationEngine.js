@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate to natural, spoken ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`,
+  primary: (targetLabel) => `Translate to natural ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate to natural, spoken ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`
+ fallback: (targetLabel) => `Translate to natural ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
