@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `Translate to natural ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate ${targetLabel} into native, spoken-style dialogue — prioritize meaning and flow over literal translation. Integrate common English loanwords when contextually appropriate, and adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Use 'saya' for 'I' and 'awak' for 'you' consistently. Keep lines concise for subtitle reading speed.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `Translate to natural ${targetLabel}, prioritizing meaning and flow over literal translation. Match speaker tone, adapt slang/idioms, and integrate common English loanwords where appropriate. Strictly use 'saya' for 'I' and 'awak' for 'you'. Keep lines concise for subtitle pacing.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate ${targetLabel} into native, spoken-style dialogue — prioritize meaning and flow over literal translation. Integrate common English loanwords when contextually appropriate, and adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Use 'saya' for 'I' and 'awak' for 'you' consistently. Keep lines concise for subtitle reading speed.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
