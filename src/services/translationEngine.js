@@ -2128,8 +2128,10 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 4. FORMAT: <s id="N">translated text</s>
    Use exact ID from input. Never write [original_id] or [N] literally.
 
-5. PRESERVE MARKUP: [br], <i>, and other inline tags stay in exact 
-   position and structure. Speaker dashes (-) stay exactly as source.
+5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
+   inline tag MUST be preserved — same position, same structure, 
+   unchanged. Speaker dashes (-) MUST also be preserved exactly as 
+   they appear in the source.
 
 6. CLEAN OUTPUT: Response MUST start immediately with the first 
    <s id="..."> tag. NO preamble, NO markdown, NO commentary. Every 
