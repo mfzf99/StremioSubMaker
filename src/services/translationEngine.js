@@ -3014,34 +3014,48 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
-    // 🧹 INJECT: ENJIN SANITASI EJAAN BM (Post-Processing Filter) 🧹
-    // Gunakan \b (Word Boundary) supaya tidak merosakkan perkataan berangkai (contoh: "berani", "batu")
-    cleaned = cleaned
-      .replace(/\bni\b/g, 'ini')
-      .replace(/\bNi\b/g, 'Ini')
-      .replace(/\bnilah\b/g, 'inilah')
-      .replace(/\bNilah\b/g, 'Inilah')
-      .replace(/\btulah\b/g, 'itulah')
-      .replace(/\bTulah\b/g, 'Itulah')
-      .replace(/\btu\b/g, 'itu')
-      .replace(/\bTu\b/g, 'Itu')
-      .replace(/\bje\b/g, 'saja')
-      .replace(/\bJe\b/g, 'Saja')
-      .replace(/\bjap\b/g, 'sekejap')
-      .replace(/\bJap\b/g, 'Sekejap')
-      .replace(/\bla\b/g, 'lah')
-      .replace(/\bLa\b/g, 'Lah')
-      .replace(/\bokey\b/g, 'okay')
-      .replace(/\bOkey\b/g, 'Okay')
-      .replace(/\bok\b/g, 'okay')
-      .replace(/\bOk\b/g, 'Okay')
-      .replace(/\bOK\b/g, 'Okay')
-      .replace(/\bdgn\b/gi, 'dengan')
-      .replace(/\byg\b/gi, 'yang')
-      .replace(/\bkat\b/g, 'dekat')
-      .replace(/\bKat\b/g, 'Dekat')
-      .replace(/\bdkt\b/gi, 'dekat')
-      .replace(/\bkt\b/gi, 'dekat');
+    // 🧹 INJECT: ENJIN SANITASI EJAAN & KATA GANTI NAMA (Post-Processing Filter) 🧹
+cleaned = cleaned
+  // 1. KATA GANTI NAMA (Aku / Kau -> Saya / Awak)
+  .replace(/\baku\b/g, 'saya')
+  .replace(/\bAku\b/g, 'Saya')
+  .replace(/\bAKU\b/g, 'SAYA')
+  .replace(/\bkau\b/g, 'awak')
+  .replace(/\bKau\b/g, 'Awak')
+  .replace(/\bKAU\b/g, 'AWAK')
+  .replace(/\bengkau\b/g, 'awak')
+  .replace(/\bEngkau\b/g, 'Awak')
+
+  // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
+  .replace(/\bni\b/g, 'ini')
+  .replace(/\bNi\b/g, 'Ini')
+  .replace(/\bnilah\b/g, 'inilah')
+  .replace(/\bNilah\b/g, 'Inilah')
+  .replace(/\btulah\b/g, 'itulah')
+  .replace(/\bTulah\b/g, 'Itulah')
+  .replace(/\btu\b/g, 'itu')
+  .replace(/\bTu\b/g, 'Itu')
+  .replace(/\bje\b/g, 'saja')
+  .replace(/\bJe\b/g, 'Saja')
+  .replace(/\bjap\b/g, 'sekejap')
+  .replace(/\bJap\b/g, 'Sekejap')
+  .replace(/\bla\b/g, 'lah')
+  .replace(/\bLa\b/g, 'Lah')
+
+  // 3. KATA PINJAMAN & STANDARDIZASI (Okay)
+  .replace(/\bokey\b/g, 'okay')
+  .replace(/\bOkey\b/g, 'Okay')
+  .replace(/\bok\b/g, 'okay')
+  .replace(/\bOk\b/g, 'Okay')
+  .replace(/\bOK\b/g, 'Okay')
+
+  // 4. SINGKATAN TEKS (Dengan, Yang, Dekat)
+  .replace(/\bdgn\b/gi, 'dengan')
+  .replace(/\byg\b/gi, 'yang')
+  .replace(/\bkat\b/g, 'dekat')
+  .replace(/\bKat\b/g, 'Dekat')
+  .replace(/\bdkt\b/gi, 'dekat')
+  .replace(/\bkt\b/gi, 'dekat');
 
     // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
     // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
