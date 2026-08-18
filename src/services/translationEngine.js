@@ -2130,8 +2130,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
    inline tag MUST be preserved — same position, same structure, 
-   unchanged. Speaker dashes (-) MUST also be preserved exactly as 
-   they appear in the source.
+   unchanged. Speaker dashes (-) and quotation mark pairs ("...") 
+   MUST also be preserved, keeping quoted terms properly enclosed.
 
 6. CLEAN OUTPUT: Response MUST start immediately with the first 
    <s id="..."> tag. NO preamble, NO markdown, NO commentary. Every 
