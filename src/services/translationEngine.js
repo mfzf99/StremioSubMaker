@@ -3055,8 +3055,12 @@ cleaned = cleaned
   .replace(/\bkat\b/g, 'dekat')
   .replace(/\bKat\b/g, 'Dekat')
   .replace(/\bdkt\b/gi, 'dekat')
-  .replace(/\bkt\b/gi, 'dekat');
+  .replace(/\bkt\b/gi, 'dekat')
 
+  // 5. PEMBERSIH TANDA PETIK TERGANTUNG / SESAT (Dangling Quotes)
+  .replace(/,\s*["”']\s*$/gm, '.')
+  .replace(/\s*["”']$/gm, '');
+    
     // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
     // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
     const formattingTags = ['i', 'b', 'u'];
