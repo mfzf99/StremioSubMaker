@@ -3005,8 +3005,8 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // 🚨 UBAHAN BARU 1: Strip ALL ASS/SSA override tags mutlak (contoh: {\an8}, {\b1}, {an8})
     cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
 
-    // 🚨 UBAHAN BARU 2: Pembersih tahi tag XML/HTML/Petik kat permulaan ayat (contoh: ">, >, ">, '>)
-    cleaned = cleaned.replace(/^["'>\s]+/, '').trim();
+    // 🚨 UBAHAN BARU 2: Hanya buang jika ada sisa kurungan tag '>' (contoh: '>', '">', "'>")
+    cleaned = cleaned.replace(/^(?:["']?\s*>)+\s*/, '').trim();
 
     // 🚨 UBAHAN BARU 3: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
     cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
