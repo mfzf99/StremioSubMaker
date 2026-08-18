@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritize meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match contextual tone, emotion, and royal/informal registers. Preserve profanity at its original level.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Integrate common English loanwords when contextually appropriate. Match contextual tone, emotion, and royal/informal registers. Preserve profanity at its original level.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritize meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match contextual tone, emotion, and royal/informal registers. Preserve profanity at its original level.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Integrate common English loanwords when contextually appropriate. Match contextual tone, emotion, and royal/informal registers. Preserve profanity at its original level.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
