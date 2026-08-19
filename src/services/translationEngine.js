@@ -2211,8 +2211,9 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId) + 1}, "text": "."}]
 
 2. ESCAPE HATCH: If you cannot translate, or the line contains ONLY 
-   symbols/music notes/song lyrics (♪) — copy the EXACT ORIGINAL TEXT 
-   for that ID. NEVER shift any remaining entry.
+   standalone symbols/music notes (e.g., ♪, ♫, ♪♪) with NO translatable words 
+   — copy the EXACT ORIGINAL TEXT for that ID. (Always translate song lyrics 
+   with words enclosed in ♪/♫). NEVER shift any remaining entry.
 
 3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
    Output IDs MUST match input IDs exactly from id: ${startId}. 
