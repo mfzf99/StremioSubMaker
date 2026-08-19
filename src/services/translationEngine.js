@@ -3014,50 +3014,74 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
-    // 🧹 INJECT: ENJIN SANITASI EJAAN & KATA GANTI NAMA (Post-Processing Filter) 🧹
+    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik) 🧹
+cleaned = cleaned.split('\n').map(line => {
+  const isMusicLine = /[♫♪♬♩🎵🎶]/.test(line);
+
+  // 1. KATA GANTI NAMA (Dialog sahaja, skip lirik muzik)
+  if (!isMusicLine) {
+    line = line
+      .replace(/\bakulah\b/g, 'sayalah')
+      .replace(/\bAkulah\b/g, 'Sayalah')
+      .replace(/\bAKULAH\b/g, 'SAYALAH')
+      .replace(/\bkaulah\b/g, 'awaklah')
+      .replace(/\bKaulah\b/g, 'Awaklah')
+      .replace(/\bKAULAH\b/g, 'AWAKLAH')
+      .replace(/\bengkaulah\b/g, 'awaklah')
+      .replace(/\bEngkaulah\b/g, 'Awaklah')
+      .replace(/\baku\b/g, 'saya')
+      .replace(/\bAku\b/g, 'Saya')
+      .replace(/\bAKU\b/g, 'SAYA')
+      .replace(/\bkau\b/g, 'awak')
+      .replace(/\bKau\b/g, 'Awak')
+      .replace(/\bKAU\b/g, 'AWAK')
+      .replace(/\bengkau\b/g, 'awak')
+      .replace(/\bEngkau\b/g, 'Awak');
+  }
+
+  // 2. PARTIKEL TANYA & GAYA LISAN (ke -> ker)
+  // Selamat: Hanya tukar jika di hadapan tanda soal atau frasa soal (ke tak/ke apa)
+  line = line
+    .replace(/\bke(?=\s*\?)/g, 'ker')
+    .replace(/\bKe(?=\s*\?)/g, 'Ker')
+    .replace(/\bke(?=\s+(?:tak|apa|bukan)\b)/gi, 'ker')
+
+  // 3. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
+    .replace(/\bni\b/g, 'ini')
+    .replace(/\bNi\b/g, 'Ini')
+    .replace(/\bnilah\b/g, 'inilah')
+    .replace(/\bNilah\b/g, 'Inilah')
+    .replace(/\btulah\b/g, 'itulah')
+    .replace(/\bTulah\b/g, 'Itulah')
+    .replace(/\btu\b/g, 'itu')
+    .replace(/\bTu\b/g, 'Itu')
+    .replace(/\bje\b/g, 'saja')
+    .replace(/\bJe\b/g, 'Saja')
+    .replace(/\bjap\b/g, 'sekejap')
+    .replace(/\bJap\b/g, 'Sekejap')
+    .replace(/\bla\b/g, 'lah')
+    .replace(/\bLa\b/g, 'Lah')
+
+  // 4. KATA PINJAMAN & STANDARDIZASI
+    .replace(/\bokey\b/g, 'okay')
+    .replace(/\bOkey\b/g, 'Okay')
+    .replace(/\bok\b/g, 'okay')
+    .replace(/\bOk\b/g, 'Okay')
+    .replace(/\bOK\b/g, 'Okay')
+
+  // 5. SINGKATAN TEKS
+    .replace(/\bdgn\b/gi, 'dengan')
+    .replace(/\byg\b/gi, 'yang')
+    .replace(/\bkat\b/g, 'dekat')
+    .replace(/\bKat\b/g, 'Dekat')
+    .replace(/\bdkt\b/gi, 'dekat')
+    .replace(/\bkt\b/gi, 'dekat');
+
+  return line;
+}).join('\n');
+
+// 6. PEMBERSIH TANDA PETIK TERGANTUNG
 cleaned = cleaned
-  // 1. KATA GANTI NAMA (Aku / Kau -> Saya / Awak)
-  .replace(/\baku\b/g, 'saya')
-  .replace(/\bAku\b/g, 'Saya')
-  .replace(/\bAKU\b/g, 'SAYA')
-  .replace(/\bkau\b/g, 'awak')
-  .replace(/\bKau\b/g, 'Awak')
-  .replace(/\bKAU\b/g, 'AWAK')
-  .replace(/\bengkau\b/g, 'awak')
-  .replace(/\bEngkau\b/g, 'Awak')
-
-  // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
-  .replace(/\bni\b/g, 'ini')
-  .replace(/\bNi\b/g, 'Ini')
-  .replace(/\bnilah\b/g, 'inilah')
-  .replace(/\bNilah\b/g, 'Inilah')
-  .replace(/\btulah\b/g, 'itulah')
-  .replace(/\bTulah\b/g, 'Itulah')
-  .replace(/\btu\b/g, 'itu')
-  .replace(/\bTu\b/g, 'Itu')
-  .replace(/\bje\b/g, 'saja')
-  .replace(/\bJe\b/g, 'Saja')
-  .replace(/\bjap\b/g, 'sekejap')
-  .replace(/\bJap\b/g, 'Sekejap')
-  .replace(/\bla\b/g, 'lah')
-  .replace(/\bLa\b/g, 'Lah')
-
-  // 3. KATA PINJAMAN & STANDARDIZASI (Okay)
-  .replace(/\bokey\b/g, 'okay')
-  .replace(/\bOkey\b/g, 'Okay')
-  .replace(/\bok\b/g, 'okay')
-  .replace(/\bOk\b/g, 'Okay')
-  .replace(/\bOK\b/g, 'Okay')
-
-  // 4. SINGKATAN TEKS (Dengan, Yang, Dekat)
-  .replace(/\bdgn\b/gi, 'dengan')
-  .replace(/\byg\b/gi, 'yang')
-  .replace(/\bkat\b/g, 'dekat')
-  .replace(/\bKat\b/g, 'Dekat')
-  .replace(/\bdkt\b/gi, 'dekat')
-  .replace(/\bkt\b/gi, 'dekat')
-
-  // 5. PEMBERSIH TANDA PETIK TERGANTUNG / SESAT (Dangling Quotes)
   .replace(/,\s*["”']\s*$/gm, '.')
   .replace(/\s*["”']$/gm, '');
     
