@@ -3017,7 +3017,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
-    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik) 🧹
+    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik + Auto-Balance Quotes Pintar) 🧹
 cleaned = cleaned.split('\n').map(line => {
   const isMusicLine = /[♫♪♬♩🎵🎶]/.test(line);
 
@@ -3078,13 +3078,50 @@ cleaned = cleaned.split('\n').map(line => {
     .replace(/\bdkt\b/gi, 'dekat')
     .replace(/\bkt\b/gi, 'dekat');
 
+  // 6. AUTO-BALANCE DOUBLE QUOTES (")
+  const doubleQuotes = (line.match(/"/g) || []).length;
+  if (doubleQuotes % 2 !== 0) {
+    // Kes 1: Buka di awal ("...), ada tanda ?!., diikuti ayat ulasan -> tutup selepas tanda baca
+    if (/^(\s*(?:<i>)?)"([^?!.]+[?!.])(\s+.*)$/.test(line)) {
+      line = line.replace(/^(\s*(?:<i>)?)"([^?!.]+[?!.])(\s+.*)$/, '$1"$2"$3');
+    }
+    // Kes 2: Ada koma tapi tiada pembuka ("...) -> letak pembuka selepas koma
+    else if (/^(.*,\s*)([^"]+")(\s*(?:<\/i>)?)$/.test(line)) {
+      line = line.replace(/^(.*,\s*)([^"]+")(\s*(?:<\/i>)?)$/, '$1"$2$3');
+    }
+    // Kes 3: Buka di awal ("...) tapi tiada penutup langsung -> tutup di hujung baris
+    else if (/^(\s*(?:<i>)?)"/.test(line)) {
+      line = line.replace(/(<\/i>)?$/, '"$1');
+    }
+    // Kes 4: Penutup di hujung ("...) tapi tiada pembuka langsung -> buka di awal
+    else if (/"(\s*(?:<\/i>)?)$/.test(line)) {
+      line = line.replace(/^(\s*(?:<i>)?)/, '$1"');
+    }
+  }
+
+  // 7. AUTO-BALANCE SINGLE QUOTES (')
+  const singleQuotes = (line.match(/'/g) || []).length;
+  if (singleQuotes % 2 !== 0) {
+    // Kes 1: Buka di awal ('...), ada tanda ?!., diikuti ayat ulasan -> tutup selepas tanda baca
+    if (/^(\s*(?:<i>)?)\'([^?!.]+[?!.])(\s+.*)$/.test(line)) {
+      line = line.replace(/^(\s*(?:<i>)?)\'([^?!.]+[?!.])(\s+.*)$/, "$1'$2'$3");
+    }
+    // Kes 2: Ada koma tapi tiada pembuka ('...) -> letak pembuka selepas koma
+    else if (/^(.*,\s*)([^']+')(\s*(?:<\/i>)?)$/.test(line)) {
+      line = line.replace(/^(.*,\s*)([^']+')(\s*(?:<\/i>)?)$/, "$1'$2$3");
+    }
+    // Kes 3: Buka di awal ('...) tapi tiada penutup langsung -> tutup di hujung baris
+    else if (/^(\s*(?:<i>)?)\'/.test(line)) {
+      line = line.replace(/(<\/i>)?$/, "'$1");
+    }
+    // Kes 4: Penutup di hujung ('...) tapi tiada pembuka langsung -> buka di awal
+    else if (/'(\s*(?:<\/i>)?)$/.test(line)) {
+      line = line.replace(/^(\s*(?:<i>)?)/, "$1'");
+    }
+  }
+
   return line;
 }).join('\n');
-
-// 6. PEMBERSIH TANDA PETIK TERGANTUNG
-cleaned = cleaned
-  .replace(/,\s*["”']\s*$/gm, '.')
-  .replace(/\s*["”']$/gm, '');
     
     // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
     // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
