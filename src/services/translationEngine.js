@@ -2115,10 +2115,12 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    "Saya betul-betul nak" IS CORRECT — intentional fragment.
    Completing it by stealing from the next ID DESTROYS sync permanently.
    
-2. ESCAPE HATCH: If you cannot translate, or the line contains ONLY 
-   symbols/music notes/song lyrics (♪) — copy the EXACT ORIGINAL TEXT 
-   for that ID. NEVER shift any remaining entry.
-
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   NEVER leave any source lyrics untranslated. Only copy exact original text 
+   if a line contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or 
+   numbers with NO translatable words. NEVER shift any remaining entry.
+   
 3. ID INTEGRITY & COUNT: Every ID appears EXACTLY ONCE in strict input 
    order, matching input IDs exactly from ID_${startId} to ID_${endId}. 
    Non-sequential input = non-sequential output — never fill gaps, 
