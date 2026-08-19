@@ -3042,12 +3042,10 @@ cleaned = cleaned.split('\n').map(line => {
       .replace(/\bEngkau\b/g, 'Awak');
   }
 
-  // 2. PARTIKEL TANYA & GAYA LISAN (ke -> ker)
-  // Selamat: Hanya tukar jika di hadapan tanda soal atau frasa soal (ke tak/ke apa)
+  // 2. PARTIKEL TANYA (HANYA 'ke?' di hujung ayat/baris -> 'ker?')
   line = line
-    .replace(/\bke(?=\s*\?)/g, 'ker')
-    .replace(/\bKe(?=\s*\?)/g, 'Ker')
-    .replace(/\bke(?=\s+(?:tak|apa|bukan)\b)/gi, 'ker')
+    .replace(/\bke(?=\s*\?[^a-zA-Z0-9]*$)/g, 'ker')
+    .replace(/\bKe(?=\s*\?[^a-zA-Z0-9]*$)/g, 'Ker')
 
   // 3. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
     .replace(/\bni\b/g, 'ini')
