@@ -83,7 +83,7 @@ class GeminiService {
     // Nota: Kedua-dua key tetap menyokong penuh fungsi streaming tanpa sebarang sekatan.
     if (this.keyType === 'crazyrouter') {
       // Menggunakan endpoint cn. untuk routing trafik yang jauh lebih stabil dan laju dari Malaysia
-      this.baseUrl = process.env.CRAZYROUTER_API_BASE || 'https://cn.crazyrouter.com/v1beta';
+      this.baseUrl = process.env.CRAZYROUTER_API_BASE || 'https://api.crazyrouter.com/v1beta';
     } else {
       this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
     }
