@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using context-appropriate colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using context-appropriate colloquialisms, prioritizing meaning and flow over literal translation. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2115,35 +2115,27 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    "Saya betul-betul nak" IS CORRECT — intentional fragment.
    Completing it by stealing from the next ID DESTROYS sync permanently.
 
-2. ESCAPE HATCH: If you cannot translate specific content — foreign 
-   proper nouns, corrupted/garbled source text, or content genuinely 
-   resistant to translation — copy the EXACT ORIGINAL TEXT for that ID. 
-   If a line contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) or 
-   numbers with no translatable words, copy it as-is. NEVER shift any 
-   remaining entry.
-
-3. SONG LYRICS: Lyrics in music notes (♪/♫) must always be translated 
-   into ${targetLabel}, whether they form a full theme block or appear 
-   scattered as background music during a scene. Translate them directly 
-   and naturally, the same way you would standard dialogue — do not 
-   spend extended deliberation trying to make them especially poetic; 
-   a clear, natural translation is sufficient.
-
-4. ID INTEGRITY & COUNT: Every ID appears EXACTLY ONCE in strict input 
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♪/♫) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   NEVER leave any source lyrics untranslated. Only copy exact original text 
+   if a line contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or 
+   numbers with NO translatable words. NEVER shift any remaining entry.
+   
+3. ID INTEGRITY & COUNT: Every ID appears EXACTLY ONCE in strict input 
    order, matching input IDs exactly from ID_${startId} to ID_${endId}. 
    Non-sequential input = non-sequential output — never fill gaps, 
    never invent an ID. Output EXACTLY ${expectedCount} entries total. 
    NEVER fabricate content to hit the count — use Rule 2 instead.
 
-5. FORMAT: <s id="N">translated text</s>
+4. FORMAT: <s id="N">translated text</s>
    Use exact ID from input. Never write [original_id] or [N] literally.
 
-6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
+5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
    inline tag MUST be preserved — same position, same structure, 
    unchanged. Speaker dashes (-) MUST also be preserved exactly as 
    they appear in the source.
 
-7. CLEAN OUTPUT: Response MUST start immediately with the first 
+6. CLEAN OUTPUT: Response MUST start immediately with the first 
    <s id="..."> tag. NO preamble, NO markdown, NO commentary. Every 
    translated word MUST be inside its corresponding tag. NOTHING 
    floating outside.
