@@ -3017,7 +3017,7 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
     // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
-    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik + Auto-Balance Quotes Pintar) 🧹
+    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik + Sokongan Penuh CAPSLOCK) 🧹
 cleaned = cleaned.split('\n').map(line => {
   const isMusicLine = /[♫♪♬♩🎵🎶]/.test(line);
 
@@ -3032,6 +3032,7 @@ cleaned = cleaned.split('\n').map(line => {
       .replace(/\bKAULAH\b/g, 'AWAKLAH')
       .replace(/\bengkaulah\b/g, 'awaklah')
       .replace(/\bEngkaulah\b/g, 'Awaklah')
+      .replace(/\bENGKAULAH\b/g, 'AWAKLAH')
       .replace(/\baku\b/g, 'saya')
       .replace(/\bAku\b/g, 'Saya')
       .replace(/\bAKU\b/g, 'SAYA')
@@ -3039,86 +3040,64 @@ cleaned = cleaned.split('\n').map(line => {
       .replace(/\bKau\b/g, 'Awak')
       .replace(/\bKAU\b/g, 'AWAK')
       .replace(/\bengkau\b/g, 'awak')
-      .replace(/\bEngkau\b/g, 'Awak');
+      .replace(/\bEngkau\b/g, 'Awak')
+      .replace(/\bENGKAU\b/g, 'AWAK');
   }
 
-  // 2. PARTIKEL TANYA (HANYA 'ke?' di hujung ayat/baris -> 'ker?')
+  // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
   line = line
-    .replace(/\bke(?=\s*\?[^a-zA-Z0-9]*$)/g, 'ker')
-    .replace(/\bKe(?=\s*\?[^a-zA-Z0-9]*$)/g, 'Ker')
-
-  // 3. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
     .replace(/\bni\b/g, 'ini')
     .replace(/\bNi\b/g, 'Ini')
+    .replace(/\bNI\b/g, 'INI')
     .replace(/\bnilah\b/g, 'inilah')
     .replace(/\bNilah\b/g, 'Inilah')
+    .replace(/\bNILAH\b/g, 'INILAH')
     .replace(/\btulah\b/g, 'itulah')
     .replace(/\bTulah\b/g, 'Itulah')
+    .replace(/\bTULAH\b/g, 'ITULAH')
     .replace(/\btu\b/g, 'itu')
     .replace(/\bTu\b/g, 'Itu')
+    .replace(/\bTU\b/g, 'ITU')
     .replace(/\bje\b/g, 'saja')
     .replace(/\bJe\b/g, 'Saja')
+    .replace(/\bJE\b/g, 'SAJA')
     .replace(/\bjap\b/g, 'sekejap')
     .replace(/\bJap\b/g, 'Sekejap')
+    .replace(/\bJAP\b/g, 'SEKEJAP')
     .replace(/\bla\b/g, 'lah')
     .replace(/\bLa\b/g, 'Lah')
+    .replace(/\bLA\b/g, 'LAH')
 
-  // 4. KATA PINJAMAN & STANDARDIZASI
+  // 3. KATA PINJAMAN & STANDARDIZASI
+    .replace(/\bokeylah\b/g, 'okaylah')
+    .replace(/\bOkeylah\b/g, 'Okaylah')
+    .replace(/\bOKEYLAH\b/g, 'OKAYLAH')
+    .replace(/\boklah\b/g, 'okaylah')
+    .replace(/\bOklah\b/g, 'Okaylah')
+    .replace(/\bOKLAH\b/g, 'OKAYLAH')
     .replace(/\bokey\b/g, 'okay')
     .replace(/\bOkey\b/g, 'Okay')
+    .replace(/\bOKEY\b/g, 'OKAY')
     .replace(/\bok\b/g, 'okay')
     .replace(/\bOk\b/g, 'Okay')
-    .replace(/\bOK\b/g, 'Okay')
+    .replace(/\bOK\b/g, 'OKAY')
 
-  // 5. SINGKATAN TEKS
-    .replace(/\bdgn\b/gi, 'dengan')
-    .replace(/\byg\b/gi, 'yang')
+  // 4. SINGKATAN TEKS
+    .replace(/\bdgn\b/g, 'dengan')
+    .replace(/\bDgn\b/g, 'Dengan')
+    .replace(/\bDGN\b/g, 'DENGAN')
+    .replace(/\byg\b/g, 'yang')
+    .replace(/\bYg\b/g, 'Yang')
+    .replace(/\bYG\b/g, 'YANG')
     .replace(/\bkat\b/g, 'dekat')
     .replace(/\bKat\b/g, 'Dekat')
-    .replace(/\bdkt\b/gi, 'dekat')
-    .replace(/\bkt\b/gi, 'dekat');
-
-  // 6. AUTO-BALANCE DOUBLE QUOTES (")
-  const doubleQuotes = (line.match(/"/g) || []).length;
-  if (doubleQuotes % 2 !== 0) {
-    // Kes 1: Buka di awal ("...), ada tanda ?!., diikuti ayat ulasan -> tutup selepas tanda baca
-    if (/^(\s*(?:<i>)?)"([^?!.]+[?!.])(\s+.*)$/.test(line)) {
-      line = line.replace(/^(\s*(?:<i>)?)"([^?!.]+[?!.])(\s+.*)$/, '$1"$2"$3');
-    }
-    // Kes 2: Ada koma tapi tiada pembuka ("...) -> letak pembuka selepas koma
-    else if (/^(.*,\s*)([^"]+")(\s*(?:<\/i>)?)$/.test(line)) {
-      line = line.replace(/^(.*,\s*)([^"]+")(\s*(?:<\/i>)?)$/, '$1"$2$3');
-    }
-    // Kes 3: Buka di awal ("...) tapi tiada penutup langsung -> tutup di hujung baris
-    else if (/^(\s*(?:<i>)?)"/.test(line)) {
-      line = line.replace(/(<\/i>)?$/, '"$1');
-    }
-    // Kes 4: Penutup di hujung ("...) tapi tiada pembuka langsung -> buka di awal
-    else if (/"(\s*(?:<\/i>)?)$/.test(line)) {
-      line = line.replace(/^(\s*(?:<i>)?)/, '$1"');
-    }
-  }
-
-  // 7. AUTO-BALANCE SINGLE QUOTES (')
-  const singleQuotes = (line.match(/'/g) || []).length;
-  if (singleQuotes % 2 !== 0) {
-    // Kes 1: Buka di awal ('...), ada tanda ?!., diikuti ayat ulasan -> tutup selepas tanda baca
-    if (/^(\s*(?:<i>)?)\'([^?!.]+[?!.])(\s+.*)$/.test(line)) {
-      line = line.replace(/^(\s*(?:<i>)?)\'([^?!.]+[?!.])(\s+.*)$/, "$1'$2'$3");
-    }
-    // Kes 2: Ada koma tapi tiada pembuka ('...) -> letak pembuka selepas koma
-    else if (/^(.*,\s*)([^']+')(\s*(?:<\/i>)?)$/.test(line)) {
-      line = line.replace(/^(.*,\s*)([^']+')(\s*(?:<\/i>)?)$/, "$1'$2$3");
-    }
-    // Kes 3: Buka di awal ('...) tapi tiada penutup langsung -> tutup di hujung baris
-    else if (/^(\s*(?:<i>)?)\'/.test(line)) {
-      line = line.replace(/(<\/i>)?$/, "'$1");
-    }
-    // Kes 4: Penutup di hujung ('...) tapi tiada pembuka langsung -> buka di awal
-    else if (/'(\s*(?:<\/i>)?)$/.test(line)) {
-      line = line.replace(/^(\s*(?:<i>)?)/, "$1'");
-    }
-  }
+    .replace(/\bKAT\b/g, 'DEKAT')
+    .replace(/\bdkt\b/g, 'dekat')
+    .replace(/\bDkt\b/g, 'Dekat')
+    .replace(/\bDKT\b/g, 'DEKAT')
+    .replace(/\bkt\b/g, 'dekat')
+    .replace(/\bKt\b/g, 'Dekat')
+    .replace(/\bKT\b/g, 'DEKAT');
 
   return line;
 }).join('\n');
