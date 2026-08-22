@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2124,11 +2124,9 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
-   If you cannot translate specific content — foreign proper nouns, 
-   corrupted/garbled source text, or content genuinely resistant to 
-   translation — copy the EXACT ORIGINAL TEXT for that ID. If a line 
-   contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) or numbers 
-   with no translatable words, copy it as-is. NEVER shift any 
+   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
+   (foreign proper nouns, corrupted text) or contains ONLY standalone 
+   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
    remaining entry.
 
 3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
