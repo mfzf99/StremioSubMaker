@@ -1518,9 +1518,10 @@ class TranslationEngine {
             } else if (stage === 2) {
                 // TIER 3: Censor Keras (Tukar prompt & Mask words dengan Kamus Gergasi)
                 const targetLabelForFallback = normalizeTargetLanguageForPrompt(targetLanguage);
-                const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback);
-                const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback);
-
+                const sourceLabelForFallback = this.sourceLanguage;
+                const primaryIntro = PROMPT_TEMPLATES.primary(targetLabelForFallback, sourceLabelForFallback);
+                const fallbackIntro = PROMPT_TEMPLATES.fallback(targetLabelForFallback, sourceLabelForFallback);
+              
                 // 🚀 KAMUS SENSOR GERGASI (Kalis Semua Genre: Aksi, Seram, Drama Matang)
                 const maskToxicWords = (text) => {
                   return String(text)
