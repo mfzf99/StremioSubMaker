@@ -2097,14 +2097,14 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
-   sealed container. Translate ONLY its own content in TOTAL ISOLATION. 
-   Fragment IN = Fragment OUT. NEVER complete a sentence by stealing 
-   words from adjacent IDs.
-   ✅ IN:  <s id="X">I really want to</s> <s id="Y">go home now.</s>
-      OUT: <s id="X">Saya betul-betul nak</s> <s id="Y">balik rumah sekarang.</s>
-   ❌ OUT: <s id="X">Saya betul-betul nak balik rumah sekarang.</s> <s id="Y">.</s>
-   Completing fragments across IDs DESTROYS subtitle sync permanently.
+1. CONTEXT-AWARE SLOT LOCK (MOST CRITICAL):
+   - READ GLOBALLY: Understand the full context, conversational flow, speaker tone, and complete sentence meaning across surrounding entries.
+   - WRITE STRICTLY BY SLOT: Map the natural translation strictly onto corresponding ID boundaries. Fragment IN = Fragment OUT.
+   - NEVER merge multi-line thoughts or steal words from adjacent IDs into a single container.
+   ✅ IN:  <s id="X">If you really think</s> <s id="Y">that I would betray you...</s>
+      OUT: <s id="X">Kalau awak betul-betul rasa</s> <s id="Y">saya sanggup khianati awak...</s>
+   ❌ OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s> <s id="Y">...</s>
+   Dividing the natural thought across matching fragments is MANDATORY. Merging them destroys subtitle sync permanently.
 
 2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
