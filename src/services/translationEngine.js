@@ -2122,31 +2122,23 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    even though you understood the full sentence. Merging them DESTROYS 
    subtitle sync permanently.
 
-2. ESCAPE HATCH: If you cannot translate specific content — foreign 
-   proper nouns, corrupted/garbled source text, or content genuinely 
-   resistant to translation — copy the EXACT ORIGINAL TEXT for that ID. 
-   If a line contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) or 
-   numbers with no translatable words, copy it as-is. NEVER shift any 
-   remaining entry.
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   NEVER leave any source lyrics untranslated. Only copy EXACT ORIGINAL TEXT 
+   if a line contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or 
+   numbers with NO translatable words. NEVER shift any remaining entry.
 
-3. SONG LYRICS: Lyrics in music notes (♪/♫) must always be translated 
-   into ${targetLabel}, whether they form a full theme block or appear 
-   scattered as background music during a scene. Translate them directly 
-   and naturally, the same way you would standard dialogue — do not 
-   spend extended deliberation trying to make them especially poetic; 
-   a clear, natural translation is sufficient.
-
-4. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    total, matching input IDs strictly in order from ID_${startId} to 
    ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
    reorder, or invent IDs. NEVER fabricate content to hit the count — 
    use Rule 2 instead.
 
-5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
    dash (-) MUST be preserved in the exact same structure and position 
    as in the source.
 
-6. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
    Zero commentary, zero markdown code blocks. Every translated word 
    MUST be enclosed inside its corresponding tag.
 
