@@ -2098,29 +2098,55 @@ class TranslationEngine {
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. CONTEXT-AWARE SLOT LOCK (MOST CRITICAL):
-   - READ GLOBALLY: Understand the full context, conversational flow, speaker tone, and complete sentence meaning across surrounding entries.
-   - WRITE STRICTLY BY SLOT: Map the natural translation strictly onto corresponding ID boundaries. Fragment IN = Fragment OUT.
-   - NEVER merge multi-line thoughts or steal words from adjacent IDs into a single container.
-   ✅ IN:  <s id="X">If you really think</s> <s id="Y">that I would betray you...</s>
-      OUT: <s id="X">Kalau awak betul-betul rasa</s> <s id="Y">saya sanggup khianati awak...</s>
-   ❌ OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s> <s id="Y">...</s>
-   Dividing the natural thought across matching fragments is MANDATORY. Merging them destroys subtitle sync permanently.
+   - READ GLOBALLY: Understand the full context, conversational flow, 
+     speaker tone, and complete sentence meaning across surrounding entries.
+   - WRITE STRICTLY BY SLOT: Reading broadly is for UNDERSTANDING ONLY — 
+     it NEVER justifies moving words across a slot boundary. Map the 
+     natural translation strictly onto its corresponding ID container. 
+     Fragment IN = Fragment OUT.
+   - NEVER merge multi-line thoughts or steal words from adjacent IDs 
+     into a single container, even when you clearly understand how the 
+     full sentence continues.
 
-2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
-   background music (BGM) playing during scenes — MUST be fully translated. 
-   NEVER leave any source lyrics untranslated. Only copy exact original text 
-   if a line contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or 
-   numbers with NO translatable words. NEVER shift any remaining entry.
+   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
+   IN:  <s id="X">If you really think</s>
+        <s id="Y">that I would betray you...</s>
+   OUT: <s id="X">Kalau awak betul-betul rasa</s>
+        <s id="Y">saya sanggup khianati awak...</s>
 
-3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries total, 
-   matching input IDs strictly in order from ID_${startId} to ID_${endId}. 
-   Format: <s id="N">translated text</s>. Never skip, reorder, or invent IDs. 
-   NEVER fabricate content to hit the count — use Rule 2 instead.
+   ❌ CATASTROPHICALLY WRONG:
+   OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+        <s id="Y">...</s>
 
-4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker dash (-) 
-   MUST be preserved in the exact same structure and position as in source.
+   Dividing the natural thought across matching fragments is MANDATORY, 
+   even though you understood the full sentence. Merging them DESTROYS 
+   subtitle sync permanently.
 
-5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+2. ESCAPE HATCH: If you cannot translate specific content — foreign 
+   proper nouns, corrupted/garbled source text, or content genuinely 
+   resistant to translation — copy the EXACT ORIGINAL TEXT for that ID. 
+   If a line contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) or 
+   numbers with no translatable words, copy it as-is. NEVER shift any 
+   remaining entry.
+
+3. SONG LYRICS: Lyrics in music notes (♪/♫) must always be translated 
+   into ${targetLabel}, whether they form a full theme block or appear 
+   scattered as background music during a scene. Translate them directly 
+   and naturally, the same way you would standard dialogue — do not 
+   spend extended deliberation trying to make them especially poetic; 
+   a clear, natural translation is sufficient.
+
+4. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   total, matching input IDs strictly in order from ID_${startId} to 
+   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
+   reorder, or invent IDs. NEVER fabricate content to hit the count — 
+   use Rule 2 instead.
+
+5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
+   dash (-) MUST be preserved in the exact same structure and position 
+   as in the source.
+
+6. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
    Zero commentary, zero markdown code blocks. Every translated word 
    MUST be enclosed inside its corresponding tag.
 
