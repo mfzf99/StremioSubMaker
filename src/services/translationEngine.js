@@ -29,14 +29,16 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 //const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ============================================================================
-// 🛠️ ZON TEMPLATE PROMPT (EDIT DI SINI BILA-BILA MASA UNTUK EKSPERIMEN)
+// 🛠️ ZON TEMPLATE PROMPT (100% UNIVERSAL & DYNAMIC)
 // ============================================================================
 const PROMPT_TEMPLATES = {
-  // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`,
+  // 1. PROMPT ASAL
+  primary: (targetLabel, sourceLabel) => 
+    `You are a professional ${sourceLabel} to ${targetLabel} translator. Your goal is to accurately convey the meaning and nuances of the original ${sourceLabel} text while adhering to ${targetLabel} grammar, vocabulary, and cultural sensitivities. Keep translations concise for subtitle reading speed.`,
 
- // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`
+  // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
+  fallback: (targetLabel, sourceLabel) => 
+    `You are a professional ${sourceLabel} to ${targetLabel} translator. Your goal is to accurately convey the meaning and nuances of the original ${sourceLabel} text while adhering to ${targetLabel} grammar, vocabulary, and cultural sensitivities. Keep translations concise for subtitle reading speed.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
