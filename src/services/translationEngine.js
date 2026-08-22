@@ -2070,6 +2070,7 @@ class TranslationEngine {
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance[cite: 2]
 
     let startId = 'START';
     let endId = 'END';
@@ -2095,8 +2096,8 @@ class TranslationEngine {
         endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE DI ATAS 🛑
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
+    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel); //[cite: 2]
 
     const promptBody = `${introInstruction}
 
