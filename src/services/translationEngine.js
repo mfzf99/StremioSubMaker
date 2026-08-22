@@ -33,10 +33,10 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // ============================================================================
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Digunakan untuk 99% batch normal)
-  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
+  primary: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using appropriate colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`,
 
  // 2. PROMPT KECEMASAN (Digunakan secara automatik bila sangkut PROHIBITED_CONTENT)
- fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
+ fallback: (targetLabel) => `You are an expert subtitle translator. Translate to ${targetLabel} using appropriate colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level. Keep translations concise for subtitle reading speed, without sacrificing natural flow.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -3072,6 +3072,9 @@ cleaned = cleaned.split('\n').map(line => {
     .replace(/\bokeylah\b/g, 'okaylah')
     .replace(/\bOkeylah\b/g, 'Okaylah')
     .replace(/\bOKEYLAH\b/g, 'OKAYLAH')
+    .replace(/\bokelah\b/g, 'okaylah')
+    .replace(/\bOkelah\b/g, 'Okaylah')
+    .replace(/\bOKELAH\b/g, 'OKAYLAH')
     .replace(/\boklah\b/g, 'okaylah')
     .replace(/\bOklah\b/g, 'Okaylah')
     .replace(/\bOKLAH\b/g, 'OKAYLAH')
