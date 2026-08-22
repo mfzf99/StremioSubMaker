@@ -2098,47 +2098,31 @@ class TranslationEngine {
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. ISOLATED BOX LAW (MOST CRITICAL): Each <s id="N"> is a completely 
-   sealed container. Translate ONLY its own content — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
-   NEVER complete a sentence by stealing words from the next ID.
+   sealed container. Translate ONLY its own content in TOTAL ISOLATION. 
+   Fragment IN = Fragment OUT. NEVER complete a sentence by stealing 
+   words from adjacent IDs.
+   ✅ IN:  <s id="X">I really want to</s> <s id="Y">go home now.</s>
+      OUT: <s id="X">Saya betul-betul nak</s> <s id="Y">balik rumah sekarang.</s>
+   ❌ OUT: <s id="X">Saya betul-betul nak balik rumah sekarang.</s> <s id="Y">.</s>
+   Completing fragments across IDs DESTROYS subtitle sync permanently.
 
-   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
-   IN:  <s id="X">I really want to</s>
-        <s id="Y">go home now.</s>
-   OUT: <s id="X">Saya betul-betul nak</s>
-        <s id="Y">balik rumah sekarang.</s>
-
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: <s id="X">Saya betul-betul nak balik rumah sekarang.</s>
-        <s id="Y">.</s>
-
-   "Saya betul-betul nak" IS CORRECT — intentional fragment.
-   Completing it by stealing from the next ID DESTROYS sync permanently.
-
-2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♪/♫) — including 
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
    NEVER leave any source lyrics untranslated. Only copy exact original text 
    if a line contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or 
    numbers with NO translatable words. NEVER shift any remaining entry.
-   
-3. ID INTEGRITY & COUNT: Every ID appears EXACTLY ONCE in strict input 
-   order, matching input IDs exactly from ID_${startId} to ID_${endId}. 
-   Non-sequential input = non-sequential output — never fill gaps, 
-   never invent an ID. Output EXACTLY ${expectedCount} entries total. 
+
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries total, 
+   matching input IDs strictly in order from ID_${startId} to ID_${endId}. 
+   Format: <s id="N">translated text</s>. Never skip, reorder, or invent IDs. 
    NEVER fabricate content to hit the count — use Rule 2 instead.
 
-4. FORMAT: <s id="N">translated text</s>
-   Use exact ID from input. Never write [original_id] or [N] literally.
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker dash (-) 
+   MUST be preserved in the exact same structure and position as in source.
 
-5. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
-   inline tag MUST be preserved — same position, same structure, 
-   unchanged. Speaker dashes (-) MUST also be preserved exactly as 
-   they appear in the source.
-
-6. CLEAN OUTPUT: Response MUST start immediately with the first 
-   <s id="..."> tag. NO preamble, NO markdown, NO commentary. Every 
-   translated word MUST be inside its corresponding tag. NOTHING 
-   floating outside.
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+   Zero commentary, zero markdown code blocks. Every translated word 
+   MUST be enclosed inside its corresponding tag.
 
 <input>
 ${batchText}
