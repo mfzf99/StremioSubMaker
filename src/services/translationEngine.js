@@ -2104,16 +2104,9 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. CONTEXT-AWARE SLOT LOCK (MOST CRITICAL):
-   - READ GLOBALLY: Understand the full context, conversational flow, 
-     speaker tone, and complete sentence meaning across surrounding entries.
-   - WRITE STRICTLY BY SLOT: Reading broadly is for UNDERSTANDING ONLY — 
-     it NEVER justifies moving words across a slot boundary. Map the 
-     natural translation strictly onto its corresponding ID container. 
-     Fragment IN = Fragment OUT.
-   - NEVER merge multi-line thoughts or steal words from adjacent IDs 
-     into a single container, even when you clearly understand how the 
-     full sentence continues.
+1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
+   NEVER steal, merge, or complete a sentence using words that belong 
+   in an adjacent ID.
 
    ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
    IN:  <s id="X">If you really think</s>
@@ -2125,9 +2118,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
         <s id="Y">...</s>
 
-   Dividing the natural thought across matching fragments is MANDATORY, 
-   even though you understood the full sentence. Merging them DESTROYS 
-   subtitle sync permanently.
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
 
 2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
