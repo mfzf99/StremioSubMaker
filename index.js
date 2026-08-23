@@ -7874,6 +7874,9 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
         sourceContent = ensureSRTForTranslation(sourceContent, '[Embedded Translate]');
 
         const targetLangName = getLanguageName(safeTargetLanguage) || safeTargetLanguage;
+        const sourceLangName = (safeSourceLanguage && safeSourceLanguage !== 'und')
+            ? (getLanguageName(safeSourceLanguage) || safeSourceLanguage)
+            : null;
         const { provider, providerName, model, fallbackProviderName } = await createTranslationProvider(workingConfig);
         if (historyEntry) {
             historyEntry.provider = providerName || fallbackProviderName || historyEntry.provider || requestedProviderName || 'unknown';
