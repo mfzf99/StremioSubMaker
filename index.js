@@ -7955,7 +7955,8 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                 } catch(e) {
                     log.debug(() => `[Radar Error] Gagal tulis partial cache: ${e.message}`);
                 }
-            }
+            },
+            sourceLangName
         );
 
         // HENTIKAN STOPWATCH
