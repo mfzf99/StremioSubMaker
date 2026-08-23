@@ -4437,7 +4437,8 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
                 workingContent,
                 targetLangName,
                 config.translationPrompt,
-                null
+                null,
+                sourceLanguage ? (getLanguageName(sourceLanguage) || sourceLanguage) : null // 🌐 Argumen ke-5
             );
 
             log.debug(() => '[File Translation API] Translation completed via TranslationEngine');
