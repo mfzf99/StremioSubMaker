@@ -4970,7 +4970,7 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
  * @param {string} userHash - User hash for concurrency tracking
  * @param {string} preDownloadedContent - Optional pre-downloaded source content (from pre-flight validation)
  */
-async function performTranslation(sourceFileId, targetLanguage, config, { cacheKey, runtimeKey, baseKey, sharedInFlightKey = null }, userHash, allowPermanent, preDownloadedContent = null, embeddedSource = null) {
+async function performTranslation(sourceFileId, targetLanguage, config, { cacheKey, runtimeKey, baseKey, sharedInFlightKey = null }, userHash, allowPermanent, preDownloadedContent = null, embeddedSource = null, options = {}) {
   let translationEngine = null;
   // Hoisted so the catch block can include them in error translationStats for history correction
   let providerName = '';
