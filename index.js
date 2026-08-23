@@ -6763,6 +6763,10 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                     }
                 );
 
+                const sourceLangName = (originalLang && originalLang !== 'und')
+                    ? (getLanguageName(originalLang) || originalLang)
+                    : null;
+
                 for (const targetLang of normalizedTargets) {
                     try {
                         logStep(`Translating to ${targetLang}`, 'info');
@@ -6770,7 +6774,8 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
                             originalSrt,
                             getLanguageName(targetLang) || targetLang,
                             translationPrompt || config.translationPrompt || '',
-                            null
+                            null,
+                            sourceLangName
                         );
                         const translatedVtt = srtPairToWebVTT(originalSrt, translated);
                         const sourceId = `autosub_${modelKey}_${targetLang}`;
