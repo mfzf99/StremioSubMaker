@@ -6016,6 +6016,7 @@ app.post('/api/smdb/translate', userDataWriteLimiter, async (req, res) => {
 
         // 5. Get target language name for translation context
         const targetLangName = getLanguageName(safeTargetLang) || safeTargetLang;
+        const sourceLangName = getLanguageName(safeSourceLang) || safeSourceLang; // 🌐
         log.debug(() => `[SMDB Translate] Translating ${sourceContent.length} chars to ${targetLangName} using ${providerName}/${effectiveModel}`);
 
         // 6. Perform translation
@@ -6023,7 +6024,8 @@ app.post('/api/smdb/translate', userDataWriteLimiter, async (req, res) => {
             sourceContent,
             targetLangName,
             null, // customPrompt
-            null  // onProgress (synchronous, no streaming needed)
+            null, // onProgress (synchronous, no streaming needed)
+            sourceLangName // 🌐 Argumen ke-5
         );
 
         if (!translatedContent || typeof translatedContent !== 'string' || translatedContent.length < 10) {
