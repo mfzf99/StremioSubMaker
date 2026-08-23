@@ -5395,7 +5395,8 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
               log.debug(() => `[Translation] Streaming progress: batch ${progress.currentBatch}/${progress.totalBatches}, ${completed}/${total} entries (not saved: ${skipReason})`);
             }
           }
-        }
+        },
+        sourceLangName
       );
 
       log.debug(() => '[Translation] Translation completed successfully');
