@@ -5150,6 +5150,12 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     // Get language names for better translation context
     const targetLangName = getLanguageName(targetLanguage) || targetLanguage;
+    const detectedSourceCode = embeddedSource?.languageCode
+      || options?.sourceLanguage
+      || (Array.isArray(config.sourceLanguages) && config.sourceLanguages.length === 1 ? config.sourceLanguages[0] : null);
+    const sourceLangName = (detectedSourceCode && detectedSourceCode !== 'auto' && detectedSourceCode !== 'und')
+      ? (getLanguageName(detectedSourceCode) || detectedSourceCode)
+      : null;
 
     // Initialize translation provider (Gemini default, others when enabled)
     if (translatedContent === undefined) {
@@ -5157,7 +5163,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     providerName = _providerName;
     effectiveModel = model || getEffectiveGeminiModel(config);
     log.debug(() => `[Translation] Using provider=${providerName} model=${effectiveModel}`);
-
+      
     // Initialize new Translation Engine (structure-first approach)
     // Pass model to enable model-specific batch size optimization
     // Pass advancedSettings to enable optional features (like batch context)
