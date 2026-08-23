@@ -4887,7 +4887,8 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       effectiveUserHash,
       allowPermanent,
       sourceContent,
-      embeddedSource
+      embeddedSource,
+      options
     );
     inFlightTranslations.set(runtimeKey, translationPromise);
     if (sharedInFlightKey) {
