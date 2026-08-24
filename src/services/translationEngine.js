@@ -2102,66 +2102,52 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES — VIOLATING THESE WILL CORRUPT THE SUBTITLE FILE:
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. SLOT LOCK (MOST CRITICAL)
-   Each <s id="N"> is one sync slot. Translate ONLY the text inside it.
-   NEVER steal, merge, complete, or move words across adjacent IDs.
+1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
+   NEVER steal, merge, or complete a sentence using words that belong 
+   in an adjacent ID.
 
-   ✅ CORRECT:
-   IN:  <s id="10">If you really think</s>
-        <s id="11">that I would betray you...</s>
-   OUT: <s id="10">Kalau kau betul-betul fikir</s>
-        <s id="11">yang aku akan khianati kau...</s>
+   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
+   IN:  <s id="X">If you really think</s>
+        <s id="Y">that I would betray you...</s>
+   OUT: <s id="X">Kalau awak betul-betul rasa</s>
+        <s id="Y">saya sanggup khianati awak...</s>
 
-   ❌ WRONG:
-   OUT: <s id="10">Kalau kau betul-betul fikir yang aku akan khianati kau...</s>
-        <s id="11">...</s>
+   ❌ CATASTROPHICALLY WRONG:
+   OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+        <s id="Y">...</s>
 
-   Splitting the translation at the same point as the source is mandatory.
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
 
-2. OUTPUT CONTRACT
-   Output EXACTLY ${expectedCount} entries.
-   Preserve input order and IDs exactly from ${startId} to ${endId}.
-   Format: <s id="N">translated text</s>
-   Never skip, reorder, renumber, or invent IDs.
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
+   (foreign proper nouns, corrupted text) or contains ONLY standalone 
+   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
+   remaining entry.
 
-3. UNTRANSLATABLE / MUSIC / SYMBOLS
-   Translate ALL sung lyrics, including background music (♫ / ♪).
-   If an ID contains ONLY untranslatable tokens — proper nouns, corrupted text,
-   sound effects, standalone music notes, numbers, or symbols — copy the
-   original text exactly.
-   Use copy only for truly untranslatable slots, not for difficult ones.
-   Never shift remaining entries.
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   total, matching input IDs strictly in order from ID_${startId} to 
+   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
+   reorder, or invent IDs. NEVER fabricate content to hit the count — 
+   use Rule 2 instead.
 
-4. MEANING FIRST, NOT TRANSLATIONESE
-   Use natural spoken ${targetLabel}.
-   Avoid stiff, textbook, or overly literal phrasing.
-   Choose the translation that sounds like something a native speaker
-   would actually say in that scene.
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
+   dash (-) MUST be preserved in the exact same structure and position 
+   as in the source.
 
-5. PRESERVE ALL INLINE MARKUP
-   Keep every <i> tag, [br] tag, and speaker dash (-) exactly in place.
-   Do not add or remove line breaks or formatting.
-
-6. NO HALLUCINATION
-   Never fabricate content to reach the expected count.
-   Never add missing sentences, explanations, or extra dialogue.
-   If uncertain, use the most probable subtitle meaning from the current ID.
-
-7. CONTEXT AWARENESS
-   Use the provided context only to resolve ambiguous pronouns, references,
-   or cultural meaning. Never copy or merge context into other IDs.
-
-8. CLEAN OUTPUT ONLY
-   Start directly with the first <s id="..."> tag.
-   End directly after the last </s> tag.
-   No markdown code blocks, no commentary, no leading/trailing text.
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+   Zero commentary, zero markdown code blocks. Every translated word 
+   MUST be enclosed inside its corresponding tag.
 
 <input>
 ${batchText}
 </input>
 
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
