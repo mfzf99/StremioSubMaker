@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Translate the original ${sourceLabel} text into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`,
+    `You are DeepSeek V4-Pro operating as a subtitle translation engine. Your ONLY task is to translate subtitle fragments from ${sourceLabel} to ${targetLabel}. You are not a general assistant. You do not explain, comment, apologize, or add markdown. You translate for meaning, tone, emotion, and register — not word-for-word. Adapt idioms, slang, jokes, and cultural references into natural ${targetLabel} equivalents. Preserve profanity at its original intensity. Do not censor or soften it. Keep the speaker's social relationship, formality, and personality consistent.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Translate the original ${sourceLabel} text into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original level.`
+    `You are DeepSeek V4-Pro operating as a subtitle translation engine. Your ONLY task is to translate subtitle fragments from ${sourceLabel} to ${targetLabel}. You are not a general assistant. You do not explain, comment, apologize, or add markdown. You translate for meaning, tone, emotion, and register — not word-for-word. Adapt idioms, slang, jokes, and cultural references into natural ${targetLabel} equivalents. Preserve profanity at its original intensity. Do not censor or soften it. Keep the speaker's social relationship, formality, and personality consistent.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2102,53 +2102,69 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES — VIOLATING THESE WILL CORRUPT THE SUBTITLE FILE:
 
-1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
-   NEVER steal, merge, or complete a sentence using words that belong 
-   in an adjacent ID.
+1. SLOT LOCK (MOST CRITICAL)
+   Each <s id="N"> is one sync slot. Translate ONLY the text inside it.
+   NEVER steal, merge, complete, or move words across adjacent IDs.
 
-   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
-   IN:  <s id="X">If you really think</s>
-        <s id="Y">that I would betray you...</s>
-   OUT: <s id="X">Kalau awak betul-betul rasa</s>
-        <s id="Y">saya sanggup khianati awak...</s>
+   ✅ CORRECT:
+   IN:  <s id="10">If you really think</s>
+        <s id="11">that I would betray you...</s>
+   OUT: <s id="10">Kalau kau betul-betul fikir</s>
+        <s id="11">yang aku akan khianati kau...</s>
 
-   ❌ CATASTROPHICALLY WRONG:
-   OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
-        <s id="Y">...</s>
+   ❌ WRONG:
+   OUT: <s id="10">Kalau kau betul-betul fikir yang aku akan khianati kau...</s>
+        <s id="11">...</s>
 
-   Dividing the natural thought across matching fragments is MANDATORY. 
-   Merging them DESTROYS subtitle sync permanently.
+   Splitting the translation at the same point as the source is mandatory.
 
-2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
-   background music (BGM) playing during scenes — MUST be fully translated. 
-   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
-   (foreign proper nouns, corrupted text) or contains ONLY standalone 
-   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
-   remaining entry.
+2. OUTPUT CONTRACT
+   Output EXACTLY ${expectedCount} entries.
+   Preserve input order and IDs exactly from ${startId} to ${endId}.
+   Format: <s id="N">translated text</s>
+   Never skip, reorder, renumber, or invent IDs.
 
-3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   total, matching input IDs strictly in order from ID_${startId} to 
-   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
-   reorder, or invent IDs. NEVER fabricate content to hit the count — 
-   use Rule 2 instead.
+3. UNTRANSLATABLE / MUSIC / SYMBOLS
+   Translate ALL sung lyrics, including background music (♫ / ♪).
+   If an ID contains ONLY untranslatable tokens — proper nouns, corrupted text,
+   sound effects, standalone music notes, numbers, or symbols — copy the
+   original text exactly.
+   Use copy only for truly untranslatable slots, not for difficult ones.
+   Never shift remaining entries.
 
-4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
-   dash (-) MUST be preserved in the exact same structure and position 
-   as in the source.
+4. MEANING FIRST, NOT TRANSLATIONESE
+   Use natural spoken ${targetLabel}.
+   Avoid stiff, textbook, or overly literal phrasing.
+   Choose the translation that sounds like something a native speaker
+   would actually say in that scene.
 
-5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
-   Zero commentary, zero markdown code blocks. Every translated word 
-   MUST be enclosed inside its corresponding tag.
+5. PRESERVE ALL INLINE MARKUP
+   Keep every <i> tag, [br] tag, and speaker dash (-) exactly in place.
+   Do not add or remove line breaks or formatting.
+
+6. NO HALLUCINATION
+   Never fabricate content to reach the expected count.
+   Never add missing sentences, explanations, or extra dialogue.
+   If uncertain, use the most probable subtitle meaning from the current ID.
+
+7. CONTEXT AWARENESS
+   Use the provided context only to resolve ambiguous pronouns, references,
+   or cultural meaning. Never copy or merge context into other IDs.
+
+8. CLEAN OUTPUT ONLY
+   Start directly with the first <s id="..."> tag.
+   End directly after the last </s> tag.
+   No markdown code blocks, no commentary, no leading/trailing text.
+
+${context ? `CONTEXT (use only for disambiguation):\n${context}` : ''}
 
 <input>
 ${batchText}
 </input>
-
-[OUTPUT_FORMAT]
-RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
-<s id="`;
+`
+};
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
