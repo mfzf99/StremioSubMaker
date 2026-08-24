@@ -3035,6 +3035,12 @@ cleaned = cleaned.split('\n').map(line => {
       .replace(/\bengkaulah\b/g, 'awaklah')
       .replace(/\bEngkaulah\b/g, 'Awaklah')
       .replace(/\bENGKAULAH\b/g, 'AWAKLAH')
+      .replace(/\bkamulah\b/g, 'awaklah')
+      .replace(/\bKamulah\b/g, 'Awaklah')
+      .replace(/\bKAMULAH\b/g, 'AWAKLAH')
+      .replace(/\bandalah\b/g, 'awaklah')
+      .replace(/\bAndalah\b/g, 'Awaklah')
+      .replace(/\bANDALAH\b/g, 'AWAKLAH')
       .replace(/\baku\b/g, 'saya')
       .replace(/\bAku\b/g, 'Saya')
       .replace(/\bAKU\b/g, 'SAYA')
@@ -3043,7 +3049,13 @@ cleaned = cleaned.split('\n').map(line => {
       .replace(/\bKAU\b/g, 'AWAK')
       .replace(/\bengkau\b/g, 'awak')
       .replace(/\bEngkau\b/g, 'Awak')
-      .replace(/\bENGKAU\b/g, 'AWAK');
+      .replace(/\bENGKAU\b/g, 'AWAK')
+      .replace(/\bkamu\b/g, 'awak')
+      .replace(/\bKamu\b/g, 'Awak')
+      .replace(/\bKAMU\b/g, 'AWAK')
+      .replace(/\banda\b/g, 'awak')
+      .replace(/\bAnda\b/g, 'Awak')
+      .replace(/\bANDA\b/g, 'AWAK');
   }
 
   // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
