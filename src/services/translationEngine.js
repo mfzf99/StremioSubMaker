@@ -2158,13 +2158,13 @@ CRITICAL RULES — VIOLATING THESE WILL CORRUPT THE SUBTITLE FILE:
    End directly after the last </s> tag.
    No markdown code blocks, no commentary, no leading/trailing text.
 
-${context ? `CONTEXT (use only for disambiguation):\n${context}` : ''}
-
 <input>
 ${batchText}
 </input>
-`
-};
+
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
+<s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
