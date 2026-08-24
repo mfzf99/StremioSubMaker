@@ -52,6 +52,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
+const { checkOpenSubtitlesDownloadIntent } = require('./src/utils/openSubtitlesDownloadGuard');
 const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
@@ -3421,6 +3422,7 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
     try {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         const { apiKey } = req.body || {};
+
         const geminiApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
 
         if (!geminiApiKey) {
@@ -3442,10 +3444,10 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
         // 🔥 Use GeminiService (hybrid) instead of hardcoding Google endpoint
         const GeminiService = require('./src/services/gemini');
         const gemini = new GeminiService(geminiApiKey);
-        
+
         let validationPassed = false;
         let models = [];
-        
+
         // =====================================================================
         // 🟡 CABANG 1: STRATEGI VALIDASI ACTIVE PROBE UNTUK CRAZYROUTER (sk-)
         // =====================================================================
@@ -3453,53 +3455,48 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
             try {
                 const axios = require('axios');
                 const { httpAgent, httpsAgent } = require('./src/utils/httpAgents');
-                
+
                 log.debug(() => '[ValidateGemini] Initiating active endpoint check for CrazyRouter key...');
-                
+
                 // Ketukan ringan: generateContent 1 token ("Ping") untuk test keaktifan key & kredit proxy
                 await axios.post(
                     `${gemini.baseUrl}/models/gemini-2.5-flash:generateContent`,
                     { contents: [{ parts: [{ text: 'Ping' }] }] },
                     {
-                        headers: gemini.getAuthHeaders(), // Mengandungi Authorization Bearer token
-                        timeout: 7000, // 7 saat gred industri, tak perlu tersedak 10 saat kaku
+                        headers: gemini.getAuthHeaders(),
+                        timeout: 7000,
                         httpAgent,
                         httpsAgent
                     }
                 );
-                
+
                 validationPassed = true;
                 log.debug(() => '[ValidateGemini] CrazyRouter active probe successful. Key is ALIVE.');
-                // Dapatkan dynamic hardcoded registry yang kita jahit dalam gemini.js
                 models = await gemini.getAvailableModels({ silent: true });
-                
+
             } catch (probeError) {
                 log.debug(() => `[ValidateGemini] CrazyRouter active probe failed: ${probeError.message}`);
-                throw probeError; // Lempar ke catch block luar untuk mapping status 401/403 otomatis
+                throw probeError;
             }
-        } 
+        }
         // =====================================================================
-        // 🟢 CABANG 2: LALUAN RASMI GOOGLE OFFICIAL (Kekal Asal Tanpa Usik)
+        // 🟢 CABANG 2: LALUAN RASMI GOOGLE OFFICIAL
         // =====================================================================
         else {
-            // Try 1: Get model list (works for Google, may fail for CrazyRouter due to null supportedGenerationMethods)
+            // Try 1: Dapatkan senarai model terus dari Google
             try {
-                models = await gemini.getAvailableModels({ silent: true });
+                models = await gemini.getAvailableModels({ silent: true, throwOnError: true });
                 if (models && models.length > 0) {
                     validationPassed = true;
                     log.debug(() => '[ValidateGemini] Google model list fetch succeeded.');
-                } else {
-                    log.debug(() => '[ValidateGemini] Google model list fetch returned empty.');
                 }
             } catch (listError) {
                 log.debug(() => `[ValidateGemini] Google model list fetch failed: ${listError.message}. Trying fallback probe.`);
             }
-            
-            // Try 2: If model list failed/empty, do a lightweight probe (count tokens)
-            // This hits the real generateContent endpoint, which CrazyRouter supports.
+
+            // Try 2: Fallback probe (count tokens) jika senarai model gagal
             if (!validationPassed) {
                 try {
-                    // Use a tiny prompt to validate the key (minimal cost, just 1 token)
                     await gemini.countTokensForTranslation('Hi', 'en', 'Translate this');
                     validationPassed = true;
                     log.debug(() => '[ValidateGemini] Google fallback probe succeeded.');
@@ -3508,8 +3505,8 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
                 }
             }
         }
-        
-        // If validation passed, clear cache and return success
+
+        // Jika validasi lulus, bersihkan rekod cache failure & hantar respons sah
         if (validationPassed) {
             await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
             return res.json({
@@ -3518,13 +3515,12 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
                 models: models || []
             });
         }
-        
-        // If both attempts failed, report invalid
+
         return res.json({
             valid: false,
             error: t('server.errors.noModelsFound', {}, 'No models available for this API key')
         });
-        
+
     } catch (error) {
         const isAuthError = error.response?.status === 401 ||
             error.response?.status === 403 ||
@@ -3533,7 +3529,11 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
             error.message?.toLowerCase().includes('permission') ||
             error.message?.toLowerCase().includes('authentication');
 
-        res.json({
+        if (isAuthError) {
+            await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
+        }
+
+        return res.json({
             valid: false,
             error: isAuthError
                 ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
@@ -3666,6 +3666,16 @@ app.post('/api/validate-wyzie', validationLimiter, async (req, res) => {
 
             if (Number.isFinite(result.resultsCount)) {
                 payload.resultsCount = result.resultsCount;
+            }
+
+            if (typeof result.keyType === 'string' && result.keyType) {
+                payload.keyType = result.keyType;
+            }
+            if (Array.isArray(result.availableSources)) {
+                payload.availableSources = result.availableSources;
+            }
+            if (Array.isArray(result.restrictedSources)) {
+                payload.restrictedSources = result.restrictedSources;
             }
 
             return res.json(payload);
@@ -4234,6 +4244,13 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
 
             const thinking = clampNumber(incoming.thinkingBudget, -1, 200000);
             if (thinking !== null) parsed.thinkingBudget = thinking;
+
+            const thinkingLevel = typeof incoming.thinkingLevel === 'string'
+                ? incoming.thinkingLevel.trim().toLowerCase()
+                : '';
+            if (['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
+                parsed.thinkingLevel = thinkingLevel;
+            }
 
             const temperature = clampNumber(incoming.temperature, 0, 2);
             if (temperature !== null) parsed.temperature = temperature;
@@ -4982,6 +4999,33 @@ const subtitleDownloadHandler = async (req, res) => {
             setSubtitleCacheHeaders(res, 'final');
             res.send(cachedContent);
             return;
+        }
+
+        // Authenticated OpenSubtitles `/download` calls consume the user's
+        // daily quota when the link is generated. Some players (including
+        // Nuvio builds) probe every returned subtitle URL before the user has
+        // selected one. Coordinate a short intent window through Redis so two
+        // SubMaker pods allow one initial request, defer the other distinct
+        // file IDs, and immediately allow the file the client requests again
+        // as its real selection. Cache hits above never enter this guard.
+        const providerPrefixes = ['subdl_', 'subsource_', 'v3_', 'scs_', 'wyzie_', 'subsro_'];
+        const isOpenSubtitlesAuthFile = !providerPrefixes.some(prefix => fileId.startsWith(prefix));
+        const openSubtitlesConfig = config.subtitleProviders?.opensubtitles || {};
+        const usesOpenSubtitlesAuth = openSubtitlesConfig.enabled === true
+            && String(openSubtitlesConfig.implementationType || 'v3').toLowerCase() === 'auth'
+            && !!openSubtitlesConfig.username
+            && !!openSubtitlesConfig.password;
+        if (isOpenSubtitlesAuthFile && usesOpenSubtitlesAuth) {
+            const intent = await checkOpenSubtitlesDownloadIntent(configKey, fileId);
+            if (!intent.allowed) {
+                log.debug(() => `[Download] Deferred OpenSubtitles prefetch for ${fileId}: ${intent.reason}`);
+                const { createInvalidSubtitleMessage } = require('./src/handlers/subtitles');
+                const prefetchMessage = createInvalidSubtitleMessage('Click again to load this subtitle.', config?.uiLanguage || 'en');
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+                setSubtitleCacheHeaders(res, 'loading');
+                return res.send(prefetchMessage);
+            }
         }
 
         // STEP 2: Cache miss - check for Stremio Community prefetch cooldown
@@ -7609,6 +7653,13 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
             const thinking = clampNumber(incoming.thinkingBudget, -1, 200000);
             if (thinking !== null) parsed.thinkingBudget = thinking;
+
+            const thinkingLevel = typeof incoming.thinkingLevel === 'string'
+                ? incoming.thinkingLevel.trim().toLowerCase()
+                : '';
+            if (['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
+                parsed.thinkingLevel = thinkingLevel;
+            }
 
             const temperature = clampNumber(incoming.temperature, 0, 2);
             if (temperature !== null) parsed.temperature = temperature;
