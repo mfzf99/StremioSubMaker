@@ -263,6 +263,35 @@ class GeminiService {
     return this.getEffectiveThinkingBudget() !== 0;
   }
 
+  buildGenerationConfig(maxOutputTokens) {
+    const generationConfig = {
+      maxOutputTokens,
+      temperature: this.temperature,
+      topK: this.topK,
+      topP: this.topP,
+      frequencyPenalty: 0.0,
+      presencePenalty: 0.0
+    };
+
+    const thinkingBudget = this.getEffectiveThinkingBudget();
+
+    if (this.isGemini3Model) {
+      const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
+      if (thinkingLevel) {
+        generationConfig.thinkingConfig = { thinkingLevel };
+      }
+      return generationConfig;
+    }
+
+    if (thinkingBudget === -1) {
+      generationConfig.thinkingConfig = { thinkingBudget: null };
+    } else if (thinkingBudget > 0) {
+      generationConfig.thinkingConfig = { thinkingBudget };
+    }
+
+    return generationConfig;
+  }
+
   /**
    * Semak sokongan turn model prefill (Set & Forget / Future-Proof)
    * Disokong: HANYA Gemini legacy (versi 1.5 hingga 3.1)
