@@ -225,7 +225,7 @@ class GeminiService {
 
   // 👉 ORGAN YANG DAH DIHIDUPKAN (BEBAS UNTUK SEMUA MODEL TERMASUK GEMMA)
   getEffectiveThinkingBudget() {
-    return this.thinkingBudget;
+    return this.isGemmaModel ? 0 : this.thinkingBudget;
   }
 
   getGemini3ThinkingLevel(thinkingBudget) {
@@ -233,6 +233,7 @@ class GeminiService {
     const requiresLowMinimum = /^gemini-3\.7-flash(?:[-.]|$)/.test(this.model)
       || this.model.includes('3.1-pro')
       || this.model === 'gemini-pro-latest';
+
     if (allowedLevels.has(this.thinkingLevel)) {
       const requestedLevel = this.thinkingLevel === 'disabled' ? 'minimal' : this.thinkingLevel;
       if (requestedLevel === 'minimal' && requiresLowMinimum) {
@@ -260,6 +261,35 @@ class GeminiService {
       return !!this.getGemini3ThinkingLevel(this.getEffectiveThinkingBudget());
     }
     return this.getEffectiveThinkingBudget() !== 0;
+  }
+
+  buildGenerationConfig(maxOutputTokens) {
+    const generationConfig = {
+      maxOutputTokens,
+      temperature: this.temperature,
+      topK: this.topK,
+      topP: this.topP,
+      frequencyPenalty: 0.0,
+      presencePenalty: 0.0
+    };
+
+    const thinkingBudget = this.getEffectiveThinkingBudget();
+
+    if (this.isGemini3Model) {
+      const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
+      if (thinkingLevel) {
+        generationConfig.thinkingConfig = { thinkingLevel };
+      }
+      return generationConfig;
+    }
+
+    if (thinkingBudget === -1) {
+      generationConfig.thinkingConfig = { thinkingBudget: null };
+    } else if (thinkingBudget > 0) {
+      generationConfig.thinkingConfig = { thinkingBudget };
+    }
+
+    return generationConfig;
   }
 
   /**
