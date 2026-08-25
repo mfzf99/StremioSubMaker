@@ -315,23 +315,24 @@ class GeminiService {
   }
 
   buildGenerationConfig(maxOutputTokens) {
-    const generationConfig = { maxOutputTokens };
+    const generationConfig = {
+      maxOutputTokens,
+      temperature: this.temperature,
+      topK: this.topK,
+      topP: this.topP,
+      frequencyPenalty: 0.0,
+      presencePenalty: 0.0
+    };
+
     const thinkingBudget = this.getEffectiveThinkingBudget();
 
     if (this.isGemini3Model) {
-      // Gemini 3.x no longer supports numeric thinking budgets, and Gemini 3.6+
-      // rejects the legacy sampling controls. Keep all 3.x requests on the
-      // documented thinking-level shape so old saved settings remain usable.
       const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
       if (thinkingLevel) {
         generationConfig.thinkingConfig = { thinkingLevel };
       }
       return generationConfig;
     }
-
-    generationConfig.temperature = this.temperature;
-    generationConfig.topK = this.topK;
-    generationConfig.topP = this.topP;
 
     if (thinkingBudget === -1) {
       generationConfig.thinkingConfig = { thinkingBudget: null };
