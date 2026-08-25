@@ -1996,31 +1996,33 @@ class TranslationEngine {
 
   /**
    * Prepare batch text for translation (numbered list format)
-   * Optionally includes context entries for better translation coherence
+   * [UPGRADED]: Memori Dwibahasa (Source + Target) berasaskan previousMemory
    */
   prepareBatchText(batch, context = null) {
     let result = '';
 
-    // Add context section if provided
-    if (context?.surroundingOriginal?.length > 0) {
-      result += '=== CONTEXT (FOR REFERENCE ONLY - DO NOT TRANSLATE) ===\n\n';
-      context.surroundingOriginal.forEach((entry, index) => {
-        const cleanText = entry.text.trim().replace(/\n+/g, '\n');
-        result += `[Context ${index + 1}] ${cleanText}\n\n`;
+    // Memori Terjemahan Dwibahasa (Translation Memory)
+    if (context?.previousMemory?.length > 0) {
+      result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n';
+      context.previousMemory.forEach((entry) => {
+        if (entry.translation) {
+          const cleanSource = String(entry.source || '').trim().replace(/\n+/g, ' ');
+          const cleanTrans = String(entry.translation || '').trim().replace(/\n+/g, ' ');
+          result += `[Ref ${entry.id}] Original: "${cleanSource}" -> Translated: "${cleanTrans}"\n`;
+        }
       });
-      result += '=== END OF CONTEXT ===\n\n';
-      result += '=== ENTRIES TO TRANSLATE (translate these) ===\n\n';
+      result += '=== END OF MEMORY ===\n\n';
+      result += '=== ENTRIES TO TRANSLATE ===\n\n';
     }
 
-    // Add batch entries to translate
+    // Entri Sasaran Bernombor
     const batchText = batch.map((entry, index) => {
       const num = index + 1;
-      const cleanText = entry.text.trim().replace(/\n+/g, '\n');
+      const cleanText = entry.text.trim().replace(/\n+/g, ' [br] ');
       return `${num}. ${cleanText}`;
     }).join('\n\n');
 
     result += batchText;
-
     return result;
   }
 
