@@ -2998,149 +2998,186 @@ OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
 
   /**
    * Clean translated text (remove timecodes, normalize line endings)
-   * [UPDATED - FASA 3]: Added Auto-Closer, Poisonous Character Sanitizer, ASS Tag & XML Garbage Cleanup & Malay Spelling Sanitizer
+   * [UPDATED]: Pemulihan Penuh Simbol & Emoji (Mojibake Restoration) + Enjin Sanitasi Hibrid + Auto-Closer
    */
   cleanTranslatedText(text) {
     let cleaned = String(text || '').trim();
 
-    // Remove any embedded timecodes
+    // 1. Buang sebarang timecodes tertanam
     const timecodePattern = /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}\s*\n?/g;
     cleaned = cleaned.replace(timecodePattern, '').trim();
 
-    // 🚨 UBAHAN BARU 1: Strip ALL ASS/SSA override tags mutlak (contoh: {\an8}, {\b1}, {an8})
+    // 2. Buang tag override ASS/SSA mutlak (contoh: {\an8}, {\b1}, {an8})
     cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
 
-    // 🚨 UBAHAN BARU 2: Hanya buang jika ada sisa kurungan tag '>' (contoh: '>', '">', "'>")
+    // 3. Buang sisa kurungan tag '>' di permulaan baris
     cleaned = cleaned.replace(/^(?:["']?\s*>)+\s*/, '').trim();
 
-    // 🚨 UBAHAN BARU 3: Tukar balik [br] jadi enter sebenar. Kita telan space kiri-kanan.
+    // 4. Tukar balik [br] kepada pemisah baris sebenar
     cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
 
-    // 🚨 UBAHAN BARU 4: Penyapu sengkang mutlak, tukar '--' jadi titik 3 biji
+    // 5. Tukar sengkang lewah '--' kepada elipsis '...'
     cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
 
-    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik + Sokongan Penuh CAPSLOCK) 🧹
-cleaned = cleaned.split('\n').map(line => {
-  const isMusicLine = /[♫♪♬♩🎵🎶]/.test(line);
+    // ============================================================================
+    // 🛠️ ENJIN PEMULIHAN MOJIBAKE & SIMBOL/EMOJI ASAL (RESTORATION ENGINE)
+    // ============================================================================
+    cleaned = cleaned
+      // --- Pemulihan Emoji Utama & Hiasan Subtitle ---
+      .replace(/ðŸ'¥|ðŸ’¥/g, '💥')
+      .replace(/ðŸ'–|ðŸ’–/g, '💖')
+      .replace(/ðŸ'—|ðŸ’—/g, '💗')
+      .replace(/ðŸ'œ|ðŸ’œ/g, '💜')
+      .replace(/ðŸ'™|ðŸ’™/g, '💙')
+      .replace(/ðŸ'š|ðŸ’š/g, '💚')
+      .replace(/ðŸ'•|ðŸ’•/g, '💗')
+      .replace(/ðŸ'|ðŸ’/g, '💓')
+      .replace(/ðŸ˜Š/g, '😊')
+      .replace(/ðŸ˜‚/g, '😂')
+      .replace(/ðŸ˜/g, '😀')
+      .replace(/ðŸ”¥/g, '🔥')
+      .replace(/ðŸŽ‰/g, '🎉')
+      .replace(/ðŸ‘/g, '👍')
 
-  // 1. KATA GANTI NAMA (Dialog sahaja, skip lirik muzik)
-  if (!isMusicLine) {
-    line = line
-      .replace(/\bakulah\b/g, 'sayalah')
-      .replace(/\bAkulah\b/g, 'Sayalah')
-      .replace(/\bAKULAH\b/g, 'SAYALAH')
-      .replace(/\bkaulah\b/g, 'awaklah')
-      .replace(/\bKaulah\b/g, 'Awaklah')
-      .replace(/\bKAULAH\b/g, 'AWAKLAH')
-      .replace(/\bengkaulah\b/g, 'awaklah')
-      .replace(/\bEngkaulah\b/g, 'Awaklah')
-      .replace(/\bENGKAULAH\b/g, 'AWAKLAH')
-      .replace(/\bkamulah\b/g, 'awaklah')
-      .replace(/\bKamulah\b/g, 'Awaklah')
-      .replace(/\bKAMULAH\b/g, 'AWAKLAH')
-      .replace(/\bandalah\b/g, 'awaklah')
-      .replace(/\bAndalah\b/g, 'Awaklah')
-      .replace(/\bANDALAH\b/g, 'AWAKLAH')
-      .replace(/\baku\b/g, 'saya')
-      .replace(/\bAku\b/g, 'Saya')
-      .replace(/\bAKU\b/g, 'SAYA')
-      .replace(/\bkau\b/g, 'awak')
-      .replace(/\bKau\b/g, 'Awak')
-      .replace(/\bKAU\b/g, 'AWAK')
-      .replace(/\bengkau\b/g, 'awak')
-      .replace(/\bEngkau\b/g, 'Awak')
-      .replace(/\bENGKAU\b/g, 'AWAK')
-      .replace(/\bkamu\b/g, 'awak')
-      .replace(/\bKamu\b/g, 'Awak')
-      .replace(/\bKAMU\b/g, 'AWAK')
-      .replace(/\banda\b/g, 'awak')
-      .replace(/\bAnda\b/g, 'Awak')
-      .replace(/\bANDA\b/g, 'AWAK');
-  }
+      // --- Pemulihan Simbol Khas, Muzik & Tanda Petik ---
+      .replace(/âœ["”]|âœ”/g, '✔')
+      .replace(/âœ“/g, '✓')
+      .replace(/âœ¨/g, '✨')
+      .replace(/âž¡|â\s*ž/g, '”')
+      .replace(/â€œ/g, '“')
+      .replace(/â€[”\?]/g, '”')
+      .replace(/â€˜/g, '‘')
+      .replace(/â€™/g, '’')
+      .replace(/â€¦/g, '…')
+      .replace(/â€”/g, '—')
+      .replace(/â€“/g, '–')
+      .replace(/â™ª/g, '♪')
+      .replace(/â™«/g, '♫')
+      .replace(/â˜…/g, '★')
+      .replace(/â˜†/g, '☆')
+      .replace(/â™¥/g, '♥')
+      .replace(/\bâ\s+(?=[💥💖💗💜💙💚💓😊😂😀🔥🎉👍✔✓✨”"“‘'…—–♪♫★☆♥])/g, '');
 
-  // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
-  line = line
-    .replace(/\bni\b/g, 'ini')
-    .replace(/\bNi\b/g, 'Ini')
-    .replace(/\bNI\b/g, 'INI')
-    .replace(/\bnilah\b/g, 'inilah')
-    .replace(/\bNilah\b/g, 'Inilah')
-    .replace(/\bNILAH\b/g, 'INILAH')
-    .replace(/\btulah\b/g, 'itulah')
-    .replace(/\bTulah\b/g, 'Itulah')
-    .replace(/\bTULAH\b/g, 'ITULAH')
-    .replace(/\btu\b/g, 'itu')
-    .replace(/\bTu\b/g, 'Itu')
-    .replace(/\bTU\b/g, 'ITU')
-    .replace(/\bje\b/g, 'saja')
-    .replace(/\bJe\b/g, 'Saja')
-    .replace(/\bJE\b/g, 'SAJA')
-    .replace(/\bjap\b/g, 'sekejap')
-    .replace(/\bJap\b/g, 'Sekejap')
-    .replace(/\bJAP\b/g, 'SEKEJAP')
-    .replace(/\bla\b/g, 'lah')
-    .replace(/\bLa\b/g, 'Lah')
-    .replace(/\bLA\b/g, 'LAH')
+    // ============================================================================
+    // 🧹 ENJIN SANITASI HIBRID (Dialog Biasa vs Lirik Muzik + Sokongan Penuh CAPSLOCK)
+    // ============================================================================
+    cleaned = cleaned.split('\n').map(line => {
+      const isMusicLine = /[♫♪♬♩🎵🎶]/.test(line);
 
-  // 3. KATA PINJAMAN & STANDARDIZASI
-    .replace(/\bokeylah\b/g, 'okaylah')
-    .replace(/\bOkeylah\b/g, 'Okaylah')
-    .replace(/\bOKEYLAH\b/g, 'OKAYLAH')
-    .replace(/\bokelah\b/g, 'okaylah')
-    .replace(/\bOkelah\b/g, 'Okaylah')
-    .replace(/\bOKELAH\b/g, 'OKAYLAH')
-    .replace(/\boklah\b/g, 'okaylah')
-    .replace(/\bOklah\b/g, 'Okaylah')
-    .replace(/\bOKLAH\b/g, 'OKAYLAH')
-    .replace(/\bokey\b/g, 'okay')
-    .replace(/\bOkey\b/g, 'Okay')
-    .replace(/\bOKEY\b/g, 'OKAY')
-    .replace(/\bok\b/g, 'okay')
-    .replace(/\bOk\b/g, 'Okay')
-    .replace(/\bOK\b/g, 'OKAY')
+      // 1. KATA GANTI NAMA (Dialog sahaja, lirik muzik dikekalkan)
+      if (!isMusicLine) {
+        line = line
+          .replace(/\bakulah\b/g, 'sayalah')
+          .replace(/\bAkulah\b/g, 'Sayalah')
+          .replace(/\bAKULAH\b/g, 'SAYALAH')
+          .replace(/\bkaulah\b/g, 'awaklah')
+          .replace(/\bKaulah\b/g, 'Awaklah')
+          .replace(/\bKAULAH\b/g, 'AWAKLAH')
+          .replace(/\bengkaulah\b/g, 'awaklah')
+          .replace(/\bEngkaulah\b/g, 'Awaklah')
+          .replace(/\bENGKAULAH\b/g, 'AWAKLAH')
+          .replace(/\bkamulah\b/g, 'awaklah')
+          .replace(/\bKamulah\b/g, 'Awaklah')
+          .replace(/\bKAMULAH\b/g, 'AWAKLAH')
+          .replace(/\bandalah\b/g, 'awaklah')
+          .replace(/\bAndalah\b/g, 'Awaklah')
+          .replace(/\bANDALAH\b/g, 'AWAKLAH')
+          .replace(/\baku\b/g, 'saya')
+          .replace(/\bAku\b/g, 'Saya')
+          .replace(/\bAKU\b/g, 'SAYA')
+          .replace(/\bkau\b/g, 'awak')
+          .replace(/\bKau\b/g, 'Awak')
+          .replace(/\bKAU\b/g, 'AWAK')
+          .replace(/\bengkau\b/g, 'awak')
+          .replace(/\bEngkau\b/g, 'Awak')
+          .replace(/\bENGKAU\b/g, 'AWAK')
+          .replace(/\bkamu\b/g, 'awak')
+          .replace(/\bKamu\b/g, 'Awak')
+          .replace(/\bKAMU\b/g, 'AWAK')
+          .replace(/\banda\b/g, 'awak')
+          .replace(/\bAnda\b/g, 'Awak')
+          .replace(/\bANDA\b/g, 'AWAK');
+      }
 
-  // 4. SINGKATAN TEKS
-    .replace(/\bdgn\b/g, 'dengan')
-    .replace(/\bDgn\b/g, 'Dengan')
-    .replace(/\bDGN\b/g, 'DENGAN')
-    .replace(/\byg\b/g, 'yang')
-    .replace(/\bYg\b/g, 'Yang')
-    .replace(/\bYG\b/g, 'YANG')
-    .replace(/\bkat\b/g, 'dekat')
-    .replace(/\bKat\b/g, 'Dekat')
-    .replace(/\bKAT\b/g, 'DEKAT')
-    .replace(/\bdkt\b/g, 'dekat')
-    .replace(/\bDkt\b/g, 'Dekat')
-    .replace(/\bDKT\b/g, 'DEKAT')
-    .replace(/\bkt\b/g, 'dekat')
-    .replace(/\bKt\b/g, 'Dekat')
-    .replace(/\bKT\b/g, 'DEKAT');
+      // 2. PARTIKEL & PENUNJUK (Ini, Itu, Lah, Saja, Sekejap)
+      line = line
+        .replace(/\bni\b/g, 'ini')
+        .replace(/\bNi\b/g, 'Ini')
+        .replace(/\bNI\b/g, 'INI')
+        .replace(/\bnilah\b/g, 'inilah')
+        .replace(/\bNilah\b/g, 'Inilah')
+        .replace(/\bNILAH\b/g, 'INILAH')
+        .replace(/\btulah\b/g, 'itulah')
+        .replace(/\bTulah\b/g, 'Itulah')
+        .replace(/\bTULAH\b/g, 'ITULAH')
+        .replace(/\btu\b/g, 'itu')
+        .replace(/\bTu\b/g, 'Itu')
+        .replace(/\bTU\b/g, 'ITU')
+        .replace(/\bje\b/g, 'saja')
+        .replace(/\bJe\b/g, 'Saja')
+        .replace(/\bJE\b/g, 'SAJA')
+        .replace(/\bjap\b/g, 'sekejap')
+        .replace(/\bJap\b/g, 'Sekejap')
+        .replace(/\bJAP\b/g, 'SEKEJAP')
+        .replace(/\bla\b/g, 'lah')
+        .replace(/\bLa\b/g, 'Lah')
+        .replace(/\bLA\b/g, 'LAH')
 
-  return line;
-}).join('\n');
-    
-    // 🛡️ FASA 2 (A): PENYELAMAT TAG TERSILANG & TERPUTUS (Auto-Closer) 🛡️
-    // Kalau AI tertinggal tag penutup (contoh <i> tanpa </i>), kita tolong jahitkan di hujung ayat.
+      // 3. KATA PINJAMAN & STANDARDIZASI
+        .replace(/\bokeylah\b/g, 'okaylah')
+        .replace(/\bOkeylah\b/g, 'Okaylah')
+        .replace(/\bOKEYLAH\b/g, 'OKAYLAH')
+        .replace(/\bokelah\b/g, 'okaylah')
+        .replace(/\bOkelah\b/g, 'Okaylah')
+        .replace(/\bOKELAH\b/g, 'OKAYLAH')
+        .replace(/\boklah\b/g, 'okaylah')
+        .replace(/\bOklah\b/g, 'Okaylah')
+        .replace(/\bOKLAH\b/g, 'OKAYLAH')
+        .replace(/\bokey\b/g, 'okay')
+        .replace(/\bOkey\b/g, 'Okay')
+        .replace(/\bOKEY\b/g, 'OKAY')
+        .replace(/\bok\b/g, 'okay')
+        .replace(/\bOk\b/g, 'Okay')
+        .replace(/\bOK\b/g, 'OKAY')
+
+      // 4. SINGKATAN TEKS
+        .replace(/\bdgn\b/g, 'dengan')
+        .replace(/\bDgn\b/g, 'Dengan')
+        .replace(/\bDGN\b/g, 'DENGAN')
+        .replace(/\byg\b/g, 'yang')
+        .replace(/\bYg\b/g, 'Yang')
+        .replace(/\bYG\b/g, 'YANG')
+        .replace(/\bkat\b/g, 'dekat')
+        .replace(/\bKat\b/g, 'Dekat')
+        .replace(/\bKAT\b/g, 'DEKAT')
+        .replace(/\bdkt\b/g, 'dekat')
+        .replace(/\bDkt\b/g, 'Dekat')
+        .replace(/\bDKT\b/g, 'DEKAT')
+        .replace(/\bkt\b/g, 'dekat')
+        .replace(/\bKt\b/g, 'Dekat')
+        .replace(/\bKT\b/g, 'DEKAT');
+
+      return line;
+    }).join('\n');
+
+    // 6. Penyelamat Tag Terputus & Tersilang (Auto-Closer)
     const formattingTags = ['i', 'b', 'u'];
     formattingTags.forEach(tag => {
       const openCount = (cleaned.match(new RegExp(`<${tag}>`, 'gi')) || []).length;
       const closeCount = (cleaned.match(new RegExp(`</${tag}>`, 'gi')) || []).length;
-      
-      // Kalau tag pembuka lebih banyak dari penutup, kita tambah penutup
+
       if (openCount > closeCount) {
         cleaned += `</${tag}>`.repeat(openCount - closeCount);
       }
     });
 
-    // 🛡️ FASA 2 (B): PEMBERSIH KARAKTER BERACUN 🛡️
-    // Tukar simbol `<` yang digunakan secara rawak (contoh: A < B atau 10 < 20) 
-    // supaya tak disalah anggap sebagai permulaan tag XML oleh video player.
+    // 7. Bersihkan Simbol Beracun
     cleaned = cleaned.replace(/<(?=[\s\d])/g, '&lt;');
 
-    // Normalize line endings (CRLF → LF)
+    // 8. Normalisasi Pemisah Baris (CRLF → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // For RTL targets
+    // 9. Format RTL (Jika Bahasa Sasaran Kanan-ke-Kiri)
     if (this.isRtlTarget) {
       cleaned = wrapRtlText(cleaned);
     }
