@@ -926,28 +926,41 @@ class GeminiService {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // 🚀 INJECT: Pembedahan Psikologi Prefill XML (Versi Kalis Double-Quote)
-        let processedUserPrompt = userPrompt;
-        let modelPrefill = "Task confirmed. Executing the strictly isolated raw data pipe localization stream now.\n";
+        // 🚀 CABANG HIBRID: Prefill vs Official Payload (Streaming)
+        let contents = [];
+        if (this.isPrefillSupported()) {
+          let processedUserPrompt = userPrompt;
+          let modelPrefill = "Task confirmed. Executing the strictly isolated raw data pipe localization stream now.\n";
 
-        if (userPrompt.endsWith('<s id="')) {
-          processedUserPrompt = userPrompt.slice(0, -7); // Potong 7 huruf: <s id="
-          modelPrefill += "<s id=\""; // 🔥 KUNCI MATI: Pulangkan balik pembuka petik [ " ] supaya Gemini terus taip nombor ID!
+          if (userPrompt.endsWith('<s id="')) {
+            processedUserPrompt = userPrompt.slice(0, -7);
+            modelPrefill += "<s id=\"";
+          }
+
+          contents = [
+            {
+              role: "user",
+              parts: [{ text: processedUserPrompt }]
+            },
+            {
+              role: "model",
+              parts: [{ text: modelPrefill }]
+            }
+          ];
+        } else {
+          // Gemini >= 3.2, 4+, 5+ & Gemma guna format rasmi single-turn
+          contents = [
+            {
+              role: "user",
+              parts: [{ text: userPrompt }]
+            }
+          ];
         }
 
         const response = await axios.post(
           `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
           {
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: processedUserPrompt }]
-              },
-              {
-                role: "model",
-                parts: [{ text: modelPrefill }]
-              }
-            ],
+            contents,
             generationConfig,
             safetySettings
           },
