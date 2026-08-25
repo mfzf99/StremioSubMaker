@@ -314,35 +314,6 @@ class GeminiService {
     return false;
   }
 
-  buildGenerationConfig(maxOutputTokens) {
-    const generationConfig = {
-      maxOutputTokens,
-      temperature: this.temperature,
-      topK: this.topK,
-      topP: this.topP,
-      frequencyPenalty: 0.0,
-      presencePenalty: 0.0
-    };
-
-    const thinkingBudget = this.getEffectiveThinkingBudget();
-
-    if (this.isGemini3Model) {
-      const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
-      if (thinkingLevel) {
-        generationConfig.thinkingConfig = { thinkingLevel };
-      }
-      return generationConfig;
-    }
-
-    if (thinkingBudget === -1) {
-      generationConfig.thinkingConfig = { thinkingBudget: null };
-    } else if (thinkingBudget > 0) {
-      generationConfig.thinkingConfig = { thinkingBudget };
-    }
-
-    return generationConfig;
-  }
-
   /**
    * Get available models from Gemini API
    */
