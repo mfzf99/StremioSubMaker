@@ -661,52 +661,11 @@ class GeminiService {
         }
 
         // Prepare generation config (Parameter Penuh Asal)
-        const generationConfig = {
-          temperature: this.temperature,
-          topK: this.topK,
-          topP: this.topP,
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve,
-          frequencyPenalty: 0.0, // 👈 KUNCI MATI (Halang AI takut ulang perkataan)
-          presencePenalty: 0.0   // 👈 KUNCI MATI (Halang AI tukar topik/istilah)
-        };
+        // 🛡️ BINA GENERATION CONFIG (Logik Berpusat)
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
-        // Current Gemini 3 models support structured JSON together with thinking
-        // levels. Preserve the older defensive behavior for numeric-budget models.
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
-        }
-
-        // 🚀 ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
-        const modelNameLower = String(this.model).toLowerCase();
-        const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
-        const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
-
-        // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
-        if (!this.isGemmaModel) {
-          if (thinkingBudget === -1) {
-            // MODE: AUTO (-1)
-            if (geminiVersion < 3.1) {
-              generationConfig.thinkingConfig = { thinkingBudget: null };
-            }
-          } else if (thinkingBudget === 0) {
-            // MODE: OFF (0)
-            if (geminiVersion >= 3.0) {
-              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
-              log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
-            }
-          } else if (thinkingBudget > 0) {
-            // MODE: FIXED BUDGET / LEVEL (>0)
-            if (geminiVersion >= 3.0) {
-              let level = 'minimal';
-              if (thinkingBudget >= 4096) level = 'high';
-              else if (thinkingBudget >= 2048) level = 'medium';
-              else if (thinkingBudget >= 1024) level = 'low';
-
-              generationConfig.thinkingConfig = { thinkingLevel: level };
-            } else {
-              generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
-            }
-          }
         }
         // =====================================================================
 
@@ -891,51 +850,11 @@ class GeminiService {
         }
 
        // Prepare generation config (Parameter Penuh Asal)
-        const generationConfig = {
-          temperature: this.temperature,
-          topK: this.topK,
-          topP: this.topP,
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve,
-          frequencyPenalty: 0.0, // 👈 KUNCI MATI (Halang AI takut ulang perkataan)
-          presencePenalty: 0.0   // 👈 KUNCI MATI (Halang AI tukar topik/istilah)
-        };
+        // 🛡️ BINA GENERATION CONFIG (Logik Berpusat)
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
-        // Keep streaming request shaping aligned with translateSubtitle.
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
-        }
-
-        // 🚀 ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
-        const modelNameLower = String(this.model).toLowerCase();
-        const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
-        const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
-
-        // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
-        if (!this.isGemmaModel) {
-          if (thinkingBudget === -1) {
-            // MODE: AUTO (-1)
-            if (geminiVersion < 3.1) {
-              generationConfig.thinkingConfig = { thinkingBudget: null };
-            }
-          } else if (thinkingBudget === 0) {
-            // MODE: OFF (0)
-            if (geminiVersion >= 3.0) {
-              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
-              log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
-            }
-          } else if (thinkingBudget > 0) {
-            // MODE: FIXED BUDGET / LEVEL (>0)
-            if (geminiVersion >= 3.0) {
-              let level = 'minimal';
-              if (thinkingBudget >= 4096) level = 'high';
-              else if (thinkingBudget >= 2048) level = 'medium';
-              else if (thinkingBudget >= 1024) level = 'low';
-
-              generationConfig.thinkingConfig = { thinkingLevel: level };
-            } else {
-              generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
-            }
-          }
         }
         // =====================================================================
 
