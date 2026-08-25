@@ -2180,68 +2180,81 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 
   /**
    * Build a translation prompt for the 'json' workflow.
-   * [GLOBAL ID UNIFIED]: Dinamik mengikut skalan ID global srt dan sauh pancingan ketat.
+   * [GLOBAL ID UNIFIED]: Selaras 1:1 dengan struktur, dinamik sourceLanguage & peraturan ketat XML workflow.
    */
   _buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance
 
     let startId = 'START';
     let endId = 'END';
 
-    // 🚨 LANGKAH XML 1: Halang baca ID dari memori, fokus pada entries_to_translate sahaja
+    // 🚨 Halang baca ID dari memori, fokus pada entries_to_translate sahaja
     let targetSection = batchText;
     if (batchText.includes('"entries_to_translate":')) {
       targetSection = batchText.split('"entries_to_translate":')[1];
     }
 
-    // 🚨 LANGKAH XML 2: Ekstrak Global ID pertama dan terakhir secara dinamik menggunakan Regex Scanner
-    const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
-    startId = idMatches.length > 0 ? idMatches[0] : '1';
-    endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
+    if (totalBatches === 1) {
+      const firstMatch = targetSection.match(/"id"\s*:\s*(\d+)/);
+      if (firstMatch) startId = firstMatch[1];
 
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel);
+      const lastIndex = targetSection.lastIndexOf('"id"');
+      if (lastIndex !== -1) {
+        const endMatch = targetSection.substring(lastIndex).match(/"id"\s*:\s*(\d+)/);
+        if (endMatch) endId = endMatch[1];
+      }
+    } else {
+      const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)].map(m => m[1]);
+      startId = idMatches.length > 0 ? idMatches[0] : '1';
+      endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : expectedCount;
+    }
+
+    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel); //
 
     const promptBody = `${introInstruction}
 
 CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. ISOLATED BOX LAW (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
-   sealed container. Translate ONLY its own "text" field — in TOTAL ISOLATION. 
-   You have ZERO awareness of adjacent IDs. Fragment IN = Fragment OUT. 
-   NEVER complete a sentence by stealing words from the next ID.
+1. SLOT LOCK (MOST CRITICAL): Each JSON object inside the "entries_to_translate" array is a completely 
+   sealed container. NEVER steal, merge, or complete a sentence using words that belong 
+   in an adjacent ID.
 
-   ✅ CORRECT:
-   IN:  [{"id": ${startId}, "text": "I really want to"}, {"id": ${parseInt(startId) + 1}, "text": "go home now."}]
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak"}, {"id": ${parseInt(startId) + 1}, "text": "balik rumah sekarang."}]
+   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
+   IN:  [{"id": X, "text": "If you really think"}, {"id": Y, "text": "that I would betray you..."}]
+   OUT: [{"id": X, "text": "Kalau awak betul-betul rasa"}, {"id": Y, "text": "saya sanggup khianati awak..."}]
 
    ❌ CATASTROPHICALLY WRONG:
-   OUT: [{"id": ${startId}, "text": "Saya betul-betul nak balik rumah sekarang."}, {"id": ${parseInt(startId) + 1}, "text": "."}]
+   OUT: [{"id": X, "text": "Kalau awak betul-betul rasa saya sanggup khianati awak..."}, {"id": Y, "text": "..."}]
 
-2. ESCAPE HATCH & MUSIC: All song lyrics enclosed in music notes (♫ / ♪) 
-   MUST be fully translated. Only copy the exact original text if a line 
-   contains ONLY standalone symbols/music notes (e.g., ♪, ♫, ♪♪) or numbers 
-   with NO translatable words at all. NEVER shift any remaining entry.
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
 
-3. ID INTEGRITY: Every ID appears EXACTLY ONCE in strict input order. 
-   Output IDs MUST match input IDs exactly from id: ${startId}. 
-   Never fill gaps, reorder, or invent an ID not in the input.
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
+   (foreign proper nouns, corrupted text) or contains ONLY standalone 
+   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
+   remaining entry.
 
-4. EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   (id: ${startId} to id: ${endId}). NEVER fabricate content — use 
-   Rule 2 instead.
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   total, matching input IDs strictly in order from id: ${startId} to 
+   id: ${endId}. Format: [{"id":N,"text":"..."}]. Never skip, 
+   reorder, or invent IDs. NEVER fabricate content to hit the count — 
+   use Rule 2 instead.
 
-5. FORMAT: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
+   dash (-) MUST be preserved in the exact same structure and position 
+   as in the source.
+
+5. FORMAT & ESCAPING: Valid, raw JSON array matching the schema exactly: [{"id":N,"text":"..."}]
    Ensure JSON is strictly valid: escape double quotes with backslash (\\") and use \\n for line breaks. 
    No trailing commas. Do NOT wrap in \`\`\`json markdown code blocks.
 
-6. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and any other 
-   inline tag MUST be preserved in the translation — same position, 
-   same structure, unchanged. Speaker dashes (-) MUST also be preserved 
-   exactly as they appear in the source.
-
-7. CLEAN OUTPUT: Response MUST start immediately with the opening bracket '[' of the JSON array. 
-   NO preamble, NO markdown, NO commentary — before, between, or after entries. 
-   Every translated word MUST be inside its corresponding object.
+6. CLEAN OUTPUT: Response MUST start immediately with the opening bracket '[' of the JSON array. 
+   Zero commentary, zero markdown code blocks. Every translated word 
+   MUST be enclosed inside its corresponding object.
 
 <input>
 ${batchText}
@@ -2249,7 +2262,7 @@ ${batchText}
 
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
-[{"id":${startId},"text":`; // 🚨 SAUH PANCINGAN: Paksa AI bermula terus dengan Global ID pertama!
+[{"id":${startId},"text":`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
