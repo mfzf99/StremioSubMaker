@@ -2660,50 +2660,42 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
   }
 
   /**
-   * Create translation prompt for a batch
+   * Create translation prompt for numbered list batches (Legacy/Original Workflow)
+   * [UPGRADED]: Selaras 1:1 dengan Universal Dynamic Prompt, Slot Lock & Sauh Pancingan
    */
   createBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
+    const sourceLabel = this.sourceLanguage;
 
-    let contextInstructions = '';
-    if (context?.surroundingOriginal?.length > 0) {
-      contextInstructions = `
-CONTEXT PROVIDED:
-- Context entries are provided for reference to ensure coherence and consistency
-- Context entries are marked with [Context N]
-- DO NOT translate context entries - they are for reference only
-- Use the context to understand dialogue flow, character names, and references
-- ONLY translate the numbered entries (1. 2. 3. etc.)
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
 
-`;
-    }
+    const promptBody = `${introInstruction}
 
-    const promptBody = `You are a professional subtitle translator. Translate to ${targetLabel}.
-${contextInstructions}
-CRITICAL RULES:
-1. Translate ONLY the numbered text entries (1. 2. 3. etc.)
-2. PRESERVE the numbering exactly (1. 2. 3. etc.)
-3. Return EXACTLY ${expectedCount} numbered entries
-4. Keep line breaks within each entry
-5. Maintain natural dialogue flow for ${targetLabel}
-6. Use appropriate colloquialisms for ${targetLabel}
-7. Preserve any existing formatting tags${context ? '\n8. Use the provided context to ensure consistency' : ''}
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-Do NOT add acknowledgements, explanations, notes, or commentary.
-Do not skip, merge, or split entries. NEVER output markdown.
-Do not include any timestamps/timecodes.
-${context ? 'Do not translate context entries - only translate numbered entries.' : ''}
+1. SLOT LOCK (MOST CRITICAL): Each numbered entry (1. to ${expectedCount}.) is a separate output slot. 
+   NEVER steal, merge, or complete a sentence using words that belong in an adjacent numbered line.
+   Dividing the natural thought across matching lines is MANDATORY. Merging them DESTROYS subtitle sync permanently.
 
-YOUR RESPONSE MUST:
-- Start immediately with "1." (the first entry)
-- End with "${expectedCount}." (the last entry)
-- Contain NOTHING else
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including background music (BGM) — MUST be fully translated. 
+   Copy EXACT ORIGINAL TEXT for a number only if content is untranslatable (proper nouns, corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any remaining entry.
 
-INPUT (${expectedCount} entries):
+3. NUMBERING INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} numbered entries total, strictly from 1. to ${expectedCount}. 
+   Format: "N. translated text". Never skip, reorder, or invent numbers. NEVER fabricate content to hit the count — use Rule 2 instead.
 
+4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker dash (-) MUST be preserved in the exact same structure and position as in the source.
+
+5. CLEAN OUTPUT: Response MUST contain ONLY the numbered entries (1. to ${expectedCount}.). 
+   Zero commentary, zero markdown code blocks. Every translated line MUST start with its number.
+
+<input>
 ${batchText}
+</input>
 
-OUTPUT (EXACTLY ${expectedCount} numbered entries, NO OTHER TEXT):`;
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
+1. `;
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
