@@ -262,6 +262,28 @@ class GeminiService {
     return this.getEffectiveThinkingBudget() !== 0;
   }
 
+  /**
+   * Semak sokongan turn model prefill (Set & Forget / Future-Proof)
+   * Disokong: HANYA Gemini legacy (versi 1.5 hingga 3.1)
+   * Ditolak (Ralat 400): Semua Gemini >= 3.2, Gemini 4+, 5+, 6+, Gemma & tag 'latest'
+   */
+  isPrefillSupported() {
+    if (this.isGemmaModel) return false;
+
+    const modelNameLower = String(this.model).toLowerCase();
+    
+    // 1. Tangkap nombor versi dinamik (cth: gemini-1.5, gemini-3.1, gemini-5.0)
+    const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
+    if (matchVer) {
+      const geminiVersion = parseFloat(matchVer[1]);
+      // Hanya versi 3.1 dan ke bawah dibenarkan prefill
+      return geminiVersion <= 3.1;
+    }
+
+    // 2. Jika tiada nombor versi (cth: gemini-flash-latest, gemini-pro), anggap model moden (default: false)
+    return false;
+  }
+
   buildGenerationConfig(maxOutputTokens) {
     const generationConfig = { maxOutputTokens };
     const thinkingBudget = this.getEffectiveThinkingBudget();
