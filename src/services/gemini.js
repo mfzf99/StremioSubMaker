@@ -629,61 +629,11 @@ class GeminiService {
           ));
         }
 
-        // Prepare generation config
+        // 🛡️ BINA GENERATION CONFIG RASMI & SAH DARI ENJIN
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
-        const generationConfig = {
-          temperature: this.temperature,
-          topK: this.topK,
-          topP: this.topP,
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve,
-          frequencyPenalty: 0.0, // 👈 KUNCI MATI (Halang AI takut ulang perkataan)
-          presencePenalty: 0.0   // 👈 KUNCI MATI (Halang AI tukar topik/istilah)
-        };
-
-
-        // Current Gemini 3 models support structured JSON together with thinking
-        // levels. Preserve the older defensive behavior for numeric-budget models.
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
-        }
-
-
-        // 🚀 INJECT: ENJIN PARSER VERSI DINAMIK (KALIS MASA DEPAN) 🚀
-        const modelNameLower = String(this.model).toLowerCase();
-        // Regex ni akan pegang nombor versi, cth: 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5, 'gemini-4.0' -> 4
-        const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
-        const geminiVersion = matchVer ? parseFloat(matchVer[1]) : 0;
-
-        // Gemma TAK SOKONG thinkingConfig di peringkat API. Dia berfikir secara manual dalam teks.
-        if (!this.isGemmaModel) {
-          if (thinkingBudget === -1) {
-            // MODE: AUTO (-1)
-            // MAZHAB API KETAT: Mana-mana model bermula versi 3.1 ke atas (3.1, 3.5, 3.8, 4.0+)
-            // akan 'reject' kalau nampak thinkingBudget. Jadi kita HANYA hantar untuk versi bawah 3.1.
-            if (geminiVersion < 3.1) {
-              generationConfig.thinkingConfig = { thinkingBudget: null };
-            }
-          } else if (thinkingBudget === 0) {
-            // MODE: OFF (0)
-            // Semua keluarga Gemini 3.0 ke atas tak boleh off 100%, jadi kita paksa ke 'minimal'
-            if (geminiVersion >= 3.0) {
-              generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
-              log.debug(() => `[Gemini] Model ${this.model} cannot disable thinking. Forced to 'minimal'.`);
-            }
-          } else if (thinkingBudget > 0) {
-            // MODE: FIXED BUDGET / LEVEL (>0)
-            // Model generasi 3.0 ke atas pakai format perkataan (Level), model lama pakai nombor (Budget)
-            if (geminiVersion >= 3.0) {
-              let level = 'minimal';
-              if (thinkingBudget >= 4096) level = 'high';
-              else if (thinkingBudget >= 2048) level = 'medium';
-              else if (thinkingBudget >= 1024) level = 'low';
-
-              generationConfig.thinkingConfig = { thinkingLevel: level };
-            } else {
-              generationConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
-            }
-          }
         }
         // =====================================================================
 
