@@ -2651,12 +2651,36 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
   }
 
   /**
-   * Create translation prompt for timestamp-aware batches
+   * Create translation prompt for timestamp-aware batches (Send Timestamps to AI / SRT Mode)
+   * [UPGRADED]: Universal Dynamic Prompt + Perisai Timecodes Kekal, Slot Lock SRT & Sauh Pancingan
    */
-  createTimestampPrompt(targetLanguage, batchIndex = 0, totalBatches = 1) {
+  createTimestampPrompt(targetLanguage, batchIndex = 0, totalBatches = 1, expectedCount = null) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
-    const base = DEFAULT_TRANSLATION_PROMPT.replace('{target_language}', targetLabel);
-    return this.addBatchHeader(base, batchIndex, totalBatches);
+    const sourceLabel = this.sourceLanguage;
+
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
+    const countRule = expectedCount ? ` Output EXACTLY ${expectedCount} SRT subtitle blocks.` : '';
+
+    const promptBody = `${introInstruction}
+
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+
+1. PRESERVE TIMECODES & STRUCTURE (MOST CRITICAL): Keep the EXACT SRT format including index numbers, timecodes (00:00:00,000 --> 00:00:00,000), and line breaks. DO NOT alter, shift, recalculate, or drop any timestamp.${countRule}
+
+2. SLOT LOCK: Translate ONLY the dialogue text within its own timestamp block. NEVER merge or shift sentences across different timestamps.
+
+3. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including background music (BGM) — MUST be fully translated. Copy EXACT ORIGINAL TEXT only if untranslatable or symbol-only.
+
+4. PRESERVE ALL INLINE MARKUP: Every <i> tag, <b> tag, font tag, and speaker dash (-) MUST be preserved in the exact same position as in the source.
+
+5. CLEAN OUTPUT: Response MUST contain ONLY valid SRT subtitle blocks. Zero preamble, zero explanations, zero markdown code blocks.
+
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH VALID SRT SUBTITLES.
+1
+00:`;
+
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
 
   /**
