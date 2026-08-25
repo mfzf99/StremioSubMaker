@@ -426,7 +426,7 @@ class GeminiService {
         effectiveThinkingBudget === 0 ? 'disabled' :
           effectiveThinkingBudget;
       const generationControls = this.isGemini3Model
-        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}`
+        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}, temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}`
         : `temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
       log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
