@@ -2039,16 +2039,18 @@ class TranslationEngine {
 
   /**
    * Prepare batch text using XML tags for robust entry identification
-   * Each entry is wrapped in <s id="N">...</s> tags
+   * [UPGRADED]: Menghantar pasangan Source + Target (Translation Memory) menggunakan tag <m>
    */
   prepareBatchXml(batch, context = null) {
     let result = '';
 
     if (context?.previousMemory?.length > 0) {
-      result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n\n';
+      result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n';
       context.previousMemory.forEach((entry) => {
         if (entry.translation) {
-           result += `<s id="${entry.id}">${entry.translation}</s>\n`;
+          const cleanSource = String(entry.source || '').trim().replace(/\n+/g, ' [br] ');
+          const cleanTrans = String(entry.translation || '').trim().replace(/\n+/g, ' [br] ');
+          result += `<m id="${entry.id}"><src>${cleanSource}</src><dst>${cleanTrans}</dst></m>\n`;
         }
       });
       result += '=== END OF MEMORY ===\n\n';
@@ -2155,7 +2157,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
-   * [GLOBAL ID UNIFIED]: Mengekalkan entry.id asal untuk keselarasan sejagat dengan XML.
+   * [UPGRADED]: Menghantar pasangan Source + Target dalam previous_translation_memory untuk keselarasan sejagat.
    */
   _prepareJsonBatchContent(batch, context = null) {
     let result = {};
@@ -2163,7 +2165,8 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
     if (context?.previousMemory?.length > 0) {
       result.previous_translation_memory = context.previousMemory.map((entry) => ({
         id: entry.id,
-        translation: entry.translation ? entry.translation.trim().replace(/\n+/g, ' [br] ') : ''
+        source: entry.source ? String(entry.source).trim().replace(/\n+/g, ' [br] ') : '',
+        translation: entry.translation ? String(entry.translation).trim().replace(/\n+/g, ' [br] ') : ''
       })).filter(m => m.translation);
     }
 
