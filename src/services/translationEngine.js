@@ -3051,8 +3051,10 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
     // 4. Tukar balik [br] kepada pemisah baris sebenar
     cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
 
-    // 5. Tukar sengkang lewah '--' kepada elipsis '...'
-    cleaned = cleaned.replace(/\s*(-{2,}|—|–)\s*/g, ' ... ');
+    // 5. Tukar sengkang lewah ('--', '—', '–') atau sengkang tergantung di hujung ayat kepada elipsis '...'
+    cleaned = cleaned
+      .replace(/\s*(-{2,}|—|–)\s*/g, ' ... ')
+      .replace(/(?<=[^\s\-])\s*-(?=\s*($|\n))/g, ' ...');
 
     // ============================================================================
     // 🛠️ ENJIN PEMULIHAN MOJIBAKE & SIMBOL/EMOJI ASAL (RESTORATION ENGINE)
