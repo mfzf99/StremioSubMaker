@@ -2363,13 +2363,14 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
 
   /**
    * Route to the correct prompt creation method based on workflow
+   * [UPGRADED]: Menghantar expectedCount ke createTimestampPrompt untuk kawalan integriti SRT
    */
   createPromptForWorkflow(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches) {
     if (this.translationWorkflow === 'json') {
       return this._buildJsonPrompt(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches);
     }
     if (this.translationWorkflow === 'ai') {
-      return this.createTimestampPrompt(targetLanguage, batchIndex, totalBatches);
+      return this.createTimestampPrompt(targetLanguage, batchIndex, totalBatches, expectedCount);
     }
     if (this.translationWorkflow === 'xml') {
       return this.createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context, batchIndex, totalBatches);
