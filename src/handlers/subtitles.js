@@ -5733,23 +5733,51 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const axios = require('axios');
             const { registerCompletedSubtitle } = require('../services/telegramBot');
 
-            const activeApiKeys = (typeof config !== 'undefined' && config?.geminiApiKeys)
-                ? config.geminiApiKeys
-                : (typeof userConfig !== 'undefined' && userConfig?.geminiApiKeys)
-                    ? userConfig.geminiApiKeys
-                    : (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys))
-                        ? geminiApiKeys
-                        : [];
+            // Kumpul semua kemungkinan bentuk kunci API (Array atau String Tunggal)
+            let detectedKeys = [];
+            if (typeof config !== 'undefined') {
+                if (Array.isArray(config?.geminiApiKeys)) detectedKeys = config.geminiApiKeys;
+                else if (config?.geminiApiKey) detectedKeys = [config.geminiApiKey];
+                else if (config?.apiKey) detectedKeys = [config.apiKey];
+            }
+            if (detectedKeys.length === 0 && typeof userConfig !== 'undefined') {
+                if (Array.isArray(userConfig?.geminiApiKeys)) detectedKeys = userConfig.geminiApiKeys;
+                else if (userConfig?.geminiApiKey) detectedKeys = [userConfig.geminiApiKey];
+                else if (userConfig?.apiKey) detectedKeys = [userConfig.apiKey];
+            }
+            if (detectedKeys.length === 0) {
+                if (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys)) detectedKeys = geminiApiKeys;
+                else if (typeof geminiApiKey !== 'undefined' && geminiApiKey) detectedKeys = [geminiApiKey];
+                else if (typeof apiKey !== 'undefined' && apiKey) detectedKeys = [apiKey];
+                else if (typeof apiKeys !== 'undefined' && Array.isArray(apiKeys)) detectedKeys = apiKeys;
+            }
 
-            const currentUsedModel = typeof usedModel !== 'undefined'
+            // Kumpul model semasa
+            const detectedModel = (typeof usedModel !== 'undefined' && usedModel)
                 ? usedModel
-                : (typeof model !== 'undefined' ? model : 'gemini-3.1-flash-lite');
+                : ((typeof model !== 'undefined' && model)
+                    ? model
+                    : ((typeof currentModel !== 'undefined' && currentModel)
+                        ? currentModel
+                        : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite')));
 
-            const currentWalletUSD = (typeof crazyWalletUSD !== 'undefined' && crazyWalletUSD !== null)
-                ? Number(crazyWalletUSD)
-                : ((typeof walletUSD !== 'undefined' && walletUSD !== null)
-                    ? Number(walletUSD)
-                    : ((typeof walletBalanceUSD !== 'undefined' && walletBalanceUSD !== null) ? Number(walletBalanceUSD) : 0));
+            // Kumpul baki dompet CrazyRouter (USD)
+            let detectedWalletUSD = 0;
+            const possibleWallets = [
+                typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
+                typeof walletUSD !== 'undefined' ? walletUSD : null,
+                typeof balanceUsd !== 'undefined' ? balanceUsd : null,
+                typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null,
+                typeof crazyBalance !== 'undefined' ? crazyBalance : null,
+                typeof walletBalance !== 'undefined' ? walletBalance : null,
+                typeof balance !== 'undefined' ? balance : null
+            ];
+            for (const pw of possibleWallets) {
+                if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
+                    detectedWalletUSD = parseFloat(pw);
+                    break;
+                }
+            }
 
             let subRegistryId = null;
             try {
@@ -5758,9 +5786,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                     provider: sourceProv,
                     targetLang: targetLanguage,
                     keys: [runtimeKey, sourceFileId],
-                    apiKeys: activeApiKeys,
-                    model: currentUsedModel,
-                    walletBalanceUSD: currentWalletUSD
+                    apiKeys: detectedKeys,
+                    model: detectedModel,
+                    walletBalanceUSD: detectedWalletUSD
                 });
             } catch (regErr) {
                 log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
