@@ -5733,13 +5733,22 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const axios = require('axios');
             const { registerCompletedSubtitle } = require('../services/telegramBot');
 
+            const activeApiKeys = (typeof config !== 'undefined' && config?.geminiApiKeys)
+                ? config.geminiApiKeys
+                : (typeof userConfig !== 'undefined' && userConfig?.geminiApiKeys)
+                    ? userConfig.geminiApiKeys
+                    : (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys))
+                        ? geminiApiKeys
+                        : [];
+
             let subRegistryId = null;
             try {
                 subRegistryId = await registerCompletedSubtitle({
                     title: movieTitle,
                     provider: sourceProv,
                     targetLang: targetLanguage,
-                    keys: [runtimeKey, sourceFileId]
+                    keys: [runtimeKey, sourceFileId],
+                    apiKeys: activeApiKeys
                 });
             } catch (regErr) {
                 log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
