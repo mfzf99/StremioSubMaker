@@ -1123,6 +1123,9 @@ function respondDisabledSession(req, res, config, translator = null) {
 
 // Create Express app
 const app = express();
+// 🤖 MULAKAN ENJIN TELEGRAM BOT 2-HALA
+const { startTelegramBot } = require('./src/services/telegramBot');
+startTelegramBot();
 // SECURITY: trust proxy is configurable via TRUST_PROXY env var.
 // Set TRUST_PROXY=1 (or loopback, linklocal, uniquelocal) when behind a reverse proxy.
 // Defaults to false (no proxy trust) to prevent IP spoofing when directly exposed.
