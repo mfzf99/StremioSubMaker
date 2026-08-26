@@ -100,7 +100,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ke
       id,
       title: title || 'Unknown Title',
       provider: provider || 'Unknown Provider',
-      targetLang: (targetLang || 'MAY').toUpperCase(),
+      targetLang: String(targetLang || 'UNKNOWN').toUpperCase(),
       keys: Array.isArray(keys) ? keys : [keys].filter(Boolean),
       createdAt: Date.now()
     };
