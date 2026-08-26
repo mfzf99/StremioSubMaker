@@ -5733,6 +5733,18 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const axios = require('axios');
             const { registerCompletedSubtitle } = require('../services/telegramBot');
 
+            let subRegistryId = null;
+            try {
+                subRegistryId = await registerCompletedSubtitle({
+                    title: movieTitle,
+                    provider: sourceProv,
+                    targetLang: targetLanguage,
+                    keys: [runtimeKey, sourceFileId]
+                });
+            } catch (regErr) {
+                log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
+            }
+            
             // Daftarkan sarikata ke buku rekod Redis (untuk /list & butang padam)
             const subRegistryId = await registerCompletedSubtitle({
                 title: movieTitle,
