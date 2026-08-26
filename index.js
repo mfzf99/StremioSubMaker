@@ -8207,11 +8207,30 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                         `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                                         `🎉 <b>Ready to stream!</b>`;
 
+                        // Daftarkan token pemadam untuk sarikata xEmbed
+                        const { registerDeletionTarget } = require('./src/services/telegramBot');
+                        const deleteToken = registerDeletionTarget({
+                            runtimeKey: runtimeKey,
+                            sourceFileId: `xembed:${safeVideoHash}:${safeTrackId}`
+                        });
+
                         let cubaLagi = 3;
                         while (cubaLagi > 0) {
                             try {
                                 await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                                    chat_id: chatId, text: teleMsg, parse_mode: 'HTML'
+                                    chat_id: chatId, 
+                                    text: teleMsg, 
+                                    parse_mode: 'HTML',
+                                    reply_markup: {
+                                        inline_keyboard: [
+                                            [
+                                                {
+                                                    text: '🗑️ Padam Subtitle Ini (Cache)',
+                                                    callback_data: `del:${deleteToken}`
+                                                }
+                                            ]
+                                        ]
+                                    }
                                 }, { timeout: 10000 });
                                 break;
                             } catch (e) {
