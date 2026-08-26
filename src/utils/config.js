@@ -205,7 +205,9 @@ function logGeminiConfigThrottled(mergedConfig) {
     ? `${effectiveModel} (base=${baseModel || 'default'}, override=${overrideModel})`
     : effectiveModel;
   const suffix = suppressed > 0 ? ` (suppressed ${suppressed} duplicate logs)` : '';
-  const topKDisplay = mergedConfig.advancedSettings?.topK !== undefined ? mergedConfig.advancedSettings.topK : 'disabled (Min-P Active)';
+  const topKDisplay = (mergedConfig.advancedSettings?.topK !== undefined && mergedConfig.advancedSettings.topK !== 40 && mergedConfig.advancedSettings.topK > 0)
+    ? mergedConfig.advancedSettings.topK
+    : 'disabled (Min-P Active)';
   log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topK=${topKDisplay}, topP=${mergedConfig.advancedSettings.topP}, minP=${mergedConfig.advancedSettings.minP}, repPenalty=${mergedConfig.advancedSettings.repetitionPenalty}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
 }
 
@@ -551,6 +553,11 @@ function normalizeConfig(config) {
     })()
   };
 
+  // 🔥 Bersihkan topK legasi (40) daripada session yang telah disimpan
+  if (mergedConfig.advancedSettings && (mergedConfig.advancedSettings.topK === 40 || mergedConfig.advancedSettings.topK === 0)) {
+    delete mergedConfig.advancedSettings.topK;
+  }
+
   mergedConfig.parallelBatchesEnabled = mergedConfig.parallelBatchesEnabled === true;
   mergedConfig.parallelBatchesCount = (() => {
     const val = parseInt(mergedConfig.parallelBatchesCount, 10);
@@ -660,8 +667,8 @@ function normalizeConfig(config) {
   const providerIsConfigured = (key) => {
     const resolved = resolveProviderKey(key);
     const cfg = mergedConfig.providers?.[resolved] || {};
-    if (KEY_OPTIONAL_PROVIDERS.has(String(resolved).toLowerCase())) {
-      if (String(resolved).toLowerCase() === 'custom') {
+    if (KEY_OPTIONAL_PROVIDERS.has(String(key).toLowerCase())) {
+      if (String(key).toLowerCase() === 'custom') {
         return !!(cfg.enabled === true && cfg.baseUrl && cfg.model);
       }
       return cfg.enabled === true;
@@ -1071,7 +1078,9 @@ function getDefaultConfig(modelName = null) {
       ? parseFloat(process.env.GEMINI_TEMPERATURE)
       : modelDefaults.temperature,
     topP: process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95,
-    topK: process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K, 10) : undefined,
+    topK: (process.env.GEMINI_TOP_K !== undefined && parseInt(process.env.GEMINI_TOP_K, 10) !== 40 && parseInt(process.env.GEMINI_TOP_K, 10) > 0)
+      ? parseInt(process.env.GEMINI_TOP_K, 10)
+      : undefined,
     minP: process.env.GEMINI_MIN_P !== undefined ? parseFloat(process.env.GEMINI_MIN_P) : 0.05,
     repetitionPenalty: process.env.GEMINI_REPETITION_PENALTY !== undefined ? parseFloat(process.env.GEMINI_REPETITION_PENALTY) : 1.05,
 
@@ -1205,8 +1214,8 @@ function validateConfig(config) {
   const resolveProviderConfig = (key) => {
     const providers = config.providers || {};
     if (providers[key]) return providers[key];
-    const match = Object.keys(providers).find(k => String(k).toLowerCase() === String(key).toLowerCase());
-    return match ? providers[match] : null;
+    const matchKey = Object.keys(providers).find(k => String(k).toLowerCase() === String(key).toLowerCase());
+    return matchKey ? providers[matchKey] : null;
   };
 
   const geminiConfigured = (() => {
