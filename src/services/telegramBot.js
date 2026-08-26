@@ -7,7 +7,7 @@ const REGISTRY_REDIS_KEY = 'stremio:sub_registry';
 const KEY_STATS_REDIS_KEY = 'stremio:key_stats';
 const ITEMS_PER_PAGE = 5;
 
-// Pangkalan Data Harga & Konfigurasi Batch Model (Untuk Anggaran 1,200 Baris / Episod)
+// Pangkalan Data Harga & Konfigurasi Batch Model (Anggaran 1,200 Baris / Episod)
 const MODEL_SPECS = {
   "3.7-flash": { input: 0.75, output: 3.75, batchSize: 400, name: "3.7-Flash" },
   "3.6-flash": { input: 0.75, output: 3.75, batchSize: 400, name: "3.6-Flash" },
@@ -65,24 +65,27 @@ function getModelSpec(modelName) {
 
 // Analisis Kunci & Pengiraan Kapasiti Mengikut Dompet dan Kuota Harian
 function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletBalanceUSD = 0) {
-  const keyList = Array.isArray(rawKeys) 
-    ? rawKeys.filter(k => typeof k === 'string' && k.trim().length > 0)
-    : (typeof rawKeys === 'string' && rawKeys.trim() ? rawKeys.split(',').map(k => k.trim()).filter(Boolean) : []);
+  let keyList = [];
+  if (Array.isArray(rawKeys)) {
+    keyList = rawKeys.filter(k => typeof k === 'string' && k.trim().length > 0);
+  } else if (typeof rawKeys === 'string' && rawKeys.trim().length > 0) {
+    keyList = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+  }
 
   const totalKeys = keyList.length;
   const crazyKeys = keyList.filter(k => k.startsWith('sk-')).length;
   const googleKeys = totalKeys - crazyKeys;
 
   const spec = getModelSpec(currentModel);
-  const batchesPerEp = Math.ceil(1200 / spec.batchSize); // cth: 1200 / 200 = 6 batch, 1200 / 400 = 3 batch
+  const batchesPerEp = Math.ceil(1200 / spec.batchSize); // Flash: 1200/400 = 3 batch; Flash-Lite: 1200/200 = 6 batch
 
-  // 1. Kira Kapasiti Google Direct (Berdasarkan Kuota Percuma 500 RPD)
+  // 1. Kira Kapasiti Google Direct (Kuota Percuma 500 RPD)
   const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
 
   // 2. Kira Kapasiti CrazyRouter (Berdasarkan Baki Dompet USD & Diskaun 45%)
   // Purata token se-episod (1,200 baris): ~25,000 input tokens, ~15,000 output tokens
   const retailCostPerEp = ((25000 / 1000000) * spec.input) + ((15000 / 1000000) * spec.output);
-  const crazyCostPerEp = retailCostPerEp * 0.55; // 45% discount
+  const crazyCostPerEp = retailCostPerEp * 0.55; // Diskaun 45% (bayar 55%)
   const crazyWalletCapacity = (crazyCostPerEp > 0 && walletBalanceUSD > 0) 
     ? Math.floor(walletBalanceUSD / crazyCostPerEp) 
     : 0;
@@ -112,20 +115,22 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   };
 }
 
-// Pengesan Status Kunci Pintar (Redis Cache -> Deep Session Scan -> ENV)
+// Pengesan Status Kunci Pintar (Kekalkan Data Redis Sedia Ada)
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
 
-  let savedStats = null;
+  // 1. KEUTAMAAN UTAMA: Semak rekod tersimpan di Redis dahulu
   try {
-    savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
+      return savedStats;
+    }
   } catch (e) {}
 
+  // 2. Semak Session Manager SubMaker dalam memori jika Redis kosong
   let discoveredKeys = [];
-  let detectedModel = savedStats?.modelName || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-  let walletBalanceUSD = typeof savedStats?.walletBalanceUSD === 'number' ? savedStats.walletBalanceUSD : 0;
+  let detectedModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
-  // Semak Session Manager SubMaker dalam memori
   try {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
@@ -136,11 +141,11 @@ async function getActiveKeyInfo() {
 
       for (const sess of sessionList) {
         const cfg = sess?.config || sess;
-        if (cfg?.geminiModel) detectedModel = cfg.geminiModel;
+        if (cfg?.geminiModel || cfg?.model) detectedModel = cfg.geminiModel || cfg.model;
 
         const valid = Array.isArray(cfg?.geminiApiKeys)
           ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
-          : (cfg?.geminiApiKey ? [cfg.geminiApiKey] : []);
+          : (cfg?.geminiApiKey ? [cfg.geminiApiKey] : (cfg?.apiKey ? [cfg.apiKey] : []));
 
         if (valid.length > 0) {
           discoveredKeys = valid;
@@ -150,13 +155,13 @@ async function getActiveKeyInfo() {
     }
   } catch (e) {}
 
-  // Semak Environment Variable (.env)
+  // 3. Semak Environment Variable (.env)
   if (discoveredKeys.length === 0) {
     const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
     discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  const result = analyzeKeyList(discoveredKeys, detectedModel, walletBalanceUSD);
+  const result = analyzeKeyList(discoveredKeys, detectedModel, 0);
 
   if (result.totalKeys > 0) {
     try {
@@ -173,18 +178,33 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
     const adapter = await getStorageAdapter();
     const id = 'sub_' + Math.random().toString(36).substring(2, 9);
 
-    // Dapatkan data sedia ada jika ada
     let existingStats = null;
     try {
       existingStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
     } catch (e) {}
 
-    const usedKeys = apiKeys || existingStats?.totalKeys || [];
-    const usedModel = model || existingStats?.modelName || 'gemini-3.1-flash-lite';
-    const usedWallet = (typeof walletBalanceUSD === 'number') ? walletBalanceUSD : (existingStats?.walletBalanceUSD || 0);
+    let validKeys = [];
+    if (Array.isArray(apiKeys)) {
+      validKeys = apiKeys.filter(k => typeof k === 'string' && k.trim());
+    } else if (typeof apiKeys === 'string' && apiKeys.trim()) {
+      validKeys = apiKeys.split(',').map(k => k.trim()).filter(Boolean);
+    }
 
-    const stats = analyzeKeyList(usedKeys, usedModel, usedWallet);
-    if (stats.totalKeys > 0) {
+    const usedKeys = validKeys.length > 0 ? validKeys : (existingStats?.totalKeys ? existingStats : []);
+    const usedModel = model || existingStats?.modelName || 'gemini-3.1-flash-lite';
+    const usedWallet = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0)
+      ? walletBalanceUSD
+      : (typeof existingStats?.walletBalanceUSD === 'number' ? existingStats.walletBalanceUSD : 0);
+
+    if (validKeys.length > 0) {
+      const stats = analyzeKeyList(validKeys, usedModel, usedWallet);
+      await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    } else if (existingStats && existingStats.totalKeys > 0) {
+      const stats = analyzeKeyList(existingStats.crazyKeys > 0 ? ['sk-cached'] : ['AIza-cached'], usedModel, usedWallet);
+      stats.totalKeys = existingStats.totalKeys;
+      stats.googleKeys = existingStats.googleKeys;
+      stats.crazyKeys = existingStats.crazyKeys;
+      stats.connectionType = existingStats.connectionType;
       await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
     }
 
@@ -303,7 +323,7 @@ async function renderServerStatus(chatId, messageId, botToken) {
   }
 }
 
-// 4. Paparan Status API Keys (Kapasiti Dinamik Mengikut Model & Baki Dompet)
+// 4. Paparan Status API Keys
 async function renderApiKeysStatus(chatId, messageId, botToken) {
   try {
     const keyInfo = await getActiveKeyInfo();
@@ -318,19 +338,16 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
 
     let capacityLine = '';
     if (keyInfo.crazyKeys > 0 && keyInfo.googleKeys === 0) {
-      // Kes CrazyRouter Tulen: Dikira Berdasarkan Baki Dompet Semasa
       const walletTxt = keyInfo.walletBalanceUSD > 0 
         ? `$${keyInfo.walletBalanceUSD.toFixed(2)} (RM ${(keyInfo.walletBalanceUSD * 4.05).toFixed(2)})` 
-        : 'Sila tunggu terjemahan pertama';
+        : 'Sila tunggu terjemahan selesai';
       capacityLine = 
         `💳 <b>Baki Dompet:</b> ${walletTxt}\n` +
         `📊 <b>Baki Kapasiti Dompet:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
         `💸 <b>Anggaran Kos / Episod:</b> ~$${keyInfo.crazyCostPerEp.toFixed(4)} (Diskaun 45% Aktif)`;
     } else if (keyInfo.googleKeys > 0 && keyInfo.crazyKeys === 0) {
-      // Kes Google Direct Tulen: Dikira Berdasarkan Had Kuota 500 RPD
       capacityLine = `📊 <b>Kapasiti Batch ${keyInfo.batchSize}:</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName})`;
     } else {
-      // Kes Hybrid: Paparkan Kedua-dua Kapasiti
       capacityLine = 
         `📊 <b>Kapasiti Google (RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari\n` +
         `💳 <b>Kapasiti Dompet CrazyRouter:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod ($${keyInfo.walletBalanceUSD.toFixed(2)})`;
