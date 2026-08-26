@@ -5738,7 +5738,9 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 title: movieTitle,
                 provider: sourceProv,
                 targetLang: targetLanguage || 'MAY',
-                keys: [runtimeKey, sourceFileId]
+                keys: [runtimeKey, sourceFileId],
+                keyCount: keyCount,
+                isCrazyRouter: isCrazyRouter
             });
 
             let cubaLagi = 3;
