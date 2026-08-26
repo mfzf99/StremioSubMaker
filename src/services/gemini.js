@@ -355,6 +355,7 @@ class GeminiService {
 
     const modelName = String(this.model).toLowerCase();
 
+    // 🚀 INTERCEPT UNTUK PROXY CRAZYROUTER
     if (this.keyType === 'crazyrouter') {
       let outputLimit = 8192;
       if (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) {
@@ -366,15 +367,20 @@ class GeminiService {
       };
       log.debug(() => `[Gemini] CrazyRouter proxy bypass applied for ${this.model}. Output limit forced to: ${limits.outputTokenLimit}`);
 
+      // Paparan Thinking & Sampling yang tepat mengikut seni bina model
       const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-      const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget;
+      const thinkingDisplay = this.isGemini3Model
+        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
+        : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
       const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
-      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, minP=${this.minP}, repetitionPenalty=${this.repetitionPenalty}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
+
+      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, minP=${this.minP}, repetitionPenalty=${this.repetitionPenalty}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
 
       this._modelLimits = limits;
       return limits;
     }
 
+    // 🌐 LALUAN GOOGLE DIRECT SDK
     try {
       const response = await axios.get(`${this.baseUrl}/models/${this.model}`, {
         headers: this.getAuthHeaders(),
@@ -398,14 +404,12 @@ class GeminiService {
       log.debug(() => `[Gemini] Model: ${this.model}, Output limit: ${limits.outputTokenLimit}, Input limit: ${limits.inputTokenLimit || 'unlimited'}`);
 
       const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-      const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' :
-        effectiveThinkingBudget === 0 ? 'disabled' :
-          effectiveThinkingBudget;
+      const thinkingDisplay = this.isGemini3Model
+        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
+        : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
       const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
-      const generationControls = this.isGemini3Model
-        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}, temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}`
-        : `temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
-      log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
+
+      log.debug(() => `[Gemini] API config: temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
       this._modelLimits = limits;
       return limits;
