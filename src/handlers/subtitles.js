@@ -5733,7 +5733,6 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const axios = require('axios');
             const { registerCompletedSubtitle } = require('../services/telegramBot');
 
-            // Kumpul semua kemungkinan bentuk kunci API (Array atau String Tunggal)
             let detectedKeys = [];
             if (typeof config !== 'undefined') {
                 if (Array.isArray(config?.geminiApiKeys)) detectedKeys = config.geminiApiKeys;
@@ -5749,33 +5748,33 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                 if (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys)) detectedKeys = geminiApiKeys;
                 else if (typeof geminiApiKey !== 'undefined' && geminiApiKey) detectedKeys = [geminiApiKey];
                 else if (typeof apiKey !== 'undefined' && apiKey) detectedKeys = [apiKey];
-                else if (typeof apiKeys !== 'undefined' && Array.isArray(apiKeys)) detectedKeys = apiKeys;
             }
 
-            // Kumpul model semasa
             const detectedModel = (typeof usedModel !== 'undefined' && usedModel)
                 ? usedModel
                 : ((typeof model !== 'undefined' && model)
                     ? model
-                    : ((typeof currentModel !== 'undefined' && currentModel)
-                        ? currentModel
-                        : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite')));
+                    : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite'));
 
-            // Kumpul baki dompet CrazyRouter (USD)
+            // Tangkap nilai baki USD terus daripada teks mesej Telegram atau pemboleh ubah dompet
             let detectedWalletUSD = 0;
-            const possibleWallets = [
-                typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
-                typeof walletUSD !== 'undefined' ? walletUSD : null,
-                typeof balanceUsd !== 'undefined' ? balanceUsd : null,
-                typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null,
-                typeof crazyBalance !== 'undefined' ? crazyBalance : null,
-                typeof walletBalance !== 'undefined' ? walletBalance : null,
-                typeof balance !== 'undefined' ? balance : null
-            ];
-            for (const pw of possibleWallets) {
-                if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
-                    detectedWalletUSD = parseFloat(pw);
-                    break;
+            const targetText = typeof message !== 'undefined' ? message : (typeof text !== 'undefined' ? text : (typeof reportMsg !== 'undefined' ? reportMsg : ''));
+            const walletRegexMatch = String(targetText).match(/Wallet Balance:[^\$]*\$([0-9.]+)/i);
+            
+            if (walletRegexMatch && walletRegexMatch[1]) {
+                detectedWalletUSD = parseFloat(walletRegexMatch[1]);
+            } else {
+                const possibleWallets = [
+                    typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
+                    typeof walletUSD !== 'undefined' ? walletUSD : null,
+                    typeof balanceUsd !== 'undefined' ? balanceUsd : null,
+                    typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null
+                ];
+                for (const pw of possibleWallets) {
+                    if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
+                        detectedWalletUSD = parseFloat(pw);
+                        break;
+                    }
                 }
             }
 
