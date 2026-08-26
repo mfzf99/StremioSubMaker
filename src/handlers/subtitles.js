@@ -5721,15 +5721,16 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                             `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                             `🎉 <b>Ready to stream!</b>`;
             
-            // 7. Hantar guna AXIOS + AUTO-RETRY (Posmen Kebal) + BUTANG PADAM
+            // 7. Hantar guna AXIOS + AUTO-RETRY + DAFTAR REGISTRY & BUTANG PADAM
             const axios = require('axios');
-            const { registerDeletionTarget } = require('../services/telegramBot');
+            const { registerCompletedSubtitle } = require('../services/telegramBot');
 
-            // Daftarkan maklumat subtitle untuk butang padam Telegram
-            const deleteToken = registerDeletionTarget({
-                runtimeKey: runtimeKey,
-                sourceFileId: sourceFileId,
-                userHash: userHash
+            // Daftarkan sarikata ke buku rekod Redis (untuk /list & butang padam)
+            const subRegistryId = await registerCompletedSubtitle({
+                title: movieTitle,
+                provider: sourceProv,
+                targetLang: targetLanguage || 'MAY',
+                keys: [runtimeKey, sourceFileId]
             });
 
             let cubaLagi = 3;
@@ -5745,7 +5746,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                                 [
                                     {
                                         text: '🗑️ Padam Subtitle Ini (Cache)',
-                                        callback_data: `del:${deleteToken}`
+                                        callback_data: subRegistryId ? `del_reg:${subRegistryId}:1` : 'done'
                                     }
                                 ]
                             ]
