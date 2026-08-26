@@ -40,63 +40,23 @@ function resolveTargetLang(lang) {
   return 'EN';
 }
 
-// Pengesan Status Kunci Pintar (Menyokong Google Direct, CrazyRouter & Hybrid)
-async function getActiveKeyInfo() {
-  const adapter = await getStorageAdapter();
+// Analisis Senarai Kunci (Google Direct vs CrazyRouter vs Hybrid)
+function analyzeKeyList(rawKeys) {
+  const keyList = Array.isArray(rawKeys) 
+    ? rawKeys.filter(k => typeof k === 'string' && k.trim().length > 0)
+    : (typeof rawKeys === 'string' && rawKeys.trim() ? rawKeys.split(',').map(k => k.trim()).filter(Boolean) : []);
 
-  // 1. Semak rekod tersimpan di Redis
-  try {
-    const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
-    if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
-      return savedStats;
-    }
-  } catch (e) {}
-
-  let allKeys = [];
-
-  // 2. Semak Session Manager SubMaker dalam memori
-  try {
-    const { getSessionManager } = require('../utils/sessionManager');
-    const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
-    if (sm && sm.sessions) {
-      for (const [, sess] of sm.sessions.entries()) {
-        const cfg = sess?.config || sess;
-        const validKeys = Array.isArray(cfg?.geminiApiKeys)
-          ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
-          : [];
-
-        if (validKeys.length > 0) {
-          allKeys = validKeys;
-          break;
-        }
-
-        if (cfg?.geminiApiKey) {
-          allKeys = [cfg.geminiApiKey];
-          break;
-        }
-      }
-    }
-  } catch (e) {}
-
-  // 3. Semak Environment Variable (.env) jika tiada di Session
-  if (allKeys.length === 0) {
-    const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
-    allKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
-  }
-
-  const totalKeys = allKeys.length;
-  const crazyKeys = allKeys.filter(k => String(k).trim().startsWith('sk-')).length;
+  const totalKeys = keyList.length;
+  const crazyKeys = keyList.filter(k => k.startsWith('sk-')).length;
   const googleKeys = totalKeys - crazyKeys;
 
-  let connectionType = 'Google Direct API';
+  let connectionType = 'Tiada Kunci Dikesan';
   if (crazyKeys > 0 && googleKeys > 0) {
     connectionType = 'Hybrid Pool (Google Direct + CrazyRouter)';
   } else if (crazyKeys > 0) {
     connectionType = 'CrazyRouter Proxy (Diskaun 45%)';
   } else if (googleKeys > 0) {
     connectionType = 'Google Direct API';
-  } else {
-    connectionType = 'Tiada Kunci Dikesan';
   }
 
   return {
@@ -108,22 +68,104 @@ async function getActiveKeyInfo() {
   };
 }
 
+// Pengesan Status Kunci Pintar (Redis Cache -> Deep Session Scan -> ENV)
+async function getActiveKeyInfo() {
+  const adapter = await getStorageAdapter();
+
+  // 1. Semak rekod tersimpan di Redis
+  try {
+    const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
+      return savedStats;
+    }
+  } catch (e) {}
+
+  let discoveredKeys = [];
+
+  // 2. Semak Session Manager SubMaker dalam memori
+  try {
+    const { getSessionManager } = require('../utils/sessionManager');
+    const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
+    if (sm) {
+      const sessionList = sm.sessions instanceof Map 
+        ? Array.from(sm.sessions.values()) 
+        : (sm.sessions && typeof sm.sessions === 'object' ? Object.values(sm.sessions) : []);
+
+      for (const sess of sessionList) {
+        const cfg = sess?.config || sess;
+        const valid = Array.isArray(cfg?.geminiApiKeys)
+          ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
+          : (cfg?.geminiApiKey ? [cfg.geminiApiKey] : []);
+
+        if (valid.length > 0) {
+          discoveredKeys = valid;
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Imbas Redis Client secara terus jika ada sesi tersimpan
+  if (discoveredKeys.length === 0) {
+    try {
+      if (adapter.client && typeof adapter.client.keys === 'function') {
+        const keysInRedis = await adapter.client.keys('*');
+        for (const rk of keysInRedis) {
+          if (rk.includes('session') || rk.includes('user') || rk.includes('config')) {
+            try {
+              const rawData = await adapter.client.get(rk);
+              if (rawData) {
+                const parsed = JSON.parse(rawData);
+                const cfg = parsed?.config || parsed;
+                const valid = Array.isArray(cfg?.geminiApiKeys)
+                  ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
+                  : (cfg?.geminiApiKey ? [cfg.geminiApiKey] : []);
+                if (valid.length > 0) {
+                  discoveredKeys = valid;
+                  break;
+                }
+              }
+            } catch (err) {}
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 4. Semak Environment Variable (.env)
+  if (discoveredKeys.length === 0) {
+    const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
+    discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
+  }
+
+  const result = analyzeKeyList(discoveredKeys);
+
+  // Jika kunci ditemui, kekalkan status ke Redis
+  if (result.totalKeys > 0) {
+    try {
+      await adapter.set(KEY_STATS_REDIS_KEY, { ...result, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    } catch (e) {}
+  }
+
+  return result;
+}
+
 // 1. Simpan rekod sarikata & status kunci ke Redis
-async function registerCompletedSubtitle({ title, provider, targetLang, keys }) {
+async function registerCompletedSubtitle({ title, provider, targetLang, keys, apiKeys }) {
   try {
     const adapter = await getStorageAdapter();
     const id = 'sub_' + Math.random().toString(36).substring(2, 9);
 
-    // Auto-kesan dan kemas kini status kunci secara dinamik ke Redis
-    try {
-      const keyInfo = await getActiveKeyInfo();
-      if (keyInfo && keyInfo.totalKeys > 0) {
-        await adapter.set(KEY_STATS_REDIS_KEY, {
-          ...keyInfo,
-          updatedAt: Date.now()
-        }, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    // Simpan maklumat kunci terus ke Redis jika dibekalkan semasa proses terjemahan
+    if (apiKeys && (Array.isArray(apiKeys) ? apiKeys.length > 0 : Boolean(apiKeys))) {
+      const stats = analyzeKeyList(apiKeys);
+      if (stats.totalKeys > 0) {
+        await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
       }
-    } catch (e) {}
+    } else {
+      // Cuba kesan secara automatik
+      getActiveKeyInfo().catch(() => {});
+    }
 
     const entry = {
       id,
@@ -240,7 +282,7 @@ async function renderServerStatus(chatId, messageId, botToken) {
   }
 }
 
-// 4. Paparan Status API Keys (Menyokong Hybrid & Pecahan Kunci)
+// 4. Paparan Status API Keys
 async function renderApiKeysStatus(chatId, messageId, botToken) {
   try {
     const keyInfo = await getActiveKeyInfo();
@@ -302,7 +344,7 @@ async function renderRegistryPage(chatId, messageId, page = 1, botToken) {
 
       if (messageId) {
         await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-          chat_id: chatId, message_id: messageId, text: emptyText, parse_mode: 'HTML', reply_markup: emptyMarkup
+          chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup: emptyMarkup
         });
       } else {
         await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
