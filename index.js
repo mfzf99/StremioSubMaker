@@ -8242,7 +8242,9 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             title: movieTitle,
                             provider: sourceProv,
                             targetLang: targetLangName || 'MAY',
-                            keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`]
+                            keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`],
+                            keyCount: keyCount,
+                            isCrazyRouter: isCrazyRouter
                         });
 
                         let cubaLagi = 3;
