@@ -9,16 +9,16 @@ const ITEMS_PER_PAGE = 5;
 
 // Pangkalan Data Harga & Konfigurasi Batch Model (Anggaran 1,200 Baris / Episod)
 const MODEL_SPECS = {
-  "3.7-flash": { input: 0.75, output: 3.75, batchSize: 400, name: "3.7-Flash" },
-  "3.6-flash": { input: 0.75, output: 3.75, batchSize: 400, name: "3.6-Flash" },
-  "3.5-flash": { input: 1.50, output: 9.00, batchSize: 400, name: "3.5-Flash" },
-  "3.5-flash-lite": { input: 0.30, output: 2.50, batchSize: 200, name: "3.5-Flash-Lite" },
-  "3.1-pro": { input: 2.00, output: 12.00, batchSize: 200, name: "3.1-Pro" },
-  "3.1-flash-lite": { input: 0.25, output: 1.50, batchSize: 200, name: "3.1-Flash-Lite" },
-  "3.0-flash": { input: 0.50, output: 3.00, batchSize: 400, name: "3.0-Flash" },
-  "2.5-pro": { input: 1.25, output: 10.00, batchSize: 200, name: "2.5-Pro" },
-  "2.5-flash": { input: 0.30, output: 2.50, batchSize: 400, name: "2.5-Flash" },
-  "2.5-flash-lite": { input: 0.10, output: 0.40, batchSize: 200, name: "2.5-Flash-Lite" }
+  '3.7-flash': { input: 0.75, output: 3.75, batchSize: 400, name: '3.7-Flash' },
+  '3.6-flash': { input: 0.75, output: 3.75, batchSize: 400, name: '3.6-Flash' },
+  '3.5-flash': { input: 1.50, output: 9.00, batchSize: 400, name: '3.5-Flash' },
+  '3.5-flash-lite': { input: 0.30, output: 2.50, batchSize: 200, name: '3.5-Flash-Lite' },
+  '3.1-pro': { input: 2.00, output: 12.00, batchSize: 200, name: '3.1-Pro' },
+  '3.1-flash-lite': { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' },
+  '3.0-flash': { input: 0.50, output: 3.00, batchSize: 400, name: '3.0-Flash' },
+  '2.5-pro': { input: 1.25, output: 10.00, batchSize: 200, name: '2.5-Pro' },
+  '2.5-flash': { input: 0.30, output: 2.50, batchSize: 400, name: '2.5-Flash' },
+  '2.5-flash-lite': { input: 0.10, output: 0.40, batchSize: 200, name: '2.5-Flash-Lite' }
 };
 
 // Format saiz bait ke format mudah dibaca (MB/GB)
@@ -60,7 +60,7 @@ function getModelSpec(modelName) {
   for (const [key, spec] of Object.entries(MODEL_SPECS)) {
     if (m.includes(key)) return spec;
   }
-  return MODEL_SPECS["3.1-flash-lite"];
+  return MODEL_SPECS['3.1-flash-lite'];
 }
 
 // Analisis Kunci & Pengiraan Kapasiti Mengikut Dompet dan Kuota Harian
@@ -77,17 +77,16 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   const googleKeys = totalKeys - crazyKeys;
 
   const spec = getModelSpec(currentModel);
-  const batchesPerEp = Math.ceil(1200 / spec.batchSize); // Flash: 1200/400 = 3 batch; Flash-Lite: 1200/200 = 6 batch
+  const batchesPerEp = Math.ceil(1200 / spec.batchSize);
 
   // 1. Kira Kapasiti Google Direct (Kuota Percuma 500 RPD)
   const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
 
   // 2. Kira Kapasiti CrazyRouter (Berdasarkan Baki Dompet USD & Diskaun 45%)
-  // Purata token se-episod (1,200 baris): ~25,000 input tokens, ~15,000 output tokens
   const retailCostPerEp = ((25000 / 1000000) * spec.input) + ((15000 / 1000000) * spec.output);
-  const crazyCostPerEp = retailCostPerEp * 0.55; // Diskaun 45% (bayar 55%)
-  const crazyWalletCapacity = (crazyCostPerEp > 0 && walletBalanceUSD > 0) 
-    ? Math.floor(walletBalanceUSD / crazyCostPerEp) 
+  const crazyCostPerEp = retailCostPerEp * 0.55;
+  const crazyWalletCapacity = (crazyCostPerEp > 0 && walletBalanceUSD > 0)
+    ? Math.floor(walletBalanceUSD / crazyCostPerEp)
     : 0;
 
   let connectionType = 'Tiada Kunci Dikesan';
@@ -119,7 +118,7 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
 
-  // 1. KEUTAMAAN UTAMA: Semak rekod tersimpan di Redis dahulu
+  // 1. Semak rekod tersimpan di Redis dahulu
   try {
     const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
     if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
@@ -127,7 +126,7 @@ async function getActiveKeyInfo() {
     }
   } catch (e) {}
 
-  // 2. Semak Session Manager SubMaker dalam memori jika Redis kosong
+  // 2. Semak Session Manager SubMaker dalam memori jika Redis belum ada data
   let discoveredKeys = [];
   let detectedModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
@@ -135,8 +134,8 @@ async function getActiveKeyInfo() {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
     if (sm) {
-      const sessionList = sm.sessions instanceof Map 
-        ? Array.from(sm.sessions.values()) 
+      const sessionList = sm.sessions instanceof Map
+        ? Array.from(sm.sessions.values())
         : (sm.sessions && typeof sm.sessions === 'object' ? Object.values(sm.sessions) : []);
 
       for (const sess of sessionList) {
@@ -190,23 +189,24 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       validKeys = apiKeys.split(',').map(k => k.trim()).filter(Boolean);
     }
 
-    const usedKeys = validKeys.length > 0 ? validKeys : (existingStats?.totalKeys ? existingStats : []);
+    const usedKeys = validKeys.length > 0
+      ? validKeys
+      : (existingStats?.totalKeys ? (existingStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached']) : ['sk-crazyrouter']);
     const usedModel = model || existingStats?.modelName || 'gemini-3.1-flash-lite';
     const usedWallet = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0)
       ? walletBalanceUSD
       : (typeof existingStats?.walletBalanceUSD === 'number' ? existingStats.walletBalanceUSD : 0);
 
-    if (validKeys.length > 0) {
-      const stats = analyzeKeyList(validKeys, usedModel, usedWallet);
-      await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
-    } else if (existingStats && existingStats.totalKeys > 0) {
-      const stats = analyzeKeyList(existingStats.crazyKeys > 0 ? ['sk-cached'] : ['AIza-cached'], usedModel, usedWallet);
+    const stats = analyzeKeyList(usedKeys, usedModel, usedWallet);
+    if (existingStats && validKeys.length === 0) {
       stats.totalKeys = existingStats.totalKeys;
       stats.googleKeys = existingStats.googleKeys;
       stats.crazyKeys = existingStats.crazyKeys;
       stats.connectionType = existingStats.connectionType;
-      await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
     }
+
+    // Kunci rekod status kunci terkini ke Redis
+    await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
 
     const entry = {
       id,
@@ -338,17 +338,17 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
 
     let capacityLine = '';
     if (keyInfo.crazyKeys > 0 && keyInfo.googleKeys === 0) {
-      const walletTxt = keyInfo.walletBalanceUSD > 0 
-        ? `$${keyInfo.walletBalanceUSD.toFixed(2)} (RM ${(keyInfo.walletBalanceUSD * 4.05).toFixed(2)})` 
+      const walletTxt = keyInfo.walletBalanceUSD > 0
+        ? `$${keyInfo.walletBalanceUSD.toFixed(2)} (RM ${(keyInfo.walletBalanceUSD * 4.05).toFixed(2)})`
         : 'Sila tunggu terjemahan selesai';
-      capacityLine = 
+      capacityLine =
         `💳 <b>Baki Dompet:</b> ${walletTxt}\n` +
         `📊 <b>Baki Kapasiti Dompet:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
         `💸 <b>Anggaran Kos / Episod:</b> ~$${keyInfo.crazyCostPerEp.toFixed(4)} (Diskaun 45% Aktif)`;
     } else if (keyInfo.googleKeys > 0 && keyInfo.crazyKeys === 0) {
       capacityLine = `📊 <b>Kapasiti Batch ${keyInfo.batchSize}:</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName})`;
     } else {
-      capacityLine = 
+      capacityLine =
         `📊 <b>Kapasiti Google (RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari\n` +
         `💳 <b>Kapasiti Dompet CrazyRouter:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod ($${keyInfo.walletBalanceUSD.toFixed(2)})`;
     }
