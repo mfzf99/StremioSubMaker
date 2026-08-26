@@ -5756,26 +5756,15 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                     ? model
                     : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite'));
 
-            // Tangkap nilai baki USD terus daripada teks mesej Telegram atau pemboleh ubah dompet
+            // Tangkap nilai baki USD terus daripada teleMsg atau walletSection
             let detectedWalletUSD = 0;
-            const targetText = typeof message !== 'undefined' ? message : (typeof text !== 'undefined' ? text : (typeof reportMsg !== 'undefined' ? reportMsg : ''));
-            const walletRegexMatch = String(targetText).match(/Wallet Balance:[^\$]*\$([0-9.]+)/i);
+            const targetReportText = (typeof teleMsg !== 'undefined' && teleMsg) 
+                ? teleMsg 
+                : ((typeof walletSection !== 'undefined' && walletSection) ? walletSection : '');
             
-            if (walletRegexMatch && walletRegexMatch[1]) {
-                detectedWalletUSD = parseFloat(walletRegexMatch[1]);
-            } else {
-                const possibleWallets = [
-                    typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
-                    typeof walletUSD !== 'undefined' ? walletUSD : null,
-                    typeof balanceUsd !== 'undefined' ? balanceUsd : null,
-                    typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null
-                ];
-                for (const pw of possibleWallets) {
-                    if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
-                        detectedWalletUSD = parseFloat(pw);
-                        break;
-                    }
-                }
+            const walletMatch = String(targetReportText).match(/Wallet Balance:[^\$]*\$([0-9.]+)/i);
+            if (walletMatch && walletMatch[1]) {
+                detectedWalletUSD = parseFloat(walletMatch[1]);
             }
 
             let subRegistryId = null;
