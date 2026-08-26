@@ -5721,8 +5721,17 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                             `🧠 <b>Engine:</b> ${usedModel}\n\n` +
                             `🎉 <b>Ready to stream!</b>`;
             
-            // 7. Hantar guna AXIOS + AUTO-RETRY (Posmen Kebal)
+            // 7. Hantar guna AXIOS + AUTO-RETRY (Posmen Kebal) + BUTANG PADAM
             const axios = require('axios');
+            const { registerDeletionTarget } = require('../services/telegramBot');
+
+            // Daftarkan maklumat subtitle untuk butang padam Telegram
+            const deleteToken = registerDeletionTarget({
+                runtimeKey: runtimeKey,
+                sourceFileId: sourceFileId,
+                userHash: userHash
+            });
+
             let cubaLagi = 3;
             
             while (cubaLagi > 0) {
@@ -5730,18 +5739,28 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
                     await axios.post(teleUrl, {
                         chat_id: chatId, 
                         text: teleMsg, 
-                        parse_mode: 'HTML'
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    {
+                                        text: '🗑️ Padam Subtitle Ini (Cache)',
+                                        callback_data: `del:${deleteToken}`
+                                    }
+                                ]
+                            ]
+                        }
                     }, { 
                         timeout: 10000 // Beri masa 10 saat sebelum timeout
                     });
-                    break; // Kalau berjaya, terus keluar dari loop (berhenti cuba)
+                    break; // Kalau berjaya, terus keluar dari loop
                 } catch (e) {
                     cubaLagi--; // Tolak 1 nyawa
                     if (cubaLagi === 0) {
                         log.debug(() => `[Telegram] Gagal hantar mutlak lepas 3 kali cuba: ${e.message}`);
                     } else {
                         log.debug(() => `[Telegram] Posmen terpelecok (${e.message}). Cuba ketuk lagi dalam 2 saat... (Baki nyawa: ${cubaLagi})`);
-                        await new Promise(res => setTimeout(res, 2000)); // Rehat 2 saat sebelum try lagi
+                        await new Promise(res => setTimeout(res, 2000));
                     }
                 }
             }
