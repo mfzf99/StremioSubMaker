@@ -147,10 +147,11 @@ class GeminiService {
       ? advancedSettings.topP
       : (process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95);
 
-    // Top-K (Omitted by default to unleash dynamic Min-P pruning; active only if manually set)
-    this.topK = advancedSettings.topK !== undefined
+    // Top-K (Abaikan nilai default legasi 40 supaya Min-P dapat beroperasi sepenuhnya secara dinamik)
+    const rawTopK = advancedSettings.topK !== undefined
       ? advancedSettings.topK
       : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K, 10) : undefined);
+    this.topK = (rawTopK === 40 || rawTopK === 0 || !rawTopK) ? undefined : rawTopK;
 
     this.minP = advancedSettings.minP !== undefined
       ? advancedSettings.minP
@@ -254,7 +255,7 @@ class GeminiService {
       presencePenalty: 0.0
     };
 
-    // Attach Top-K only if explicitly defined by user/environment
+    // Attach Top-K only if explicitly defined by user/environment (and not legacy default 40)
     if (this.topK !== undefined && Number.isFinite(this.topK) && this.topK > 0) {
       generationConfig.topK = this.topK;
     }
