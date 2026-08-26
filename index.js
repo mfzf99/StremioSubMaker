@@ -8256,17 +8256,20 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             else if (typeof apiKey !== 'undefined' && apiKey) detectedKeys = [apiKey];
                         }
 
-                        const detectedModel = (typeof usedModel !== 'undefined' && usedModel)
-                            ? usedModel
-                            : ((typeof model !== 'undefined' && model)
-                                ? model
-                                : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite'));
+                        const targetReportText = (typeof teleMsg !== 'undefined' && teleMsg)
+                            ? teleMsg
+                            : ((typeof walletSection !== 'undefined' && walletSection) ? walletSection : '');
+
+                        const engineMatch = String(targetReportText).match(/Engine:[^\w]*([a-zA-Z0-9._-]+)/i);
+                        const detectedModel = (engineMatch && engineMatch[1])
+                            ? engineMatch[1]
+                            : ((typeof usedModel !== 'undefined' && usedModel)
+                                ? usedModel
+                                : ((typeof model !== 'undefined' && model)
+                                    ? model
+                                    : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite')));
 
                         let detectedWalletUSD = 0;
-                        const targetReportText = (typeof teleMsg !== 'undefined' && teleMsg) 
-                            ? teleMsg 
-                            : ((typeof walletSection !== 'undefined' && walletSection) ? walletSection : '');
-                        
                         const walletMatch = String(targetReportText).match(/Wallet Balance:[^\$]*\$([0-9.]+)/i);
                         if (walletMatch && walletMatch[1]) {
                             detectedWalletUSD = parseFloat(walletMatch[1]);
