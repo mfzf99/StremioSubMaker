@@ -8254,7 +8254,6 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             if (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys)) detectedKeys = geminiApiKeys;
                             else if (typeof geminiApiKey !== 'undefined' && geminiApiKey) detectedKeys = [geminiApiKey];
                             else if (typeof apiKey !== 'undefined' && apiKey) detectedKeys = [apiKey];
-                            else if (typeof apiKeys !== 'undefined' && Array.isArray(apiKeys)) detectedKeys = apiKeys;
                         }
 
                         const detectedModel = (typeof usedModel !== 'undefined' && usedModel)
@@ -8264,19 +8263,23 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                 : (typeof config !== 'undefined' && config?.geminiModel ? config.geminiModel : 'gemini-3.1-flash-lite'));
 
                         let detectedWalletUSD = 0;
-                        const possibleWallets = [
-                            typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
-                            typeof walletUSD !== 'undefined' ? walletUSD : null,
-                            typeof balanceUsd !== 'undefined' ? balanceUsd : null,
-                            typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null,
-                            typeof crazyBalance !== 'undefined' ? crazyBalance : null,
-                            typeof walletBalance !== 'undefined' ? walletBalance : null,
-                            typeof balance !== 'undefined' ? balance : null
-                        ];
-                        for (const pw of possibleWallets) {
-                            if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
-                                detectedWalletUSD = parseFloat(pw);
-                                break;
+                        const targetText = typeof message !== 'undefined' ? message : (typeof text !== 'undefined' ? text : (typeof reportMsg !== 'undefined' ? reportMsg : ''));
+                        const walletRegexMatch = String(targetText).match(/Wallet Balance:[^\$]*\$([0-9.]+)/i);
+                        
+                        if (walletRegexMatch && walletRegexMatch[1]) {
+                            detectedWalletUSD = parseFloat(walletRegexMatch[1]);
+                        } else {
+                            const possibleWallets = [
+                                typeof crazyWalletUSD !== 'undefined' ? crazyWalletUSD : null,
+                                typeof walletUSD !== 'undefined' ? walletUSD : null,
+                                typeof balanceUsd !== 'undefined' ? balanceUsd : null,
+                                typeof walletBalanceUSD !== 'undefined' ? walletBalanceUSD : null
+                            ];
+                            for (const pw of possibleWallets) {
+                                if (pw !== null && pw !== undefined && !isNaN(parseFloat(pw)) && parseFloat(pw) > 0) {
+                                    detectedWalletUSD = parseFloat(pw);
+                                    break;
+                                }
                             }
                         }
 
