@@ -8247,6 +8247,16 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                     ? geminiApiKeys
                                     : [];
 
+                        const currentUsedModel = typeof usedModel !== 'undefined'
+                            ? usedModel
+                            : (typeof model !== 'undefined' ? model : 'gemini-3.1-flash-lite');
+
+                        const currentWalletUSD = (typeof crazyWalletUSD !== 'undefined' && crazyWalletUSD !== null)
+                            ? Number(crazyWalletUSD)
+                            : ((typeof walletUSD !== 'undefined' && walletUSD !== null)
+                                ? Number(walletUSD)
+                                : ((typeof walletBalanceUSD !== 'undefined' && walletBalanceUSD !== null) ? Number(walletBalanceUSD) : 0));
+
                         let subRegistryId = null;
                         try {
                             subRegistryId = await registerCompletedSubtitle({
@@ -8254,7 +8264,9 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                 provider: sourceProv,
                                 targetLang: targetLangName || targetLanguage,
                                 keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`],
-                                apiKeys: activeApiKeys
+                                apiKeys: activeApiKeys,
+                                model: currentUsedModel,
+                                walletBalanceUSD: currentWalletUSD
                             });
                         } catch (regErr) {
                             log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
