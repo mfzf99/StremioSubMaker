@@ -8214,6 +8214,15 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             sourceFileId: `xembed:${safeVideoHash}:${safeTrackId}`
                         });
 
+                        // Daftarkan ke dalam registry Redis untuk xEmbed & butang padam
+                        const { registerCompletedSubtitle } = require('./src/services/telegramBot');
+                        const subRegistryId = await registerCompletedSubtitle({
+                            title: movieTitle,
+                            provider: sourceProv,
+                            targetLang: targetLangName || 'MAY',
+                            keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`]
+                        });
+
                         let cubaLagi = 3;
                         while (cubaLagi > 0) {
                             try {
@@ -8226,7 +8235,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                                             [
                                                 {
                                                     text: '🗑️ Padam Subtitle Ini (Cache)',
-                                                    callback_data: `del:${deleteToken}`
+                                                    callback_data: subRegistryId ? `del_reg:${subRegistryId}:1` : 'done'
                                                 }
                                             ]
                                         ]
