@@ -15,7 +15,6 @@ const GEMINI_LOG_INTERVAL_MS = parseInt(process.env.GEMINI_CONFIG_LOG_INTERVAL_M
 let lastGeminiConfigLog = 0;
 let suppressedGeminiConfigLogs = 0;
 
-// Maximum number of Gemini API keys allowed in rotation (configurable via env, default 5)
 const MAX_GEMINI_API_KEYS = parseInt(process.env.MAX_GEMINI_API_KEYS, 10) || Infinity;
 
 function parseLanguageLimit(envVar, fallback, min = 1, max = 50) {
@@ -41,15 +40,15 @@ function getDeepSeekDefaultMaxOutputTokens(modelName) {
 
 const PROVIDER_PARAMETER_DEFAULTS = {
   openai: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
     translationTimeout: 60,
     maxRetries: 2,
-    reasoningEffort: undefined // undefined = omit from API request (default behavior)
+    reasoningEffort: undefined
   },
   anthropic: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
     translationTimeout: 60,
@@ -57,22 +56,21 @@ const PROVIDER_PARAMETER_DEFAULTS = {
     thinkingBudget: 0
   },
   xai: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
     translationTimeout: 60,
     maxRetries: 2
   },
   deepseek: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
-    // deepseek-chat rejects max_tokens > 8192 (returns HTTP 400)
     maxOutputTokens: 8192,
     translationTimeout: 60,
     maxRetries: 2
   },
   deepl: {
-    temperature: 0, // Not used by DeepL, kept for UI consistency
+    temperature: 0,
     topP: 1,
     maxOutputTokens: 32768,
     translationTimeout: 60,
@@ -82,21 +80,21 @@ const PROVIDER_PARAMETER_DEFAULTS = {
     preserveFormatting: true
   },
   mistral: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
     translationTimeout: 60,
     maxRetries: 2
   },
   cfworkers: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.9,
     maxOutputTokens: 32768,
     translationTimeout: 60,
     maxRetries: 2
   },
   openrouter: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
     translationTimeout: 60,
@@ -110,10 +108,10 @@ const PROVIDER_PARAMETER_DEFAULTS = {
     maxRetries: 2
   },
   custom: {
-    temperature: 0.4,
+    temperature: 0.2,
     topP: 0.95,
     maxOutputTokens: 32768,
-    translationTimeout: 120,  // Higher for local models
+    translationTimeout: 120,
     maxRetries: 2
   }
 };
@@ -127,7 +125,6 @@ function sanitizeProviderNumber(value, fallback, min, max) {
 }
 
 function sanitizeReasoningEffort(value, fallback) {
-  // Allow empty string to explicitly disable reasoning effort
   if (value === '' || value === null || value === undefined) {
     return undefined;
   }
@@ -156,7 +153,7 @@ function mergeProviderParameters(defaults, incoming) {
       topP: sanitizeProviderNumber(raw?.topP, base.topP, 0, 1),
       maxOutputTokens: Math.max(1, sanitizeProviderNumber(raw?.maxOutputTokens, base.maxOutputTokens, 1, 200000)),
       translationTimeout: Math.max(5, sanitizeProviderNumber(raw?.translationTimeout, base.translationTimeout, 5, 720)),
-      maxRetries: Math.max(0, Math.min(5, parseInt(raw?.maxRetries) || base.maxRetries || 0)),
+      maxRetries: Math.max(0, Math.min(5, parseInt(raw?.maxRetries, 10) || base.maxRetries || 0)),
       reasoningEffort: sanitizeReasoningEffort(raw?.reasoningEffort, base.reasoningEffort),
       thinkingBudget: (() => {
         const requested = Number.isFinite(parseInt(raw?.thinkingBudget, 10))
@@ -208,18 +205,14 @@ function logGeminiConfigThrottled(mergedConfig) {
     ? `${effectiveModel} (base=${baseModel || 'default'}, override=${overrideModel})`
     : effectiveModel;
   const suffix = suppressed > 0 ? ` (suppressed ${suppressed} duplicate logs)` : '';
-  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topK=${mergedConfig.advancedSettings.topK}, topP=${mergedConfig.advancedSettings.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
+  const topKDisplay = mergedConfig.advancedSettings?.topK !== undefined ? mergedConfig.advancedSettings.topK : 'disabled (Min-P Active)';
+  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topK=${topKDisplay}, topP=${mergedConfig.advancedSettings.topP}, minP=${mergedConfig.advancedSettings.minP}, repPenalty=${mergedConfig.advancedSettings.repetitionPenalty}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
 }
 
 function getDefaultProviderParameters() {
   return JSON.parse(JSON.stringify(PROVIDER_PARAMETER_DEFAULTS));
 }
 
-/**
- * Feature flag: Override deprecated/old model names with current default
- * Set to false in the future to allow users to select any model they want
- * Currently enabled to ensure all users get the latest stable model
- */
 const OVERRIDE_DEPRECATED_MODELS = true;
 const GEMINI_31_FLASH_LITE_MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_FLASH_LATEST_MODEL = 'gemini-flash-latest';
@@ -239,26 +232,16 @@ function normalizeGeminiModelName(modelName) {
   return normalized;
 }
 
-/**
- * List of deprecated model names that should be replaced with the current default
- * This prevents old saved configs from using outdated or experimental models
- */
 const DEPRECATED_MODEL_NAMES = [
   'gemini-2.0-flash-exp',
-  'gemini-2.5-flash-lite-09-2025', // Old name before preview version
+  'gemini-2.5-flash-lite-09-2025',
   GEMINI_FLASH_LATEST_MODEL,
   'gemini-2.5-flash-latest',
   'gemini-pro-latest',
   'gemini-2.5-pro-latest',
-  'gemini-2.5-flash-preview-09-2025' // Renamed to gemini-2.5-flash
+  'gemini-2.5-flash-preview-09-2025'
 ];
 
-/**
- * Parse configuration from config string or session token
- * @param {string} configStr - Base64 encoded config string OR session token
- * @param {Object} options - Options { allowBase64: boolean }
- * @returns {Promise<Object>} - Parsed configuration
- */
 async function parseConfig(configStr, options = {}) {
   try {
     if (!configStr) {
@@ -266,11 +249,9 @@ async function parseConfig(configStr, options = {}) {
     }
 
     const allowBase64 = options.allowBase64 === true || process.env.ALLOW_BASE64_CONFIG === 'true';
-    // Check if this is a session token (32 hex chars) or base64 config
     const isSessionToken = /^[a-f0-9]{32}$/.test(configStr);
 
     if (isSessionToken) {
-      // Try to get config from session (now with Redis fallback)
       const sessionManager = getSessionManager();
       const config = await sessionManager.getSession(configStr);
 
@@ -280,18 +261,15 @@ async function parseConfig(configStr, options = {}) {
       } else {
         log.warn(() => `[Config] Session token not found: ${configStr}`);
         const defaultConfig = getDefaultConfig();
-        // Mark this config as having a session token error so handlers can show appropriate error messages
         defaultConfig.__sessionTokenError = true;
         return defaultConfig;
       }
     }
 
-    // Allow legacy base64 configs only when explicitly enabled
     if (allowBase64) {
       return parseBase64Config(configStr);
     }
 
-    // Production mode: reject base64 configs
     log.warn(() => '[Config] Base64 configs not allowed in production mode. Use session tokens.');
     return getDefaultConfig();
 
@@ -304,11 +282,6 @@ async function parseConfig(configStr, options = {}) {
   }
 }
 
-/**
- * Normalize base64/base64url strings by restoring standard characters and padding
- * @param {string} input - Base64 or base64url string
- * @returns {string} - Normalized base64 string
- */
 function normalizeBase64Input(input) {
   if (!input || typeof input !== 'string') return input;
   let normalized = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -319,14 +292,8 @@ function normalizeBase64Input(input) {
   return normalized;
 }
 
-/**
- * Parse base64 encoded configuration (legacy method)
- * @param {string} configStr - Base64 encoded config string
- * @returns {Object} - Parsed configuration
- */
 function parseBase64Config(configStr) {
   try {
-    // Express automatically URL-decodes path params, so we can decode base64 directly
     let decoded;
     try {
       const normalized = normalizeBase64Input(configStr);
@@ -337,7 +304,6 @@ function parseBase64Config(configStr) {
       return getDefaultConfig();
     }
 
-    // Check if decoded string looks like JSON (should start with { or [)
     const trimmed = decoded.trim();
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
       log.error(() => '[Config] Decoded content does not look like JSON');
@@ -361,11 +327,6 @@ function parseBase64Config(configStr) {
   }
 }
 
-/**
- * Remove UI-only/fake language entries and normalize common variants
- * @param {Array} list - Array of language codes
- * @returns {Array} - Sanitized list (deduped, lowercased)
- */
 function sanitizeLanguages(list) {
   if (!Array.isArray(list)) return [];
 
@@ -435,32 +396,21 @@ function normalizeApiKeySubtitleProvider(mergedConfig, rawConfig, providerKey) {
   }
 }
 
-/**
- * Normalize and merge config with defaults
- * @param {Object} config - User configuration
- * @returns {Object} - Normalized configuration
- */
 function normalizeConfig(config) {
-  // Migrate old config format to new format (backward compatibility)
   if (config.opensubtitlesApiKey && !config.subtitleProviders) {
     log.debug(() => '[Config] Migrating old config format to new format');
     config = migrateOldConfig(config);
   }
 
-  // Determine the model to use (from config or default)
   const configModel = normalizeGeminiModelName(config.geminiModel || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
-
-  // Get model-specific defaults based on the selected model
   const defaults = getDefaultConfig(configModel);
   const mergedConfig = {
     ...defaults,
     ...config,
-    // Deep merge subtitle providers to preserve individual provider settings
     subtitleProviders: {
       ...defaults.subtitleProviders,
       ...(config.subtitleProviders || {})
     },
-    // Deep merge translation cache settings
     translationCache: {
       ...defaults.translationCache,
       ...(config.translationCache || {})
@@ -478,12 +428,10 @@ function normalizeConfig(config) {
       defaults.providerParameters,
       config.providerParameters || {}
     ),
-    // Deep merge bypass cache settings (support old tempCache name for backward compatibility)
     bypassCacheConfig: {
       ...defaults.bypassCacheConfig,
       ...(config.bypassCacheConfig || config.tempCache || {})
     },
-    // Deep merge advanced settings to preserve environment variable defaults
     advancedSettings: {
       ...defaults.advancedSettings,
       ...(config.advancedSettings || {})
@@ -498,10 +446,6 @@ function normalizeConfig(config) {
   normalizeApiKeySubtitleProvider(mergedConfig, config, 'subsource');
   normalizeApiKeySubtitleProvider(mergedConfig, config, 'subsro');
 
-  // Model-aware default for DeepSeek max output tokens:
-  // - deepseek-chat: 8k
-  // - deepseek-reasoner: 64k
-  // Keep explicit user overrides untouched.
   const rawProviderParams = config.providerParameters || {};
   const deepseekInputKey = Object.keys(rawProviderParams).find(k => String(k).toLowerCase() === 'deepseek');
   const deepseekInput = deepseekInputKey ? rawProviderParams[deepseekInputKey] : null;
@@ -515,10 +459,8 @@ function normalizeConfig(config) {
     mergedConfig.providerParameters.deepseek.maxOutputTokens = getDeepSeekDefaultMaxOutputTokens(deepseekModel);
   }
 
-  // Force Learn Mode placement to top-of-screen now that the UI no longer exposes this toggle
   mergedConfig.learnPlacement = 'top';
 
-  // Strip out UI-only/fake languages that might have been saved accidentally
   mergedConfig.sourceLanguages = sanitizeLanguages(mergedConfig.sourceLanguages);
   mergedConfig.targetLanguages = sanitizeLanguages(mergedConfig.targetLanguages);
   mergedConfig.noTranslationLanguages = sanitizeLanguages(mergedConfig.noTranslationLanguages);
@@ -528,7 +470,6 @@ function normalizeConfig(config) {
     return lang || 'en';
   })();
 
-  // Enforce language selection limits (configurable via env)
   const { maxSourceLanguages, maxTargetLanguages, maxNoTranslationLanguages } = getLanguageSelectionLimits();
   if (mergedConfig.sourceLanguages.length > maxSourceLanguages) {
     mergedConfig.sourceLanguages = mergedConfig.sourceLanguages.slice(0, maxSourceLanguages);
@@ -555,7 +496,6 @@ function normalizeConfig(config) {
   mergedConfig.targetLanguages = trimmedTargets;
   mergedConfig.learnTargetLanguages = trimmedLearns;
 
-  // Normalize key toggles early so downstream logic always sees booleans
   const legacyToolboxEnabled = mergedConfig.fileTranslationEnabled === true || mergedConfig.syncSubtitlesEnabled === true;
   mergedConfig.subToolboxEnabled = mergedConfig.subToolboxEnabled === true || legacyToolboxEnabled;
   mergedConfig.fileTranslationEnabled = mergedConfig.subToolboxEnabled === true;
@@ -564,40 +504,25 @@ function normalizeConfig(config) {
   mergedConfig.multiProviderEnabled = mergedConfig.multiProviderEnabled === true;
   mergedConfig.excludeHearingImpairedSubtitles = mergedConfig.excludeHearingImpairedSubtitles === true;
   mergedConfig.forceSRTOutput = mergedConfig.forceSRTOutput === true;
-  // ASS/SSA conversion enabled by default (backwards compatible) - only disabled when explicitly set to false
-  // When forceSRTOutput is true, ASS conversion is always enabled (SRT output requires conversion)
   mergedConfig.convertAssToVtt = mergedConfig.forceSRTOutput === true || mergedConfig.convertAssToVtt !== false;
-  // When ASS passthrough is active, force no URL extension to avoid extension/payload mismatch
-  // (Stremio would request .srt but receive ASS content — this causes player confusion)
   if (mergedConfig.convertAssToVtt === false) {
     mergedConfig.urlExtensionTest = 'none';
   }
-  // URL extension test mode: validate and default to 'srt'
-  // Valid values:
-  // - 'srt' (default)
-  // - 'sub' (Option A)
-  // - 'none' (Option B)
-  // - 'resolve' (Option C: resolver URL that redirects to detected typed URL)
+
   const validExtensions = ['srt', 'sub', 'none', 'resolve'];
   mergedConfig.urlExtensionTest = validExtensions.includes(mergedConfig.urlExtensionTest)
     ? mergedConfig.urlExtensionTest
     : 'srt';
-  // Android subtitle compatibility mode (dev mode only)
-  // - 'off': default behavior
-  // - 'safe': encoded URL segments + typed .srt URLs for subtitle entries
-  // - 'aggressive': safe + skip cache-buster redirects for subtitle routes + stricter SRT headers
+
   const validAndroidCompatModes = ['off', 'safe', 'aggressive'];
   const normalizedAndroidCompatMode = String(mergedConfig.androidSubtitleCompatMode || '').toLowerCase();
   mergedConfig.androidSubtitleCompatMode = validAndroidCompatModes.includes(normalizedAndroidCompatMode)
     ? normalizedAndroidCompatMode
     : 'off';
-  // Season packs enabled by default (backwards compatible) - only disabled when explicitly set to false
+
   mergedConfig.enableSeasonPacks = mergedConfig.enableSeasonPacks !== false;
-  // Deduplication is enabled by default (only disabled if explicitly set to false)
   mergedConfig.deduplicateSubtitles = mergedConfig.deduplicateSubtitles !== false;
 
-  // Normalize subtitle provider timeout (min: 8s, max: 30s, default: 12s)
-  // Use 12s as fallback for backwards compatibility with old sessions without this setting
   const rawTimeout = parseInt(mergedConfig.subtitleProviderTimeout, 10);
   mergedConfig.subtitleProviderTimeout = Number.isFinite(rawTimeout)
     ? Math.max(8, Math.min(30, rawTimeout))
@@ -615,23 +540,20 @@ function normalizeConfig(config) {
     translationWorkflow: (() => {
       const val = String(advSettings.translationWorkflow || '').toLowerCase();
       if (['original', 'ai', 'xml', 'json'].includes(val)) return val;
-      // Backward compat: enableJsonOutput + non-ai workflow → 'json'
       if (advSettings.enableJsonOutput === true) return 'json';
-      // Backward compat: if sendTimestampsToAI was true, map to 'ai'
       if (advSettings.sendTimestampsToAI === true) return 'ai';
       return 'xml';
     })(),
-    enableJsonOutput: advSettings.enableJsonOutput === true, // kept for one version (backward compat)
+    enableJsonOutput: advSettings.enableJsonOutput === true,
     mismatchRetries: (() => {
-      const val = parseInt(advSettings.mismatchRetries);
+      const val = parseInt(advSettings.mismatchRetries, 10);
       return Number.isFinite(val) ? Math.max(0, Math.min(3, val)) : 3;
     })()
   };
 
-  // Parallel batches parsing
   mergedConfig.parallelBatchesEnabled = mergedConfig.parallelBatchesEnabled === true;
   mergedConfig.parallelBatchesCount = (() => {
-    const val = parseInt(mergedConfig.parallelBatchesCount);
+    const val = parseInt(mergedConfig.parallelBatchesCount, 10);
     return Number.isFinite(val) ? Math.max(1, Math.min(5, val)) : 3;
   })();
 
@@ -639,24 +561,14 @@ function normalizeConfig(config) {
     mergedConfig.noTranslationLanguages = mergedConfig.noTranslationLanguages.slice(0, maxNoTranslationLanguages);
   }
 
-  // Normalize Gemini API key rotation fields
   mergedConfig.geminiKeyRotationEnabled = mergedConfig.geminiKeyRotationEnabled === true;
 
-  /**
-   * Detect if a value appears to still be encrypted (decryption failed due to key mismatch)
-   * Encrypted values have format: 1:base64:base64:base64 (version:iv:authTag:ciphertext)
-   * @param {any} value - The value to check
-   * @returns {boolean} - True if the value looks like it's still encrypted
-   */
   const looksEncrypted = (value) => {
     if (!value || typeof value !== 'string') return false;
     const parts = value.split(':');
-    // Our encryption format: version:iv:authTag:ciphertext where version is "1"
     return parts.length === 4 && parts[0] === '1';
   };
 
-  // Sanitize geminiApiKeys array: trim whitespace, remove empty strings, dedupe, enforce max limit
-  // Also detect and remove encrypted keys that failed to decrypt
   const rawKeys = Array.isArray(mergedConfig.geminiApiKeys) ? mergedConfig.geminiApiKeys : [];
   const seenKeys = new Set();
   const sanitizedKeys = [];
@@ -665,11 +577,10 @@ function normalizeConfig(config) {
     const trimmed = typeof key === 'string' ? key.trim() : '';
     if (!trimmed) continue;
 
-    // Check if this key still looks encrypted (decryption failed)
     if (looksEncrypted(trimmed)) {
       encryptedGeminiKeysDetected = true;
       log.warn(() => `[Config] Gemini API key appears to still be encrypted (decryption failed). Skipping this key.`);
-      continue; // Skip encrypted keys
+      continue;
     }
 
     if (!seenKeys.has(trimmed)) {
@@ -679,17 +590,14 @@ function normalizeConfig(config) {
     }
   }
 
-  // Also check the single geminiApiKey
   const rawSingleKey = typeof mergedConfig.geminiApiKey === 'string' ? mergedConfig.geminiApiKey.trim() : '';
   if (rawSingleKey && looksEncrypted(rawSingleKey)) {
     encryptedGeminiKeysDetected = true;
     log.warn(() => `[Config] Gemini API key (single) appears to still be encrypted (decryption failed). Clearing it.`);
-    mergedConfig.geminiApiKey = ''; // Clear the unusable encrypted key
+    mergedConfig.geminiApiKey = '';
   }
 
-  // Set a flag if any API keys failed to decrypt
   if (encryptedGeminiKeysDetected) {
-    mergedConfig.__credentialDecryptionFailed = mergedConfig.__credentialDecryptionFailed || false;
     mergedConfig.__credentialDecryptionFailed = true;
     mergedConfig.__credentialDecryptionFailedFields = mergedConfig.__credentialDecryptionFailedFields || [];
     if (!mergedConfig.__credentialDecryptionFailedFields.includes('geminiApiKey')) {
@@ -697,7 +605,6 @@ function normalizeConfig(config) {
     }
   }
 
-  // Migration: if geminiApiKeys is empty but geminiApiKey exists, seed the array
   const singleKey = typeof mergedConfig.geminiApiKey === 'string' ? mergedConfig.geminiApiKey.trim() : '';
   if (sanitizedKeys.length === 0 && singleKey) {
     sanitizedKeys.push(singleKey);
@@ -705,52 +612,41 @@ function normalizeConfig(config) {
 
   mergedConfig.geminiApiKeys = sanitizedKeys;
 
-  // Backward compat: keep geminiApiKey synced to first non-empty key from array
-  // This ensures legacy code paths still work
   if (mergedConfig.geminiKeyRotationEnabled && sanitizedKeys.length > 0) {
     mergedConfig.geminiApiKey = sanitizedKeys[0];
   } else if (!singleKey && sanitizedKeys.length > 0) {
-    // If user cleared single key but has array, use first from array
     mergedConfig.geminiApiKey = sanitizedKeys[0];
   } else {
     mergedConfig.geminiApiKey = singleKey;
   }
 
-  // Normalize rotation mode - only allow valid values
   const validRotationModes = ['per-request', 'per-batch'];
   if (!validRotationModes.includes(mergedConfig.geminiKeyRotationMode)) {
     mergedConfig.geminiKeyRotationMode = 'per-batch';
   }
 
-  // If geminiModel is empty/null, use defaults (respects .env)
   if (!mergedConfig.geminiModel || mergedConfig.geminiModel.trim() === '') {
     mergedConfig.geminiModel = defaults.geminiModel;
   } else {
     mergedConfig.geminiModel = normalizeGeminiModelName(mergedConfig.geminiModel);
   }
 
-  // Override deprecated model names with current default (if feature flag enabled)
-  // TO RE-ENABLE USER MODEL SELECTION: Set OVERRIDE_DEPRECATED_MODELS = false at top of file
   if (OVERRIDE_DEPRECATED_MODELS && mergedConfig.geminiModel && DEPRECATED_MODEL_NAMES.includes(mergedConfig.geminiModel)) {
     const replacementModel = normalizeGeminiModelName(process.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL;
     log.debug(() => `[Config] Overriding deprecated model '${mergedConfig.geminiModel}' with default '${replacementModel}'`);
     mergedConfig.geminiModel = replacementModel;
   }
 
-  // Enforce permanent disk caching regardless of client config
   mergedConfig.translationCache.enabled = true;
   mergedConfig.translationCache.persistent = true;
   mergedConfig.translationCache.duration = 0;
 
-  // If user disabled main caching in UI, interpret as bypass mode
   if (config.translationCache && config.translationCache.enabled === false) {
     mergedConfig.bypassCache = true;
   }
 
-  // Normalize bypass flag
   mergedConfig.bypassCache = mergedConfig.bypassCache === true;
 
-  // Normalize multi-provider settings
   mergedConfig.multiProviderEnabled = mergedConfig.multiProviderEnabled === true;
   mergedConfig.mainProvider = mergedConfig.multiProviderEnabled ? (mergedConfig.mainProvider || 'gemini') : 'gemini';
   mergedConfig.mainProvider = String(mergedConfig.mainProvider || 'gemini').toLowerCase();
@@ -797,7 +693,6 @@ function normalizeConfig(config) {
     }
   }
 
-  // Normalize auto-subs defaults and feature flags
   const allowedAutoModes = new Set(['cloudflare', 'assemblyai', 'local']);
   const requestedMode = (mergedConfig.autoSubs?.defaultMode || defaults.autoSubs.defaultMode || 'cloudflare')
     .toString()
@@ -857,7 +752,6 @@ function normalizeConfig(config) {
     }
   }
 
-  // Only keep multi-provider mode enabled when a non-Gemini main OR a fallback is active
   const hasActiveMultiProvider = mergedConfig.multiProviderEnabled && (
     mergedConfig.mainProvider !== 'gemini' || mergedConfig.secondaryProviderEnabled
   );
@@ -867,7 +761,6 @@ function normalizeConfig(config) {
     mergedConfig.secondaryProvider = '';
   }
 
-  // Force bypass cache when experimental/one-off modes are enabled to avoid polluting shared cache
   const bypassReasons = [];
   if (mergedConfig.advancedSettings.enabled) bypassReasons.push('advanced-settings');
   if (mergedConfig.parallelBatchesEnabled === true) bypassReasons.push('parallel-batches');
@@ -877,38 +770,26 @@ function normalizeConfig(config) {
     mergedConfig.bypassCache = true;
   }
 
-  // Ensure bypass cache config mirrors bypass flag and clamp duration to max 12h
   mergedConfig.bypassCacheConfig = mergedConfig.bypassCacheConfig || {};
   mergedConfig.bypassCacheConfig.enabled = mergedConfig.bypassCache === true;
   const bypassDur = Number(mergedConfig.bypassCacheConfig.duration);
   mergedConfig.bypassCacheConfig.duration = (Number.isFinite(bypassDur) && bypassDur > 0) ? Math.min(12, bypassDur) : 12;
-
-  // Keep old tempCache for backward compatibility
   mergedConfig.tempCache = mergedConfig.bypassCacheConfig;
-
-  // Normalize mobile mode flag
   mergedConfig.mobileMode = mergedConfig.mobileMode === true;
 
-  // Show all Gemini API configs that will be used (throttled to avoid spam on polling endpoints)
   logGeminiConfigThrottled(mergedConfig);
 
-  // Guardrail: if OpenSubtitles Auth is selected without credentials, fall back to V3 to avoid runtime auth errors
   const openSubConfig = mergedConfig.subtitleProviders?.opensubtitles;
   if (openSubConfig) {
-    // Note: looksEncrypted() is already defined above for Gemini API key detection
-
     const normalizeCredential = (value) => {
       if (value === undefined || value === null) return '';
-      // Accept non-string values but always coerce to string to prevent trim() type errors
       const normalized = String(value).trim();
-      // Extra safeguard: reject values that look like failed JSON serialization
       if (normalized === '[object Object]' || normalized === '[object Array]') {
         log.warn(() => `[Config] OpenSubtitles credential appears to be a serialized object, clearing it`);
         return '';
       }
       return normalized;
     };
-    // Normalize implementation type for legacy configs (default to v3)
     const impl = typeof openSubConfig.implementationType === 'string'
       ? openSubConfig.implementationType.trim().toLowerCase()
       : '';
@@ -916,52 +797,32 @@ function normalizeConfig(config) {
     openSubConfig.username = normalizeCredential(openSubConfig.username);
     openSubConfig.password = normalizeCredential(openSubConfig.password);
 
-    // Check if credentials appear to still be encrypted (decryption failed due to key mismatch between server instances)
-    // This can happen when:
-    // 1. User is on a multi-pod deployment (e.g., ElfHosted) with inconsistent encryption keys
-    // 2. The encryption key was rotated/lost
-    // 3. Session was created on a different server instance
     const usernameStillEncrypted = looksEncrypted(openSubConfig.username);
     const passwordStillEncrypted = looksEncrypted(openSubConfig.password);
 
     if (usernameStillEncrypted || passwordStillEncrypted) {
-      log.warn(() => `[Config] OpenSubtitles credentials appear to still be encrypted (decryption failed). ` +
-        `This usually indicates an encryption key mismatch between server instances. ` +
-        `Falling back to V3 mode. User should re-enter their credentials.`);
-
-      // Clear the encrypted credentials since they're unusable
+      log.warn(() => `[Config] OpenSubtitles credentials appear to still be encrypted (decryption failed). Falling back to V3 mode.`);
       openSubConfig.username = '';
       openSubConfig.password = '';
-
-      // Force V3 mode
       openSubConfig.implementationType = 'v3';
-
-      // Set a flag so the UI can show a helpful message instead of the generic "session token error"
       mergedConfig.__credentialDecryptionFailed = true;
       const credentialFailureFields = new Set(mergedConfig.__credentialDecryptionFailedFields || []);
       if (usernameStillEncrypted) credentialFailureFields.add('opensubtitles.username');
       if (passwordStillEncrypted) credentialFailureFields.add('opensubtitles.password');
       mergedConfig.__credentialDecryptionFailedFields = Array.from(credentialFailureFields);
-
       mergedConfig.subtitleProviders.opensubtitles = openSubConfig;
     }
 
     const wantsAuth = openSubConfig.implementationType === 'auth';
     const missingCreds = !openSubConfig.username || !openSubConfig.password;
     if (wantsAuth && missingCreds) {
-      // Only log once - set flag to persist this fix to the session
-      // The caller (resolveConfigAsync) will persist the corrected config and clear this flag
-      log.warn(() => '[Config] OpenSubtitles Auth selected without credentials; switching to V3 (no login required). This will be persisted to avoid future warnings.');
-      // Preserve the username/password fields even when switching to V3 so they're not lost
+      log.warn(() => '[Config] OpenSubtitles Auth selected without credentials; switching to V3 (no login required).');
       mergedConfig.subtitleProviders.opensubtitles = {
         ...openSubConfig,
         implementationType: 'v3',
-        // Keep username/password in config even when using V3, so user can switch back to Auth without re-entering
         username: openSubConfig.username,
         password: openSubConfig.password
       };
-      // Flag that this config was corrected and should be persisted back to the session
-      // This prevents repeated warnings on every request
       mergedConfig.__needsSessionPersist = true;
       mergedConfig.__persistReason = 'opensubtitles-auth-to-v3';
     }
@@ -1047,17 +908,10 @@ function normalizeConfig(config) {
   return mergedConfig;
 }
 
-/**
- * Migrate old configuration format to new format
- * @param {Object} oldConfig - Old configuration format
- * @returns {Object} - New configuration format
- */
 function migrateOldConfig(oldConfig) {
   const newConfig = { ...oldConfig };
   const defaults = getDefaultConfig();
 
-  // Migrate opensubtitlesApiKey to subtitleProviders structure
-  // Include all providers from defaults to ensure none are missing
   newConfig.subtitleProviders = {
     ...defaults.subtitleProviders,
     opensubtitles: {
@@ -1067,20 +921,12 @@ function migrateOldConfig(oldConfig) {
     }
   };
 
-  // Backfill new provider parameters with defaults
   newConfig.providerParameters = { ...defaults.providerParameters };
-
-  // Remove old field
   delete newConfig.opensubtitlesApiKey;
 
   return newConfig;
 }
 
-/**
- * Encode configuration to base64 string
- * @param {Object} config - Configuration object
- * @returns {string} - Base64 config string
- */
 function encodeConfig(config) {
   try {
     const json = JSON.stringify(config);
@@ -1092,114 +938,105 @@ function encodeConfig(config) {
 }
 
 /**
- * Model-specific default configurations
- * Each model has its own optimal settings for thinking and temperature
+ * Model-specific default configurations (Universal Blueprint Temperature: 0.2)
  */
 const MODEL_SPECIFIC_DEFAULTS = {
   'gemma-3-27b-it': {
-    thinkingBudget: 0,      // Gemma models don't support thinking
+    thinkingBudget: 0,
     thinkingLevel: '',
-    temperature: 0.7        // Balanced temperature for Gemma
+    temperature: 0.2
   },
   'gemini-2.5-flash-lite': {
-    thinkingBudget: 0,      // No thinking for lite model
+    thinkingBudget: 0,
     thinkingLevel: '',
-    temperature: 0.8        // Higher temperature for creativity
+    temperature: 0.2
   },
   'gemini-2.5-flash-lite-preview-09-2025': {
-    thinkingBudget: 0,      // No thinking for lite model
+    thinkingBudget: 0,
     thinkingLevel: '',
-    temperature: 0.8        // Higher temperature for creativity
+    temperature: 0.2
   },
   'gemini-2.5-flash': {
-    thinkingBudget: -1,     // Dynamic thinking for flash model
+    thinkingBudget: -1,
     thinkingLevel: '',
-    temperature: 0.5        // Lower temperature for consistency
+    temperature: 0.2
   },
   'gemini-3-flash-preview': {
-    thinkingBudget: -1,     // Dynamic thinking for flash model
+    thinkingBudget: -1,
     thinkingLevel: 'high',
-    temperature: 0.5        // Lower temperature for consistency
+    temperature: 0.2
   },
   'gemini-3.1-flash-lite': {
-    thinkingBudget: 0,      // No thinking for lite model
+    thinkingBudget: 0,
     thinkingLevel: 'minimal',
-    temperature: 0.8        // Higher temperature for creativity
+    temperature: 0.2
   },
   'gemini-3.5-flash-lite': {
     thinkingBudget: 0,
     thinkingLevel: 'minimal',
-    temperature: 0.8
+    temperature: 0.2
   },
   'gemini-3.5-flash': {
     thinkingBudget: -1,
     thinkingLevel: 'high',
-    temperature: 0.5
+    temperature: 0.2
   },
   'gemini-3.6-flash': {
     thinkingBudget: -1,
     thinkingLevel: 'high',
-    temperature: 0.5
+    temperature: 0.2
   },
   'gemini-3.7-flash': {
     thinkingBudget: -1,
     thinkingLevel: 'high',
-    temperature: 0.5
+    temperature: 0.2
   },
   'gemini-flash-lite-latest': {
-    thinkingBudget: 0,      // No thinking for lite model (latest alias)
+    thinkingBudget: 0,
     thinkingLevel: 'minimal',
-    temperature: 0.8        // Higher temperature for creativity
+    temperature: 0.2
   },
   'gemini-2.5-pro': {
-    thinkingBudget: 1000,   // Fixed thinking budget for pro model
+    thinkingBudget: 1000,
     thinkingLevel: '',
-    temperature: 0.5        // Lower temperature for consistency
+    temperature: 0.2
   },
   'gemini-3.1-pro-preview': {
-    thinkingBudget: 1000,   // Fixed thinking budget for pro model
+    thinkingBudget: 1000,
     thinkingLevel: 'high',
-    temperature: 0.5        // Lower temperature for consistency
+    temperature: 0.2
   }
 };
 
-/**
- * Get model-specific defaults for thinking and temperature
- * @param {string} modelName - The Gemini model name
- * @returns {Object} - Model-specific settings { thinkingBudget, temperature }
- */
 function getModelSpecificDefaults(modelName) {
   const normalized = normalizeGeminiModelName(modelName).toLowerCase();
   const exactDefaults = MODEL_SPECIFIC_DEFAULTS[normalized];
   if (exactDefaults) return { ...exactDefaults };
 
-  // Model discovery can expose newer aliases or dated variants before the
-  // curated UI list is updated. Keep unknown models on their family profile
-  // instead of silently falling back to the Flash-Lite profile.
   const isGemini3 = /^gemini-3(?:[.-]|$)/.test(normalized)
     || /^gemini-(?:flash|flash-lite|pro)-latest$/.test(normalized);
   if (isGemini3 && normalized.includes('flash-lite')) {
-    return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+    return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.2 };
   }
   if (isGemini3 && normalized.includes('flash')) {
-    return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+    return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.2 };
   }
   if (isGemini3 && normalized.includes('pro')) {
-    return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.5 };
+    return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.2 };
   }
   if (normalized.includes('gemma')) {
-    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.7 };
+    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
   }
   if (normalized.includes('flash-lite')) {
-    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
   }
   if (normalized.includes('flash')) {
-    return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
+    return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.2 };
   }
   if (normalized.includes('pro')) {
-    return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
+    return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.2 };
   }
-  return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+  return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
 }
 
 function getEffectiveGeminiModel(config = {}) {
@@ -1212,79 +1049,60 @@ function getEffectiveGeminiModel(config = {}) {
   return baseModel || normalizeGeminiModelName(process.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL;
 }
 
-/**
- * Get default configuration
- * @param {string} modelName - Optional model name to get model-specific defaults
- * @returns {Object} - Default configuration
- */
 function getDefaultConfig(modelName = null) {
-  // Determine the model to use for defaults
-  // Default to the latest Flash Lite alias as the primary fallback model.
   const effectiveModel = normalizeGeminiModelName(modelName || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
   const modelDefaults = getModelSpecificDefaults(effectiveModel);
 
-  // Read advanced settings from environment variables with fallback to model-specific defaults
   const advancedSettings = {
-    maxOutputTokens: parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS) || 65536,
+    maxOutputTokens: parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS, 10) || 65536,
     chunkSize: 12000,
-    translationTimeout: parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT) || 720, // seconds
-    maxRetries: process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES) : 3,
-    // When enabled, trust the AI to return timestamps for each batch instead of reusing originals
+    translationTimeout: parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT, 10) || 720,
+    maxRetries: process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES, 10) : 3,
     sendTimestampsToAI: process.env.SEND_TIMESTAMPS_TO_AI === 'true',
-    // Translation workflow: 'original' (numbered list), 'ai' (send timestamps), 'xml' (XML-tagged), 'json' (structured JSON I/O)
     translationWorkflow: process.env.TRANSLATION_WORKFLOW || 'xml',
-    // DEPRECATED: Use translationWorkflow: 'json' instead. Kept for backward compat (auto-migrates in validation).
     enableJsonOutput: process.env.ENABLE_JSON_OUTPUT === 'true',
-    // Extended thinking (priority: .env > model-specific > global default)
     thinkingBudget: process.env.GEMINI_THINKING_BUDGET !== undefined
-      ? parseInt(process.env.GEMINI_THINKING_BUDGET)
+      ? parseInt(process.env.GEMINI_THINKING_BUDGET, 10)
       : modelDefaults.thinkingBudget,
     thinkingLevel: sanitizeGeminiThinkingLevel(process.env.GEMINI_THINKING_LEVEL, modelDefaults.thinkingLevel),
-    // Sampling parameters (priority: .env > model-specific > global default)
+
+    // Advanced Sampling Defaults (Blueprint Optimized)
     temperature: process.env.GEMINI_TEMPERATURE !== undefined
       ? parseFloat(process.env.GEMINI_TEMPERATURE)
       : modelDefaults.temperature,
-    topK: process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 40,
     topP: process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95,
-    // Batch context: Include original surrounding context and previous translations for better coherence
-    // Disabled by default for performance (can be enabled for improved translation quality)
-    enableBatchContext: process.env.ENABLE_BATCH_CONTEXT === 'true' ? true : false,
-    contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE) || 20, // Number of preceding original entries to include as context
-    // Mismatch retries: number of times to retry a batch when AI returns wrong entry count (0-3, default: 1)
-    mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES))) : 3
+    topK: process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K, 10) : undefined,
+    minP: process.env.GEMINI_MIN_P !== undefined ? parseFloat(process.env.GEMINI_MIN_P) : 0.05,
+    repetitionPenalty: process.env.GEMINI_REPETITION_PENALTY !== undefined ? parseFloat(process.env.GEMINI_REPETITION_PENALTY) : 1.05,
+
+    enableBatchContext: process.env.ENABLE_BATCH_CONTEXT === 'true',
+    contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE, 10) || 20,
+    mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES, 10))) : 3
   };
 
-  // UI/results limits
-  // Limit the number of subtitles returned per language in the list to avoid UI slowdown
-  // Clamp to a safe range [1, 50] with default 12
   const envSubsPerLang = parseInt(process.env.MAX_SUBTITLES_PER_LANGUAGE, 10);
   const maxSubtitlesPerLanguage = (Number.isFinite(envSubsPerLang) && envSubsPerLang > 0)
     ? Math.min(50, envSubsPerLang)
     : 12;
 
   return {
-    noTranslationMode: false, // If true, skip translation and just fetch subtitles
-    noTranslationLanguages: [], // Languages to fetch when in no-translation mode
+    noTranslationMode: false,
+    noTranslationLanguages: [],
     sourceLanguages: [],
     targetLanguages: [],
-    // UI language for all addon pages/subtitles
     uiLanguage: process.env.UI_LANGUAGE_DEFAULT || 'en',
-    // Learn Mode: create dual-language WebVTT entries
     learnMode: false,
     learnTargetLanguages: [],
     learnOrder: 'source-top',
-    learnPlacement: 'top', // default: pin top language at top of screen
+    learnPlacement: 'top',
     learnItalic: true,
-    learnItalicTarget: 'target', // 'target' | 'source'
+    learnItalicTarget: 'target',
     geminiApiKey: '',
-    // Gemini API key rotation: allows multiple keys to be cycled for load distribution
     geminiKeyRotationEnabled: false,
-    geminiApiKeys: [], // Array of API keys to rotate through
-    geminiKeyRotationMode: 'per-batch', // 'per-batch' = rotate for each batch , 'per-request' = rotate once per file
-    // --- Advanced Parallel Translation Engine ---
+    geminiApiKeys: [],
+    geminiKeyRotationMode: 'per-batch',
     parallelBatchesEnabled: false,
     parallelBatchesCount: 3,
-    // --------------------------------------------
     assemblyAiApiKey: DEFAULT_API_KEYS.ASSEMBLYAI || '',
     cloudflareWorkersApiKey: DEFAULT_API_KEYS.CF_WORKERS_AUTOSUBS || '',
     otherApiKeysEnabled: true,
@@ -1293,7 +1111,6 @@ function getDefaultConfig(modelName = null) {
       sendFullVideoToAssembly: false,
       assemblySpeechModel: 'universal-3-pro'
     },
-    // Use effective model (from parameter, env variable, or default)
     geminiModel: effectiveModel,
     multiProviderEnabled: false,
     mainProvider: 'gemini',
@@ -1316,8 +1133,8 @@ function getDefaultConfig(modelName = null) {
     subtitleProviders: {
       opensubtitles: {
         enabled: true,
-        username: '', // OpenSubtitles account username (required)
-        password: ''   // OpenSubtitles account password (required)
+        username: '',
+        password: ''
       },
       subdl: {
         enabled: true,
@@ -1341,58 +1158,38 @@ function getDefaultConfig(modelName = null) {
         apiKey: ''
       }
     },
-    // Subtitle provider timeout in seconds (min: 8, max: 30, default: 12)
-    // Controls the maximum time for search/download operations per provider
-    // Individual request timeouts are set 2s below this to allow for orchestration overhead
-    subtitleProviderTimeout: parseInt(process.env.SUBTITLE_PROVIDER_TIMEOUT) || 12,
+    subtitleProviderTimeout: parseInt(process.env.SUBTITLE_PROVIDER_TIMEOUT, 10) || 12,
     translationCache: {
       enabled: true,
-      duration: 0, // hours, 0 = permanent
-      persistent: true // save to disk
+      duration: 0,
+      persistent: true
     },
     bypassCache: false,
     bypassCacheConfig: {
       enabled: true,
       duration: 12
     },
-    tempCache: { // Deprecated: kept for backward compatibility, use bypassCacheConfig instead
+    tempCache: {
       enabled: true,
       duration: 12
     },
-    subToolboxEnabled: false, // unified toolbox entry for file translation, sync, and upcoming tools
-    fileTranslationEnabled: false, // legacy flag (mirrors subToolboxEnabled)
-    syncSubtitlesEnabled: false, // legacy flag (mirrors subToolboxEnabled)
-    // If true, filter out SDH/HI (hearing impaired) subtitles from provider results
+    subToolboxEnabled: false,
+    fileTranslationEnabled: false,
+    syncSubtitlesEnabled: false,
     excludeHearingImpairedSubtitles: false,
-    // If true, include season pack subtitles in results (default: enabled for backwards compatibility)
     enableSeasonPacks: true,
-    // If true, convert all subtitle outputs (VTT, ASS, etc.) to SRT format for maximum player compatibility
     forceSRTOutput: false,
-    // If true, convert ASS/SSA subtitles to VTT format (default: enabled for backwards compatibility)
-    // When false, original ASS/SSA styling is preserved (Stremio supports ASS natively)
     convertAssToVtt: true,
-    // URL extension test mode (dev mode only): 'srt' (default), 'sub' (Option A), 'none' (Option B), 'resolve' (Option C)
-    // Used to test different URL extensions for ASS/SSA subtitle compatibility with Stremio
     urlExtensionTest: 'srt',
-    // Android subtitle compatibility mode (dev mode only): 'off' (default), 'safe', 'aggressive'
     androidSubtitleCompatMode: 'off',
-    mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
-    singleBatchMode: false, // Translate whole file at once (streaming partials)
-    // Minimum size for a subtitle file to be considered valid (bytes)
-    // Prevents attempting to load/translate obviously broken files
+    mobileMode: false,
+    singleBatchMode: false,
     minSubtitleSizeBytes: 200,
-    // Maximum number of subtitles to display per language in Stremio UI
-    // Configurable via env var MAX_SUBTITLES_PER_LANGUAGE (default 12, max 50)
     maxSubtitlesPerLanguage,
     advancedSettings
   };
 }
 
-/**
- * Validate configuration
- * @param {Object} config - Configuration to validate
- * @returns {Object} - Validation result { valid: boolean, errors: Array }
- */
 function validateConfig(config) {
   const errors = [];
   const t = getTranslator(config?.uiLanguage || 'en');
@@ -1412,12 +1209,10 @@ function validateConfig(config) {
     return match ? providers[match] : null;
   };
 
-  // Check if Gemini is properly configured (handles both single key and rotation modes)
   const geminiConfigured = (() => {
     const hasModel = !!getEffectiveGeminiModel(config);
     if (!hasModel) return false;
 
-    // When rotation is enabled, check the keys array
     if (config.geminiKeyRotationEnabled === true) {
       const keys = Array.isArray(config.geminiApiKeys)
         ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim() !== '')
@@ -1425,7 +1220,6 @@ function validateConfig(config) {
       return keys.length > 0;
     }
 
-    // Single key mode
     return !!(config.geminiApiKey && config.geminiApiKey.trim() !== '');
   })();
   const providerIsConfigured = (key) => {
@@ -1448,7 +1242,6 @@ function validateConfig(config) {
     }
   });
 
-  // Main provider must always be fully configured so we have at least one AI provider available
   if (!mainProvider) {
     errors.push(t('validation.mainProviderMissing', {}, 'Main provider must be selected'));
   } else if (mainProvider === 'gemini') {
@@ -1461,7 +1254,6 @@ function validateConfig(config) {
     }
   }
 
-  // Secondary provider requires a second configured provider and explicit selection
   if (multiEnabled && config.secondaryProviderEnabled === true) {
     const secondaryKey = String(config.secondaryProvider || '').toLowerCase();
     if (!secondaryKey) {
@@ -1477,12 +1269,10 @@ function validateConfig(config) {
     }
   }
 
-  // Require at least one configured AI provider overall
   if (configuredProviders.size === 0) {
     errors.push(t('validation.atLeastOneProvider', {}, 'At least one AI provider must be enabled with an API key and model'));
   }
 
-  // When secondary is enabled, ensure we truly have two configured providers (main + fallback)
   if (multiEnabled && config.secondaryProviderEnabled === true && configuredProviders.size < 2) {
     errors.push(t('validation.secondaryTwoProviders', {}, 'Secondary Provider requires two configured AI providers with API keys'));
   }
@@ -1531,12 +1321,6 @@ function validateConfig(config) {
   };
 }
 
-/**
- * Build addon manifest from configuration
- * @param {Object} config - Configuration object
- * @param {string} baseUrl - Base URL of the addon server (optional)
- * @returns {Object} - Stremio addon manifest
- */
 const { version } = require('./version');
 
 function buildManifest(config, baseUrl = '') {
@@ -1629,87 +1413,54 @@ function buildManifest(config, baseUrl = '') {
     version: version,
     name: addonName,
     description: description,
-
     catalogs: [],
     resources: ['subtitles'],
     types: ['movie', 'series', 'anime'],
-    // Do not advertise idPrefixes here: Stremio filters addons client-side with
-    // exact prefix matching, which prevents unsupported IDs from ever reaching
-    // SubMaker and makes request-level debugging impossible.
-
     behaviorHints: {
       configurable: true,
       configurationRequired: false
     },
-
     logo: logo,
     icon: logo,
     background: background,
-
     contactEmail: 'support@submaker.example.com'
   };
 }
 
-// In-memory fallback counters for filesystem mode (keyed by configHash)
 const memoryRotationCounters = new Map();
 
-/**
- * Select a Gemini API key from config using per-user sequential rotation.
- * 
- * When rotation is enabled and there are multiple keys, uses Redis INCR for
- * atomic sequential rotation per user (identified by config hash). This ensures:
- * - Multi-instance safe: Redis stores the shared counter across all instances
- * - Sequential: Each call increments and picks the next key in order
- * - Per-user: Each user has their own independent rotation counter
- * - Resource-light: Single Redis INCR per call (atomic, O(1), negligible cost)
- * 
- * Falls back to in-memory counters per configHash for filesystem mode.
- * 
- * @param {Object} config - Normalized configuration
- * @returns {Promise<string>} - Selected API key (may be empty if none configured)
- */
 async function selectGeminiApiKey(config) {
   if (!config) return '';
 
-  // If rotation is enabled and we have keys in the array
   if (config.geminiKeyRotationEnabled === true) {
     const keys = Array.isArray(config.geminiApiKeys)
       ? config.geminiApiKeys.filter(k => typeof k === 'string' && k.trim() !== '')
       : [];
 
     if (keys.length > 0) {
-      // Get the user's config hash for per-user rotation
       const configHash = config.__configHash || 'default';
       let counter = 0;
 
       try {
-        // Try to use Redis for multi-instance safe rotation
         const StorageFactory = require('../storage/StorageFactory');
         const adapter = await StorageFactory.getStorageAdapter();
 
-        // Check if this is a Redis adapter by checking for the client property
         if (adapter && adapter.client && typeof adapter.client.incr === 'function') {
-          // Use Redis INCR for atomic sequential rotation
           const redisKey = `keyrotation:${configHash}`;
           counter = await adapter.client.incr(redisKey);
-          // Set TTL only on first creation (when counter is 1) to avoid an extra
-          // Redis round-trip on every single request
           if (counter === 1) {
             await adapter.client.expire(redisKey, 86400);
           }
         } else {
-          // Filesystem mode: use in-memory counter per configHash
           counter = (memoryRotationCounters.get(configHash) || 0) + 1;
           memoryRotationCounters.set(configHash, counter);
         }
       } catch (err) {
-        // If Redis fails, fall back to in-memory counter
         log.warn(() => `[Config] Redis key rotation counter failed, using in-memory: ${err.message}`);
         counter = (memoryRotationCounters.get(configHash) || 0) + 1;
         memoryRotationCounters.set(configHash, counter);
       }
 
-      // Sequential round-robin: counter modulo number of keys
       const keyIndex = (counter - 1) % keys.length;
       const selectedKey = keys[keyIndex];
       log.info(() => `[Gemini] Key rotation: using key ${keyIndex + 1} of ${keys.length} (${redactApiKey(selectedKey)})`);
@@ -1717,14 +1468,9 @@ async function selectGeminiApiKey(config) {
     }
   }
 
-  // Fallback to single key
   return config.geminiApiKey || '';
 }
 
-/**
- * Get the maximum number of Gemini API keys allowed
- * @returns {number}
- */
 function getMaxGeminiApiKeys() {
   return MAX_GEMINI_API_KEYS;
 }
@@ -1736,7 +1482,6 @@ module.exports = {
   getModelSpecificDefaults,
   validateConfig,
   buildManifest,
-  // Exported for async token resolution paths in routes
   normalizeConfig,
   getLanguageSelectionLimits,
   getDefaultProviderParameters,
@@ -1744,7 +1489,6 @@ module.exports = {
   getEffectiveGeminiModel,
   normalizeGeminiModelName,
   sanitizeGeminiThinkingLevel,
-  // Gemini key rotation
   selectGeminiApiKey,
   getMaxGeminiApiKeys,
   MAX_GEMINI_API_KEYS
