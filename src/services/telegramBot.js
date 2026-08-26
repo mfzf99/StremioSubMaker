@@ -152,8 +152,8 @@ async function fetchLiveCrazyRouterBalance() {
   return null;
 }
 
-// Analisis Kunci & Pengiraan Kapasiti Dinamik
-function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletBalanceUSD = 0) {
+// Analisis Kunci & Pengiraan Kapasiti Dinamik (Dengan Sokongan Sync Kunci Pool)
+function analyzeKeyList(rawKeys, currentModel = 'gemini-3-flash-preview', walletBalanceUSD = 0, overrideCounts = null) {
   let keyList = [];
   if (Array.isArray(rawKeys)) {
     keyList = rawKeys.filter(k => typeof k === 'string' && k.trim().length > 0);
@@ -161,14 +161,21 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
     keyList = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  const totalKeys = keyList.length;
-  const crazyKeys = keyList.filter(k => k.startsWith('sk-')).length;
-  const googleKeys = totalKeys - crazyKeys;
+  let totalKeys = keyList.length;
+  let crazyKeys = keyList.filter(k => k.startsWith('sk-')).length;
+  let googleKeys = totalKeys - crazyKeys;
+
+  // Guna kiraan rasmi daripada pool pangkalan data jika wujud
+  if (overrideCounts && typeof overrideCounts.totalKeys === 'number' && overrideCounts.totalKeys > 0) {
+    totalKeys = overrideCounts.totalKeys;
+    googleKeys = typeof overrideCounts.googleKeys === 'number' ? overrideCounts.googleKeys : (totalKeys - (overrideCounts.crazyKeys || 0));
+    crazyKeys = typeof overrideCounts.crazyKeys === 'number' ? overrideCounts.crazyKeys : 0;
+  }
 
   const spec = getModelSpec(currentModel);
   const batchesPerEp = Math.ceil(1200 / spec.batchSize);
 
-  // 1. Kapasiti Google Direct (Kuota 500 RPD)
+  // 1. Kapasiti Google Direct (Kuota 500 RPD per key)
   const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
 
   // 2. Kapasiti CrazyRouter (Baki Dompet USD & Diskaun 45%)
@@ -194,6 +201,7 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
     connectionType,
     isCrazyRouter: crazyKeys > 0,
     modelName: spec.name,
+    rawModel: currentModel,
     batchSize: spec.batchSize,
     batchesPerEp,
     walletBalanceUSD,
@@ -203,7 +211,7 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   };
 }
 
-// Pengesan Status Kunci Pintar (Live CrazyRouter Fetch + Redis Cache + Session)
+// Pengesan Status Kunci Pintar (Mengutamakan Model Aktif Terkini dari Redis)
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
 
@@ -217,9 +225,12 @@ async function getActiveKeyInfo() {
     ? liveWalletUSD
     : (typeof savedStats?.walletBalanceUSD === 'number' ? savedStats.walletBalanceUSD : 0);
 
-  let discoveredKeys = [];
-  let detectedModel = savedStats?.modelName || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  // 1. Keutamaan Pertama: Model aktif sebenar yang baru selesai menterjemah
+  let detectedModel = savedStats?.rawModel || savedStats?.model || savedStats?.modelName || '';
 
+  let discoveredKeys = [];
+
+  // 2. Imbas sesi untuk senarai kunci dan model jika belum dikesan
   try {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
@@ -230,7 +241,10 @@ async function getActiveKeyInfo() {
 
       for (const sess of sessionList) {
         const cfg = sess?.config || sess;
-        if (cfg?.geminiModel || cfg?.model) detectedModel = cfg.geminiModel || cfg.model;
+        const sessionModel = cfg?.advancedSettings?.geminiModel || cfg?.geminiModel || cfg?.model;
+        if (!detectedModel && sessionModel) {
+          detectedModel = sessionModel;
+        }
 
         const valid = Array.isArray(cfg?.geminiApiKeys)
           ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
@@ -249,20 +263,21 @@ async function getActiveKeyInfo() {
     discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  if (discoveredKeys.length === 0 && savedStats && savedStats.totalKeys > 0) {
-    discoveredKeys = savedStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached'];
-  } else if (discoveredKeys.length === 0 && process.env.CRAZYROUTER_ACCESS_TOKEN) {
-    discoveredKeys = ['sk-crazyrouter'];
+  if (!detectedModel) {
+    detectedModel = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
   }
 
-  const result = analyzeKeyList(discoveredKeys, detectedModel, walletBalanceUSD);
-
-  if (savedStats && discoveredKeys.length === 1 && (discoveredKeys[0] === 'sk-cached' || discoveredKeys[0] === 'AIzaSy-cached')) {
-    result.totalKeys = savedStats.totalKeys;
-    result.googleKeys = savedStats.googleKeys;
-    result.crazyKeys = savedStats.crazyKeys;
-    result.connectionType = savedStats.connectionType;
+  // Jika senarai kekunci di memori terhad tetapi Redis menyimpan jumlah pool sebenar (contoh 79 kunci)
+  let overrideCounts = null;
+  if (discoveredKeys.length <= 1 && savedStats && savedStats.totalKeys > 1) {
+    overrideCounts = {
+      totalKeys: savedStats.totalKeys,
+      googleKeys: savedStats.googleKeys,
+      crazyKeys: savedStats.crazyKeys
+    };
   }
+
+  const result = analyzeKeyList(discoveredKeys, detectedModel, walletBalanceUSD, overrideCounts);
 
   if (result.totalKeys > 0) {
     try {
@@ -291,10 +306,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       validKeys = apiKeys.split(',').map(k => k.trim()).filter(Boolean);
     }
 
-    const usedKeys = validKeys.length > 0
-      ? validKeys
-      : (existingStats?.totalKeys ? (existingStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached']) : ['sk-crazyrouter']);
-    const usedModel = model || existingStats?.modelName || 'gemini-3.1-flash-lite';
+    const usedModel = model || existingStats?.rawModel || existingStats?.model || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 
     let finalWalletUSD = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0) ? walletBalanceUSD : 0;
     if (finalWalletUSD === 0) {
@@ -302,13 +314,17 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       finalWalletUSD = (typeof live === 'number' && live > 0) ? live : (existingStats?.walletBalanceUSD || 0);
     }
 
-    const stats = analyzeKeyList(usedKeys, usedModel, finalWalletUSD);
-    if (existingStats && validKeys.length === 0) {
-      stats.totalKeys = existingStats.totalKeys;
-      stats.googleKeys = existingStats.googleKeys;
-      stats.crazyKeys = existingStats.crazyKeys;
-      stats.connectionType = existingStats.connectionType;
+    let overrideCounts = null;
+    if (validKeys.length <= 1 && existingStats && existingStats.totalKeys > 1) {
+      overrideCounts = {
+        totalKeys: existingStats.totalKeys,
+        googleKeys: existingStats.googleKeys,
+        crazyKeys: existingStats.crazyKeys
+      };
     }
+
+    const usedKeys = validKeys.length > 0 ? validKeys : (existingStats?.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached']);
+    const stats = analyzeKeyList(usedKeys, usedModel, finalWalletUSD, overrideCounts);
 
     await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
 
@@ -453,7 +469,7 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
       capacityLine = `📊 <b>Kapasiti Batch ${keyInfo.batchSize}:</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName})`;
     } else {
       capacityLine =
-        `📊 <b>Kapasiti Google (RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari\n` +
+        `📊 <b>Kapasiti Google (RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
         `💳 <b>Kapasiti Dompet CrazyRouter:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod ($${keyInfo.walletBalanceUSD.toFixed(2)})`;
     }
 
