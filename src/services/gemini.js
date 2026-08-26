@@ -92,25 +92,20 @@ class GeminiService {
   constructor(apiKey, model = '', advancedSettings = {}) {
     this.apiKey = typeof apiKey === 'string' ? apiKey.trim() : apiKey;
     this.authFailureCacheKey = getProviderAuthFailureCacheKey('gemini', this.apiKey);
-    // Fallback to default if model not provided (config.js handles env var override)
     this.model = normalizeGeminiModelId(model || process.env.GEMINI_MODEL || 'gemini-flash-lite-latest');
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
-    
     this.isGemini3Model = typeof isGemini3Model === 'function' ? isGemini3Model(this.model) : String(this.model).toLowerCase().includes('gemini-3');
 
-    // 🔥 Auto-detect key type (Google vs CrazyRouter)
+    // Auto-detect key type (Google Direct vs CrazyRouter Proxy)
     this.keyType = this.detectKeyType(this.apiKey);
 
-    // 🔥 FIX MUKTAMAD: Pisahkan variable base URL supaya tak berlaku contamination!
-    // Nota: Kedua-dua key tetap menyokong penuh fungsi streaming tanpa sebarang sekatan.
     if (this.keyType === 'crazyrouter') {
-      // Menggunakan endpoint cn. untuk routing trafik yang jauh lebih stabil dan laju dari Malaysia
       this.baseUrl = process.env.CRAZYROUTER_API_BASE || 'https://cn.crazyrouter.com/v1beta';
     } else {
       this.baseUrl = process.env.GEMINI_API_BASE || GEMINI_API_URL;
     }
 
-    // 🚨 BUKU REKOD FINOPS (UNTUK TELEGRAM) 🚨
+    // FinOps Usage Ledger
     this.usageStats = {
       inputTokens: 0,
       outputTokens: 0,
@@ -118,29 +113,23 @@ class GeminiService {
       cachedTokens: 0
     };
 
-    // Advanced settings with environment variable fallbacks
-    // Priority: advancedSettings param > environment variables > hardcoded defaults
-
-    // Max output tokens (default: 65536)
+    // Output limits & timeouts
     this.maxOutputTokens = advancedSettings.maxOutputTokens
-      || parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS)
+      || parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS, 10)
       || 65536;
 
-    // Timeout in milliseconds (env is in seconds, convert to ms)
     const timeoutSeconds = advancedSettings.translationTimeout
-      || parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT)
+      || parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT, 10)
       || 720;
     this.timeout = timeoutSeconds * 1000;
 
-    // Max retries (default: 3)
     this.maxRetries = advancedSettings.maxRetries !== undefined
       ? advancedSettings.maxRetries
-      : (process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES) : 3);
+      : (process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES, 10) : 3);
 
-    // Thinking budget (default: 0)
-    // Special handling: -1 means dynamic thinking (null to API)
+    // Thinking Budget
     const envThinking = process.env.GEMINI_THINKING_BUDGET !== undefined
-      ? parseInt(process.env.GEMINI_THINKING_BUDGET)
+      ? parseInt(process.env.GEMINI_THINKING_BUDGET, 10)
       : 0;
     this.thinkingBudget = advancedSettings.thinkingBudget !== undefined
       ? advancedSettings.thinkingBudget
@@ -149,37 +138,39 @@ class GeminiService {
       ? advancedSettings.thinkingLevel.trim().toLowerCase()
       : String(process.env.GEMINI_THINKING_LEVEL || '').trim().toLowerCase();
 
-    // Temperature (default: 0.8)
+    // Blueprint Sampling Defaults (Temperature: 0.2, Top-P: 0.95, Min-P: 0.05, Repetition: 1.05)
     this.temperature = advancedSettings.temperature !== undefined
       ? advancedSettings.temperature
-      : (process.env.GEMINI_TEMPERATURE !== undefined ? parseFloat(process.env.GEMINI_TEMPERATURE) : 0.8);
+      : (process.env.GEMINI_TEMPERATURE !== undefined ? parseFloat(process.env.GEMINI_TEMPERATURE) : 0.2);
 
-    // Top-K (default: 40)
-    this.topK = advancedSettings.topK !== undefined
-      ? advancedSettings.topK
-      : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K) : 40);
-
-    // Top-P (default: 0.95)
     this.topP = advancedSettings.topP !== undefined
       ? advancedSettings.topP
       : (process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95);
 
+    // Top-K (Omitted by default to unleash dynamic Min-P pruning; active only if manually set)
+    this.topK = advancedSettings.topK !== undefined
+      ? advancedSettings.topK
+      : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K, 10) : undefined);
+
+    this.minP = advancedSettings.minP !== undefined
+      ? advancedSettings.minP
+      : (process.env.GEMINI_MIN_P !== undefined ? parseFloat(process.env.GEMINI_MIN_P) : 0.05);
+
+    this.repetitionPenalty = advancedSettings.repetitionPenalty !== undefined
+      ? advancedSettings.repetitionPenalty
+      : (process.env.GEMINI_REPETITION_PENALTY !== undefined ? parseFloat(process.env.GEMINI_REPETITION_PENALTY) : 1.05);
+
     if (this.isGemmaModel) {
-      // Gemma models don't support thinkingConfig and have lower output limits.
       this.maxOutputTokens = 8192;
-      // Gemma free tier has aggressive rate limits - use longer backoff
-      // 2 retries with 8s→24s exponential backoff
       this.gemmaRetryConfig = {
         maxRetries: 2,
-        baseDelay: 8000  // 8 seconds base, doubles to 24s on 2nd retry
+        baseDelay: 8000
       };
     }
 
-        // JSON structured output mode (set by TranslationEngine when enabled)
     this.enableJsonOutput = advancedSettings.enableJsonOutput === true;
   }
 
-  // 🔥 Auto-detect key type (Google vs CrazyRouter)
   detectKeyType(apiKey) {
     if (!apiKey) return 'google';
     const key = String(apiKey).trim();
@@ -187,7 +178,6 @@ class GeminiService {
     return 'google';
   }
 
-  // 🔥 Get authentication headers based on key type
   getAuthHeaders() {
     const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
     if (this.keyType === 'crazyrouter') {
@@ -196,34 +186,26 @@ class GeminiService {
     return { 'x-goog-api-key': sanitizedKey, 'Content-Type': 'application/json' };
   }
 
-  // 🚨 FUNGSI KUTIP RESIT GOOGLE API (V14 MULTI-BATCH LEDGER) 🚨
   updateUsageStats(usage, streamId = 'default') {
     if (!usage) return;
 
-    // Cipta Buku Log Global kalau belum wujud
     if (!global.geminiFinOps) {
-        global.geminiFinOps = { streams: {} };
+      global.geminiFinOps = { streams: {} };
     }
 
     const input = usage.promptTokenCount || 0;
     const cached = usage.cachedContentTokenCount || 0;
-    
-    // Thought tokens: v1beta baru pakai thoughtsTokenCount (ada 's')
     const thought = usage.thoughtsTokenCount || usage.thoughtTokenCount || 0;
-    
-    // Output tokens tulen: candidatesTokenCount
     const textOut = usage.candidatesTokenCount || 0;
 
-    // Simpan data ikut ID Batch (Stream ID) supaya tak bertindih dengan batch lain!
     global.geminiFinOps.streams[streamId] = {
-        input: input,
-        cached: cached,
-        thought: thought,
-        output: textOut
+      input,
+      cached,
+      thought,
+      output: textOut
     };
   }
 
-  // 👉 ORGAN YANG DAH DIHIDUPKAN (BEBAS UNTUK SEMUA MODEL TERMASUK GEMMA)
   getEffectiveThinkingBudget() {
     return this.isGemmaModel ? 0 : this.thinkingBudget;
   }
@@ -267,11 +249,25 @@ class GeminiService {
     const generationConfig = {
       maxOutputTokens,
       temperature: this.temperature,
-      topK: this.topK,
       topP: this.topP,
       frequencyPenalty: 0.0,
       presencePenalty: 0.0
     };
+
+    // Attach Top-K only if explicitly defined by user/environment
+    if (this.topK !== undefined && Number.isFinite(this.topK) && this.topK > 0) {
+      generationConfig.topK = this.topK;
+    }
+
+    // Inject advanced dynamic sampling parameters for CrazyRouter proxy
+    if (this.keyType === 'crazyrouter') {
+      if (this.minP !== undefined && Number.isFinite(this.minP)) {
+        generationConfig.min_p = this.minP;
+      }
+      if (this.repetitionPenalty !== undefined && Number.isFinite(this.repetitionPenalty)) {
+        generationConfig.repetition_penalty = this.repetitionPenalty;
+      }
+    }
 
     const thinkingBudget = this.getEffectiveThinkingBudget();
 
@@ -292,31 +288,19 @@ class GeminiService {
     return generationConfig;
   }
 
-  /**
-   * Semak sokongan turn model prefill (Set & Forget / Future-Proof)
-   * Disokong: HANYA Gemini legacy (versi 1.5 hingga 3.1)
-   * Ditolak (Ralat 400): Semua Gemini >= 3.2, Gemini 4+, 5+, 6+, Gemma & tag 'latest'
-   */
   isPrefillSupported() {
     if (this.isGemmaModel) return false;
 
     const modelNameLower = String(this.model).toLowerCase();
-    
-    // 1. Tangkap nombor versi dinamik (cth: gemini-1.5, gemini-3.1, gemini-5.0)
     const matchVer = modelNameLower.match(/gemini-(\d+(?:\.\d+)?)/);
     if (matchVer) {
       const geminiVersion = parseFloat(matchVer[1]);
-      // Hanya versi 3.1 dan ke bawah dibenarkan prefill
       return geminiVersion <= 3.1;
     }
 
-    // 2. Jika tiada nombor versi (cth: gemini-flash-latest, gemini-pro), anggap model moden (default: false)
     return false;
   }
 
-  /**
-   * Get available models from Gemini API
-   */
   async getAvailableModels(options = {}) {
     const silent = !!options.silent;
     const throwOnError = options.throwOnError === true;
@@ -327,7 +311,6 @@ class GeminiService {
 
     try {
       const response = await axios.get(`${this.baseUrl}/models`, {
-        // Use header form for API key to avoid query parsing/proxy quirks
         headers: this.getAuthHeaders(),
         timeout: 10000,
         httpAgent,
@@ -355,7 +338,6 @@ class GeminiService {
         await cacheProviderAuthFailure(this.authFailureCacheKey);
       }
       if (!silent) {
-        // Log response details to help diagnose issues when not in config UI
         logApiError(error, 'Gemini', 'Fetch models', { skipResponseData: true });
       }
       if (throwOnError) {
@@ -365,9 +347,6 @@ class GeminiService {
     }
   }
 
-  /**
-   * Fetch model limits (input/output token limits) and cache them
-   */
   async getModelLimits() {
     if (this._modelLimits) {
       return this._modelLimits;
@@ -375,8 +354,6 @@ class GeminiService {
 
     const modelName = String(this.model).toLowerCase();
 
-    // 🔥 INTERCEPT MUKTAMAD UNTUK PROXY CRAZYROUTER
-    // Menyayat ralat 404 noisy sepenuhnya dan menetapkan siling output 65k untuk kluster Gemini 2.5, 3 & 4
     if (this.keyType === 'crazyrouter') {
       let outputLimit = 8192;
       if (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) {
@@ -387,12 +364,12 @@ class GeminiService {
         outputTokenLimit: outputLimit
       };
       log.debug(() => `[Gemini] CrazyRouter proxy bypass applied for ${this.model}. Output limit forced to: ${limits.outputTokenLimit}`);
-      
-      // Log Gemini API configuration untuk debug lokal kekal berfungsi penuh
+
       const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
       const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget;
-      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
-      
+      const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
+      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, minP=${this.minP}, repetitionPenalty=${this.repetitionPenalty}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
+
       this._modelLimits = limits;
       return limits;
     }
@@ -411,7 +388,6 @@ class GeminiService {
         outputTokenLimit: data.outputTokenLimit
       };
 
-      // Fallback heuristics by model family if not provided (Kini menyokong Gemini 3 & 4)
       if (!limits.outputTokenLimit) {
         limits.outputTokenLimit = typeof getFallbackOutputTokenLimit === 'function'
           ? getFallbackOutputTokenLimit(this.model)
@@ -420,14 +396,14 @@ class GeminiService {
 
       log.debug(() => `[Gemini] Model: ${this.model}, Output limit: ${limits.outputTokenLimit}, Input limit: ${limits.inputTokenLimit || 'unlimited'}`);
 
-      // Log Gemini API configuration for debugging
       const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
       const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' :
         effectiveThinkingBudget === 0 ? 'disabled' :
           effectiveThinkingBudget;
+      const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
       const generationControls = this.isGemini3Model
-        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}, temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}`
-        : `temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
+        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}, temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}`
+        : `temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
       log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
       this._modelLimits = limits;
@@ -446,19 +422,11 @@ class GeminiService {
     }
   }
 
-  /**
-   * Get default models as fallback
-   */
   getDefaultModels() {
     return [];
   }
 
-  /**
-   * Retry a function with exponential backoff
-   * For Gemma models, uses more aggressive retry settings for rate limits
-   */
   async retryWithBackoff(fn, maxRetries = null, baseDelay = 3000) {
-    // Use Gemma-specific retry config if available and not overridden
     const useGemmaConfig = this.isGemmaModel && this.gemmaRetryConfig;
     const effectiveMaxRetries = maxRetries !== null ? maxRetries :
       (useGemmaConfig ? this.gemmaRetryConfig.maxRetries : this.maxRetries);
@@ -474,20 +442,17 @@ class GeminiService {
         const isSocketHangup = error.message.includes('socket hang up') || error.code === 'ECONNRESET';
         const isRateLimit = error.response?.status === 429 || error.statusCode === 429;
         const isServiceUnavailable = error.response?.status === 503 || error.statusCode === 503;
-        // Check for explicitly marked retryable errors (e.g., finishReason: OTHER)
         const isMarkedRetryable = error.isRetryable === true;
 
-        // Retry for: timeouts, network errors, rate limits (429), service unavailable (503), and marked retryable errors
         const isRetryable = isTimeout || isNetworkError || isSocketHangup || isRateLimit || isServiceUnavailable || isMarkedRetryable;
 
         if (isLastAttempt || !isRetryable) {
           throw error;
         }
 
-        // Calculate delay - Gemma uses 8s→24s (8*3), others use 3s→6s→12s (3*2^n)
         const delay = useGemmaConfig
-          ? effectiveBaseDelay * Math.pow(3, attempt)  // 8s → 24s (2 retries max)
-          : effectiveBaseDelay * Math.pow(2, attempt); // 3s → 6s → 12s (3 retries max)
+          ? effectiveBaseDelay * Math.pow(3, attempt)
+          : effectiveBaseDelay * Math.pow(2, attempt);
         const errorType = isRateLimit ? '429 rate limit' :
           isServiceUnavailable ? '503 service unavailable' :
             isSocketHangup ? 'socket hang up' :
@@ -499,18 +464,9 @@ class GeminiService {
     }
   }
 
-  /**
-   * Build the user prompt exactly as used for translation (shared between translation and token counting)
-   * @param {string} subtitleContent
-   * @param {string} targetLanguage
-   * @param {string|null} customPrompt
-   * @returns {{userPrompt: string, systemPrompt: string, normalizedTarget: string}}
-   */
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {
-    // Normalize target language to a human-readable form
     const normalizedTarget = normalizeTargetName(targetLanguage);
 
-    // Prepare the prompt
     let systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT)
       .replace('{target_language}', normalizedTarget);
 
@@ -521,7 +477,6 @@ class GeminiService {
     if (thinkingEnabled) {
       const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, literal translations, overlapping speech (-), sound/music tags (e.g., [sighs], ♪), song lyrics, and sentence fragments — bypass reasoning ENTIRELY. Output the XML immediately.\n4. SELECTIVE REASONING: ONLY activate reasoning for highly complex idioms or untranslatable slang. Resolve conceptually then output XML immediately.\n';
 
-      // 🛡️ SISTEM PENGESAN MAHA KEBAL (Sesuai untuk semua jenis prompt)
       if (systemPrompt.includes('<input>')) {
         systemPrompt = systemPrompt.replace('<input>', universalReasoningChain + '\n<input>');
       } else if (systemPrompt.includes('Do NOT include acknowledgements')) {
@@ -533,29 +488,17 @@ class GeminiService {
       }
     }
 
-    // 🚨 PISAU BEDAH: ANTI-DOUBLE TEXT (VERSI MUKTAMAD)! 🚨
     let userPrompt;
-    
-    // Kalau prompt dah ada tag <input> atau perkataan "INPUT (" (dari TranslationEngine)
     if (systemPrompt.includes('<input>') || systemPrompt.includes('INPUT (')) {
-      // Prompt tu DAH LENGKAP sepenuhnya dengan muatan sarikata dan cangkuk penamat.
-      // Kita BUANG TERUS subtitleContent supaya tak berlaku double payload!
       userPrompt = systemPrompt;
     } else {
-      // Legacy / Fallback kalau sistem lain panggil GeminiService secara direct
       userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
     }
 
     return { userPrompt, systemPrompt, normalizedTarget };
   }
 
-  /**
-   * Ask Gemini to count tokens for a translation request (real value from API)
-   * Falls back to null when unavailable so callers can use estimates.
-   */
   async countTokensForTranslation(subtitleContent, targetLanguage, customPrompt = null) {
-    // 🔥 FIX MUKTAMAD: Jika guna CrazyRouter, pintas terus untuk elakkan double billing & timeout.
-    // Laluan rasmi Google tetap akan berjalan 100% asal untuk bekalkan data ke kalkulator Telegram kau.
     if (this.keyType === 'crazyrouter') {
       return null;
     }
@@ -589,62 +532,38 @@ class GeminiService {
       return null;
     }
   }
-  
-  /**
-   * Translate subtitle content (single API call)
-   * @param {string} subtitleContent - Content to translate
-   * @param {string} sourceLanguage - Source language name (unused, kept for compatibility)
-   * @param {string} targetLanguage - Target language name
-   * @param {string} customPrompt - Custom translation prompt (optional)
-   * @returns {Promise<string>} - Translated content
-   */
+
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null) {
     return this.retryWithBackoff(async () => {
       try {
         const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
-        // Calculate dynamic output token limit
-        const estimatedInputTokens = this.estimateTokenCount(userPrompt);
         const estimatedSubtitleTokens = this.estimateTokenCount(subtitleContent);
 
-        // Fetch model output limits and respect them with a safety margin
         const limits = await this.getModelLimits();
         const modelOutputCap = typeof limits.outputTokenLimit === 'number' ? limits.outputTokenLimit : this.maxOutputTokens;
-        const safetyMargin = Math.floor(modelOutputCap * 0.05); // 5% safety margin
+        const safetyMargin = Math.floor(modelOutputCap * 0.05);
 
-        // Reserve tokens for thinking budget
         const thinkingBudget = this.getEffectiveThinkingBudget();
         const thinkingReserve = thinkingBudget > 0 ? thinkingBudget : 0;
         const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin - thinkingReserve));
 
-        // When thinking is enabled (dynamic or fixed budget), don't limit output based on subtitle size
-        // Thinking can consume significant tokens, so we need the full available output capacity
         let estimatedOutputTokens;
         if (this.isThinkingEnabled()) {
-          // Thinking enabled: use full available output (thinking will consume part of maxOutputTokens)
           estimatedOutputTokens = availableForOutput;
         } else {
-          // Thinking disabled: use 3.5x multiplier for subtitle content (translations can expand 2-3x+)
           estimatedOutputTokens = Math.floor(Math.min(
             availableForOutput,
             Math.max(8192, estimatedSubtitleTokens * 3.5)
           ));
         }
 
-        // Prepare generation config (Parameter Penuh Asal)
-        // 🛡️ BINA GENERATION CONFIG (Logik Berpusat)
         const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
         }
-        // =====================================================================
 
-        // Safety settings: disable all content filters for subtitle translation
-        // Subtitles contain fictional dialogue that frequently triggers false positives
-        // Use 'OFF' threshold — stronger than 'BLOCK_NONE' and respected by newer models
-        // (Gemini 2.0+ may still block with BLOCK_NONE but honours OFF)
-        // HARM_CATEGORY_CIVIC_INTEGRITY is deprecated; use enableEnhancedCivicAnswers instead
         const safetySettings = [
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'OFF' },
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'OFF' },
@@ -652,7 +571,6 @@ class GeminiService {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // 🚀 CABANG HIBRID: Prefill vs Official Payload
         let contents = [];
         if (this.isPrefillSupported()) {
           let processedUserPrompt = userPrompt;
@@ -674,7 +592,6 @@ class GeminiService {
             }
           ];
         } else {
-          // Gemini >= 3.2, 4+, 5+ & Gemma guna format rasmi single-turn
           contents = [
             {
               role: "user",
@@ -683,7 +600,6 @@ class GeminiService {
           ];
         }
 
-        // Call Gemini API (use header auth for consistency and security)
         const response = await axios.post(
           `${this.baseUrl}/models/${this.model}:generateContent`,
           {
@@ -699,19 +615,16 @@ class GeminiService {
           }
         );
 
-        // Validate response
         if (!response.data) {
           log.warn(() => '[Gemini] No data in response');
           throw new Error('No data returned from Gemini API');
         }
 
         if (!response.data.candidates || response.data.candidates.length === 0) {
-          // Some safety blocks return promptFeedback without candidates
           const pf = response.data.promptFeedback || {};
           const blockReason = pf.blockReason || null;
           const safetyRatings = pf.safetyRatings || null;
 
-          // Truncate noisy Gemini responses to keep logs readable
           const truncatedResponse = (() => {
             try {
               const serialized = JSON.stringify(response.data, null, 2);
@@ -726,24 +639,18 @@ class GeminiService {
 
           log.warn(() => ['[Gemini] No candidates in response (truncated):', truncatedResponse]);
 
-          // If Gemini flagged safety, classify explicitly so upstream shows proper error subtitles
           if (blockReason || safetyRatings) {
             const err = new Error(`PROHIBITED_CONTENT: ${blockReason || 'SAFETY'}`);
-            // Hint downstream handlers to produce the right UX
             err.translationErrorType = 'PROHIBITED_CONTENT';
             throw err;
           }
 
-          // Otherwise, propagate a generic error
           throw new Error('No response candidates from Gemini API');
         }
 
         const candidate = response.data.candidates[0];
-
-        // Aggregate all parts text
         const aggregatedText = candidate?.content?.parts?.map(p => (p && typeof p.text === 'string') ? p.text : '').join('') || '';
 
-        // Check for finish reason issues
         if (candidate.finishReason && candidate.finishReason !== 'STOP') {
           log.warn(() => ['[Gemini] Unusual finish reason:', candidate.finishReason]);
 
@@ -760,17 +667,14 @@ class GeminiService {
               throw new Error('Translation exceeded maximum token limit with minimal output');
             }
 
-            // Continue with partial output
             log.warn(() => '[Gemini] Continuing with partial translation due to MAX_TOKENS');
           } else {
-            // OTHER and unknown finish reasons are likely transient - mark as retryable
             const err = new Error(`Translation stopped with reason: ${candidate.finishReason}`);
             err.isRetryable = true;
             throw err;
           }
         }
 
-        // Check for content
         if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
           log.warn(() => ['[Gemini] No content in candidate:', JSON.stringify(candidate, null, 2)]);
           throw new Error('No content in response candidate');
@@ -785,21 +689,16 @@ class GeminiService {
         return this.cleanTranslatedSubtitle(translatedText);
 
       } catch (error) {
-        // Use centralized error handler
         handleTranslationError(error, 'Gemini', { skipResponseData: true });
       }
     });
   }
 
-  /**
-   * Stream subtitle translation and yield partial text
-   */
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onChunk = null) {
     return this.retryWithBackoff(async () => {
       try {
         const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
-        const estimatedInputTokens = this.estimateTokenCount(userPrompt);
         const estimatedSubtitleTokens = this.estimateTokenCount(subtitleContent);
 
         const limits = await this.getModelLimits();
@@ -820,16 +719,12 @@ class GeminiService {
           ));
         }
 
-       // Prepare generation config (Parameter Penuh Asal)
-        // 🛡️ BINA GENERATION CONFIG (Logik Berpusat)
         const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
         }
-        // =====================================================================
 
-        // Safety settings: disable all content filters for subtitle translation
         const safetySettings = [
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'OFF' },
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'OFF' },
@@ -837,7 +732,6 @@ class GeminiService {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        // 🚀 CABANG HIBRID: Prefill vs Official Payload (Streaming)
         let contents = [];
         if (this.isPrefillSupported()) {
           let processedUserPrompt = userPrompt;
@@ -859,7 +753,6 @@ class GeminiService {
             }
           ];
         } else {
-          // Gemini >= 3.2, 4+, 5+ & Gemma guna format rasmi single-turn
           contents = [
             {
               role: "user",
@@ -905,13 +798,12 @@ class GeminiService {
               : payloadStr.trim();
             if (!cleaned) return;
             let data;
-            try { 
-              data = JSON.parse(cleaned); 
-            } catch (_) { 
-              return; 
+            try {
+              data = JSON.parse(cleaned);
+            } catch (_) {
+              return;
             }
-            
-            // 🚨 KUTIP RESIT KOS (STREAMING CHUNKS) - SECARA SENYAP 🚨
+
             if (data.usageMetadata) {
               if (!processPayload.streamId) processPayload.streamId = 'batch_' + Date.now() + Math.random();
               this.updateUsageStats(data.usageMetadata, processPayload.streamId);
@@ -1035,39 +927,19 @@ class GeminiService {
     });
   }
 
-  /**
-   * Clean the translated subtitle text
-   */
   cleanTranslatedSubtitle(text) {
-    // Remove markdown code blocks if present
     let cleaned = text.replace(/```srt\n?/g, '').replace(/```\n?/g, '');
-
-    // Normalize line endings (CRLF/CR → LF)
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-    // Remove any leading/trailing whitespace
     cleaned = cleaned.trim();
-
     return cleaned;
   }
 
-  /**
-   * Estimate token count (conservative estimation)
-   * @param {string} text - Text to estimate
-   * @returns {number} - Estimated token count
-   */
   estimateTokenCount(text) {
     if (!text) return 0;
-    // Gemini uses SentencePiece, not BPE — heuristic is more appropriate here
-    // than gpt-tokenizer. For exact counts, use countTokensForTranslation() API.
     const approx = Math.ceil(text.length / 3);
     return Math.ceil(approx * 1.1);
   }
 
-  /**
-   * Recover stream payloads from raw stream text when chunk parsing fails.
-   * Handles SSE (data: ...), JSONL, and concatenated JSON objects.
-   */
   recoverStreamPayload(rawStream) {
     const result = {
       text: '',
@@ -1090,10 +962,9 @@ class GeminiService {
         return;
       }
 
-      // 🚨 KUTIP RESIT KOS (FALLBACK) - SECARA SENYAP 🚨
       if (data.usageMetadata) {
-          if (!processPayload.streamId) processPayload.streamId = 'recv_' + Date.now() + Math.random();
-          this.updateUsageStats(data.usageMetadata, processPayload.streamId);
+        if (!processPayload.streamId) processPayload.streamId = 'recv_' + Date.now() + Math.random();
+        this.updateUsageStats(data.usageMetadata, processPayload.streamId);
       }
 
       const candidate = data?.candidates?.[0];
@@ -1120,14 +991,12 @@ class GeminiService {
       result.payloadCount += 1;
     };
 
-    // Strategy 1: split by blank lines (SSE events)
     const blocks = rawStream.split(/\r?\n\r?\n/);
     for (const block of blocks) {
       const cleaned = block.split(/\r?\n/).map(line => line.replace(/^data:\s*/, '').trim()).filter(Boolean).join('');
       processPayload(cleaned);
     }
 
-    // Strategy 2: line-by-line (JSONL)
     if (result.payloadCount === 0) {
       const lines = rawStream.split(/\r?\n/);
       for (const line of lines) {
@@ -1136,7 +1005,6 @@ class GeminiService {
       }
     }
 
-    // Strategy 3: concatenated JSON objects without delimiters
     if (result.payloadCount === 0 && rawStream.includes('}{')) {
       const pieces = rawStream.split(/}\s*(?=\{)/).map((piece, idx, arr) => {
         if (idx < arr.length - 1) return piece + '}';
