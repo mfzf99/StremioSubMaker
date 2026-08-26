@@ -63,6 +63,29 @@ function getModelSpec(modelName) {
   return MODEL_SPECS['3.1-flash-lite'];
 }
 
+// Semak baki langsung dari API CrazyRouter secara mandiri
+async function fetchLiveCrazyRouterBalance() {
+  const token = process.env.CRAZYROUTER_ACCESS_TOKEN;
+  const userId = process.env.CRAZYROUTER_USER_ID;
+  if (!token || !userId) return null;
+
+  try {
+    const res = await axios.get('https://crazyrouter.com/api/user/self', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'New-Api-User': userId
+      },
+      timeout: 5000
+    });
+    if (res?.data?.success && res?.data?.data && typeof res.data.data.quota === 'number') {
+      return res.data.data.quota / 500000; // Nilai USD sebenar
+    }
+  } catch (err) {
+    // Gunakan fallback cache jika ralat rangkaian
+  }
+  return null;
+}
+
 // Analisis Kunci & Pengiraan Kapasiti Mengikut Dompet dan Kuota Harian
 function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletBalanceUSD = 0) {
   let keyList = [];
@@ -114,22 +137,25 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   };
 }
 
-// Pengesan Status Kunci Pintar (Kekalkan Data Redis Sedia Ada)
+// Pengesan Status Kunci Pintar (Live CrazyRouter Fetch + Redis Cache + Session)
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
 
-  // 1. Semak rekod tersimpan di Redis dahulu
+  let savedStats = null;
   try {
-    const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
-    if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
-      return savedStats;
-    }
+    savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
   } catch (e) {}
 
-  // 2. Semak Session Manager SubMaker dalam memori jika Redis belum ada data
-  let discoveredKeys = [];
-  let detectedModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  // Semak baki live CrazyRouter
+  const liveWalletUSD = await fetchLiveCrazyRouterBalance();
+  let walletBalanceUSD = (typeof liveWalletUSD === 'number') 
+    ? liveWalletUSD 
+    : (typeof savedStats?.walletBalanceUSD === 'number' ? savedStats.walletBalanceUSD : 0);
 
+  let discoveredKeys = [];
+  let detectedModel = savedStats?.modelName || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+
+  // Semak Session Manager SubMaker dalam memori
   try {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
@@ -154,13 +180,27 @@ async function getActiveKeyInfo() {
     }
   } catch (e) {}
 
-  // 3. Semak Environment Variable (.env)
+  // Semak Environment Variable (.env) jika sesi kosong
   if (discoveredKeys.length === 0) {
     const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
     discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  const result = analyzeKeyList(discoveredKeys, detectedModel, 0);
+  // Jika tiada kunci ditemui tetapi terdapat rekod lama atau token CrazyRouter
+  if (discoveredKeys.length === 0 && savedStats && savedStats.totalKeys > 0) {
+    discoveredKeys = savedStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached'];
+  } else if (discoveredKeys.length === 0 && process.env.CRAZYROUTER_ACCESS_TOKEN) {
+    discoveredKeys = ['sk-crazyrouter'];
+  }
+
+  const result = analyzeKeyList(discoveredKeys, detectedModel, walletBalanceUSD);
+
+  if (savedStats && discoveredKeys.length === 1 && (discoveredKeys[0] === 'sk-cached' || discoveredKeys[0] === 'AIzaSy-cached')) {
+    result.totalKeys = savedStats.totalKeys;
+    result.googleKeys = savedStats.googleKeys;
+    result.crazyKeys = savedStats.crazyKeys;
+    result.connectionType = savedStats.connectionType;
+  }
 
   if (result.totalKeys > 0) {
     try {
@@ -193,11 +233,14 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       ? validKeys
       : (existingStats?.totalKeys ? (existingStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached']) : ['sk-crazyrouter']);
     const usedModel = model || existingStats?.modelName || 'gemini-3.1-flash-lite';
-    const usedWallet = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0)
-      ? walletBalanceUSD
-      : (typeof existingStats?.walletBalanceUSD === 'number' ? existingStats.walletBalanceUSD : 0);
 
-    const stats = analyzeKeyList(usedKeys, usedModel, usedWallet);
+    let finalWalletUSD = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0) ? walletBalanceUSD : 0;
+    if (finalWalletUSD === 0) {
+      const live = await fetchLiveCrazyRouterBalance();
+      finalWalletUSD = (typeof live === 'number' && live > 0) ? live : (existingStats?.walletBalanceUSD || 0);
+    }
+
+    const stats = analyzeKeyList(usedKeys, usedModel, finalWalletUSD);
     if (existingStats && validKeys.length === 0) {
       stats.totalKeys = existingStats.totalKeys;
       stats.googleKeys = existingStats.googleKeys;
@@ -340,7 +383,7 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
     if (keyInfo.crazyKeys > 0 && keyInfo.googleKeys === 0) {
       const walletTxt = keyInfo.walletBalanceUSD > 0
         ? `$${keyInfo.walletBalanceUSD.toFixed(2)} (RM ${(keyInfo.walletBalanceUSD * 4.05).toFixed(2)})`
-        : 'Sila tunggu terjemahan selesai';
+        : 'Sila tunggu pengesahan baki';
       capacityLine =
         `💳 <b>Baki Dompet:</b> ${walletTxt}\n` +
         `📊 <b>Baki Kapasiti Dompet:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
