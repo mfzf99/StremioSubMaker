@@ -8241,7 +8241,7 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const subRegistryId = await registerCompletedSubtitle({
                             title: movieTitle,
                             provider: sourceProv,
-                            targetLang: targetLangName || targetLanguage || 'UNKNOWN',
+                            targetLang: targetLangName || targetLanguage,
                             keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`],
                             keyCount: keyCount,
                             isCrazyRouter: isCrazyRouter
