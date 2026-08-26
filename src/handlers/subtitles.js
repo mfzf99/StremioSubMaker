@@ -5744,16 +5744,6 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             } catch (regErr) {
                 log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
             }
-            
-            // Daftarkan sarikata ke buku rekod Redis (untuk /list & butang padam)
-            const subRegistryId = await registerCompletedSubtitle({
-                title: movieTitle,
-                provider: sourceProv,
-                targetLang: targetLanguage,
-                keys: [runtimeKey, sourceFileId],
-                keyCount: keyCount,
-                isCrazyRouter: isCrazyRouter
-            });
 
             let cubaLagi = 3;
             
