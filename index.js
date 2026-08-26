@@ -8238,13 +8238,23 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
                         // Daftarkan ke dalam registry Redis untuk xEmbed & butang padam
                         const { registerCompletedSubtitle } = require('./src/services/telegramBot');
+
+                        const activeApiKeys = (typeof config !== 'undefined' && config?.geminiApiKeys)
+                            ? config.geminiApiKeys
+                            : (typeof userConfig !== 'undefined' && userConfig?.geminiApiKeys)
+                                ? userConfig.geminiApiKeys
+                                : (typeof geminiApiKeys !== 'undefined' && Array.isArray(geminiApiKeys))
+                                    ? geminiApiKeys
+                                    : [];
+
                         let subRegistryId = null;
                         try {
                             subRegistryId = await registerCompletedSubtitle({
                                 title: movieTitle,
                                 provider: sourceProv,
                                 targetLang: targetLangName || targetLanguage,
-                                keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`]
+                                keys: [runtimeKey, `xembed:${safeVideoHash}:${safeTrackId}`],
+                                apiKeys: activeApiKeys
                             });
                         } catch (regErr) {
                             log.debug(() => `[Telegram] Gagal daftar registry: ${regErr.message}`);
