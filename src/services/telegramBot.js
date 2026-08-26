@@ -28,6 +28,18 @@ function formatUptime(seconds) {
   return parts.join(' ');
 }
 
+// Hierarki Resolusi Bahasa Sasaran (Best Practice Waterfall)
+function resolveTargetLang(lang) {
+  if (lang && typeof lang === 'string' && lang.trim().length > 0) {
+    return lang.trim().toUpperCase();
+  }
+  const envDefault = process.env.DEFAULT_TARGET_LANG || process.env.TARGET_LANGUAGE;
+  if (envDefault && typeof envDefault === 'string' && envDefault.trim().length > 0) {
+    return envDefault.trim().toUpperCase();
+  }
+  return 'EN'; // Standard antarabangsa ISO jika tiada sebarang parameter
+}
+
 // Pengesan Status Kunci API (Redis -> Session Manager -> ENV)
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
@@ -87,7 +99,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ke
     const adapter = await getStorageAdapter();
     const id = 'sub_' + Math.random().toString(36).substring(2, 9);
 
-    // Simpan maklumat kunci terkini
+    // Simpan maklumat kunci terkini ke Redis jika dibekalkan
     if (typeof keyCount === 'number' && keyCount > 0) {
       await adapter.set(KEY_STATS_REDIS_KEY, {
         totalKeys: keyCount,
@@ -98,9 +110,9 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ke
 
     const entry = {
       id,
-      title: title || 'Unknown Title',
-      provider: provider || 'Unknown Provider',
-      targetLang: String(targetLang || 'UNKNOWN').toUpperCase(),
+      title: title || 'Untitled Media',
+      provider: provider || 'Generic Provider',
+      targetLang: resolveTargetLang(targetLang),
       keys: Array.isArray(keys) ? keys : [keys].filter(Boolean),
       createdAt: Date.now()
     };
