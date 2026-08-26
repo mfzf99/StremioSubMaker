@@ -5737,7 +5737,7 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
             const subRegistryId = await registerCompletedSubtitle({
                 title: movieTitle,
                 provider: sourceProv,
-                targetLang: targetLanguage || 'MAY',
+                targetLang: targetLanguage || 'UNKNOWN',
                 keys: [runtimeKey, sourceFileId],
                 keyCount: keyCount,
                 isCrazyRouter: isCrazyRouter
