@@ -4,6 +4,7 @@ const { getStorageAdapter } = require('../storage/StorageFactory');
 const { StorageAdapter } = require('../storage');
 
 const REGISTRY_REDIS_KEY = 'stremio:sub_registry';
+const KEY_STATS_REDIS_KEY = 'stremio:key_stats';
 const ITEMS_PER_PAGE = 5;
 
 // Format saiz bait ke format mudah dibaca (MB/GB)
@@ -27,12 +28,74 @@ function formatUptime(seconds) {
   return parts.join(' ');
 }
 
-// 1. Simpan rekod sarikata ke Redis
-async function registerCompletedSubtitle({ title, provider, targetLang, keys }) {
+// Pengesan Status Kunci API (Redis -> Session Manager -> ENV)
+async function getActiveKeyInfo() {
+  const adapter = await getStorageAdapter();
+
+  // 1. Semak rekod status kunci yang dikemas kini dari proses terjemahan
+  try {
+    const savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    if (savedStats && typeof savedStats.totalKeys === 'number' && savedStats.totalKeys > 0) {
+      return savedStats;
+    }
+  } catch (e) {}
+
+  // 2. Semak Session Manager SubMaker dalam memori
+  try {
+    const { getSessionManager } = require('../utils/sessionManager');
+    const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
+    if (sm && sm.sessions) {
+      for (const [, sess] of sm.sessions.entries()) {
+        const cfg = sess?.config || sess;
+        const validKeys = Array.isArray(cfg?.geminiApiKeys)
+          ? cfg.geminiApiKeys.filter(k => typeof k === 'string' && k.trim())
+          : [];
+
+        if (validKeys.length > 0) {
+          return {
+            totalKeys: validKeys.length,
+            isCrazyRouter: validKeys.some(k => String(k).trim().startsWith('sk-'))
+          };
+        }
+
+        if (cfg?.geminiApiKey) {
+          return {
+            totalKeys: 1,
+            isCrazyRouter: String(cfg.geminiApiKey).trim().startsWith('sk-')
+          };
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Semak Environment Variable (.env)
+  const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
+  const keyArray = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
+  if (keyArray.length > 0) {
+    return {
+      totalKeys: keyArray.length,
+      isCrazyRouter: keyArray.some(k => k.startsWith('sk-'))
+    };
+  }
+
+  return { totalKeys: 0, isCrazyRouter: false };
+}
+
+// 1. Simpan rekod sarikata & status kunci ke Redis
+async function registerCompletedSubtitle({ title, provider, targetLang, keys, keyCount, isCrazyRouter }) {
   try {
     const adapter = await getStorageAdapter();
     const id = 'sub_' + Math.random().toString(36).substring(2, 9);
-    
+
+    // Simpan maklumat kunci terkini
+    if (typeof keyCount === 'number' && keyCount > 0) {
+      await adapter.set(KEY_STATS_REDIS_KEY, {
+        totalKeys: keyCount,
+        isCrazyRouter: Boolean(isCrazyRouter),
+        updatedAt: Date.now()
+      }, StorageAdapter.CACHE_TYPES.TRANSLATION);
+    }
+
     const entry = {
       id,
       title: title || 'Unknown Title',
@@ -63,7 +126,7 @@ async function renderMainMenu(chatId, messageId, botToken) {
     const list = (await adapter.get(REGISTRY_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION)) || [];
     const totalSubtitles = Array.isArray(list) ? list.length : 0;
 
-    const text = 
+    const text =
       `🎛️ <b>Papan Pemuka SubMaker VPS</b> ⚡\n\n` +
       `📦 <b>Sarikata Berdaftar:</b> ${totalSubtitles} fail\n` +
       `⏱️ <b>Bot Uptime:</b> ${formatUptime(process.uptime())}\n` +
@@ -115,7 +178,7 @@ async function renderServerStatus(chatId, messageId, botToken) {
       redisStatus = '🔴 Ralat Sambungan';
     }
 
-    const text = 
+    const text =
       `📊 <b>Status Pelayan & VPS (Live)</b> 🖥️\n\n` +
       `🧠 <b>RAM VPS:</b> ${formatBytes(usedMem)} / ${formatBytes(totalMem)} (${Math.round((usedMem / totalMem) * 100)}%)\n` +
       `📦 <b>RAM Node.js:</b> ${formatBytes(mem.rss)} (Heap: ${formatBytes(mem.heapUsed)})\n` +
@@ -134,9 +197,15 @@ async function renderServerStatus(chatId, messageId, botToken) {
       ]
     };
 
-    await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup
-    });
+    if (messageId) {
+      await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+        chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup
+      });
+    } else {
+      await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        chat_id: chatId, text, parse_mode: 'HTML', reply_markup
+      });
+    }
   } catch (err) {
     console.error(`[Telegram Bot] Ralat render server: ${err.message}`);
   }
@@ -145,18 +214,17 @@ async function renderServerStatus(chatId, messageId, botToken) {
 // 4. Paparan Status API Keys
 async function renderApiKeysStatus(chatId, messageId, botToken) {
   try {
-    const keyEnv = process.env.GEMINI_API_KEY || '';
-    const keyArray = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
-    const totalKeys = keyArray.length > 0 ? keyArray.length : (keyEnv ? 1 : 0);
+    const keyInfo = await getActiveKeyInfo();
+    const totalKeys = keyInfo.totalKeys;
+    const isCrazyRouter = keyInfo.isCrazyRouter;
+    const dailyCapacity = totalKeys > 0 ? Math.floor((totalKeys * 500) / 6) : 0;
 
-    const isCrazyRouter = keyArray.some(k => k.startsWith('sk-')) || keyEnv.startsWith('sk-');
-
-    const text = 
+    const text =
       `🔑 <b>Status Kolam API Kunci</b> 🛡️\n\n` +
       `🔢 <b>Jumlah Kunci Dikesan:</b> ${totalKeys} Kunci Aktif\n` +
       `🔄 <b>Mod Giliran:</b> Auto-Rotation (Beban Agihan Rata)\n` +
       `🎯 <b>Jenis Sambungan:</b> ${isCrazyRouter ? 'CrazyRouter Proxy (Diskaun 45%)' : 'Google Direct API'}\n` +
-      `📊 <b>Kapasiti Batch 200:</b> ±${(totalKeys * 500 / 6).toFixed(0)} episod/hari (Flash-Lite)\n\n` +
+      `📊 <b>Kapasiti Batch 200:</b> ±${dailyCapacity.toLocaleString()} episod/hari (Flash-Lite)\n\n` +
       `<i>Semua kunci diputar secara automatik setiap batch/terjemahan.</i>`;
 
     const reply_markup = {
@@ -168,9 +236,15 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
       ]
     };
 
-    await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup
-    });
+    if (messageId) {
+      await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+        chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup
+      });
+    } else {
+      await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        chat_id: chatId, text, parse_mode: 'HTML', reply_markup
+      });
+    }
   } catch (err) {
     console.error(`[Telegram Bot] Ralat render keys: ${err.message}`);
   }
@@ -181,23 +255,23 @@ async function renderRegistryPage(chatId, messageId, page = 1, botToken) {
   try {
     const adapter = await getStorageAdapter();
     const list = (await adapter.get(REGISTRY_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION)) || [];
-    
+
     if (!Array.isArray(list) || list.length === 0) {
       const emptyText = '📭 <b>Tiada Sarikata Dalam Cache VPS</b>\n\nSemua cache sarikata kosong atau telah dipadam.';
-      const emptyMarkup = { 
+      const emptyMarkup = {
         inline_keyboard: [
           [{ text: '🔄 Refresh', callback_data: 'page:1' }],
           [{ text: '🔙 Menu Utama', callback_data: 'menu:main' }]
-        ] 
+        ]
       };
-      
+
       if (messageId) {
         await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-          chat_id: chatId, message_id: messageId, text: emptyText, parse_mode: 'HTML', reply_markup: emptyMarkup
+          chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup: emptyMarkup
         });
       } else {
         await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          chat_id: chatId, text: emptyText, parse_mode: 'HTML', reply_markup: emptyMarkup
+          chat_id: chatId, text, parse_mode: 'HTML', reply_markup: emptyMarkup
         });
       }
       return;
@@ -218,7 +292,7 @@ async function renderRegistryPage(chatId, messageId, page = 1, botToken) {
     pageItems.forEach((item, index) => {
       const itemNum = startIndex + index + 1;
       const safeTitle = item.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      
+
       text += `<b>${itemNum}.</b> 🎬 <code>${safeTitle}</code>\n`;
       text += `   └ 📥 <b>Source:</b> ${item.provider} | 🌐 ${item.targetLang}\n\n`;
 
@@ -325,15 +399,9 @@ async function handleTextMessage(message, botToken, authorizedChatId) {
   } else if (text === '/list' || text === '📋 Senarai Subtitle') {
     await renderRegistryPage(fromChatId, null, 1, botToken);
   } else if (text === '/server' || text === '📊 Status VPS') {
-    const res = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      chat_id: fromChatId, text: '⏳ Memuat status pelayan...', parse_mode: 'HTML'
-    });
-    await renderServerStatus(fromChatId, res.data.result.message_id, botToken);
+    await renderServerStatus(fromChatId, null, botToken);
   } else if (text === '/keys' || text === '🔑 Status Keys') {
-    const res = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      chat_id: fromChatId, text: '⏳ Menyemak kunci API...', parse_mode: 'HTML'
-    });
-    await renderApiKeysStatus(fromChatId, res.data.result.message_id, botToken);
+    await renderApiKeysStatus(fromChatId, null, botToken);
   }
 }
 
@@ -361,14 +429,14 @@ async function handleCallbackQuery(query, botToken, authorizedChatId) {
   } else if (callbackData === 'menu:keys') {
     await renderApiKeysStatus(fromChatId, messageId, botToken);
     try { await axios.post(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, { callback_query_id: query.id }); } catch (e) {}
-  } 
-  
+  }
+
   // Sahkan Flush Cache
   else if (callbackData === 'menu:flush_confirm') {
-    const text = 
+    const text =
       `⚠️ <b>AMARAN: Kosongkan Semua Cache?</b>\n\n` +
       `Tindakan ini akan memadam semua pendaftaran sarikata di Redis. Semua terjemahan seterusnya akan dijana semula dari awal.`;
-    
+
     const reply_markup = {
       inline_keyboard: [
         [
@@ -427,11 +495,11 @@ async function handleCallbackQuery(query, botToken, authorizedChatId) {
     try {
       const adapter = await getStorageAdapter();
       const list = (await adapter.get(REGISTRY_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION)) || [];
-      
+
       const itemIndex = list.findIndex(item => item.id === targetId);
       if (itemIndex !== -1) {
         const item = list[itemIndex];
-        
+
         for (const key of item.keys) {
           await adapter.delete(key, StorageAdapter.CACHE_TYPES.SUBTITLES);
           await adapter.delete(key, StorageAdapter.CACHE_TYPES.BYPASS);
