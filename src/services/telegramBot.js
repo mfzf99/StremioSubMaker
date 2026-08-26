@@ -7,20 +7,6 @@ const REGISTRY_REDIS_KEY = 'stremio:sub_registry';
 const KEY_STATS_REDIS_KEY = 'stremio:key_stats';
 const ITEMS_PER_PAGE = 5;
 
-// Pangkalan Data Harga & Konfigurasi Batch Model (Anggaran 1,200 Baris / Episod)
-const MODEL_SPECS = {
-  '3.7-flash': { input: 0.75, output: 3.75, batchSize: 400, name: '3.7-Flash' },
-  '3.6-flash': { input: 0.75, output: 3.75, batchSize: 400, name: '3.6-Flash' },
-  '3.5-flash': { input: 1.50, output: 9.00, batchSize: 400, name: '3.5-Flash' },
-  '3.5-flash-lite': { input: 0.30, output: 2.50, batchSize: 200, name: '3.5-Flash-Lite' },
-  '3.1-pro': { input: 2.00, output: 12.00, batchSize: 200, name: '3.1-Pro' },
-  '3.1-flash-lite': { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' },
-  '3.0-flash': { input: 0.50, output: 3.00, batchSize: 400, name: '3.0-Flash' },
-  '2.5-pro': { input: 1.25, output: 10.00, batchSize: 200, name: '2.5-Pro' },
-  '2.5-flash': { input: 0.30, output: 2.50, batchSize: 400, name: '2.5-Flash' },
-  '2.5-flash-lite': { input: 0.10, output: 0.40, batchSize: 200, name: '2.5-Flash-Lite' }
-};
-
 // Format saiz bait ke format mudah dibaca (MB/GB)
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 MB';
@@ -54,13 +40,33 @@ function resolveTargetLang(lang) {
   return 'EN';
 }
 
-// Dapatkan spesifikasi model yang sedang aktif
+// Pengecam Model Pintar & Luwes (Menyokong Preview, Exp & Standard Naming)
 function getModelSpec(modelName) {
-  const m = String(modelName || '').toLowerCase();
-  for (const [key, spec] of Object.entries(MODEL_SPECS)) {
-    if (m.includes(key)) return spec;
-  }
-  return MODEL_SPECS['3.1-flash-lite'];
+  const m = String(modelName || '').toLowerCase().replace(/_/g, '-');
+
+  // 1. Model Pro (Batch 200)
+  if (m.includes('3.1-pro')) return { input: 2.00, output: 12.00, batchSize: 200, name: '3.1-Pro' };
+  if (m.includes('2.5-pro')) return { input: 1.25, output: 10.00, batchSize: 200, name: '2.5-Pro' };
+  if (m.includes('1.5-pro')) return { input: 1.25, output: 5.00, batchSize: 200, name: '1.5-Pro' };
+
+  // 2. Model Flash-Lite (Batch 200)
+  if (m.includes('3.5-flash-lite')) return { input: 0.30, output: 2.50, batchSize: 200, name: '3.5-Flash-Lite' };
+  if (m.includes('3.1-flash-lite') || m.includes('flash-lite')) return { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' };
+  if (m.includes('2.5-flash-lite')) return { input: 0.10, output: 0.40, batchSize: 200, name: '2.5-Flash-Lite' };
+
+  // 3. Model Flash Standard & Preview (Batch 400)
+  if (m.includes('3.7-flash')) return { input: 0.75, output: 3.75, batchSize: 400, name: '3.7-Flash' };
+  if (m.includes('3.6-flash')) return { input: 0.75, output: 3.75, batchSize: 400, name: '3.6-Flash' };
+  if (m.includes('3.5-flash')) return { input: 1.50, output: 9.00, batchSize: 400, name: '3.5-Flash' };
+  if (m.includes('3-flash') || m.includes('3.0-flash')) return { input: 0.50, output: 3.00, batchSize: 400, name: '3-Flash' };
+  if (m.includes('2.5-flash')) return { input: 0.30, output: 2.50, batchSize: 400, name: '2.5-Flash' };
+  if (m.includes('1.5-flash')) return { input: 0.075, output: 0.30, batchSize: 400, name: '1.5-Flash' };
+
+  // Fallback Umum
+  if (m.includes('pro')) return { input: 1.25, output: 10.00, batchSize: 200, name: 'Gemini-Pro' };
+  if (m.includes('flash')) return { input: 0.50, output: 3.00, batchSize: 400, name: '3-Flash' };
+
+  return { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' };
 }
 
 // Semak baki langsung dari API CrazyRouter secara mandiri
@@ -78,11 +84,9 @@ async function fetchLiveCrazyRouterBalance() {
       timeout: 5000
     });
     if (res?.data?.success && res?.data?.data && typeof res.data.data.quota === 'number') {
-      return res.data.data.quota / 500000; // Nilai USD sebenar
+      return res.data.data.quota / 500000;
     }
-  } catch (err) {
-    // Gunakan fallback cache jika ralat rangkaian
-  }
+  } catch (err) {}
   return null;
 }
 
@@ -100,12 +104,12 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   const googleKeys = totalKeys - crazyKeys;
 
   const spec = getModelSpec(currentModel);
-  const batchesPerEp = Math.ceil(1200 / spec.batchSize);
+  const batchesPerEp = Math.ceil(1200 / spec.batchSize); // 1200 / 400 = 3 batch, 1200 / 200 = 6 batch
 
-  // 1. Kira Kapasiti Google Direct (Kuota Percuma 500 RPD)
+  // 1. Kira Kapasiti Google Direct (Kuota 500 RPD)
   const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
 
-  // 2. Kira Kapasiti CrazyRouter (Berdasarkan Baki Dompet USD & Diskaun 45%)
+  // 2. Kira Kapasiti CrazyRouter (Berdasarkan Dompet USD & Diskaun 45%)
   const retailCostPerEp = ((25000 / 1000000) * spec.input) + ((15000 / 1000000) * spec.output);
   const crazyCostPerEp = retailCostPerEp * 0.55;
   const crazyWalletCapacity = (crazyCostPerEp > 0 && walletBalanceUSD > 0)
@@ -146,16 +150,14 @@ async function getActiveKeyInfo() {
     savedStats = await adapter.get(KEY_STATS_REDIS_KEY, StorageAdapter.CACHE_TYPES.TRANSLATION);
   } catch (e) {}
 
-  // Semak baki live CrazyRouter
   const liveWalletUSD = await fetchLiveCrazyRouterBalance();
-  let walletBalanceUSD = (typeof liveWalletUSD === 'number') 
-    ? liveWalletUSD 
+  let walletBalanceUSD = (typeof liveWalletUSD === 'number')
+    ? liveWalletUSD
     : (typeof savedStats?.walletBalanceUSD === 'number' ? savedStats.walletBalanceUSD : 0);
 
   let discoveredKeys = [];
   let detectedModel = savedStats?.modelName || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
-  // Semak Session Manager SubMaker dalam memori
   try {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
@@ -180,13 +182,11 @@ async function getActiveKeyInfo() {
     }
   } catch (e) {}
 
-  // Semak Environment Variable (.env) jika sesi kosong
   if (discoveredKeys.length === 0) {
     const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
     discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  // Jika tiada kunci ditemui tetapi terdapat rekod lama atau token CrazyRouter
   if (discoveredKeys.length === 0 && savedStats && savedStats.totalKeys > 0) {
     discoveredKeys = savedStats.crazyKeys > 0 ? ['sk-cached'] : ['AIzaSy-cached'];
   } else if (discoveredKeys.length === 0 && process.env.CRAZYROUTER_ACCESS_TOKEN) {
@@ -248,7 +248,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       stats.connectionType = existingStats.connectionType;
     }
 
-    // Kunci rekod status kunci terkini ke Redis
+    // Kunci rekod status kunci & model terkini ke Redis
     await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
 
     const entry = {
@@ -274,7 +274,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
   }
 }
 
-// 2. Paparan Menu Utama (Dashboard Utama)
+// 2. Paparan Menu Utama
 async function renderMainMenu(chatId, messageId, botToken) {
   try {
     const adapter = await getStorageAdapter();
@@ -428,7 +428,7 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
   }
 }
 
-// 5. Paparan Senarai Sarikata (Pagination)
+// 5. Paparan Senarai Sarikata
 async function renderRegistryPage(chatId, messageId, page = 1, botToken) {
   try {
     const adapter = await getStorageAdapter();
