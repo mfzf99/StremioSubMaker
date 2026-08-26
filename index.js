@@ -8078,8 +8078,12 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                         const totalTokens = totalPromptSize + outputTokens;
                         // --- 🏁 TAMAT: PEMBEDAHAN FINOPS TOKEN 🏁 ---
 
+                        // 🚨 PANGKALAN DATA HARGA PENUH (Input, Output, Cache, Tier 2) 🚨
                         const pricing = {
+                            "3.7-flash": { input: 0.75, output: 3.75, cache: 0.075 },
+                            "3.6-flash": { input: 0.75, output: 3.75, cache: 0.075 },
                             "3.5-flash": { input: 1.50, output: 9.00, cache: 0.15 },
+                            "3.5-flash-lite": { input: 0.30, output: 2.50, cache: 0.03 },
                             "3.1-pro": { input: 2.00, output: 12.00, cache: 0.20, inputT2: 4.00, outputT2: 18.00, cacheT2: 0.40 },
                             "3.1-flash-lite": { input: 0.25, output: 1.50, cache: 0.025 },
                             "3.0-flash": { input: 0.50, output: 3.00, cache: 0.05 },
@@ -8088,19 +8092,37 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
                             "2.5-flash-lite": { input: 0.10, output: 0.40, cache: 0.01 }
                         };
 
-                        let rateInput = pricing["3.1-flash-lite"].input;
-                        let rateOutput = pricing["3.1-flash-lite"].output;
-                        let rateCache = pricing["3.1-flash-lite"].cache;
+                        // Enjin Pencari Harga Dinamik
+                        let rateInput = pricing["3.5-flash-lite"].input;
+                        let rateOutput = pricing["3.5-flash-lite"].output;
+                        let rateCache = pricing["3.5-flash-lite"].cache;
 
-                        if (usedModel.includes('3.5-flash')) {
+                        if (usedModel.includes('3.7-flash')) {
+                            rateInput = pricing["3.7-flash"].input; rateOutput = pricing["3.7-flash"].output; rateCache = pricing["3.7-flash"].cache;
+                        } else if (usedModel.includes('3.6-flash')) {
+                            rateInput = pricing["3.6-flash"].input; rateOutput = pricing["3.6-flash"].output; rateCache = pricing["3.6-flash"].cache;
+                        } else if (usedModel.includes('3.5-flash-lite')) {
+                            rateInput = pricing["3.5-flash-lite"].input; rateOutput = pricing["3.5-flash-lite"].output; rateCache = pricing["3.5-flash-lite"].cache;
+                        } else if (usedModel.includes('3.5-flash')) {
                             rateInput = pricing["3.5-flash"].input; rateOutput = pricing["3.5-flash"].output; rateCache = pricing["3.5-flash"].cache;
                         } else if (usedModel.includes('3.1-pro')) {
                             const isT2 = totalPromptSize > 200000;
                             rateInput = isT2 ? pricing["3.1-pro"].inputT2 : pricing["3.1-pro"].input;
                             rateOutput = isT2 ? pricing["3.1-pro"].outputT2 : pricing["3.1-pro"].output;
                             rateCache = isT2 ? pricing["3.1-pro"].cacheT2 : pricing["3.1-pro"].cache;
+                        } else if (usedModel.includes('3.1-flash-lite')) {
+                            rateInput = pricing["3.1-flash-lite"].input; rateOutput = pricing["3.1-flash-lite"].output; rateCache = pricing["3.1-flash-lite"].cache;
                         } else if (usedModel.includes('3.0-flash') || usedModel.includes('3-flash')) {
                             rateInput = pricing["3.0-flash"].input; rateOutput = pricing["3.0-flash"].output; rateCache = pricing["3.0-flash"].cache;
+                        } else if (usedModel.includes('2.5-pro')) {
+                            const isT2 = totalPromptSize > 200000;
+                            rateInput = isT2 ? pricing["2.5-pro"].inputT2 : pricing["2.5-pro"].input;
+                            rateOutput = isT2 ? pricing["2.5-pro"].outputT2 : pricing["2.5-pro"].output;
+                            rateCache = isT2 ? pricing["2.5-pro"].cacheT2 : pricing["2.5-pro"].cache;
+                        } else if (usedModel.includes('2.5-flash-lite')) {
+                            rateInput = pricing["2.5-flash-lite"].input; rateOutput = pricing["2.5-flash-lite"].output; rateCache = pricing["2.5-flash-lite"].cache;
+                        } else if (usedModel.includes('2.5-flash')) {
+                            rateInput = pricing["2.5-flash"].input; rateOutput = pricing["2.5-flash"].output; rateCache = pricing["2.5-flash"].cache;
                         }
 
                         let KADAR_TUKARAN_MYR = 4.40;
