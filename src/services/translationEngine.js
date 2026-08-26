@@ -105,46 +105,46 @@ const NATIVE_BATCH_PROVIDER_NAMES = new Set(['deepl', 'googletranslate']);
 const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/disable entry caching
 
 /**
- * Get batch size for model (model-specific optimization)
- * Priority: Environment variable > Model-specific > Default (250)
+ * Resolves the optimal translation batch size based on model architecture and versioning.
+ * Implements a future-proof tiered heuristic balancing token throughput, inference latency, and context integrity.
  *
- * Model-specific batch sizes are hardcoded in backend and safe from client manipulation.
+ * Tier Hierarchy:
+ * - ENV Override > Lightweight/Gemma (200) > Flash 3.0+ (400) > Pro 2.5+ / Flash 2.x (300) > Default (250)
+ *
+ * @param {string} model - Gemini/LLM model identifier
+ * @returns {number} Batch size (entries per translation payload)
  */
 function getBatchSizeForModel(model) {
-  // Environment variable override (highest priority)
+  // 1. Environment variable override (highest priority)
   if (process.env.TRANSLATION_BATCH_SIZE) {
-    return parseInt(process.env.TRANSLATION_BATCH_SIZE);
+    return parseInt(process.env.TRANSLATION_BATCH_SIZE, 10);
   }
 
-  // Model-specific batch sizes (hardcoded, safe from client manipulation)
-  const modelStr = String(model || '').toLowerCase();
+  const modelStr = String(model || '').toLowerCase().replace(/_/g, '-');
 
-  // Gemma models: Lower batch size for stability (200)
-  if (modelStr.includes('gemma')) {
+  // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability
+  if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
     return 200;
   }
 
-  // Flash-lite models: More conservative batch size for stability (200)
-  if (modelStr.includes('flash-lite')) {
-    return 200;
+  // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
+  const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
+  const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
+
+  // 4. Reasoning & Pro tier: Balanced against latency penalty and retry overhead
+  if (modelStr.includes('pro')) {
+    if (version >= 2.5) return 300; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+)
+    return 250;                     // Legacy Pro (1.5)
   }
 
-  // 🚀 KONDISI KHAS GEMINI FLASH (FUTURE-PROOF VERSIONING)
+  // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    // Sedut nombor versi (contoh: 'gemini-1.5-flash' -> 1.5, 'gemini-3-flash' -> 3, 'gemini-3.5' -> 3.5)
-    const versionMatch = modelStr.match(/gemini-(\d+(?:\.\d+)?)/);
-    const geminiVersion = versionMatch ? parseFloat(versionMatch[1]) : 0;
-
-    // Versi 3.0 dan ke atas dapat batch size (400)
-    if (geminiVersion >= 3.0) {
-      return 400;
-    }
-    
-    // Versi bawah 3.0 atau legacy Flash models kekal (250)
-    return 250;
+    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+)
+    if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5)
+    return 250;                     // Legacy Flash (1.5)
   }
 
-  // Default batch size for unknown models (250)
+  // 6. Safe baseline fallback for unmapped architectures
   return 250;
 }
 
