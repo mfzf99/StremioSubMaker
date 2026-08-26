@@ -40,33 +40,95 @@ function resolveTargetLang(lang) {
   return 'EN';
 }
 
-// Pengecam Model Pintar & Luwes (Menyokong Preview, Exp & Standard Naming)
+/**
+ * Resolves the optimal translation batch size based on model architecture and versioning.
+ * Implements a future-proof tiered heuristic balancing token throughput, inference latency, and context integrity.
+ *
+ * Tier Hierarchy:
+ * - ENV Override > Lightweight/Gemma (200) > Flash 3.0+ (400) > Pro 2.5+ / Flash 2.x (300) > Default (250)
+ *
+ * @param {string} model - Gemini/LLM model identifier
+ * @returns {number} Batch size (entries per translation payload)
+ */
+function getBatchSizeForModel(model) {
+  // 1. Environment variable override (highest priority)
+  if (process.env.TRANSLATION_BATCH_SIZE) {
+    return parseInt(process.env.TRANSLATION_BATCH_SIZE, 10);
+  }
+
+  const modelStr = String(model || '').toLowerCase().replace(/_/g, '-');
+
+  // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability
+  if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
+    return 200;
+  }
+
+  // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
+  const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
+  const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
+
+  // 4. Reasoning & Pro tier: Balanced against latency penalty and retry overhead
+  if (modelStr.includes('pro')) {
+    if (version >= 2.5) return 300; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+)
+    return 250;                     // Legacy Pro (1.5)
+  }
+
+  // 5. Flash tier: Optimized for high-throughput context windows
+  if (modelStr.includes('flash')) {
+    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+)
+    if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5)
+    return 250;                     // Legacy Flash (1.5)
+  }
+
+  // 6. Safe baseline fallback for unmapped architectures
+  return 250;
+}
+
+// Pangkalan Data Harga & Spesifikasi Model AI
 function getModelSpec(modelName) {
   const m = String(modelName || '').toLowerCase().replace(/_/g, '-');
+  const batchSize = getBatchSizeForModel(m);
 
-  // 1. Model Pro (Batch 200)
-  if (m.includes('3.1-pro')) return { input: 2.00, output: 12.00, batchSize: 200, name: '3.1-Pro' };
-  if (m.includes('2.5-pro')) return { input: 1.25, output: 10.00, batchSize: 200, name: '2.5-Pro' };
-  if (m.includes('1.5-pro')) return { input: 1.25, output: 5.00, batchSize: 200, name: '1.5-Pro' };
+  let inputPrice = 0.25;
+  let outputPrice = 1.50;
+  let cleanName = '3.1-Flash-Lite';
 
-  // 2. Model Flash-Lite (Batch 200)
-  if (m.includes('3.5-flash-lite')) return { input: 0.30, output: 2.50, batchSize: 200, name: '3.5-Flash-Lite' };
-  if (m.includes('3.1-flash-lite') || m.includes('flash-lite')) return { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' };
-  if (m.includes('2.5-flash-lite')) return { input: 0.10, output: 0.40, batchSize: 200, name: '2.5-Flash-Lite' };
+  if (m.includes('3.1-pro')) {
+    inputPrice = 2.00; outputPrice = 12.00; cleanName = '3.1-Pro';
+  } else if (m.includes('2.5-pro')) {
+    inputPrice = 1.25; outputPrice = 10.00; cleanName = '2.5-Pro';
+  } else if (m.includes('1.5-pro')) {
+    inputPrice = 1.25; outputPrice = 5.00; cleanName = '1.5-Pro';
+  } else if (m.includes('3.5-flash-lite')) {
+    inputPrice = 0.30; outputPrice = 2.50; cleanName = '3.5-Flash-Lite';
+  } else if (m.includes('3.1-flash-lite') || m.includes('flash-lite')) {
+    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite';
+  } else if (m.includes('2.5-flash-lite')) {
+    inputPrice = 0.10; outputPrice = 0.40; cleanName = '2.5-Flash-Lite';
+  } else if (m.includes('3.7-flash')) {
+    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.7-Flash';
+  } else if (m.includes('3.6-flash')) {
+    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.6-Flash';
+  } else if (m.includes('3.5-flash')) {
+    inputPrice = 1.50; outputPrice = 9.00; cleanName = '3.5-Flash';
+  } else if (m.includes('3-flash') || m.includes('3.0-flash')) {
+    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3-Flash';
+  } else if (m.includes('2.5-flash')) {
+    inputPrice = 0.30; outputPrice = 2.50; cleanName = '2.5-Flash';
+  } else if (m.includes('1.5-flash')) {
+    inputPrice = 0.075; outputPrice = 0.30; cleanName = '1.5-Flash';
+  } else if (m.includes('pro')) {
+    inputPrice = 1.25; outputPrice = 10.00; cleanName = 'Gemini-Pro';
+  } else if (m.includes('flash')) {
+    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3-Flash';
+  }
 
-  // 3. Model Flash Standard & Preview (Batch 400)
-  if (m.includes('3.7-flash')) return { input: 0.75, output: 3.75, batchSize: 400, name: '3.7-Flash' };
-  if (m.includes('3.6-flash')) return { input: 0.75, output: 3.75, batchSize: 400, name: '3.6-Flash' };
-  if (m.includes('3.5-flash')) return { input: 1.50, output: 9.00, batchSize: 400, name: '3.5-Flash' };
-  if (m.includes('3-flash') || m.includes('3.0-flash')) return { input: 0.50, output: 3.00, batchSize: 400, name: '3-Flash' };
-  if (m.includes('2.5-flash')) return { input: 0.30, output: 2.50, batchSize: 400, name: '2.5-Flash' };
-  if (m.includes('1.5-flash')) return { input: 0.075, output: 0.30, batchSize: 400, name: '1.5-Flash' };
-
-  // Fallback Umum
-  if (m.includes('pro')) return { input: 1.25, output: 10.00, batchSize: 200, name: 'Gemini-Pro' };
-  if (m.includes('flash')) return { input: 0.50, output: 3.00, batchSize: 400, name: '3-Flash' };
-
-  return { input: 0.25, output: 1.50, batchSize: 200, name: '3.1-Flash-Lite' };
+  return {
+    input: inputPrice,
+    output: outputPrice,
+    batchSize,
+    name: cleanName
+  };
 }
 
 // Semak baki langsung dari API CrazyRouter secara mandiri
@@ -90,7 +152,7 @@ async function fetchLiveCrazyRouterBalance() {
   return null;
 }
 
-// Analisis Kunci & Pengiraan Kapasiti Mengikut Dompet dan Kuota Harian
+// Analisis Kunci & Pengiraan Kapasiti Dinamik
 function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletBalanceUSD = 0) {
   let keyList = [];
   if (Array.isArray(rawKeys)) {
@@ -104,12 +166,12 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.1-flash-lite', walletB
   const googleKeys = totalKeys - crazyKeys;
 
   const spec = getModelSpec(currentModel);
-  const batchesPerEp = Math.ceil(1200 / spec.batchSize); // 1200 / 400 = 3 batch, 1200 / 200 = 6 batch
+  const batchesPerEp = Math.ceil(1200 / spec.batchSize);
 
-  // 1. Kira Kapasiti Google Direct (Kuota 500 RPD)
+  // 1. Kapasiti Google Direct (Kuota 500 RPD)
   const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
 
-  // 2. Kira Kapasiti CrazyRouter (Berdasarkan Dompet USD & Diskaun 45%)
+  // 2. Kapasiti CrazyRouter (Baki Dompet USD & Diskaun 45%)
   const retailCostPerEp = ((25000 / 1000000) * spec.input) + ((15000 / 1000000) * spec.output);
   const crazyCostPerEp = retailCostPerEp * 0.55;
   const crazyWalletCapacity = (crazyCostPerEp > 0 && walletBalanceUSD > 0)
@@ -248,7 +310,6 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       stats.connectionType = existingStats.connectionType;
     }
 
-    // Kunci rekod status kunci & model terkini ke Redis
     await adapter.set(KEY_STATS_REDIS_KEY, { ...stats, updatedAt: Date.now() }, StorageAdapter.CACHE_TYPES.TRANSLATION);
 
     const entry = {
