@@ -1933,11 +1933,9 @@
             advancedSettings: {
                 enabled: false,
                 geminiModel: '',
-                thinkingBudget: geminiAdvancedDefaults.thinkingBudget,
-                thinkingLevel: geminiAdvancedDefaults.thinkingLevel,
-                temperature: geminiAdvancedDefaults.temperature,
+                thinkingLevel: geminiAdvancedDefaults.thinkingLevel || 'minimal',
+                temperature: geminiAdvancedDefaults.temperature || 0.2,
                 topP: 0.95,
-                topK: 40,
                 enableBatchContext: false,
                 contextSize: 20,
                 sendTimestampsToAI: false,
