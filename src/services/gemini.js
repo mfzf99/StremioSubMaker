@@ -24,6 +24,31 @@ function isGemini3Model(model) {
   return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
 }
 
+// Jadual Pemetaan Rasmi Google Dokumen untuk Thinking Level & Tahap Disokong
+const MODEL_THINKING_PROFILES = {
+  'gemini-3.7-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+  'gemini-3.6-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+  'gemini-3.5-flash-lite': { default: 'minimal', levels: ['minimal', 'low', 'medium', 'high'] },
+  'gemini-3.1-pro-preview': { default: 'high', levels: ['low', 'medium', 'high'] },
+  'gemini-3.1-flash-lite-image': { default: 'minimal', levels: ['minimal', 'high'] },
+  'gemini-3-flash-preview': { default: 'high', levels: ['minimal', 'low', 'medium', 'high'] },
+  'gemini-3-pro-preview': { default: 'high', levels: ['low', 'high'] },
+  'gemini-3.5-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+  'gemini-2.5-pro': { default: 'medium', levels: ['low', 'medium', 'high'] },
+  'gemini-2.5-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+  'gemini-2.5-flash-lite': { default: 'disabled', levels: ['low', 'medium', 'high'] }
+};
+
+function getModelThinkingProfile(modelName) {
+  const normalized = normalizeGeminiModelId(modelName).toLowerCase();
+  for (const [key, profile] of Object.entries(MODEL_THINKING_PROFILES)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return profile;
+    }
+  }
+  return { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] };
+}
+
 function getFallbackOutputTokenLimit(model) {
   const modelName = normalizeGeminiModelId(model).toLowerCase();
   if (modelName.includes('2.0') || modelName.includes('-flash-001') || modelName.includes('-flash-lite-001')) {
@@ -127,16 +152,11 @@ class GeminiService {
       ? advancedSettings.maxRetries
       : (process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES, 10) : 3);
 
-    // Thinking Budget
-    const envThinking = process.env.GEMINI_THINKING_BUDGET !== undefined
-      ? parseInt(process.env.GEMINI_THINKING_BUDGET, 10)
-      : 0;
-    this.thinkingBudget = advancedSettings.thinkingBudget !== undefined
-      ? advancedSettings.thinkingBudget
-      : envThinking;
-    this.thinkingLevel = typeof advancedSettings.thinkingLevel === 'string'
+    // Thinking Level Rasmi Mengikut Model
+    const modelProfile = getModelThinkingProfile(this.model);
+    this.thinkingLevel = typeof advancedSettings.thinkingLevel === 'string' && advancedSettings.thinkingLevel.trim() !== ''
       ? advancedSettings.thinkingLevel.trim().toLowerCase()
-      : String(process.env.GEMINI_THINKING_LEVEL || '').trim().toLowerCase();
+      : (process.env.GEMINI_THINKING_LEVEL ? process.env.GEMINI_THINKING_LEVEL.trim().toLowerCase() : modelProfile.default);
 
     // Universal 1:1 Sampling Defaults (Temperature: 0.2, Top-P: 0.95 | Pure Nucleus Sampling)
     this.temperature = advancedSettings.temperature !== undefined
@@ -193,43 +213,19 @@ class GeminiService {
     };
   }
 
-  getEffectiveThinkingBudget() {
-    return this.isGemmaModel ? 0 : this.thinkingBudget;
-  }
-
-  getGemini3ThinkingLevel(thinkingBudget) {
-    const allowedLevels = new Set(['disabled', 'minimal', 'low', 'medium', 'high']);
-    const requiresLowMinimum = /^gemini-3\.7-flash(?:[-.]|$)/.test(this.model)
-      || this.model.includes('3.1-pro')
-      || this.model === 'gemini-pro-latest';
-
-    if (allowedLevels.has(this.thinkingLevel)) {
-      const requestedLevel = this.thinkingLevel === 'disabled' ? 'minimal' : this.thinkingLevel;
-      if (requestedLevel === 'minimal' && requiresLowMinimum) {
-        return 'low';
-      }
-      return requestedLevel;
+  getEffectiveThinkingLevel() {
+    if (this.isGemmaModel) return 'disabled';
+    const profile = getModelThinkingProfile(this.model);
+    const supportedLevels = new Set(profile.levels);
+    if (supportedLevels.has(this.thinkingLevel)) {
+      return this.thinkingLevel;
     }
-    if (!Number.isFinite(thinkingBudget) || thinkingBudget < 0) {
-      return null;
-    }
-    if (thinkingBudget === 0) {
-      return requiresLowMinimum ? 'low' : 'minimal';
-    }
-    if (thinkingBudget <= 2048) {
-      return 'low';
-    }
-    if (thinkingBudget <= 8192) {
-      return 'medium';
-    }
-    return 'high';
+    return profile.default;
   }
 
   isThinkingEnabled() {
-    if (this.isGemini3Model) {
-      return !!this.getGemini3ThinkingLevel(this.getEffectiveThinkingBudget());
-    }
-    return this.getEffectiveThinkingBudget() !== 0;
+    const level = this.getEffectiveThinkingLevel();
+    return level && level !== 'disabled' && level !== 'off';
   }
 
   buildGenerationConfig(maxOutputTokens) {
@@ -241,20 +237,9 @@ class GeminiService {
       presencePenalty: 0.0
     };
 
-    const thinkingBudget = this.getEffectiveThinkingBudget();
-
-    if (this.isGemini3Model) {
-      const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
-      if (thinkingLevel) {
-        generationConfig.thinkingConfig = { thinkingLevel };
-      }
-      return generationConfig;
-    }
-
-    if (thinkingBudget === -1) {
-      generationConfig.thinkingConfig = { thinkingBudget: null };
-    } else if (thinkingBudget > 0) {
-      generationConfig.thinkingConfig = { thinkingBudget };
+    const effectiveLevel = this.getEffectiveThinkingLevel();
+    if (effectiveLevel && effectiveLevel !== 'disabled' && effectiveLevel !== 'off') {
+      generationConfig.thinkingConfig = { thinkingLevel: effectiveLevel };
     }
 
     return generationConfig;
@@ -338,11 +323,7 @@ class GeminiService {
       };
       log.debug(() => `[Gemini] CrazyRouter proxy bypass applied for ${this.model}. Output limit forced to: ${limits.outputTokenLimit}`);
 
-      const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-      const thinkingDisplay = this.isGemini3Model
-        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
-        : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
-
+      const thinkingDisplay = `thinkingLevel=${this.getEffectiveThinkingLevel()}`;
       log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topP=${this.topP}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
 
       this._modelLimits = limits;
@@ -372,14 +353,8 @@ class GeminiService {
 
       log.debug(() => `[Gemini] Model: ${this.model}, Output limit: ${limits.outputTokenLimit}, Input limit: ${limits.inputTokenLimit || 'unlimited'}`);
 
-      const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-      const thinkingDisplay = this.isGemini3Model
-        ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
-        : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
-
-      const generationControls = this.isGemini3Model
-        ? `temperature=${this.temperature}, topP=${this.topP}, ${thinkingDisplay}`
-        : `temperature=${this.temperature}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
+      const thinkingDisplay = `thinkingLevel=${this.getEffectiveThinkingLevel()}`;
+      const generationControls = `temperature=${this.temperature}, topP=${this.topP}, ${thinkingDisplay}`;
 
       log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
@@ -447,9 +422,7 @@ class GeminiService {
     let systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT)
       .replace('{target_language}', normalizedTarget);
 
-    const thinkingEnabled = typeof this.isThinkingEnabled === 'function'
-      ? this.isThinkingEnabled()
-      : (this.getEffectiveThinkingBudget ? this.getEffectiveThinkingBudget() !== 0 : true);
+    const thinkingEnabled = this.isThinkingEnabled();
 
     if (thinkingEnabled) {
       const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, literal translations, overlapping speech (-), sound/music tags (e.g., [sighs], ♪), song lyrics, and sentence fragments — bypass reasoning ENTIRELY. Output the XML immediately.\n4. SELECTIVE REASONING: ONLY activate reasoning for highly complex idioms or untranslatable slang. Resolve conceptually then output XML immediately.\n';
@@ -521,9 +494,7 @@ class GeminiService {
         const modelOutputCap = typeof limits.outputTokenLimit === 'number' ? limits.outputTokenLimit : this.maxOutputTokens;
         const safetyMargin = Math.floor(modelOutputCap * 0.05);
 
-        const thinkingBudget = this.getEffectiveThinkingBudget();
-        const thinkingReserve = thinkingBudget > 0 ? thinkingBudget : 0;
-        const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin - thinkingReserve));
+        const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin));
 
         let estimatedOutputTokens;
         if (this.isThinkingEnabled()) {
@@ -535,7 +506,7 @@ class GeminiService {
           ));
         }
 
-        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens);
 
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
@@ -682,9 +653,7 @@ class GeminiService {
         const modelOutputCap = typeof limits.outputTokenLimit === 'number' ? limits.outputTokenLimit : this.maxOutputTokens;
         const safetyMargin = Math.floor(modelOutputCap * 0.05);
 
-        const thinkingBudget = this.getEffectiveThinkingBudget();
-        const thinkingReserve = thinkingBudget > 0 ? thinkingBudget : 0;
-        const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin - thinkingReserve));
+        const availableForOutput = Math.max(1024, Math.min(this.maxOutputTokens, modelOutputCap - safetyMargin));
 
         let estimatedOutputTokens;
         if (this.isThinkingEnabled()) {
@@ -696,7 +665,7 @@ class GeminiService {
           ));
         }
 
-        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens);
 
         if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
