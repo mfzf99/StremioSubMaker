@@ -7831,8 +7831,7 @@ Translate to {target_language}.`;
             const advTopPEl = document.getElementById('advancedTopP');
 
             if (advModelEl) advModelEl.value = ''; // Reset to "Use Default Model"
-            if (advThinkingEl) advThinkingEl.value = modelDefaults.thinkingBudget;
-            if (advThinkingLevelEl) advThinkingLevelEl.value = modelDefaults.thinkingLevel || 'disabled';
+            if (advThinkingLevelEl) advThinkingLevelEl.value = modelDefaults.thinkingLevel;
             if (advTempEl) advTempEl.value = modelDefaults.temperature;
             if (advTopPEl) advTopPEl.value = fullDefaults.topP;
             updateGeminiThinkingControl();
