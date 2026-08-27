@@ -6530,18 +6530,13 @@ Translate to {target_language}.`;
         const modelChanged = advModelEl.value !== (defaults.geminiModel || '');
         const activeModel = normalizeGeminiModelName(advModelEl.value || currentBaseModel);
         const activeModelDefaults = getModelSpecificDefaults(activeModel);
-        const thinkingChanged = isGemini3ModelName(activeModel)
-            ? sanitizeGeminiThinkingLevel(advThinkingLevelEl.value) !== activeModelDefaults.thinkingLevel
-            : parseInt(advThinkingEl.value) !== activeModelDefaults.thinkingBudget;
+        const thinkingChanged = sanitizeGeminiThinkingLevel(advThinkingLevelEl.value, activeModelDefaults.thinkingLevel) !== activeModelDefaults.thinkingLevel;
         const tempChanged = parseFloat(advTempEl.value) !== defaults.temperature;
         const topPChanged = parseFloat(advTopPEl.value) !== defaults.topP;
-        // Batch context changes are also considered advanced modifications
         const batchCtxChanged = batchCtxEl ? (batchCtxEl.checked !== (defaults.enableBatchContext === true)) : false;
         const ctxSizeChanged = ctxSizeEl ? (parseInt(ctxSizeEl.value) !== (defaults.contextSize || 20)) : false;
-        // Mismatch retries change
         const mismatchRetriesEl = document.getElementById('mismatchRetries');
         const mismatchRetriesChanged = mismatchRetriesEl ? (parseInt(mismatchRetriesEl.value) !== (defaults.mismatchRetries ?? 3)) : false;
-        // Workflow change (default is 'xml')
         const workflowChanged = getSelectedTranslationWorkflow('xml') !== 'xml';
 
         return modelChanged || thinkingChanged || tempChanged || topPChanged || batchCtxChanged || ctxSizeChanged || mismatchRetriesChanged || workflowChanged;
