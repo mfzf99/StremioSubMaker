@@ -2844,43 +2844,92 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 || getConfiguredModelForProvider('gemini');
         }
 
+        const MODEL_THINKING_PROFILES = {
+            'gemini-3.7-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+            'gemini-3.6-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+            'gemini-3.5-flash-lite': { default: 'minimal', levels: ['minimal', 'low', 'medium', 'high'] },
+            'gemini-3.1-pro-preview': { default: 'high', levels: ['low', 'medium', 'high'] },
+            'gemini-3.1-flash-lite-image': { default: 'minimal', levels: ['minimal', 'high'] },
+            'gemini-3-flash-preview': { default: 'high', levels: ['minimal', 'low', 'medium', 'high'] },
+            'gemini-3-pro-preview': { default: 'high', levels: ['low', 'high'] },
+            'gemini-3.5-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+            'gemini-2.5-pro': { default: 'medium', levels: ['low', 'medium', 'high'] },
+            'gemini-2.5-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+            'gemini-2.5-flash-lite': { default: 'disabled', levels: ['low', 'medium', 'high'] }
+        };
+
+        function getModelThinkingProfile(modelName) {
+            const normalized = normalizeGeminiModelId(modelName);
+            for (const [key, profile] of Object.entries(MODEL_THINKING_PROFILES)) {
+                if (normalized.includes(key) || key.includes(normalized)) {
+                    return profile;
+                }
+            }
+            return { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] };
+        }
+
         function normalizeGeminiModelId(modelName) {
-            return String(modelName || '').trim().replace(/^models\\//, '').toLowerCase();
+            return String(modelName || '').trim().replace(/^models\//, '').toLowerCase();
         }
 
         function getGeminiModelFamilyDefaults(modelName) {
             const modelId = normalizeGeminiModelId(modelName);
             const isGemini3 = isGemini3Model(modelId);
             if (isGemini3 && modelId.includes('flash-lite')) {
-                return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+                return { thinkingLevel: 'minimal', temperature: 0.2 };
             }
             if (isGemini3 && modelId.includes('flash')) {
-                return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+                return { thinkingLevel: 'medium', temperature: 0.2 };
             }
             if (isGemini3 && modelId.includes('pro')) {
-                return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.5 };
+                return { thinkingLevel: 'high', temperature: 0.2 };
             }
             if (modelId.includes('gemma')) {
-                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.7 };
+                return { thinkingLevel: 'disabled', temperature: 0.2 };
             }
             if (modelId.includes('flash-lite')) {
-                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+                return { thinkingLevel: 'disabled', temperature: 0.2 };
             }
-            if (modelId.includes('flash')) {
-                return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
+            if (modelId.includes('flash') || modelId.includes('pro')) {
+                return { thinkingLevel: 'medium', temperature: 0.2 };
             }
-            if (modelId.includes('pro')) {
-                return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
-            }
-            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+            return { thinkingLevel: 'minimal', temperature: 0.2 };
         }
 
         function updateThinkingControls(providerKey) {
             const normalized = normalizeProviderKey(providerKey);
-            const useThinkingLevel = normalized === 'gemini' && isGemini3Model(getSelectedGeminiModel());
-            const supportsBudget = normalized === 'gemini' || normalized === 'anthropic';
-            if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = supportsBudget && !useThinkingLevel ? '' : 'none';
-            if (thinkingLevelGroup) thinkingLevelGroup.style.display = useThinkingLevel ? '' : 'none';
+            const levelSelect = document.getElementById('advancedThinkingLevel');
+            
+            if (normalized === 'gemini') {
+                if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = 'none';
+                if (thinkingLevelGroup) thinkingLevelGroup.style.display = '';
+
+                const selectedModel = getSelectedGeminiModel();
+                const profile = getModelThinkingProfile(selectedModel);
+
+                if (levelSelect && profile && Array.isArray(profile.levels)) {
+                    const currentVal = levelSelect.value;
+                    levelSelect.innerHTML = '';
+                    profile.levels.forEach(lvl => {
+                        const opt = document.createElement('option');
+                        opt.value = lvl;
+                        opt.textContent = lvl.charAt(0).toUpperCase() + lvl.slice(1);
+                        levelSelect.appendChild(opt);
+                    });
+
+                    if (profile.levels.includes(currentVal)) {
+                        levelSelect.value = currentVal;
+                    } else {
+                        levelSelect.value = profile.default;
+                    }
+                }
+            } else if (normalized === 'anthropic') {
+                if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = '';
+                if (thinkingLevelGroup) thinkingLevelGroup.style.display = 'none';
+            } else {
+                if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = 'none';
+                if (thinkingLevelGroup) thinkingLevelGroup.style.display = 'none';
+            }
         }
 
         function applyGeminiModelDefaults(modelName) {
@@ -2890,18 +2939,17 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 ? getProviderParamsFor('gemini')
                 : getGeminiModelFamilyDefaults(selectedModel);
 
-            if (advancedThinkingBudget) {
-                advancedThinkingBudget.value = params.thinkingBudget ?? 0;
-            }
-            if (advancedThinkingLevel) {
-                advancedThinkingLevel.value = params.thinkingLevel || 'disabled';
+            updateThinkingControls('gemini');
+
+            const levelSelect = document.getElementById('advancedThinkingLevel');
+            if (levelSelect && params.thinkingLevel) {
+                levelSelect.value = params.thinkingLevel;
             }
             if (advancedTemperature) {
-                advancedTemperature.value = params.temperature ?? 0.8;
+                advancedTemperature.value = params.temperature ?? 0.2;
             }
-            updateThinkingControls('gemini');
         }
-
+        
         function buildProviderOptions() {
             const options = [];
             const seen = new Set();
