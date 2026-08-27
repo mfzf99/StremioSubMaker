@@ -42,7 +42,6 @@ function resolveTargetLang(lang) {
 
 /**
  * Resolves the optimal translation batch size based on model architecture and versioning.
- * Implements a future-proof tiered heuristic balancing token throughput, inference latency, and context integrity.
  *
  * Tier Hierarchy:
  * - ENV Override > Lightweight/Gemma (200) > Flash 3.0+ (400) > Pro 2.5+ / Flash 2.x (300) > Default (250)
@@ -51,36 +50,30 @@ function resolveTargetLang(lang) {
  * @returns {number} Batch size (entries per translation payload)
  */
 function getBatchSizeForModel(model) {
-  // 1. Environment variable override (highest priority)
   if (process.env.TRANSLATION_BATCH_SIZE) {
     return parseInt(process.env.TRANSLATION_BATCH_SIZE, 10);
   }
 
   const modelStr = String(model || '').toLowerCase().replace(/_/g, '-');
 
-  // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability
   if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
     return 200;
   }
 
-  // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
   const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
   const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
 
-  // 4. Reasoning & Pro tier: Balanced against latency penalty and retry overhead
   if (modelStr.includes('pro')) {
-    if (version >= 2.5) return 300; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+)
-    return 250;                     // Legacy Pro (1.5)
+    if (version >= 2.5) return 300;
+    return 250;
   }
 
-  // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+)
-    if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5)
-    return 250;                     // Legacy Flash (1.5)
+    if (version >= 3.0) return 400; // 3.0, 3.5, 3.6, 3.7, 4.0+
+    if (version >= 2.0) return 300;
+    return 250;
   }
 
-  // 6. Safe baseline fallback for unmapped architectures
   return 250;
 }
 
@@ -101,7 +94,7 @@ function getModelSpec(modelName) {
     inputPrice = 1.25; outputPrice = 5.00; cleanName = '1.5-Pro';
   } else if (m.includes('3.5-flash-lite')) {
     inputPrice = 0.30; outputPrice = 2.50; cleanName = '3.5-Flash-Lite';
-  } else if (m.includes('3.1-flash-lite') || m.includes('flash-lite')) {
+  } else if (m.includes('3.1-flash-lite')) {
     inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite';
   } else if (m.includes('2.5-flash-lite')) {
     inputPrice = 0.10; outputPrice = 0.40; cleanName = '2.5-Flash-Lite';
@@ -117,6 +110,8 @@ function getModelSpec(modelName) {
     inputPrice = 0.30; outputPrice = 2.50; cleanName = '2.5-Flash';
   } else if (m.includes('1.5-flash')) {
     inputPrice = 0.075; outputPrice = 0.30; cleanName = '1.5-Flash';
+  } else if (m.includes('flash-lite') || m.includes('lite')) {
+    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite';
   } else if (m.includes('pro')) {
     inputPrice = 1.25; outputPrice = 10.00; cleanName = 'Gemini-Pro';
   } else if (m.includes('flash')) {
@@ -152,8 +147,8 @@ async function fetchLiveCrazyRouterBalance() {
   return null;
 }
 
-// Analisis Kunci & Pengiraan Kapasiti Dinamik (Dengan Sokongan Sync Kunci Pool)
-function analyzeKeyList(rawKeys, currentModel = 'gemini-3-flash-preview', walletBalanceUSD = 0, overrideCounts = null) {
+// Analisis Kunci & Pengiraan Kapasiti Dinamik
+function analyzeKeyList(rawKeys, currentModel = 'gemini-3.5-flash', walletBalanceUSD = 0, overrideCounts = null) {
   let keyList = [];
   if (Array.isArray(rawKeys)) {
     keyList = rawKeys.filter(k => typeof k === 'string' && k.trim().length > 0);
@@ -165,7 +160,6 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3-flash-preview', wallet
   let crazyKeys = keyList.filter(k => k.startsWith('sk-')).length;
   let googleKeys = totalKeys - crazyKeys;
 
-  // Guna kiraan rasmi daripada pool pangkalan data jika wujud
   if (overrideCounts && typeof overrideCounts.totalKeys === 'number' && overrideCounts.totalKeys > 0) {
     totalKeys = overrideCounts.totalKeys;
     googleKeys = typeof overrideCounts.googleKeys === 'number' ? overrideCounts.googleKeys : (totalKeys - (overrideCounts.crazyKeys || 0));
@@ -211,7 +205,7 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3-flash-preview', wallet
   };
 }
 
-// Pengesan Status Kunci Pintar (Mengutamakan Model Aktif Terkini dari Redis)
+// Pengesan Status Kunci Pintar (Mengutamakan Session Aktif Stremio Dahulu)
 async function getActiveKeyInfo() {
   const adapter = await getStorageAdapter();
 
@@ -225,12 +219,10 @@ async function getActiveKeyInfo() {
     ? liveWalletUSD
     : (typeof savedStats?.walletBalanceUSD === 'number' ? savedStats.walletBalanceUSD : 0);
 
-  // 1. Keutamaan Pertama: Model aktif sebenar yang baru selesai menterjemah
-  let detectedModel = savedStats?.rawModel || savedStats?.model || savedStats?.modelName || '';
-
   let discoveredKeys = [];
+  let detectedModel = '';
 
-  // 2. Imbas sesi untuk senarai kunci dan model jika belum dikesan
+  // 1. Keutamaan Pertama: Imbas Sesi Stremio Aktif
   try {
     const { getSessionManager } = require('../utils/sessionManager');
     const sm = typeof getSessionManager === 'function' ? getSessionManager() : null;
@@ -241,8 +233,9 @@ async function getActiveKeyInfo() {
 
       for (const sess of sessionList) {
         const cfg = sess?.config || sess;
+        // Baca model override daripada advancedSettings dahulu
         const sessionModel = cfg?.advancedSettings?.geminiModel || cfg?.geminiModel || cfg?.model;
-        if (!detectedModel && sessionModel) {
+        if (sessionModel && !detectedModel) {
           detectedModel = sessionModel;
         }
 
@@ -258,16 +251,21 @@ async function getActiveKeyInfo() {
     }
   } catch (e) {}
 
+  // 2. Keutamaan Kedua: Rekod pendaftaran Redis dari terjemahan terakhir
+  if (!detectedModel) {
+    detectedModel = savedStats?.rawModel || savedStats?.model || savedStats?.modelName || '';
+  }
+
+  // 3. Keutamaan Ketiga: Environment Variable
+  if (!detectedModel) {
+    detectedModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  }
+
   if (discoveredKeys.length === 0) {
     const keyEnv = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
     discoveredKeys = keyEnv.split(',').map(k => k.trim()).filter(Boolean);
   }
 
-  if (!detectedModel) {
-    detectedModel = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-  }
-
-  // Jika senarai kekunci di memori terhad tetapi Redis menyimpan jumlah pool sebenar (contoh 79 kunci)
   let overrideCounts = null;
   if (discoveredKeys.length <= 1 && savedStats && savedStats.totalKeys > 1) {
     overrideCounts = {
@@ -306,7 +304,7 @@ async function registerCompletedSubtitle({ title, provider, targetLang, keys, ap
       validKeys = apiKeys.split(',').map(k => k.trim()).filter(Boolean);
     }
 
-    const usedModel = model || existingStats?.rawModel || existingStats?.model || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+    const usedModel = model || existingStats?.rawModel || existingStats?.model || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 
     let finalWalletUSD = (typeof walletBalanceUSD === 'number' && walletBalanceUSD > 0) ? walletBalanceUSD : 0;
     if (finalWalletUSD === 0) {
@@ -635,7 +633,7 @@ async function handleTextMessage(message, botToken, authorizedChatId) {
   if (text === '/start') {
     await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       chat_id: fromChatId,
-      text: '👋 <b>Selamat Datang ke Panel Kawalan SubMaker!</b>\n\nPapan kekunci menu telah diaktifkan:',
+      text: '👋 <b>Selamat Datang ke Panel Kawalan SubMaker!</b>\n\nPapan kekanced menu telah diaktifkan:',
       parse_mode: 'HTML',
       reply_markup: {
         keyboard: [
