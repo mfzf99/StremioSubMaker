@@ -11143,11 +11143,9 @@ Translate to {target_language}.`;
             advancedSettings: {
                 enabled: areAdvancedSettingsModified(), // Auto-detect if any setting differs from defaults
                 geminiModel: (function () { const el = document.getElementById('advancedModel'); return el ? el.value : ''; })(),
-                thinkingBudget: (function () { const el = document.getElementById('advancedThinkingBudget'); return el ? parseInt(el.value) : 0; })(),
-                thinkingLevel: (function () { const el = document.getElementById('advancedThinkingLevel'); return el ? sanitizeGeminiThinkingLevel(el.value) : ''; })(),
-                temperature: (function () { const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.8; })(),
+                thinkingLevel: (function () { const el = document.getElementById('advancedThinkingLevel'); return el ? sanitizeGeminiThinkingLevel(el.value) : 'minimal'; })(),
+                temperature: (function () { const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.2; })(),
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
-                topK: 40, // Keep default topK
                 enableBatchContext: (function () { const el = document.getElementById('enableBatchContext'); return el ? el.checked : false; })(),
                 contextSize: (function () { const el = document.getElementById('contextSize'); return el ? parseInt(el.value) : 20; })(),
                 translationWorkflow: getSelectedTranslationWorkflow('xml'),
