@@ -10775,10 +10775,10 @@ Translate to {target_language}.`;
             const activeDefaults = getModelSpecificDefaults(currentConfig.advancedSettings?.geminiModel || currentConfig.geminiModel);
             advThinkingLevelEl.value = sanitizeGeminiThinkingLevel(
                 currentConfig.advancedSettings?.thinkingLevel,
-                activeDefaults.thinkingLevel || 'disabled'
-            ) || 'disabled';
+                activeDefaults.thinkingLevel
+            );
         }
-        if (advTempEl) advTempEl.value = currentConfig.advancedSettings?.temperature ?? 0.8;
+        if (advTempEl) advTempEl.value = currentConfig.advancedSettings?.temperature ?? 0.2;
         if (advTopPEl) advTopPEl.value = currentConfig.advancedSettings?.topP ?? 0.95;
         updateGeminiThinkingControl();
 
