@@ -968,87 +968,102 @@ Translate to {target_language}.`;
         return normalized;
     }
 
+    const MODEL_THINKING_PROFILES = {
+        'gemini-3.7-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+        'gemini-3.6-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+        'gemini-3.5-flash-lite': { default: 'minimal', levels: ['minimal', 'low', 'medium', 'high'] },
+        'gemini-3.1-pro-preview': { default: 'high', levels: ['low', 'medium', 'high'] },
+        'gemini-3.1-flash-lite-image': { default: 'minimal', levels: ['minimal', 'high'] },
+        'gemini-3-flash-preview': { default: 'high', levels: ['minimal', 'low', 'medium', 'high'] },
+        'gemini-3-pro-preview': { default: 'high', levels: ['low', 'high'] },
+        'gemini-3.5-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
+        'gemini-2.5-pro': { default: 'medium', levels: ['low', 'medium', 'high'] },
+        'gemini-2.5-flash': { default: 'medium', levels: ['low', 'medium', 'high'] },
+        'gemini-2.5-flash-lite': { default: 'disabled', levels: ['low', 'medium', 'high'] }
+    };
+
+    function getModelThinkingProfile(modelName) {
+        const normalized = normalizeGeminiModelName(modelName).toLowerCase();
+        for (const [key, profile] of Object.entries(MODEL_THINKING_PROFILES)) {
+            if (normalized.includes(key) || key.includes(normalized)) {
+                return profile;
+            }
+        }
+        return { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] };
+    }
+
     function isGemini3ModelName(modelName) {
         const modelId = normalizeGeminiModelName(modelName);
         return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
     }
 
-    function sanitizeGeminiThinkingLevel(value, fallback = '') {
+    function sanitizeGeminiThinkingLevel(value, fallback = 'minimal') {
         const allowed = ['disabled', 'minimal', 'low', 'medium', 'high'];
         const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
         if (allowed.includes(normalized)) return normalized;
         const normalizedFallback = typeof fallback === 'string' ? fallback.trim().toLowerCase() : '';
-        return allowed.includes(normalizedFallback) ? normalizedFallback : '';
+        return allowed.includes(normalizedFallback) ? normalizedFallback : 'minimal';
     }
 
     const MODEL_SPECIFIC_DEFAULTS = {
-
-        'gemini-2.5-flash-lite': {
-            thinkingBudget: 0,
-            thinkingLevel: '',
-            temperature: 0.8
-        },
-        'gemini-2.5-flash-lite-preview-09-2025': {
-            thinkingBudget: 0,
-            thinkingLevel: '',
-            temperature: 0.8
-        },
-        'gemini-2.5-flash': {
-            thinkingBudget: -1,
-            thinkingLevel: '',
-            temperature: 0.5
-        },
-        'gemini-3-flash-preview': {
-            thinkingBudget: -1,
-            thinkingLevel: 'high',
-            temperature: 0.5
-        },
-        'gemini-3.1-flash-lite': {
-            thinkingBudget: 0,
-            thinkingLevel: 'minimal',
-            temperature: 0.8
-        },
-        'gemini-3.5-flash-lite': {
-            thinkingBudget: 0,
-            thinkingLevel: 'minimal',
-            temperature: 0.8
-        },
-        'gemini-3.5-flash': {
-            thinkingBudget: -1,
-            thinkingLevel: 'high',
-            temperature: 0.5
+        'gemini-3.7-flash': {
+            thinkingLevel: 'medium',
+            temperature: 0.2
         },
         'gemini-3.6-flash': {
-            thinkingBudget: -1,
-            thinkingLevel: 'high',
-            temperature: 0.5
+            thinkingLevel: 'medium',
+            temperature: 0.2
         },
-        'gemini-3.7-flash': {
-            thinkingBudget: -1,
-            thinkingLevel: 'high',
-            temperature: 0.5
-        },
-        'gemini-flash-lite-latest': {
-            thinkingBudget: 0,
+        'gemini-3.5-flash-lite': {
             thinkingLevel: 'minimal',
-            temperature: 0.8
-        },
-        'gemini-2.5-pro': {
-            thinkingBudget: 1000,
-            thinkingLevel: '',
-            temperature: 0.5
+            temperature: 0.2
         },
         'gemini-3.1-pro-preview': {
-            thinkingBudget: 1000,
             thinkingLevel: 'high',
-            temperature: 0.5
+            temperature: 0.2
+        },
+        'gemini-3.1-flash-lite-image': {
+            thinkingLevel: 'minimal',
+            temperature: 0.2
+        },
+        'gemini-3-flash-preview': {
+            thinkingLevel: 'high',
+            temperature: 0.2
+        },
+        'gemini-3-pro-preview': {
+            thinkingLevel: 'high',
+            temperature: 0.2
+        },
+        'gemini-3.5-flash': {
+            thinkingLevel: 'medium',
+            temperature: 0.2
+        },
+        'gemini-flash-lite-latest': {
+            thinkingLevel: 'minimal',
+            temperature: 0.2
+        },
+        'gemini-2.5-pro': {
+            thinkingLevel: 'medium',
+            temperature: 0.2
+        },
+        'gemini-2.5-flash': {
+            thinkingLevel: 'medium',
+            temperature: 0.2
+        },
+        'gemini-2.5-flash-lite': {
+            thinkingLevel: 'disabled',
+            temperature: 0.2
+        },
+        'gemma-3-27b-it': {
+            thinkingLevel: 'disabled',
+            temperature: 0.2
         }
     };
 
     /**
      * Get model-specific defaults for thinking and temperature
      * @param {string} modelName - The Gemini model name
-     * @returns {Object} - Model-specific settings { thinkingBudget, temperature }
+     * @returns {Object} - Model-specific settings { thinkingLevel, temperature }
      */
     function getModelSpecificDefaults(modelName) {
         const normalized = normalizeGeminiModelName(modelName).toLowerCase();
@@ -1057,28 +1072,26 @@ Translate to {target_language}.`;
 
         const isGemini3 = /^gemini-3(?:[.-]|$)/.test(normalized)
             || /^gemini-(?:flash|flash-lite|pro)-latest$/.test(normalized);
+
         if (isGemini3 && normalized.includes('flash-lite')) {
-            return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+            return { thinkingLevel: 'minimal', temperature: 0.2 };
         }
         if (isGemini3 && normalized.includes('flash')) {
-            return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+            return { thinkingLevel: 'medium', temperature: 0.2 };
         }
         if (isGemini3 && normalized.includes('pro')) {
-            return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.5 };
+            return { thinkingLevel: 'high', temperature: 0.2 };
         }
         if (normalized.includes('gemma')) {
-            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.7 };
+            return { thinkingLevel: 'disabled', temperature: 0.2 };
         }
         if (normalized.includes('flash-lite')) {
-            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+            return { thinkingLevel: 'disabled', temperature: 0.2 };
         }
-        if (normalized.includes('flash')) {
-            return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
+        if (normalized.includes('flash') || normalized.includes('pro')) {
+            return { thinkingLevel: 'medium', temperature: 0.2 };
         }
-        if (normalized.includes('pro')) {
-            return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
-        }
-        return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+        return { thinkingLevel: 'minimal', temperature: 0.2 };
     }
 
     function getVisibleGeminiModelOptions() {
