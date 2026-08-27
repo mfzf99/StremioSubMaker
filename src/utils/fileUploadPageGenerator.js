@@ -3806,11 +3806,10 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             }
 
             const selectedModel = advancedModel && advancedModel.value ? advancedModel.value.trim() : '';
-            const usesThinkingLevel = providerKey === 'gemini' && isGemini3Model(selectedModel || getConfiguredModelForProvider('gemini'));
-            const thinkingBudget = caps.supportsThinking && !usesThinkingLevel
-                ? readBoundedNumber(advancedThinkingBudget, -1, 32768, (v) => parseInt(v, 10))
+            const thinkingBudget = providerKey === 'anthropic'
+                ? readBoundedNumber(advancedThinkingBudget, 0, 32768, (v) => parseInt(v, 10))
                 : null;
-            const thinkingLevel = usesThinkingLevel && advancedThinkingLevel
+            const thinkingLevel = providerKey === 'gemini' && advancedThinkingLevel
                 ? String(advancedThinkingLevel.value || '').trim().toLowerCase()
                 : '';
             const temperature = caps.supportsTemperature
@@ -3818,9 +3817,6 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 : null;
             const topP = caps.supportsTopP
                 ? readBoundedNumber(advancedTopP, 0, 1, (v) => parseFloat(v))
-                : null;
-            const topK = caps.supportsTopK
-                ? readBoundedNumber(advancedTopK, 1, 100, (v) => parseInt(v, 10))
                 : null;
             const maxTokens = caps.supportsMaxTokens
                 ? readBoundedNumber(advancedMaxTokens, 1, MAX_OUTPUT_TOKEN_LIMIT, (v) => parseInt(v, 10))
@@ -3841,11 +3837,8 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             if (caps.supportsMaxTokens && Number.isFinite(maxTokens)) providerOverrides.maxOutputTokens = maxTokens;
             if (caps.supportsTimeout && Number.isFinite(timeout)) providerOverrides.translationTimeout = timeout;
             if (caps.supportsMaxRetries && Number.isFinite(maxRetries)) providerOverrides.maxRetries = maxRetries;
-            if (caps.supportsThinking && Number.isFinite(thinkingBudget)) {
+            if (providerKey === 'anthropic' && Number.isFinite(thinkingBudget)) {
                 providerOverrides.thinkingBudget = thinkingBudget;
-            }
-            if (usesThinkingLevel && ['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
-                providerOverrides.thinkingLevel = thinkingLevel;
             }
             if (caps.supportsReasoning && reasoningEffort) {
                 providerOverrides.reasoningEffort = reasoningEffort;
@@ -3858,11 +3851,9 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             const advancedOverrides = providerKey === 'gemini'
                 ? {
                     geminiModel: selectedModel || clientConfig.geminiModel || '',
-                    thinkingBudget: Number.isFinite(thinkingBudget) ? thinkingBudget : undefined,
-                    thinkingLevel: usesThinkingLevel ? thinkingLevel : undefined,
-                    temperature: Number.isFinite(temperature) ? temperature : undefined,
-                    topP: Number.isFinite(topP) ? topP : undefined,
-                    topK: Number.isFinite(topK) ? topK : undefined,
+                    thinkingLevel: thinkingLevel || undefined,
+                    temperature: Number.isFinite(temperature) ? temperature : 0.2,
+                    topP: Number.isFinite(topP) ? topP : 0.95,
                     maxOutputTokens: Number.isFinite(maxTokens) ? maxTokens : undefined,
                     translationTimeout: Number.isFinite(timeout) ? timeout : undefined,
                     maxRetries: Number.isFinite(maxRetries) ? maxRetries : undefined
