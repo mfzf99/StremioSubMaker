@@ -160,46 +160,48 @@
     }
 
     function getQuickSetupGeminiAdvancedDefaults(modelName) {
-        const normalizedModel = String(modelName || '').trim();
+        const normalizedModel = String(modelName || '').trim().toLowerCase();
         const helper = getConfigPageGeminiUiHelper();
         if (helper && typeof helper.getModelSpecificDefaults === 'function') {
             const helperDefaults = helper.getModelSpecificDefaults(normalizedModel);
-            if (helperDefaults && Number.isFinite(Number(helperDefaults.thinkingBudget)) && Number.isFinite(Number(helperDefaults.temperature))) {
+            if (helperDefaults) {
                 return {
-                    thinkingBudget: Number(helperDefaults.thinkingBudget),
-                    thinkingLevel: typeof helperDefaults.thinkingLevel === 'string' ? helperDefaults.thinkingLevel : '',
-                    temperature: Number(helperDefaults.temperature)
+                    thinkingLevel: typeof helperDefaults.thinkingLevel === 'string' ? helperDefaults.thinkingLevel : 'minimal',
+                    temperature: typeof helperDefaults.temperature === 'number' ? helperDefaults.temperature : 0.2
                 };
             }
         }
 
         switch (normalizedModel) {
-            case 'gemini-2.5-flash':
-                return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
-            case 'gemini-3-flash-preview':
-                return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
-            case 'gemini-3.5-flash':
-            case 'gemini-3.6-flash':
             case 'gemini-3.7-flash':
-                return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+            case 'gemini-3.6-flash':
+            case 'gemini-3.5-flash':
+            case 'gemini-2.5-flash':
             case 'gemini-2.5-pro':
-                return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
+                return { thinkingLevel: 'medium', temperature: 0.2 };
             case 'gemini-3.1-pro-preview':
-                return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.5 };
-            case 'gemini-2.5-flash-lite':
-                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+            case 'gemini-3-flash-preview':
+            case 'gemini-3-pro-preview':
+                return { thinkingLevel: 'high', temperature: 0.2 };
             case 'gemini-3.1-flash-lite':
+            case 'gemini-3.1-flash-lite-image':
             case 'gemini-3.5-flash-lite':
             case 'gemini-flash-lite-latest':
-                return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+                return { thinkingLevel: 'minimal', temperature: 0.2 };
+            case 'gemini-2.5-flash-lite':
+            case 'gemma-3-27b-it':
+                return { thinkingLevel: 'disabled', temperature: 0.2 };
             default:
-                if (/^gemini-3(?:[.-]|$)/.test(normalizedModel) && normalizedModel.includes('flash-lite')) {
-                    return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+                if (normalizedModel.includes('flash-lite')) {
+                    return { thinkingLevel: 'minimal', temperature: 0.2 };
                 }
-                if (/^gemini-3(?:[.-]|$)/.test(normalizedModel) && normalizedModel.includes('flash')) {
-                    return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+                if (normalizedModel.includes('pro')) {
+                    return { thinkingLevel: 'high', temperature: 0.2 };
                 }
-                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+                if (normalizedModel.includes('flash')) {
+                    return { thinkingLevel: 'medium', temperature: 0.2 };
+                }
+                return { thinkingLevel: 'minimal', temperature: 0.2 };
         }
     }
 
