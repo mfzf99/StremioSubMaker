@@ -77,7 +77,7 @@ function getBatchSizeForModel(model) {
   return 250;
 }
 
-// Pangkalan Data Harga & Spesifikasi Model AI
+// Pangkalan Data Harga, Spesifikasi & Had Kuota Rasmi Google Free Tier (RPD/RPM)
 function getModelSpec(modelName) {
   const m = String(modelName || '').toLowerCase().replace(/_/g, '-');
   const batchSize = getBatchSizeForModel(m);
@@ -85,44 +85,65 @@ function getModelSpec(modelName) {
   let inputPrice = 0.25;
   let outputPrice = 1.50;
   let cleanName = '3.1-Flash-Lite';
+  let rpd = 500;
+  let rpm = 15;
 
-  if (m.includes('3.1-pro')) {
-    inputPrice = 2.00; outputPrice = 12.00; cleanName = '3.1-Pro';
-  } else if (m.includes('2.5-pro')) {
-    inputPrice = 1.25; outputPrice = 10.00; cleanName = '2.5-Pro';
-  } else if (m.includes('1.5-pro')) {
-    inputPrice = 1.25; outputPrice = 5.00; cleanName = '1.5-Pro';
+  // Gemma 4 Models
+  if (m.includes('gemma-4-31b') || (m.includes('gemma') && m.includes('31b'))) {
+    inputPrice = 0.10; outputPrice = 0.40; cleanName = 'Gemma-4-31B'; rpd = 14400; rpm = 30;
+  } else if (m.includes('gemma-4-26b') || (m.includes('gemma') && m.includes('26b'))) {
+    inputPrice = 0.10; outputPrice = 0.40; cleanName = 'Gemma-4-26B'; rpd = 14400; rpm = 30;
+  } else if (m.includes('gemma')) {
+    inputPrice = 0.10; outputPrice = 0.40; cleanName = 'Gemma-4'; rpd = 14400; rpm = 30;
+  // Gemini 3.x Flash-Lite (RPD: 500, RPM: 15)
   } else if (m.includes('3.5-flash-lite')) {
-    inputPrice = 0.30; outputPrice = 2.50; cleanName = '3.5-Flash-Lite';
-  } else if (m.includes('3.1-flash-lite')) {
-    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite';
+    inputPrice = 0.30; outputPrice = 2.50; cleanName = '3.5-Flash-Lite'; rpd = 500; rpm = 15;
+  } else if (m.includes('3.1-flash-lite') || (m.includes('flash-lite') && m.includes('3'))) {
+    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite'; rpd = 500; rpm = 15;
+  // Gemini 2.5 Flash-Lite (RPD: 20, RPM: 10)
   } else if (m.includes('2.5-flash-lite')) {
-    inputPrice = 0.10; outputPrice = 0.40; cleanName = '2.5-Flash-Lite';
+    inputPrice = 0.10; outputPrice = 0.40; cleanName = '2.5-Flash-Lite'; rpd = 20; rpm = 10;
+  // Gemini 2.0 Flash & Flash-Lite (RPD: 0, RPM: 0)
+  } else if (m.includes('2.0-flash') || m.includes('2-flash') || m.includes('2.0-flash-lite') || m.includes('2-flash-lite')) {
+    inputPrice = 0.075; outputPrice = 0.30; cleanName = 'Gemini-2-Flash'; rpd = 0; rpm = 0;
+  // Gemini 3.x Flash (RPD: 20, RPM: 5)
   } else if (m.includes('3.7-flash')) {
-    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.7-Flash';
+    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.7-Flash'; rpd = 20; rpm = 5;
   } else if (m.includes('3.6-flash')) {
-    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.6-Flash';
+    inputPrice = 0.75; outputPrice = 3.75; cleanName = '3.6-Flash'; rpd = 20; rpm = 5;
   } else if (m.includes('3.5-flash')) {
-    inputPrice = 1.50; outputPrice = 9.00; cleanName = '3.5-Flash';
+    inputPrice = 1.50; outputPrice = 9.00; cleanName = '3.5-Flash'; rpd = 20; rpm = 5;
   } else if (m.includes('3-flash') || m.includes('3.0-flash')) {
-    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3-Flash';
+    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3.0-Flash'; rpd = 20; rpm = 5;
+  // Gemini 2.5 Flash (RPD: 20, RPM: 5)
   } else if (m.includes('2.5-flash')) {
-    inputPrice = 0.30; outputPrice = 2.50; cleanName = '2.5-Flash';
+    inputPrice = 0.30; outputPrice = 2.50; cleanName = '2.5-Flash'; rpd = 20; rpm = 5;
+  // Gemini 1.5 Flash (Legacy)
   } else if (m.includes('1.5-flash')) {
-    inputPrice = 0.075; outputPrice = 0.30; cleanName = '1.5-Flash';
-  } else if (m.includes('flash-lite') || m.includes('lite')) {
-    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite';
+    inputPrice = 0.075; outputPrice = 0.30; cleanName = '1.5-Flash'; rpd = 1500; rpm = 15;
+  // Pro Models (RPD: 0, RPM: 0 - Tiada Kuota Percuma)
+  } else if (m.includes('3.1-pro') || m.includes('3-pro')) {
+    inputPrice = 2.00; outputPrice = 12.00; cleanName = '3.1-Pro'; rpd = 0; rpm = 0;
+  } else if (m.includes('2.5-pro')) {
+    inputPrice = 1.25; outputPrice = 10.00; cleanName = '2.5-Pro'; rpd = 0; rpm = 0;
+  } else if (m.includes('1.5-pro')) {
+    inputPrice = 1.25; outputPrice = 5.00; cleanName = '1.5-Pro'; rpd = 50; rpm = 2;
   } else if (m.includes('pro')) {
-    inputPrice = 1.25; outputPrice = 10.00; cleanName = 'Gemini-Pro';
+    inputPrice = 1.25; outputPrice = 10.00; cleanName = 'Gemini-Pro'; rpd = 0; rpm = 0;
+  // Sandaran Umum
+  } else if (m.includes('flash-lite') || m.includes('lite')) {
+    inputPrice = 0.25; outputPrice = 1.50; cleanName = '3.1-Flash-Lite'; rpd = 500; rpm = 15;
   } else if (m.includes('flash')) {
-    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3-Flash';
+    inputPrice = 0.50; outputPrice = 3.00; cleanName = '3.0-Flash'; rpd = 20; rpm = 5;
   }
 
   return {
     input: inputPrice,
     output: outputPrice,
     batchSize,
-    name: cleanName
+    name: cleanName,
+    rpd,
+    rpm
   };
 }
 
@@ -169,8 +190,10 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.5-flash', walletBalanc
   const spec = getModelSpec(currentModel);
   const batchesPerEp = Math.ceil(1200 / spec.batchSize);
 
-  // 1. Kapasiti Google Direct (Kuota 500 RPD per key)
-  const googleDailyCapacity = googleKeys > 0 ? Math.floor((googleKeys * 500) / batchesPerEp) : 0;
+  // 1. Kapasiti Google Direct (Dinamik berpandukan had RPD rasmi setiap model)
+  const googleDailyCapacity = (googleKeys > 0 && spec.rpd > 0)
+    ? Math.floor((googleKeys * spec.rpd) / batchesPerEp)
+    : 0;
 
   // 2. Kapasiti CrazyRouter (Baki Dompet USD & Diskaun 45%)
   const retailCostPerEp = ((25000 / 1000000) * spec.input) + ((15000 / 1000000) * spec.output);
@@ -198,6 +221,8 @@ function analyzeKeyList(rawKeys, currentModel = 'gemini-3.5-flash', walletBalanc
     rawModel: currentModel,
     batchSize: spec.batchSize,
     batchesPerEp,
+    rpd: spec.rpd,
+    rpm: spec.rpm,
     walletBalanceUSD,
     googleDailyCapacity,
     crazyWalletCapacity,
@@ -233,7 +258,6 @@ async function getActiveKeyInfo() {
 
       for (const sess of sessionList) {
         const cfg = sess?.config || sess;
-        // Baca model override daripada advancedSettings dahulu
         const sessionModel = cfg?.advancedSettings?.geminiModel || cfg?.geminiModel || cfg?.model;
         if (sessionModel && !detectedModel) {
           detectedModel = sessionModel;
@@ -464,10 +488,14 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
         `📊 <b>Baki Kapasiti Dompet:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
         `💸 <b>Anggaran Kos / Episod:</b> ~$${keyInfo.crazyCostPerEp.toFixed(4)} (Diskaun 45% Aktif)`;
     } else if (keyInfo.googleKeys > 0 && keyInfo.crazyKeys === 0) {
-      capacityLine = `📊 <b>Kapasiti Batch ${keyInfo.batchSize}:</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName})`;
+      if (keyInfo.rpd === 0) {
+        capacityLine = `⚠️ <b>Tiada Kuota Percuma Google (0 RPD):</b> Model ${keyInfo.modelName} memerlukan akaun berbayar atau CrazyRouter.`;
+      } else {
+        capacityLine = `📊 <b>Kapasiti Batch ${keyInfo.batchSize}:</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName}, ${keyInfo.rpd} RPD/key)`;
+      }
     } else {
       capacityLine =
-        `📊 <b>Kapasiti Google (RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
+        `📊 <b>Kapasiti Google (${keyInfo.rpd} RPD):</b> ±${keyInfo.googleDailyCapacity.toLocaleString()} episod/hari (${keyInfo.modelName}, Batch ${keyInfo.batchSize})\n` +
         `💳 <b>Kapasiti Dompet CrazyRouter:</b> ±${keyInfo.crazyWalletCapacity.toLocaleString()} episod ($${keyInfo.walletBalanceUSD.toFixed(2)})`;
     }
 
@@ -478,7 +506,7 @@ async function renderApiKeysStatus(chatId, messageId, botToken) {
       `🔄 <b>Mod Giliran:</b> Auto-Rotation (${keyInfo.batchesPerEp} Batch / Episod)\n` +
       `🎯 <b>Jenis Sambungan:</b> ${keyInfo.connectionType}\n` +
       `${capacityLine}\n\n` +
-      `<i>Kapasiti dikira secara dinamik berpandukan model AI dan baki dompet aktif.</i>`;
+      `<i>Kapasiti dikira secara dinamik berpandukan had kuota rasmi Free Tier Google AI Studio.</i>`;
 
     const reply_markup = {
       inline_keyboard: [
@@ -633,7 +661,7 @@ async function handleTextMessage(message, botToken, authorizedChatId) {
   if (text === '/start') {
     await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       chat_id: fromChatId,
-      text: '👋 <b>Selamat Datang ke Panel Kawalan SubMaker!</b>\n\nPapan kekanced menu telah diaktifkan:',
+      text: '👋 <b>Selamat Datang ke Panel Kawalan SubMaker!</b>\n\nPapan kekunci menu telah diaktifkan:',
       parse_mode: 'HTML',
       reply_markup: {
         keyboard: [
