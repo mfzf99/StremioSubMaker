@@ -2297,7 +2297,6 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                                     <span class="label-description">${escapeHtml(thinkingLevelHelper)}</span>
                                 </label>
                                 <select id="advancedThinkingLevel">
-                                    <option value="disabled">${escapeHtml(t('fileUpload.advanced.thinkingLevel.disabled', {}, 'Disabled (closest supported)'))}</option>
                                     <option value="minimal">${escapeHtml(t('fileUpload.advanced.thinkingLevel.minimal', {}, 'Minimal'))}</option>
                                     <option value="low">${escapeHtml(t('fileUpload.advanced.thinkingLevel.low', {}, 'Low'))}</option>
                                     <option value="medium">${escapeHtml(t('fileUpload.advanced.thinkingLevel.medium', {}, 'Medium'))}</option>
@@ -2310,7 +2309,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                                     ${escapeHtml(temperatureLabel)}
                                     <span class="label-description">${escapeHtml(temperatureHelper)}</span>
                                 </label>
-                                <input type="number" id="advancedTemperature" min="0" max="2" step="0.1" value="0.8" placeholder="0.8">
+                                <input type="number" id="advancedTemperature" min="0" max="2" step="0.1" value="0.2" placeholder="0.2">
                             </div>
 
                             <div class="form-group" id="reasoningEffortGroup">
