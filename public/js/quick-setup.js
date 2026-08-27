@@ -183,8 +183,7 @@
             case 'gemini-3-flash-preview':
             case 'gemini-3-pro-preview':
                 return { thinkingLevel: 'high', temperature: 0.2 };
-            case 'gemini-3.1-flash-lite':
-            case 'gemini-3.1-flash-lite-image':
+           case 'gemini-3.1-flash-lite':
             case 'gemini-3.5-flash-lite':
             case 'gemini-flash-lite-latest':
                 return { thinkingLevel: 'minimal', temperature: 0.2 };
