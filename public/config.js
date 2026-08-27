@@ -1184,12 +1184,32 @@ Translate to {target_language}.`;
 
     function updateGeminiThinkingControl() {
         const model = getAdvancedGeminiModelValue();
-        const usesThinkingLevel = isGemini3ModelName(model);
-        const budgetGroup = document.getElementById('advancedThinkingBudgetGroup');
+        const profile = getModelThinkingProfile(model);
+        const levelSelect = document.getElementById('advancedThinkingLevel');
         const levelGroup = document.getElementById('advancedThinkingLevelGroup');
+        const budgetGroup = document.getElementById('advancedThinkingBudgetGroup');
 
-        if (budgetGroup) budgetGroup.style.display = usesThinkingLevel ? 'none' : '';
-        if (levelGroup) levelGroup.style.display = usesThinkingLevel ? '' : 'none';
+        if (budgetGroup) budgetGroup.style.display = 'none';
+
+        if (levelSelect && profile && Array.isArray(profile.levels)) {
+            const currentVal = levelSelect.value;
+            levelSelect.innerHTML = '';
+            
+            profile.levels.forEach(lvl => {
+                const opt = document.createElement('option');
+                opt.value = lvl;
+                opt.textContent = lvl.charAt(0).toUpperCase() + lvl.slice(1);
+                levelSelect.appendChild(opt);
+            });
+
+            if (profile.levels.includes(currentVal)) {
+                levelSelect.value = currentVal;
+            } else {
+                levelSelect.value = profile.default;
+            }
+        }
+
+        if (levelGroup) levelGroup.style.display = '';
     }
 
     function getDefaultProviderParameters() {
