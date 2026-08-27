@@ -138,7 +138,7 @@ class GeminiService {
       ? advancedSettings.thinkingLevel.trim().toLowerCase()
       : String(process.env.GEMINI_THINKING_LEVEL || '').trim().toLowerCase();
 
-    // Blueprint Sampling Defaults (Temperature: 0.2, Top-P: 0.95, Min-P: 0.05, Repetition: 1.05)
+    // Universal 1:1 Sampling Defaults (Temperature: 0.2, Top-P: 0.95 | Pure Nucleus Sampling)
     this.temperature = advancedSettings.temperature !== undefined
       ? advancedSettings.temperature
       : (process.env.GEMINI_TEMPERATURE !== undefined ? parseFloat(process.env.GEMINI_TEMPERATURE) : 0.2);
@@ -146,20 +146,6 @@ class GeminiService {
     this.topP = advancedSettings.topP !== undefined
       ? advancedSettings.topP
       : (process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95);
-
-    // Top-K (Abaikan nilai default legasi 40 supaya Min-P dapat beroperasi sepenuhnya secara dinamik)
-    const rawTopK = advancedSettings.topK !== undefined
-      ? advancedSettings.topK
-      : (process.env.GEMINI_TOP_K !== undefined ? parseInt(process.env.GEMINI_TOP_K, 10) : undefined);
-    this.topK = (rawTopK === 40 || rawTopK === 0 || !rawTopK) ? undefined : rawTopK;
-
-    this.minP = advancedSettings.minP !== undefined
-      ? advancedSettings.minP
-      : (process.env.GEMINI_MIN_P !== undefined ? parseFloat(process.env.GEMINI_MIN_P) : 0.05);
-
-    this.repetitionPenalty = advancedSettings.repetitionPenalty !== undefined
-      ? advancedSettings.repetitionPenalty
-      : (process.env.GEMINI_REPETITION_PENALTY !== undefined ? parseFloat(process.env.GEMINI_REPETITION_PENALTY) : 1.05);
 
     if (this.isGemmaModel) {
       this.maxOutputTokens = 8192;
@@ -255,21 +241,6 @@ class GeminiService {
       presencePenalty: 0.0
     };
 
-    // Attach Top-K only if explicitly defined by user/environment (and not legacy default 40)
-    if (this.topK !== undefined && Number.isFinite(this.topK) && this.topK > 0) {
-      generationConfig.topK = this.topK;
-    }
-
-    // Inject advanced dynamic sampling parameters for CrazyRouter proxy
-    if (this.keyType === 'crazyrouter') {
-      if (this.minP !== undefined && Number.isFinite(this.minP)) {
-        generationConfig.min_p = this.minP;
-      }
-      if (this.repetitionPenalty !== undefined && Number.isFinite(this.repetitionPenalty)) {
-        generationConfig.repetition_penalty = this.repetitionPenalty;
-      }
-    }
-
     const thinkingBudget = this.getEffectiveThinkingBudget();
 
     if (this.isGemini3Model) {
@@ -355,7 +326,7 @@ class GeminiService {
 
     const modelName = String(this.model).toLowerCase();
 
-    // 🚀 INTERCEPT UNTUK PROXY CRAZYROUTER
+    // 🚀 INTERCEPT UNTUK PROXY CRAZYROUTER (1:1 DENGAN GOOGLE DIRECT)
     if (this.keyType === 'crazyrouter') {
       let outputLimit = 8192;
       if (modelName.includes('2.5') || modelName.includes('gemini-3') || modelName.includes('gemini-4')) {
@@ -367,14 +338,12 @@ class GeminiService {
       };
       log.debug(() => `[Gemini] CrazyRouter proxy bypass applied for ${this.model}. Output limit forced to: ${limits.outputTokenLimit}`);
 
-      // Paparan Thinking & Sampling yang tepat mengikut seni bina model
       const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
       const thinkingDisplay = this.isGemini3Model
         ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
         : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
-      const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
 
-      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, minP=${this.minP}, repetitionPenalty=${this.repetitionPenalty}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
+      log.debug(() => `[Gemini] API config (Bypass Mode): temperature=${this.temperature}, topP=${this.topP}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}`);
 
       this._modelLimits = limits;
       return limits;
@@ -407,9 +376,12 @@ class GeminiService {
       const thinkingDisplay = this.isGemini3Model
         ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'minimal'}`
         : `thinkingBudget=${effectiveThinkingBudget === -1 ? 'dynamic' : effectiveThinkingBudget === 0 ? 'disabled' : effectiveThinkingBudget}`;
-      const topKDisplay = this.topK !== undefined ? this.topK : 'disabled (Min-P Active)';
 
-      log.debug(() => `[Gemini] API config: temperature=${this.temperature}, topK=${topKDisplay}, topP=${this.topP}, ${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
+      const generationControls = this.isGemini3Model
+        ? `temperature=${this.temperature}, topP=${this.topP}, ${thinkingDisplay}`
+        : `temperature=${this.temperature}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
+
+      log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
       this._modelLimits = limits;
       return limits;
