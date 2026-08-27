@@ -205,10 +205,8 @@ function logGeminiConfigThrottled(mergedConfig) {
     ? `${effectiveModel} (base=${baseModel || 'default'}, override=${overrideModel})`
     : effectiveModel;
   const suffix = suppressed > 0 ? ` (suppressed ${suppressed} duplicate logs)` : '';
-  const topKDisplay = (mergedConfig.advancedSettings?.topK !== undefined && mergedConfig.advancedSettings.topK !== 40 && mergedConfig.advancedSettings.topK > 0)
-    ? mergedConfig.advancedSettings.topK
-    : 'disabled (Min-P Active)';
-  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topK=${topKDisplay}, topP=${mergedConfig.advancedSettings.topP}, minP=${mergedConfig.advancedSettings.minP}, repPenalty=${mergedConfig.advancedSettings.repetitionPenalty}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
+
+  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topP=${mergedConfig.advancedSettings.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
 }
 
 function getDefaultProviderParameters() {
@@ -553,9 +551,11 @@ function normalizeConfig(config) {
     })()
   };
 
-  // 🔥 Bersihkan topK legasi (40) daripada session yang telah disimpan
-  if (mergedConfig.advancedSettings && (mergedConfig.advancedSettings.topK === 40 || mergedConfig.advancedSettings.topK === 0)) {
+  // 🔥 Pembersihan Mutlak Parameter Legasi (topK, minP, repetitionPenalty)
+  if (mergedConfig.advancedSettings) {
     delete mergedConfig.advancedSettings.topK;
+    delete mergedConfig.advancedSettings.minP;
+    delete mergedConfig.advancedSettings.repetitionPenalty;
   }
 
   mergedConfig.parallelBatchesEnabled = mergedConfig.parallelBatchesEnabled === true;
@@ -673,7 +673,7 @@ function normalizeConfig(config) {
       }
       return cfg.enabled === true;
     }
-    return !!(cfg.enabled && cfg.apiKey && cfg.model);
+    return !!(cfg.apiKey && String(cfg.apiKey).trim() !== '' && cfg.model && String(cfg.model).trim() !== '');
   };
   const firstConfiguredProvider = () => {
     const entry = Object.entries(mergedConfig.providers || {}).find(([key, cfg]) => {
@@ -1072,18 +1072,10 @@ function getDefaultConfig(modelName = null) {
       ? parseInt(process.env.GEMINI_THINKING_BUDGET, 10)
       : modelDefaults.thinkingBudget,
     thinkingLevel: sanitizeGeminiThinkingLevel(process.env.GEMINI_THINKING_LEVEL, modelDefaults.thinkingLevel),
-
-    // Advanced Sampling Defaults (Blueprint Optimized)
     temperature: process.env.GEMINI_TEMPERATURE !== undefined
       ? parseFloat(process.env.GEMINI_TEMPERATURE)
       : modelDefaults.temperature,
     topP: process.env.GEMINI_TOP_P !== undefined ? parseFloat(process.env.GEMINI_TOP_P) : 0.95,
-    topK: (process.env.GEMINI_TOP_K !== undefined && parseInt(process.env.GEMINI_TOP_K, 10) !== 40 && parseInt(process.env.GEMINI_TOP_K, 10) > 0)
-      ? parseInt(process.env.GEMINI_TOP_K, 10)
-      : undefined,
-    minP: process.env.GEMINI_MIN_P !== undefined ? parseFloat(process.env.GEMINI_MIN_P) : 0.05,
-    repetitionPenalty: process.env.GEMINI_REPETITION_PENALTY !== undefined ? parseFloat(process.env.GEMINI_REPETITION_PENALTY) : 1.05,
-
     enableBatchContext: process.env.ENABLE_BATCH_CONTEXT === 'true',
     contextSize: parseInt(process.env.BATCH_CONTEXT_SIZE, 10) || 20,
     mismatchRetries: process.env.MISMATCH_RETRIES !== undefined ? Math.max(0, Math.min(3, parseInt(process.env.MISMATCH_RETRIES, 10))) : 3
