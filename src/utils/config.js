@@ -133,12 +133,12 @@ function sanitizeReasoningEffort(value, fallback) {
   return allowed.includes(normalized) ? normalized : fallback;
 }
 
-function sanitizeGeminiThinkingLevel(value, fallback = '') {
+function sanitizeGeminiThinkingLevel(value, fallback = 'minimal') {
   const allowed = ['disabled', 'minimal', 'low', 'medium', 'high'];
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (allowed.includes(normalized)) return normalized;
   const normalizedFallback = typeof fallback === 'string' ? fallback.trim().toLowerCase() : '';
-  return allowed.includes(normalizedFallback) ? normalizedFallback : '';
+  return allowed.includes(normalizedFallback) ? normalizedFallback : 'minimal';
 }
 
 function mergeProviderParameters(defaults, incoming) {
@@ -163,7 +163,7 @@ function mergeProviderParameters(defaults, incoming) {
           ? parseInt(base.thinkingBudget, 10)
           : 0;
         const chosen = Number.isFinite(requested) ? requested : fallback;
-        return Math.max(-1, Math.min(200000, chosen));
+        return Math.max(0, Math.min(200000, chosen));
       })(),
       formality: typeof raw?.formality === 'string'
         ? raw.formality
@@ -189,13 +189,7 @@ function logGeminiConfigThrottled(mergedConfig) {
   const suppressed = suppressedGeminiConfigLogs;
   suppressedGeminiConfigLogs = 0;
 
-  const thinkingDisplay = (() => {
-    const val = mergedConfig.advancedSettings?.thinkingBudget;
-    if (val === undefined || val === null) return 'dynamic';
-    if (Number(val) === 0) return 'disabled';
-    return val;
-  })();
-
+  const thinkingLevelDisplay = mergedConfig.advancedSettings?.thinkingLevel || 'minimal';
   const effectiveModel = getEffectiveGeminiModel(mergedConfig);
   const baseModel = typeof mergedConfig.geminiModel === 'string' ? mergedConfig.geminiModel : '';
   const overrideModel = typeof mergedConfig.advancedSettings?.geminiModel === 'string'
@@ -206,7 +200,7 @@ function logGeminiConfigThrottled(mergedConfig) {
     : effectiveModel;
   const suffix = suppressed > 0 ? ` (suppressed ${suppressed} duplicate logs)` : '';
 
-  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topP=${mergedConfig.advancedSettings.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
+  log.debug(() => `[Config] Gemini API config: model=${modelLabel}, temperature=${mergedConfig.advancedSettings.temperature}, topP=${mergedConfig.advancedSettings.topP}, thinkingLevel=${thinkingLevelDisplay}, maxOutputTokens=${mergedConfig.advancedSettings.maxOutputTokens}, timeout=${mergedConfig.advancedSettings.translationTimeout}s, maxRetries=${mergedConfig.advancedSettings.maxRetries}, sendTimestampsToAI=${mergedConfig.advancedSettings.sendTimestampsToAI ? 'enabled' : 'disabled'}${suffix}`);
 }
 
 function getDefaultProviderParameters() {
@@ -531,6 +525,7 @@ function normalizeConfig(config) {
   const advSettings = mergedConfig.advancedSettings || {};
   const normalizedAdvancedModel = normalizeGeminiModelName(advSettings.geminiModel);
   const advancedModelDefaults = getModelSpecificDefaults(normalizedAdvancedModel || configModel);
+  
   mergedConfig.advancedSettings = {
     ...advSettings,
     geminiModel: normalizedAdvancedModel,
@@ -551,11 +546,12 @@ function normalizeConfig(config) {
     })()
   };
 
-  // 🔥 Pembersihan Mutlak Parameter Legasi (topK, minP, repetitionPenalty)
+  // 🔥 Pembersihan Mutlak Parameter Legasi (topK, minP, repetitionPenalty, thinkingBudget)
   if (mergedConfig.advancedSettings) {
     delete mergedConfig.advancedSettings.topK;
     delete mergedConfig.advancedSettings.minP;
     delete mergedConfig.advancedSettings.repetitionPenalty;
+    delete mergedConfig.advancedSettings.thinkingBudget;
   }
 
   mergedConfig.parallelBatchesEnabled = mergedConfig.parallelBatchesEnabled === true;
@@ -945,72 +941,59 @@ function encodeConfig(config) {
 }
 
 /**
- * Model-specific default configurations (Universal Blueprint Temperature: 0.2)
+ * Model-specific default configurations (100% Mengikut Dokumentasi Rasmi Google)
  */
 const MODEL_SPECIFIC_DEFAULTS = {
-  'gemma-3-27b-it': {
-    thinkingBudget: 0,
-    thinkingLevel: '',
-    temperature: 0.2
-  },
-  'gemini-2.5-flash-lite': {
-    thinkingBudget: 0,
-    thinkingLevel: '',
-    temperature: 0.2
-  },
-  'gemini-2.5-flash-lite-preview-09-2025': {
-    thinkingBudget: 0,
-    thinkingLevel: '',
-    temperature: 0.2
-  },
-  'gemini-2.5-flash': {
-    thinkingBudget: -1,
-    thinkingLevel: '',
-    temperature: 0.2
-  },
-  'gemini-3-flash-preview': {
-    thinkingBudget: -1,
-    thinkingLevel: 'high',
-    temperature: 0.2
-  },
-  'gemini-3.1-flash-lite': {
-    thinkingBudget: 0,
-    thinkingLevel: 'minimal',
-    temperature: 0.2
-  },
-  'gemini-3.5-flash-lite': {
-    thinkingBudget: 0,
-    thinkingLevel: 'minimal',
-    temperature: 0.2
-  },
-  'gemini-3.5-flash': {
-    thinkingBudget: -1,
-    thinkingLevel: 'high',
+  'gemini-3.7-flash': {
+    thinkingLevel: 'medium',
     temperature: 0.2
   },
   'gemini-3.6-flash': {
-    thinkingBudget: -1,
+    thinkingLevel: 'medium',
+    temperature: 0.2
+  },
+  'gemini-3.5-flash-lite': {
+    thinkingLevel: 'minimal',
+    temperature: 0.2
+  },
+  'gemini-3.1-pro-preview': {
     thinkingLevel: 'high',
     temperature: 0.2
   },
-  'gemini-3.7-flash': {
-    thinkingBudget: -1,
+  'gemini-3.1-flash-lite-image': {
+    thinkingLevel: 'minimal',
+    temperature: 0.2
+  },
+  'gemini-3-flash-preview': {
     thinkingLevel: 'high',
+    temperature: 0.2
+  },
+  'gemini-3-pro-preview': {
+    thinkingLevel: 'high',
+    temperature: 0.2
+  },
+  'gemini-3.5-flash': {
+    thinkingLevel: 'medium',
     temperature: 0.2
   },
   'gemini-flash-lite-latest': {
-    thinkingBudget: 0,
     thinkingLevel: 'minimal',
     temperature: 0.2
   },
   'gemini-2.5-pro': {
-    thinkingBudget: 1000,
-    thinkingLevel: '',
+    thinkingLevel: 'medium',
     temperature: 0.2
   },
-  'gemini-3.1-pro-preview': {
-    thinkingBudget: 1000,
-    thinkingLevel: 'high',
+  'gemini-2.5-flash': {
+    thinkingLevel: 'medium',
+    temperature: 0.2
+  },
+  'gemini-2.5-flash-lite': {
+    thinkingLevel: 'disabled',
+    temperature: 0.2
+  },
+  'gemma-3-27b-it': {
+    thinkingLevel: 'disabled',
     temperature: 0.2
   }
 };
@@ -1022,28 +1005,26 @@ function getModelSpecificDefaults(modelName) {
 
   const isGemini3 = /^gemini-3(?:[.-]|$)/.test(normalized)
     || /^gemini-(?:flash|flash-lite|pro)-latest$/.test(normalized);
+
   if (isGemini3 && normalized.includes('flash-lite')) {
-    return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.2 };
+    return { thinkingLevel: 'minimal', temperature: 0.2 };
   }
   if (isGemini3 && normalized.includes('flash')) {
-    return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.2 };
+    return { thinkingLevel: 'medium', temperature: 0.2 };
   }
   if (isGemini3 && normalized.includes('pro')) {
-    return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.2 };
+    return { thinkingLevel: 'high', temperature: 0.2 };
   }
   if (normalized.includes('gemma')) {
-    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
+    return { thinkingLevel: 'disabled', temperature: 0.2 };
   }
   if (normalized.includes('flash-lite')) {
-    return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
+    return { thinkingLevel: 'disabled', temperature: 0.2 };
   }
-  if (normalized.includes('flash')) {
-    return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.2 };
+  if (normalized.includes('flash') || normalized.includes('pro')) {
+    return { thinkingLevel: 'medium', temperature: 0.2 };
   }
-  if (normalized.includes('pro')) {
-    return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.2 };
-  }
-  return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.2 };
+  return { thinkingLevel: 'minimal', temperature: 0.2 };
 }
 
 function getEffectiveGeminiModel(config = {}) {
@@ -1068,9 +1049,6 @@ function getDefaultConfig(modelName = null) {
     sendTimestampsToAI: process.env.SEND_TIMESTAMPS_TO_AI === 'true',
     translationWorkflow: process.env.TRANSLATION_WORKFLOW || 'xml',
     enableJsonOutput: process.env.ENABLE_JSON_OUTPUT === 'true',
-    thinkingBudget: process.env.GEMINI_THINKING_BUDGET !== undefined
-      ? parseInt(process.env.GEMINI_THINKING_BUDGET, 10)
-      : modelDefaults.thinkingBudget,
     thinkingLevel: sanitizeGeminiThinkingLevel(process.env.GEMINI_THINKING_LEVEL, modelDefaults.thinkingLevel),
     temperature: process.env.GEMINI_TEMPERATURE !== undefined
       ? parseFloat(process.env.GEMINI_TEMPERATURE)
