@@ -2992,14 +2992,12 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             const normalized = normalizeProviderKey(providerKey);
             if (normalized === 'gemini') {
                 return {
-                    thinkingBudget: baseAdvancedSettings.thinkingBudget ?? 0,
-                    thinkingLevel: baseAdvancedSettings.thinkingLevel || '',
-                    temperature: baseAdvancedSettings.temperature ?? 0.8,
+                    thinkingLevel: baseAdvancedSettings.thinkingLevel || 'minimal',
+                    temperature: baseAdvancedSettings.temperature ?? 0.2,
                     topP: baseAdvancedSettings.topP ?? 0.95,
-                    topK: baseAdvancedSettings.topK ?? 40,
                     maxOutputTokens: baseAdvancedSettings.maxOutputTokens ?? 65536,
                     translationTimeout: baseAdvancedSettings.translationTimeout ?? 720,
-                    maxRetries: baseAdvancedSettings.maxRetries ?? 2
+                    maxRetries: baseAdvancedSettings.maxRetries ?? 3
                 };
             }
             const params = clientConfig.providerParameters || {};
