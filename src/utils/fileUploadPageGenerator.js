@@ -2849,7 +2849,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             'gemini-3.6-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
             'gemini-3.5-flash-lite': { default: 'minimal', levels: ['minimal', 'low', 'medium', 'high'] },
             'gemini-3.1-pro-preview': { default: 'high', levels: ['low', 'medium', 'high'] },
-            'gemini-3.1-flash-lite-image': { default: 'minimal', levels: ['minimal', 'high'] },
+            'gemini-3.1-flash-lite': { default: 'minimal', levels: ['minimal', 'low', 'medium', 'high'] },
             'gemini-3-flash-preview': { default: 'high', levels: ['minimal', 'low', 'medium', 'high'] },
             'gemini-3-pro-preview': { default: 'high', levels: ['low', 'high'] },
             'gemini-3.5-flash': { default: 'medium', levels: ['minimal', 'low', 'medium', 'high'] },
