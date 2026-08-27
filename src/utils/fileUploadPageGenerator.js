@@ -252,9 +252,9 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
     const thinkingBudgetLabel = t('fileUpload.advanced.thinking.label', {}, 'Thinking Budget (Extended Reasoning)');
     const thinkingBudgetHelper = t('fileUpload.advanced.thinking.helper', {}, '0 = disabled, -1 = dynamic (auto-adjust), or fixed token count (1-32768).');
     const thinkingLevelLabel = t('fileUpload.advanced.thinkingLevel.label', {}, 'Thinking Level');
-    const thinkingLevelHelper = t('fileUpload.advanced.thinkingLevel.helper', {}, 'Controls Gemini 3.x reasoning. Minimal is the closest supported option to disabled thinking.');
+    const thinkingLevelHelper = t('fileUpload.advanced.thinkingLevel.helper', {}, 'Controls Gemini reasoning intensity (Minimal, Low, Medium, High).');
     const temperatureLabel = t('fileUpload.advanced.temperature.label', {}, 'Temperature (Creativity)');
-    const temperatureHelper = t('fileUpload.advanced.temperature.helper', {}, 'Controls randomness (0.0-2.0). Lower = deterministic, Higher = creative. Default: 0.8');
+    const temperatureHelper = t('fileUpload.advanced.temperature.helper', {}, 'Controls randomness (0.0-2.0). Lower = deterministic, Higher = creative. Default: 0.2');
     const reasoningEffortLabel = t('fileUpload.advanced.reasoning.label', {}, 'Reasoning Effort');
     const reasoningEffortHelper = t('fileUpload.advanced.reasoning.helper', {}, 'Applies to reasoning-capable OpenAI-style models. Leave blank for default.');
     const topPLabel = t('fileUpload.advanced.topP.label', {}, 'Top-P (Nucleus Sampling)');
