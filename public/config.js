@@ -7950,10 +7950,9 @@ Translate to {target_language}.`;
             advModelEl.addEventListener('change', () => {
                 const selectedModel = getAdvancedGeminiModelValue();
                 const selectedDefaults = getModelSpecificDefaults(selectedModel);
-                if (advThinkingEl) advThinkingEl.value = selectedDefaults.thinkingBudget;
-                if (advThinkingLevelEl) advThinkingLevelEl.value = selectedDefaults.thinkingLevel || 'disabled';
-                if (advTempEl) advTempEl.value = selectedDefaults.temperature;
                 updateGeminiThinkingControl();
+                if (advThinkingLevelEl) advThinkingLevelEl.value = selectedDefaults.thinkingLevel;
+                if (advTempEl) advTempEl.value = selectedDefaults.temperature;
                 updateBypassCacheForAdvancedSettings();
             });
         }
