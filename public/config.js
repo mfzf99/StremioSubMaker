@@ -8475,31 +8475,59 @@ Translate to {target_language}.`;
     }
 
     function populateProviderModels(providerKey, models, selectedModel = '') {
-        const select = document.getElementById(`provider-${providerKey}-model`);
-        if (!select) return;
-        select.innerHTML = '';
+        const targetEl = document.getElementById(`provider-${providerKey}-model`);
+        if (!targetEl) return;
+
+        // Sokongan untuk Custom Provider yang menggunakan <input type="text">
+        if (targetEl.tagName === 'INPUT') {
+            let datalist = document.getElementById(`provider-${providerKey}-model-list`);
+            if (!datalist) {
+                datalist = document.createElement('datalist');
+                datalist.id = `provider-${providerKey}-model-list`;
+                targetEl.parentNode.appendChild(datalist);
+                targetEl.setAttribute('list', datalist.id);
+            }
+            datalist.innerHTML = '';
+            (models || []).forEach(model => {
+                if (!model || !model.name) return;
+                const opt = document.createElement('option');
+                opt.value = model.name;
+                opt.label = model.displayName || model.name;
+                datalist.appendChild(opt);
+            });
+
+            if (selectedModel) {
+                targetEl.value = selectedModel;
+            } else if (!targetEl.value && models.length > 0) {
+                targetEl.value = models[0].name;
+            }
+            return;
+        }
+
+        // Standard dropdown untuk provider lain (<select>)
+        targetEl.innerHTML = '';
         const placeholder = document.createElement('option');
         placeholder.value = '';
         placeholder.textContent = tConfig('config.providersUi.selectModel', {}, 'Select model');
-        select.appendChild(placeholder);
+        targetEl.appendChild(placeholder);
 
         (models || []).forEach(model => {
             if (!model || !model.name) return;
             const opt = document.createElement('option');
             opt.value = model.name;
             opt.textContent = model.displayName || model.name;
-            select.appendChild(opt);
+            targetEl.appendChild(opt);
         });
 
         if (selectedModel) {
-            const exists = Array.from(select.options).some(o => o.value === selectedModel);
+            const exists = Array.from(targetEl.options || []).some(o => o.value === selectedModel);
             if (!exists) {
                 const extraOpt = document.createElement('option');
                 extraOpt.value = selectedModel;
                 extraOpt.textContent = `${selectedModel} (saved)`;
-                select.appendChild(extraOpt);
+                targetEl.appendChild(extraOpt);
             }
-            select.value = selectedModel;
+            targetEl.value = selectedModel;
         }
     }
 
