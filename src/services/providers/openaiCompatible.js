@@ -21,7 +21,7 @@ const {
 
 /**
  * Universal OpenAI-Compatible Provider Wrapper
- * Equipped with 28-Model Smart Payload & Reasoning Engine.
+ * 100% Full Parity with Gemini Engine & 28-Model Smart Payload Registry.
  */
 class OpenAICompatibleProvider {
   constructor(options = {}) {
@@ -174,8 +174,8 @@ class OpenAICompatibleProvider {
   }
 
   /**
-   * 🧠 ENJIN PINTAR BINA PAYLOAD (28-Model Smart Payload Generator)
-   * Menyusun struktur JSON body mengikut spesifikasi mutlak setiap model.
+   * 🧠 ENJIN PINTAR BINA PAYLOAD (28-Model Registry & Behavior Engine)
+   * Menyusun struktur JSON body mengikut spesifikasi rasmi setiap model.
    */
   applySmartModelPayload(body, modelName, rawEffort) {
     const m = String(modelName || '').toLowerCase();
@@ -244,7 +244,7 @@ class OpenAICompatibleProvider {
       else if (effort === 'high') mapped = 'high';
       else if (effort === 'medium') mapped = 'medium';
       else if (effort === 'xhigh') {
-        mapped = m.includes('4.6') ? 'high' : 'xhigh'; // 4.6 tak sokong xhigh
+        mapped = m.includes('4.6') ? 'high' : 'xhigh'; // 4.6 tidak sokong xhigh
       }
       body.output_config = { effort: mapped };
       return;
@@ -301,13 +301,9 @@ class OpenAICompatibleProvider {
 
     const cappedMaxTokens = this.getCappedMaxOutputTokens();
     const isReasoning = this.isOpenAIReasoningModel();
-    const openAIInstructionRole = (isOpenAI && isReasoning) ? 'developer' : 'system';
 
+    // 🎯 1:1 Pariti Mutlak dengan Gemini (Hantar 1 prompt lengkap dalam mesej user)
     const messages = [
-      {
-        role: openAIInstructionRole,
-        content: 'You are an expert subtitle translation engine. Execute the translation strictly following all output constraints, XML tags, and rules.'
-      },
       {
         role: 'user',
         content: userPrompt
@@ -319,7 +315,6 @@ class OpenAICompatibleProvider {
       : (isOpenAI && useResponsesApi)
         ? {
           model: this.model,
-          instructions: messages[0].content,
           input: userPrompt,
           max_output_tokens: cappedMaxTokens,
           stream
