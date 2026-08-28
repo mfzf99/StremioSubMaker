@@ -8475,90 +8475,60 @@ Translate to {target_language}.`;
     }
 
     function populateProviderModels(providerKey, models, selectedModel = '') {
-        const targetEl = document.getElementById(`provider-${providerKey}-model`);
-        if (!targetEl) return;
-
-        // Sokongan untuk Custom Provider yang menggunakan <input type="text">
-        if (targetEl.tagName === 'INPUT') {
-            let datalist = document.getElementById(`provider-${providerKey}-model-list`);
-            if (!datalist) {
-                datalist = document.createElement('datalist');
-                datalist.id = `provider-${providerKey}-model-list`;
-                targetEl.parentNode.appendChild(datalist);
-                targetEl.setAttribute('list', datalist.id);
-            }
-            datalist.innerHTML = '';
-            (models || []).forEach(model => {
-                if (!model || !model.name) return;
-                const opt = document.createElement('option');
-                opt.value = model.name;
-                opt.label = model.displayName || model.name;
-                datalist.appendChild(opt);
-            });
-
-            if (selectedModel) {
-                targetEl.value = selectedModel;
-            } else if (!targetEl.value && models.length > 0) {
-                targetEl.value = models[0].name;
-            }
-            return;
-        }
-
-        // Standard dropdown untuk provider lain (<select>)
-        targetEl.innerHTML = '';
+        const select = document.getElementById(`provider-${providerKey}-model`);
+        if (!select) return;
+        select.innerHTML = '';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = tConfig('config.providersUi.selectModel', {}, 'Select model');
-        targetEl.appendChild(placeholder);
+        placeholder.textContent = tConfig('config.providersUi.selectModel', {}, 'Select model');[cite: 1]
+        select.appendChild(placeholder);
 
         (models || []).forEach(model => {
             if (!model || !model.name) return;
             const opt = document.createElement('option');
             opt.value = model.name;
             opt.textContent = model.displayName || model.name;
-            targetEl.appendChild(opt);
+            select.appendChild(opt);
         });
 
         if (selectedModel) {
-            const exists = Array.from(targetEl.options || []).some(o => o.value === selectedModel);
+            const exists = Array.from(select.options || []).some(o => o.value === selectedModel);
             if (!exists) {
                 const extraOpt = document.createElement('option');
                 extraOpt.value = selectedModel;
                 extraOpt.textContent = `${selectedModel} (saved)`;
-                targetEl.appendChild(extraOpt);
+                select.appendChild(extraOpt);
             }
-            targetEl.value = selectedModel;
+            select.value = selectedModel;
         }
     }
 
     function applyProvidersToForm(providers) {
-        ensureProvidersInState();
-        ensureProviderParametersInState();
+        ensureProvidersInState();[cite: 1]
+        ensureProviderParametersInState();[cite: 1]
         getProviderKeys().forEach(key => {
-            const cfg = providers && (providers[key] || providers[Object.keys(providers).find(k => k.toLowerCase() === key)]);
-            const enabled = cfg?.enabled === true;
-            const toggle = document.getElementById(`provider-${key}-enabled`);
-            const apiKeyInput = document.getElementById(`provider-${key}-key`);
-            if (toggle) toggle.checked = enabled;
-            if (apiKeyInput) apiKeyInput.value = cfg?.apiKey || '';
-            // Populate baseUrl for custom provider
+            const cfg = providers && (providers[key] || providers[Object.keys(providers).find(k => k.toLowerCase() === key)]);[cite: 1]
+            const enabled = cfg?.enabled === true;[cite: 1]
+            const toggle = document.getElementById(`provider-${key}-enabled`);[cite: 1]
+            const apiKeyInput = document.getElementById(`provider-${key}-key`);[cite: 1]
+            if (toggle) toggle.checked = enabled;[cite: 1]
+            if (apiKeyInput) apiKeyInput.value = cfg?.apiKey || '';[cite: 1]
+
+            // Populate baseUrl untuk custom provider
             if (key === 'custom') {
                 const baseUrlInput = document.getElementById('provider-custom-baseUrl');
                 if (baseUrlInput) baseUrlInput.value = cfg?.baseUrl || '';
-                // Custom provider uses a text input for model, not a select dropdown
-                const modelInput = document.getElementById('provider-custom-model');
-                if (modelInput) modelInput.value = cfg?.model || '';
-            } else {
-                const cachedModels = providerModelCache[key] || [];
-                populateProviderModels(key, cachedModels, cfg?.model || '');
             }
-            toggleProviderFields(key, enabled);
+
+            const cachedModels = providerModelCache[key] || [];[cite: 1]
+            populateProviderModels(key, cachedModels, cfg?.model || '');
+            toggleProviderFields(key, enabled);[cite: 1]
             currentConfig.providers[key] = {
                 ...currentConfig.providers[key],
                 ...(cfg || {})
             };
         });
-        updateMainProviderOptions(currentConfig.mainProvider || 'gemini');
+        updateMainProviderOptions(currentConfig.mainProvider || 'gemini');[cite: 1]
         if (currentConfig.multiProviderEnabled) {
             const secondaryEnabled = currentConfig.secondaryProviderEnabled === true;
             if (secondaryEnabled) {
@@ -8566,11 +8536,11 @@ Translate to {target_language}.`;
                 if (toggle) toggle.checked = true;
             }
             toggleSecondaryProviderUI(secondaryEnabled);
-            updateSecondaryProviderOptions(currentConfig.secondaryProvider || '');
+            updateSecondaryProviderOptions(currentConfig.secondaryProvider || '');[cite: 1]
         } else {
             toggleSecondaryProviderUI(false);
         }
-        updateProviderAdvancedVisibility();
+        updateProviderAdvancedVisibility();[cite: 1]
     }
 
     function getProvidersFromForm() {
@@ -8593,7 +8563,7 @@ Translate to {target_language}.`;
         });
         return providers;
     }
-
+    
     function parseCfWorkersKey(rawKey) {
         const cleaned = typeof rawKey === 'string' ? rawKey.trim() : '';
         let accountId = '';
