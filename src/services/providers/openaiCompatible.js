@@ -21,7 +21,7 @@ const {
 
 /**
  * Minimal OpenAI-compatible provider wrapper.
- * Used for OpenAI, XAI/Grok, DeepSeek, Mistral, OpenRouter and other
+ * Used for OpenAI, XAI/Grok, DeepSeek, Mistral, OpenRouter, Custom Gateway and other
  * API-compatible backends by swapping the base URL and headers.
  */
 class OpenAICompatibleProvider {
@@ -32,8 +32,8 @@ class OpenAICompatibleProvider {
     this.providerName = options.providerName || 'openai';
     this.authFailureCacheKey = getProviderAuthFailureCacheKey(this.providerName, this.apiKey);
     this.headers = options.headers || {};
-    this.temperature = options.temperature !== undefined ? options.temperature : 0.4;
-    this.maxOutputTokens = options.maxOutputTokens || 4096;
+    this.temperature = options.temperature !== undefined ? options.temperature : 0.2;
+    this.maxOutputTokens = options.maxOutputTokens || 32768;
     this.topP = options.topP !== undefined ? options.topP : 0.95;
     this.reasoningEffort = this.normalizeReasoningEffort(options.reasoningEffort);
     const timeoutSeconds = options.translationTimeout !== undefined ? options.translationTimeout : 60;
@@ -58,6 +58,7 @@ class OpenAICompatibleProvider {
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return allowed.includes(normalized) ? normalized : undefined;
   }
+
   /**
    * Return the appropriate HTTP agents for this provider.
    * Custom providers with SSRF-safe lookup use dedicated agents;
@@ -69,8 +70,6 @@ class OpenAICompatibleProvider {
     }
     return { httpAgent, httpsAgent };
   }
-
-
 
   isCfTranslationModel() {
     const model = String(this.model || '').toLowerCase();
@@ -235,15 +234,17 @@ class OpenAICompatibleProvider {
     const openAIInstructionRole = isOpenAI && this.isOpenAIReasoningModel()
       ? 'developer'
       : 'system';
+    const systemInstruction = meta?.systemPrompt || 'You are a subtitle translation engine.';
+
     const body = isCfRun
       ? {
-        prompt: userPrompt,
+        prompt: `${systemInstruction}\n\n${userPrompt}`,
         stream
       }
       : (isOpenAI && useResponsesApi)
         ? {
           model: this.model,
-          instructions: 'You are a subtitle translation engine.',
+          instructions: systemInstruction,
           input: userPrompt,
           max_output_tokens: cappedMaxTokens,
           stream
@@ -251,7 +252,7 @@ class OpenAICompatibleProvider {
         : {
           model: this.model,
           messages: [
-            { role: openAIInstructionRole, content: 'You are a subtitle translation engine.' },
+            { role: openAIInstructionRole, content: systemInstruction },
             { role: 'user', content: userPrompt }
           ],
           max_completion_tokens: isOpenAI ? cappedMaxTokens : undefined,
@@ -262,7 +263,6 @@ class OpenAICompatibleProvider {
     // JSON structured output mode for OpenAI-compatible APIs
     if (!isCfRun && this.enableJsonOutput && !disableStructuredOutput) {
       // DeepSeek does not support json_schema (strict) — use json_object instead.
-      // Tested: both deepseek-chat and deepseek-reasoner accept json_object and reject json_schema.
       if (this.providerName === 'deepseek') {
         body.response_format = { type: 'json_object' };
       } else if (isOpenAI && useResponsesApi) {
@@ -274,7 +274,7 @@ class OpenAICompatibleProvider {
       }
     }
 
-        if (!isCfRun && this.providerName === 'openai') {
+    if (!isCfRun && this.providerName === 'openai') {
       const effort = this.getOpenAIReasoningEffortForRequest();
       if (effort) {
         if (useResponsesApi) {
@@ -425,7 +425,6 @@ class OpenAICompatibleProvider {
     };
 
     // OpenAI strict structured outputs require a root object, not a root array.
-    // The TranslationEngine parser already accepts this { entries: [...] } envelope.
     return {
       type: 'object',
       properties: {
@@ -466,8 +465,6 @@ class OpenAICompatibleProvider {
     const safe = Math.max(1, Math.floor(raw));
     if (this.providerName === 'deepseek') {
       const model = String(this.model || '').toLowerCase();
-      // DeepSeek model families have different token ceilings.
-      // deepseek-chat: 8k, deepseek-reasoner: 64k
       const cap = model.includes('reasoner') ? 65536 : 8192;
       return Math.min(safe, cap);
     }
@@ -477,8 +474,8 @@ class OpenAICompatibleProvider {
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {
     const normalizedTarget = this.normalizeTargetName(targetLanguage);
     const systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
-    const userPrompt = `${systemPrompt}\n\nContent to translate:\n\n${subtitleContent}`;
-    return { userPrompt, systemPrompt, normalizedTarget };
+    const userPrompt = `Content to translate:\n\n${subtitleContent}`;
+    return { userPrompt, systemPrompt, normalizedTarget, subtitleContent };
   }
 
   estimateTokenCount(text) {
@@ -488,25 +485,24 @@ class OpenAICompatibleProvider {
       const { countTokens } = require('gpt-tokenizer');
       return countTokens(str);
     } catch (_) {
-      // Fallback to heuristic if tokenizer fails
       const approx = Math.ceil(str.length / 3);
       return Math.ceil(approx * 1.1);
     }
   }
 
-    getAuthHeaders() {
+  getAuthHeaders() {
     // Sanitize API key to prevent header injection vulnerabilities
     const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
-    
-    // Jika tiada API key (contoh: Ollama / LocalAI local), jangan hantar header kosong
+
+    // Jika tiada API key (contoh: Ollama / LocalAI local), jangan hantar header pengesahan
     if (!sanitizedKey) {
       return { ...this.headers };
     }
 
-    // Universal: Hantar Authorization Bearer untuk SEMUA jenis API key
-    // (Serasi dengan Fiqstr, CrazyRouter, OpenAI, DeepSeek, Kimi, GLM & semua proxy dunia)
+    // Universal: Sokong Authorization Bearer dan x-api-key secara serentak
     return {
       Authorization: `Bearer ${sanitizedKey}`,
+      'x-api-key': sanitizedKey,
       ...this.headers
     };
   }
@@ -528,7 +524,6 @@ class OpenAICompatibleProvider {
     const raw = String(code || '').trim();
     if (!raw) return 'en';
 
-    // Resolve human-friendly names to codes first
     const fromName = findISO6391ByName(raw);
     if (fromName) {
       return this.normalizeLanguageCode(fromName);
@@ -536,7 +531,6 @@ class OpenAICompatibleProvider {
 
     let cleaned = raw.toLowerCase().replace(/[\s_]/g, '-');
 
-    // Preserve explicit regional variants
     const variantMap = {
       'pob': 'pt-br',
       'ptbr': 'pt-br',
@@ -561,10 +555,8 @@ class OpenAICompatibleProvider {
       return variantMap[cleaned];
     }
 
-    // Drop translation suffix if present
     cleaned = cleaned.replace(/-tr$/, '');
 
-    // ISO-639-2 -> ISO-639-1
     if (/^[a-z]{3}$/.test(cleaned)) {
       const iso1 = toISO6391(cleaned);
       if (iso1) {
@@ -582,7 +574,6 @@ class OpenAICompatibleProvider {
       return cleaned;
     }
 
-    // Fallback to first two chars to avoid empty strings
     return cleaned.slice(0, 2) || 'en';
   }
 
@@ -611,10 +602,8 @@ class OpenAICompatibleProvider {
       if (isCfWorkers) {
         const searchUrl = `${this.baseUrl.replace(/\/v1$/, '')}/models/search`;
         try {
-          // Cloudflare Workers AI uses GET for /models/search endpoint
           response = await axios.get(searchUrl, requestConfig);
         } catch (searchError) {
-          // Fallback to base /models endpoint if search is unavailable
           response = await axios.get(baseModelsUrl, requestConfig);
         }
       } else {
@@ -633,7 +622,6 @@ class OpenAICompatibleProvider {
       const models = Array.isArray(modelsRaw)
         ? modelsRaw.map(m => {
           const isCf = this.providerName === 'cfWorkers';
-          // Cloudflare returns a UUID in `id` and the human slug in `name`/`slug`
           const name = isCf
             ? (m.name || m.slug || m.id || m.model)
             : (m.id || m.name || m.model);
@@ -705,7 +693,7 @@ class OpenAICompatibleProvider {
   }
 
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, requestOptions = {}) {
-    const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
+    const { userPrompt, systemPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
     let lastError;
     let disableStructuredOutput = requestOptions?.disableStructuredOutput === true;
@@ -719,6 +707,7 @@ class OpenAICompatibleProvider {
             subtitleContent,
             sourceLanguage,
             targetLanguage,
+            systemPrompt,
             disableStructuredOutput
           }
         );
@@ -773,14 +762,13 @@ class OpenAICompatibleProvider {
       }
     }
 
-    // If retries exhausted and no throw occurred, surface last error cleanly
     if (lastError) {
       throw lastError;
     }
   }
 
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null, requestOptions = {}) {
-    const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
+    const { userPrompt, systemPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
     const request = this.buildChatRequest(
       userPrompt,
       true,
@@ -788,6 +776,7 @@ class OpenAICompatibleProvider {
         subtitleContent,
         sourceLanguage,
         targetLanguage,
+        systemPrompt,
         disableStructuredOutput: requestOptions?.disableStructuredOutput === true
       }
     );
@@ -823,8 +812,6 @@ class OpenAICompatibleProvider {
           responseType: 'stream'
         }
       );
-
-      const contentType = (response.headers && (response.headers['content-type'] || response.headers['Content-Type'])) || '';
 
       return await new Promise((resolve, reject) => {
         let buffer = '';
@@ -939,7 +926,6 @@ class OpenAICompatibleProvider {
       } catch (error) {
         lastError = error;
 
-        // If streaming is not supported, fall back to non-stream once
         const status = error?.response?.status;
         const rawErr = String(
           error?.response?.data?.error?.message ||
@@ -974,13 +960,12 @@ class OpenAICompatibleProvider {
   }
 
   async countTokensForTranslation() {
-    return null; // Not supported on generic OpenAI-compatible APIs
+    return null;
   }
 
   extractChunkText(choice) {
     if (!choice) return '';
 
-    // Modern responses may return delta.content as array of blocks
     const delta = choice.delta || {};
     const collect = [];
 
@@ -999,7 +984,6 @@ class OpenAICompatibleProvider {
       collect.push(delta.text);
     }
 
-    // Fallback to full message content if delta missing
     if (collect.length === 0) {
       const msgContent = choice.message?.content;
       if (typeof msgContent === 'string') {
@@ -1024,6 +1008,8 @@ class OpenAICompatibleProvider {
 
   cleanTranslatedSubtitle(text) {
     let cleaned = String(text || '');
+    // Tapis dan singkirkan blok pemikiran <think>...</think> daripada model penaakulan
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
     cleaned = cleaned.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     return cleaned.trim();
