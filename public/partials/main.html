@@ -1069,11 +1069,10 @@
                                         <input type="text" id="provider-custom-key" placeholder="API key (optional)"
                                             data-i18n="config.providersUi.placeholders.customKey"
                                             data-i18n-attr="placeholder" class="sensitive-input masked">
-                                        <div class="provider-model-row" style="display: flex; gap: 0.5rem; align-items: center;">
-                                            <input type="text" id="provider-custom-model"
-                                                placeholder="e.g. deepseek-v4-pro, kimi-k3, glm-5.3-flash"
-                                                data-i18n="config.providersUi.placeholders.customModel"
-                                                data-i18n-attr="placeholder" style="flex: 1;">
+                                        <div class="provider-model-row">
+                                            <select id="provider-custom-model">
+                                                <option value="" data-i18n="config.providersUi.selectModel">Select model</option>
+                                            </select>
                                             <button type="button" class="validate-api-btn" data-provider="custom"
                                                 title="Fetch models" data-i18n="config.providersUi.loadModelsTitle"
                                                 data-i18n-attr="title">
