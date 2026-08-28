@@ -20,30 +20,29 @@ const {
 } = require('../../utils/providerAuthFailureCache');
 
 /**
- * Minimal OpenAI-compatible provider wrapper.
- * Used for OpenAI, XAI/Grok, DeepSeek, Mistral, OpenRouter, Custom Gateway and other
- * API-compatible backends by swapping the base URL and headers.
+ * Universal OpenAI-Compatible Provider Wrapper
+ * Calibrated 1:1 with Gemini translation architecture.
+ * Supports OpenAI, DeepSeek, Kimi, GLM, MiniMax, Claude, and Proxy Gateways.
  */
 class OpenAICompatibleProvider {
   constructor(options = {}) {
     this.apiKey = options.apiKey || '';
     this.model = options.model || '';
     this.baseUrl = (options.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
-    this.providerName = options.providerName || 'openai';
+    this.providerName = options.providerName || 'custom';
     this.authFailureCacheKey = getProviderAuthFailureCacheKey(this.providerName, this.apiKey);
     this.headers = options.headers || {};
     this.temperature = options.temperature !== undefined ? options.temperature : 0.2;
-    this.maxOutputTokens = options.maxOutputTokens || 32768;
+    // Tingkatkan siling token lalai kepada 65,536 untuk menampung penaakulan model AI
+    this.maxOutputTokens = options.maxOutputTokens || 65536;
     this.topP = options.topP !== undefined ? options.topP : 0.95;
     this.reasoningEffort = this.normalizeReasoningEffort(options.reasoningEffort);
-    const timeoutSeconds = options.translationTimeout !== undefined ? options.translationTimeout : 60;
-    this.translationTimeout = Math.max(5000, parseInt(timeoutSeconds * 1000, 10) || 60000);
+    const timeoutSeconds = options.translationTimeout !== undefined ? options.translationTimeout : 120;
+    this.translationTimeout = Math.max(5000, parseInt(timeoutSeconds * 1000, 10) || 120000);
     this.maxRetries = Number.isFinite(parseInt(options.maxRetries, 10))
       ? Math.max(0, parseInt(options.maxRetries, 10))
       : 2;
-    // JSON structured output mode
     this.enableJsonOutput = options.enableJsonOutput === true;
-    // Optional SSRF-safe DNS lookup for custom providers (closes TOCTOU gap)
     this._ssrfLookup = options.ssrfLookup || null;
     if (this._ssrfLookup) {
       const http = require('http');
@@ -59,11 +58,6 @@ class OpenAICompatibleProvider {
     return allowed.includes(normalized) ? normalized : undefined;
   }
 
-  /**
-   * Return the appropriate HTTP agents for this provider.
-   * Custom providers with SSRF-safe lookup use dedicated agents;
-   * all others use the shared connection-pooled agents.
-   */
   getHttpAgents() {
     if (this._ssrfLookup) {
       return { httpAgent: this._ssrfHttpAgent, httpsAgent: this._ssrfHttpsAgent };
@@ -82,29 +76,16 @@ class OpenAICompatibleProvider {
   normalizeCfModelId() {
     const raw = String(this.model || '').trim();
     const lower = raw.toLowerCase();
-    // If already has @cf/ prefix, keep as-is
-    if (lower.startsWith('@cf/')) {
-      return raw;
-    }
-    // If already has meta/ prefix, add @cf/
-    if (lower.startsWith('meta/')) {
-      return `@cf/${raw}`;
-    }
-    // Default translation models live under meta namespace
+    if (lower.startsWith('@cf/')) return raw;
+    if (lower.startsWith('meta/')) return `@cf/${raw}`;
     return `@cf/meta/${raw}`;
   }
 
-  /**
-   * Normalize target language name in prompt for better model guidance
-   */
   normalizeTargetName(name) {
     const raw = String(name || '').trim();
     if (!raw) return 'target language';
 
-    // Resolve to a canonical code first (preserves regional variants)
     const code = this.normalizeLanguageCode(raw);
-
-    // Prefer explicit regional display names when we know them
     const variantDisplay = this.variantNameFromCode(code);
     if (variantDisplay) return normalizeTargetLanguageForPrompt(variantDisplay);
 
@@ -113,13 +94,11 @@ class OpenAICompatibleProvider {
       return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(displayFromUi));
     }
 
-    // Try direct name lookup by code (covers ISO-639-2 codes and custom variants like pt-br)
     const nameFromCode = getLanguageName(code) || getLanguageName(code.replace(/-/g, ''));
     if (nameFromCode) {
       return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(nameFromCode));
     }
 
-    // ISO-639-1 -> ISO-639-2 -> display name
     if (/^[a-z]{2}$/i.test(code)) {
       const iso2 = toISO6392(code);
       if (Array.isArray(iso2) && iso2.length > 0) {
@@ -133,9 +112,6 @@ class OpenAICompatibleProvider {
     return normalizeTargetLanguageForPrompt(this.normalizeVariantDisplayName(raw) || raw);
   }
 
-  /**
-   * Normalize human-friendly names (e.g., Brazilian Portuguese) to a canonical display name
-   */
   normalizeVariantDisplayName(name) {
     const n = String(name || '').trim();
     if (!n) return '';
@@ -158,9 +134,6 @@ class OpenAICompatibleProvider {
     return n;
   }
 
-  /**
-   * Map normalized codes to explicit variant names for prompts
-   */
   variantNameFromCode(code) {
     const normalized = String(code || '').toLowerCase();
     switch (normalized) {
@@ -197,19 +170,10 @@ class OpenAICompatibleProvider {
       target_lang: targetLang
     };
 
-    if (sourceLang) {
-      body.source_lang = sourceLang;
-    }
-
-    if (this.temperature !== undefined) {
-      body.temperature = this.temperature;
-    }
-    if (this.topP !== undefined) {
-      body.top_p = this.topP;
-    }
-    if (this.maxOutputTokens) {
-      body.max_tokens = this.maxOutputTokens;
-    }
+    if (sourceLang) body.source_lang = sourceLang;
+    if (this.temperature !== undefined) body.temperature = this.temperature;
+    if (this.topP !== undefined) body.top_p = this.topP;
+    if (this.maxOutputTokens) body.max_tokens = this.maxOutputTokens;
 
     return { body, url };
   }
@@ -231,44 +195,54 @@ class OpenAICompatibleProvider {
     }
 
     const cappedMaxTokens = this.getCappedMaxOutputTokens();
-    const openAIInstructionRole = isOpenAI && this.isOpenAIReasoningModel()
-      ? 'developer'
-      : 'system';
-    const systemInstruction = meta?.systemPrompt || 'You are a subtitle translation engine.';
+    const isReasoning = this.isOpenAIReasoningModel();
+    const openAIInstructionRole = (isOpenAI && isReasoning) ? 'developer' : 'system';
+
+    // Pengasingan mesej mengikut kesetaraan 1:1 Gemini
+    const messages = [];
+    if (meta.isSelfContained) {
+      messages.push({
+        role: openAIInstructionRole,
+        content: 'You are an expert subtitle translation engine. Execute the translation strictly following all output constraints, XML tags, and rules.'
+      });
+      messages.push({
+        role: 'user',
+        content: userPrompt
+      });
+    } else {
+      messages.push({
+        role: openAIInstructionRole,
+        content: meta.systemPrompt || 'You are an expert subtitle translation engine.'
+      });
+      messages.push({
+        role: 'user',
+        content: userPrompt
+      });
+    }
 
     const body = isCfRun
-      ? {
-        prompt: `${systemInstruction}\n\n${userPrompt}`,
-        stream
-      }
+      ? { prompt: userPrompt, stream }
       : (isOpenAI && useResponsesApi)
         ? {
           model: this.model,
-          instructions: systemInstruction,
+          instructions: messages[0].content,
           input: userPrompt,
           max_output_tokens: cappedMaxTokens,
           stream
         }
         : {
           model: this.model,
-          messages: [
-            { role: openAIInstructionRole, content: systemInstruction },
-            { role: 'user', content: userPrompt }
-          ],
-          max_completion_tokens: isOpenAI ? cappedMaxTokens : undefined,
-          max_tokens: isOpenAI ? undefined : cappedMaxTokens,
+          messages,
+          max_completion_tokens: (isOpenAI && isReasoning) ? cappedMaxTokens : undefined,
+          max_tokens: (isOpenAI && isReasoning) ? undefined : cappedMaxTokens,
           stream
         };
 
-    // JSON structured output mode for OpenAI-compatible APIs
     if (!isCfRun && this.enableJsonOutput && !disableStructuredOutput) {
-      // DeepSeek does not support json_schema (strict) — use json_object instead.
       if (this.providerName === 'deepseek') {
         body.response_format = { type: 'json_object' };
       } else if (isOpenAI && useResponsesApi) {
-        body.text = {
-          format: this.buildResponsesJsonSchemaFormat()
-        };
+        body.text = { format: this.buildResponsesJsonSchemaFormat() };
       } else {
         body.response_format = this.buildChatJsonSchemaResponseFormat();
       }
@@ -277,38 +251,25 @@ class OpenAICompatibleProvider {
     if (!isCfRun && this.providerName === 'openai') {
       const effort = this.getOpenAIReasoningEffortForRequest();
       if (effort) {
-        if (useResponsesApi) {
-          body.reasoning = { effort };
-        } else {
-          body.reasoning_effort = effort;
-        }
+        if (useResponsesApi) body.reasoning = { effort };
+        else body.reasoning_effort = effort;
       }
     }
 
-    // DeepSeek reasoning effort (high / max)
-    if (!isCfRun && this.providerName === 'deepseek') {
-      const effort = this.reasoningEffort;
-      if (effort) {
-        body.reasoning_effort = effort;
-      }
+    if (!isCfRun && this.providerName === 'deepseek' && this.reasoningEffort) {
+      body.reasoning_effort = this.reasoningEffort;
     }
 
     if (isCfRun) {
-      if (this.temperature !== undefined) {
-        body.temperature = this.temperature;
-      }
-      if (this.topP !== undefined) {
-        body.top_p = this.topP;
-      }
-      if (this.maxOutputTokens) {
-        body.max_tokens = cappedMaxTokens;
-      }
+      if (this.temperature !== undefined) body.temperature = this.temperature;
+      if (this.topP !== undefined) body.top_p = this.topP;
+      if (this.maxOutputTokens) body.max_tokens = cappedMaxTokens;
     } else {
-      const omitSamplingParams = this.shouldOmitOpenAISamplingParams();
-      if (!(isOpenAI && omitSamplingParams) && this.temperature !== undefined && !useResponsesApi) {
+      const omitSampling = this.shouldOmitOpenAISamplingParams();
+      if (!omitSampling && this.temperature !== undefined && !useResponsesApi) {
         body.temperature = this.temperature;
       }
-      if (!(isOpenAI && omitSamplingParams) && this.topP !== undefined) {
+      if (!omitSampling && this.topP !== undefined) {
         body.top_p = this.topP;
       }
     }
@@ -335,82 +296,21 @@ class OpenAICompatibleProvider {
   }
 
   isOpenAIReasoningModel(modelName = this.model) {
-    if (this.providerName !== 'openai') return false;
     const model = String(modelName || '').trim().toLowerCase();
-    return /^gpt-5(?:[\.-]|$)/.test(model) || /^o\d(?:[\.-]|$)/.test(model);
-  }
-
-  isOpenAIGpt5ProModel(modelName = this.model) {
-    const model = String(modelName || '').trim().toLowerCase();
-    return /^gpt-5(?:\.\d+)?-pro(?:$|-)/.test(model);
-  }
-
-  isOpenAIBaseGpt5ProModel(modelName = this.model) {
-    const model = String(modelName || '').trim().toLowerCase();
-    return /^gpt-5-pro(?:$|-)/.test(model);
-  }
-
-  isOpenAIGpt5CodexModel(modelName = this.model) {
-    const model = String(modelName || '').trim().toLowerCase();
-    return /^gpt-5(?:\.\d+)?-codex(?:$|-)/.test(model);
+    return (
+      model.includes('reasoner') ||
+      model.includes('thinking') ||
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.includes('k3') ||
+      /^gpt-5(?:[\.-]|$)/.test(model)
+    );
   }
 
   getOpenAIReasoningEffortForRequest() {
     const raw = this.normalizeReasoningEffort(this.reasoningEffort);
     if (!raw) return undefined;
-    const model = String(this.model || '').trim().toLowerCase();
-
-    if (!this.isOpenAIReasoningModel(model)) {
-      return undefined;
-    }
-
-    // The original GPT-5 pro only accepts high reasoning.
-    if (this.isOpenAIBaseGpt5ProModel(model)) {
-      return 'high';
-    }
-
-    // GPT-5.4/5.5 pro variants accept medium/high/xhigh.
-    if (this.isOpenAIGpt5ProModel(model)) {
-      if (raw === 'xhigh' || raw === 'high' || raw === 'medium') return raw;
-      return 'medium';
-    }
-
-    // Codex variants document low/medium/high/xhigh; avoid unsupported none/minimal.
-    if (this.isOpenAIGpt5CodexModel(model)) {
-      if (raw === 'xhigh' || raw === 'high' || raw === 'medium' || raw === 'low') return raw;
-      return undefined;
-    }
-
-    // GPT-5.1 supports none/low/medium/high, but not xhigh/minimal.
-    if (/^gpt-5\.1(?:$|-)/.test(model)) {
-      if (raw === 'xhigh') return 'high';
-      if (raw === 'minimal') return 'low';
-      return raw;
-    }
-
-    // GPT-5.2+ frontier variants, including GPT-5.4 mini/nano and GPT-5.5,
-    // support none/low/medium/high/xhigh. Map minimal to low for compatibility.
-    if (/^gpt-5\.(?:2|4|5)(?:[\.-]|$)/.test(model)) {
-      return raw === 'minimal' ? 'low' : raw;
-    }
-
-    // Original GPT-5-family models support minimal/low/medium/high; avoid none/xhigh.
-    if (/^gpt-5(?:$|-)/.test(model)) {
-      if (raw === 'none') return undefined;
-      if (raw === 'xhigh') return 'high';
-      return raw;
-    }
-
-    // o-series chat models commonly support low/medium/high. Degrade or omit others.
-    if (/^o\d(?:[\.-]|$)/.test(model)) {
-      if (raw === 'none') return undefined;
-      if (raw === 'minimal') return 'low';
-      if (raw === 'xhigh') return 'high';
-      return raw;
-    }
-
-    if (raw === 'xhigh') return 'high';
-    return raw;
+    return raw === 'xhigh' ? 'high' : raw;
   }
 
   buildSubtitleEntriesJsonSchema() {
@@ -424,7 +324,6 @@ class OpenAICompatibleProvider {
       additionalProperties: false
     };
 
-    // OpenAI strict structured outputs require a root object, not a root array.
     return {
       type: 'object',
       properties: {
@@ -461,21 +360,31 @@ class OpenAICompatibleProvider {
   getCappedMaxOutputTokens() {
     const raw = Number.isFinite(Number(this.maxOutputTokens))
       ? Number(this.maxOutputTokens)
-      : 4096;
-    const safe = Math.max(1, Math.floor(raw));
-    if (this.providerName === 'deepseek') {
-      const model = String(this.model || '').toLowerCase();
-      const cap = model.includes('reasoner') ? 65536 : 8192;
-      return Math.min(safe, cap);
-    }
-    return safe;
+      : 65536;
+    return Math.max(1024, Math.min(Math.floor(raw), 131072));
   }
 
   buildUserPrompt(subtitleContent, targetLanguage, customPrompt = null) {
     const normalizedTarget = this.normalizeTargetName(targetLanguage);
-    const systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
-    const userPrompt = `Content to translate:\n\n${subtitleContent}`;
-    return { userPrompt, systemPrompt, normalizedTarget, subtitleContent };
+    let systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
+
+    let userPrompt;
+    let isSelfContained = false;
+
+    // Jika customPrompt sudah mengandungi blok input XML/JSON/SRT, elakkan pertindihan
+    if (
+      systemPrompt.includes('<input>') ||
+      systemPrompt.includes('INPUT (') ||
+      systemPrompt.includes('=== ENTRIES TO TRANSLATE ===') ||
+      systemPrompt.includes('entries_to_translate')
+    ) {
+      userPrompt = systemPrompt;
+      isSelfContained = true;
+    } else {
+      userPrompt = `Content to translate:\n\n${subtitleContent}`;
+    }
+
+    return { userPrompt, systemPrompt, normalizedTarget, subtitleContent, isSelfContained };
   }
 
   estimateTokenCount(text) {
@@ -491,15 +400,10 @@ class OpenAICompatibleProvider {
   }
 
   getAuthHeaders() {
-    // Sanitize API key to prevent header injection vulnerabilities
     const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
-
-    // Jika tiada API key (contoh: Ollama / LocalAI local), jangan hantar header pengesahan
     if (!sanitizedKey) {
       return { ...this.headers };
     }
-
-    // Universal: Sokong Authorization Bearer dan x-api-key secara serentak
     return {
       Authorization: `Bearer ${sanitizedKey}`,
       'x-api-key': sanitizedKey,
@@ -525,12 +429,9 @@ class OpenAICompatibleProvider {
     if (!raw) return 'en';
 
     const fromName = findISO6391ByName(raw);
-    if (fromName) {
-      return this.normalizeLanguageCode(fromName);
-    }
+    if (fromName) return this.normalizeLanguageCode(fromName);
 
     let cleaned = raw.toLowerCase().replace(/[\s_]/g, '-');
-
     const variantMap = {
       'pob': 'pt-br',
       'ptbr': 'pt-br',
@@ -551,28 +452,17 @@ class OpenAICompatibleProvider {
       'zh-hans': 'zh-hans',
       'zh-cn': 'zh-hans'
     };
-    if (variantMap[cleaned]) {
-      return variantMap[cleaned];
-    }
+    if (variantMap[cleaned]) return variantMap[cleaned];
 
     cleaned = cleaned.replace(/-tr$/, '');
-
     if (/^[a-z]{3}$/.test(cleaned)) {
       const iso1 = toISO6391(cleaned);
-      if (iso1) {
-        cleaned = iso1.toLowerCase();
-      }
+      if (iso1) cleaned = iso1.toLowerCase();
     }
 
     cleaned = cleaned.replace(/[^a-z-]/g, '');
-
-    if (/^[a-z]{2}(-[a-z0-9]{2,})?$/.test(cleaned)) {
-      return cleaned;
-    }
-
-    if (/^[a-z]{2}$/.test(cleaned)) {
-      return cleaned;
-    }
+    if (/^[a-z]{2}(-[a-z0-9]{2,})?$/.test(cleaned)) return cleaned;
+    if (/^[a-z]{2}$/.test(cleaned)) return cleaned;
 
     return cleaned.slice(0, 2) || 'en';
   }
@@ -598,12 +488,11 @@ class OpenAICompatibleProvider {
       };
 
       let response;
-
       if (isCfWorkers) {
         const searchUrl = `${this.baseUrl.replace(/\/v1$/, '')}/models/search`;
         try {
           response = await axios.get(searchUrl, requestConfig);
-        } catch (searchError) {
+        } catch (_) {
           response = await axios.get(baseModelsUrl, requestConfig);
         }
       } else {
@@ -640,22 +529,6 @@ class OpenAICompatibleProvider {
         }).filter(m => !!m.name)
         : [];
 
-      if (this.providerName === 'cfWorkers' && models.length === 0) {
-        const hints = []
-          .concat(data?.messages || [])
-          .concat(data?.errors || [])
-          .concat(data?.result?.messages || [])
-          .concat(data?.result?.errors || []);
-        const firstHint = hints
-          .map(msg => (typeof msg === 'string' ? msg : msg?.message || msg?.error))
-          .find(Boolean)
-          || (typeof data?.result === 'string' ? data.result : null);
-        const detail = firstHint || 'Cloudflare returned no models. Ensure Workers AI is enabled and the token has Workers AI read access.';
-        const error = new Error(detail);
-        error.responseData = data;
-        throw error;
-      }
-
       if (this.shouldUseAuthFailureCache()) {
         await clearCachedProviderAuthFailure(this.authFailureCacheKey);
       }
@@ -665,9 +538,6 @@ class OpenAICompatibleProvider {
         await cacheProviderAuthFailure(this.authFailureCacheKey);
       }
       logApiError(error, this.providerName, 'Fetch models', { skipResponseData: true });
-      if (this.providerName === 'cfWorkers') {
-        throw error;
-      }
       return [];
     }
   }
@@ -693,24 +563,27 @@ class OpenAICompatibleProvider {
   }
 
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, requestOptions = {}) {
-    const { userPrompt, systemPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
+    const promptData = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
     let lastError;
     let disableStructuredOutput = requestOptions?.disableStructuredOutput === true;
     let structuredDowngradeUsed = disableStructuredOutput;
+
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         const { body, url, isCfRun, useResponsesApi } = this.buildChatRequest(
-          userPrompt,
+          promptData.userPrompt,
           false,
           {
             subtitleContent,
             sourceLanguage,
             targetLanguage,
-            systemPrompt,
+            systemPrompt: promptData.systemPrompt,
+            isSelfContained: promptData.isSelfContained,
             disableStructuredOutput
           }
         );
+
         const agents = this.getHttpAgents();
         const response = await axios.post(
           url,
@@ -751,7 +624,7 @@ class OpenAICompatibleProvider {
         ) {
           structuredDowngradeUsed = true;
           disableStructuredOutput = true;
-          log.warn(() => [`[${this.providerName}] Structured output not supported by this model/base, retrying without response_format`]);
+          log.warn(() => [`[${this.providerName}] Structured output not supported by this model, retrying without response_format`]);
           continue;
         }
         if (attempt < this.maxRetries) {
@@ -762,26 +635,25 @@ class OpenAICompatibleProvider {
       }
     }
 
-    if (lastError) {
-      throw lastError;
-    }
+    if (lastError) throw lastError;
   }
 
   async streamTranslateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, onPartial = null, requestOptions = {}) {
-    const { userPrompt, systemPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
+    const promptData = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
     const request = this.buildChatRequest(
-      userPrompt,
+      promptData.userPrompt,
       true,
       {
         subtitleContent,
         sourceLanguage,
         targetLanguage,
-        systemPrompt,
+        systemPrompt: promptData.systemPrompt,
+        isSelfContained: promptData.isSelfContained,
         disableStructuredOutput: requestOptions?.disableStructuredOutput === true
       }
     );
 
-    if (request.isCfTranslation) {
+    if (request.isCfTranslation || request.useResponsesApi) {
       const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt, requestOptions);
       if (typeof onPartial === 'function') {
         try { await onPartial(full); } catch (_) { }
@@ -789,15 +661,7 @@ class OpenAICompatibleProvider {
       return full;
     }
 
-    const { body, url, isCfRun, useResponsesApi } = request;
-
-    if (useResponsesApi) {
-      const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt, requestOptions);
-      if (typeof onPartial === 'function') {
-        try { await onPartial(full); } catch (_) { }
-      }
-      return full;
-    }
+    const { body, url, isCfRun } = request;
 
     const executeStream = async () => {
       const agents = this.getHttpAgents();
@@ -845,10 +709,12 @@ class OpenAICompatibleProvider {
           const chunkText = isCfRun
             ? this.extractCfChunkText(data)
             : this.extractChunkText(choice);
+
           if (chunkText) {
             aggregated += chunkText;
             const cleanedAgg = this.cleanTranslatedSubtitle(aggregated);
-            if (typeof onPartial === 'function') {
+            // Hantar hanya apabila pemikiran selesai dan teks sari kata bermula
+            if (cleanedAgg && typeof onPartial === 'function') {
               try { onPartial(cleanedAgg); } catch (_) { }
             }
           }
@@ -892,22 +758,6 @@ class OpenAICompatibleProvider {
               return;
             }
 
-            if (finishReason && finishReason !== 'stop' && finishReason !== 'tool_calls') {
-              if (finishReason === 'content_filter') {
-                const err = new Error('PROHIBITED_CONTENT: content_filter');
-                err.translationErrorType = 'PROHIBITED_CONTENT';
-                reject(err);
-                return;
-              }
-              if (finishReason === 'length' && cleaned.length < subtitleContent.length * 0.3) {
-                const err = new Error('MAX_TOKENS: Translation exceeded maximum token limit with minimal output');
-                err.translationErrorType = 'MAX_TOKENS';
-                reject(err);
-                return;
-              }
-              log.warn(() => [`[${this.providerName}] Stream finished with reason: ${finishReason}`]);
-            }
-
             resolve(cleaned);
           } catch (err) {
             reject(err);
@@ -933,12 +783,14 @@ class OpenAICompatibleProvider {
           error?.message ||
           ''
         ).toLowerCase();
+
         const looksUnsupported = status === 404 || status === 405 || status === 501
           || (status === 400 && (rawErr.includes('stream') || rawErr.includes('sse') || rawErr.includes('event-stream')))
           || (error.message && /stream/i.test(error.message));
+
         if (!fallbackUsed && looksUnsupported) {
           fallbackUsed = true;
-          log.warn(() => [`[${this.providerName}] Streaming not supported for this model/base, falling back to non-stream`]);
+          log.warn(() => [`[${this.providerName}] Streaming not supported, falling back to non-stream`]);
           const full = await this.translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt, requestOptions);
           if (typeof onPartial === 'function') {
             try { await onPartial(full); } catch (_) { }
@@ -954,9 +806,7 @@ class OpenAICompatibleProvider {
       }
     }
 
-    if (lastError) {
-      throw lastError;
-    }
+    if (lastError) throw lastError;
   }
 
   async countTokensForTranslation() {
@@ -965,35 +815,14 @@ class OpenAICompatibleProvider {
 
   extractChunkText(choice) {
     if (!choice) return '';
-
     const delta = choice.delta || {};
-    const collect = [];
-
-    if (Array.isArray(delta.content)) {
-      for (const part of delta.content) {
-        if (!part) continue;
-        if (typeof part === 'string') {
-          collect.push(part);
-        } else if (typeof part.text === 'string') {
-          collect.push(part.text);
-        }
-      }
-    } else if (typeof delta.content === 'string') {
-      collect.push(delta.content);
-    } else if (typeof delta.text === 'string') {
-      collect.push(delta.text);
+    // Abaikan delta.reasoning_content untuk mengelakkan pencemaran teks terjemahan
+    if (typeof delta.content === 'string') return delta.content;
+    if (typeof delta.text === 'string') return delta.text;
+    if (choice.message?.content && typeof choice.message.content === 'string') {
+      return choice.message.content;
     }
-
-    if (collect.length === 0) {
-      const msgContent = choice.message?.content;
-      if (typeof msgContent === 'string') {
-        collect.push(msgContent);
-      } else if (Array.isArray(msgContent)) {
-        collect.push(...msgContent.map(part => (typeof part === 'string' ? part : part?.text || '')).filter(Boolean));
-      }
-    }
-
-    return collect.join('');
+    return '';
   }
 
   extractCfChunkText(payload) {
@@ -1008,9 +837,12 @@ class OpenAICompatibleProvider {
 
   cleanTranslatedSubtitle(text) {
     let cleaned = String(text || '');
-    // Tapis dan singkirkan blok pemikiran <think>...</think> daripada model penaakulan
+    // 1. Tapis blok pemikiran yang lengkap mahupun yang belum bertutup semasa streaming
     cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleaned = cleaned.replace(/<think>[\s\S]*$/gi, '');
+    // 2. Buang blok kod markdown
     cleaned = cleaned.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
+    // 3. Seragamkan baris penamat
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     return cleaned.trim();
   }
@@ -1026,51 +858,26 @@ class OpenAICompatibleProvider {
       if (!item || !Array.isArray(item.content)) continue;
       for (const part of item.content) {
         if (!part) continue;
-        if (typeof part === 'string') {
-          collect.push(part);
-          continue;
-        }
-        if (typeof part.text === 'string') {
-          collect.push(part.text);
-          continue;
-        }
-        if (typeof part.output_text === 'string') {
-          collect.push(part.output_text);
-          continue;
-        }
-        if (typeof part.transcript === 'string') {
-          collect.push(part.transcript);
-        }
+        if (typeof part === 'string') collect.push(part);
+        else if (typeof part.text === 'string') collect.push(part.text);
+        else if (typeof part.output_text === 'string') collect.push(part.output_text);
       }
     }
     return collect.join('');
   }
 
   recoverStreamPayload(rawStream, isCfRun = false) {
-    const result = {
-      text: '',
-      finishReason: null,
-      payloadCount: 0
-    };
-
-    if (!rawStream || typeof rawStream !== 'string') {
-      return result;
-    }
+    const result = { text: '', finishReason: null, payloadCount: 0 };
+    if (!rawStream || typeof rawStream !== 'string') return result;
 
     const processPayload = (payloadStr) => {
       if (!payloadStr) return;
       let data;
-      try {
-        data = JSON.parse(payloadStr);
-      } catch (_) {
-        return;
-      }
+      try { data = JSON.parse(payloadStr); } catch (_) { return; }
 
       if (isCfRun) {
         const chunkText = this.extractCfChunkText(data);
-        if (chunkText) {
-          result.text += chunkText;
-        }
+        if (chunkText) result.text += chunkText;
         result.payloadCount += 1;
         return;
       }
@@ -1080,9 +887,7 @@ class OpenAICompatibleProvider {
         result.finishReason = choice.finish_reason;
       }
       const chunkText = this.extractChunkText(choice);
-      if (chunkText) {
-        result.text += chunkText;
-      }
+      if (chunkText) result.text += chunkText;
       result.payloadCount += 1;
     };
 
@@ -1090,23 +895,6 @@ class OpenAICompatibleProvider {
     for (const block of blocks) {
       const cleaned = block.split(/\r?\n/).map(line => line.replace(/^data:\s*/, '').trim()).filter(Boolean).join('');
       processPayload(cleaned);
-    }
-
-    if (result.payloadCount === 0) {
-      const lines = rawStream.split(/\r?\n/);
-      for (const line of lines) {
-        const cleaned = line.replace(/^data:\s*/, '').trim();
-        processPayload(cleaned);
-      }
-    }
-
-    if (result.payloadCount === 0 && rawStream.includes('}{')) {
-      const pieces = rawStream.split(/}\s*(?=\{)/).map((piece, idx, arr) => (idx < arr.length - 1 ? `${piece}}` : piece));
-      for (let i = 0; i < pieces.length; i++) {
-        let segment = pieces[i];
-        if (segment && segment[0] !== '{') segment = `{${segment}`;
-        processPayload(segment.trim());
-      }
     }
 
     return result;
