@@ -92,7 +92,7 @@ class SubDLService {
 
   static downloadClient = axios.create({
     headers: {
-      'User-Agent': CHROME_USER_AGENT,
+      'User-Agent': USER_AGENT, // 'StremioSubtitleTranslator v1.0' (elak sekatan Cloudflare)
       'Accept': '*/*'
     },
     httpAgent,
