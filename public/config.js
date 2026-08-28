@@ -7797,12 +7797,11 @@ Translate to {target_language}.`;
                     const selectedModel = e.target.value;
                     currentConfig.providers[key].model = selectedModel;
 
-                    // 🧠 Smart Auto-Detection mengikut 28 Spesifikasi Model
                     if (selectedModel) {
                         const m = selectedModel.toLowerCase();
                         const maxTokensInput = document.getElementById(`provider-${key}-maxTokens`);
-                        const reasoningSelect = document.getElementById(`provider-${key}-reasoning`);
 
+                        // 1. Auto-Detect Siling Token (65,536 untuk Model Moden/Reasoning)
                         if (
                             m.includes('deepseek') ||
                             m.includes('kimi') ||
@@ -7818,20 +7817,15 @@ Translate to {target_language}.`;
                             m.includes('hunyuan')
                         ) {
                             if (maxTokensInput) maxTokensInput.value = 65536;
-
-                            if (reasoningSelect) {
-                                // Model Always-On Thinking: paksa ke 'low' untuk kelajuan terjemahan optimum
-                                if (m.includes('5.3') || m.includes('k2.7') || m.includes('k3')) {
-                                    reasoningSelect.value = 'low';
-                                } else if (!reasoningSelect.value) {
-                                    reasoningSelect.value = 'low';
-                                }
-                            }
                         } else {
                             if (maxTokensInput && maxTokensInput.value === '65536') {
                                 maxTokensInput.value = 32768;
                             }
                         }
+
+                        // 2. Jana semula pilihan dropdown Reasoning Effort secara dinamik mengikut spesifikasi model
+                        const currentReasoning = currentConfig.providerParameters?.[key]?.reasoningEffort || '';
+                        updateReasoningDropdown(key, selectedModel, currentReasoning);
                     }
                 });
             }
