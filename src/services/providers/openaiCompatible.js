@@ -33,7 +33,6 @@ class OpenAICompatibleProvider {
     this.authFailureCacheKey = getProviderAuthFailureCacheKey(this.providerName, this.apiKey);
     this.headers = options.headers || {};
     this.temperature = options.temperature !== undefined ? options.temperature : 0.2;
-    // Tingkatkan siling token lalai kepada 65,536 untuk menampung penaakulan model AI
     this.maxOutputTokens = options.maxOutputTokens || 65536;
     this.topP = options.topP !== undefined ? options.topP : 0.95;
     this.reasoningEffort = this.normalizeReasoningEffort(options.reasoningEffort);
@@ -53,7 +52,7 @@ class OpenAICompatibleProvider {
   }
 
   normalizeReasoningEffort(value) {
-    const allowed = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+    const allowed = ['disabled', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return allowed.includes(normalized) ? normalized : undefined;
   }
@@ -198,27 +197,16 @@ class OpenAICompatibleProvider {
     const isReasoning = this.isOpenAIReasoningModel();
     const openAIInstructionRole = (isOpenAI && isReasoning) ? 'developer' : 'system';
 
-    // Pengasingan mesej mengikut kesetaraan 1:1 Gemini
-    const messages = [];
-    if (meta.isSelfContained) {
-      messages.push({
+    const messages = [
+      {
         role: openAIInstructionRole,
         content: 'You are an expert subtitle translation engine. Execute the translation strictly following all output constraints, XML tags, and rules.'
-      });
-      messages.push({
+      },
+      {
         role: 'user',
         content: userPrompt
-      });
-    } else {
-      messages.push({
-        role: openAIInstructionRole,
-        content: meta.systemPrompt || 'You are an expert subtitle translation engine.'
-      });
-      messages.push({
-        role: 'user',
-        content: userPrompt
-      });
-    }
+      }
+    ];
 
     const body = isCfRun
       ? { prompt: userPrompt, stream }
@@ -238,6 +226,25 @@ class OpenAICompatibleProvider {
           stream
         };
 
+    // Kawalan Mod Pemikiran (DeepSeek / OpenAI Reasoning / Gateway)
+    if (!isCfRun) {
+      const effort = this.reasoningEffort;
+      if (effort === 'disabled' || effort === 'none' || effort === 'off') {
+        body.thinking = { type: 'disabled' };
+        if (isOpenAI) {
+          if (useResponsesApi) body.reasoning = { effort: 'none' };
+          else body.reasoning_effort = 'none';
+        }
+      } else if (effort) {
+        body.thinking = { type: 'enabled' };
+        const mappedEffort = (effort === 'minimal' || effort === 'low') ? 'low' : (effort === 'max' ? 'max' : 'high');
+        body.reasoning_effort = mappedEffort;
+        if (useResponsesApi) {
+          body.reasoning = { effort: mappedEffort };
+        }
+      }
+    }
+
     if (!isCfRun && this.enableJsonOutput && !disableStructuredOutput) {
       if (this.providerName === 'deepseek') {
         body.response_format = { type: 'json_object' };
@@ -246,18 +253,6 @@ class OpenAICompatibleProvider {
       } else {
         body.response_format = this.buildChatJsonSchemaResponseFormat();
       }
-    }
-
-    if (!isCfRun && this.providerName === 'openai') {
-      const effort = this.getOpenAIReasoningEffortForRequest();
-      if (effort) {
-        if (useResponsesApi) body.reasoning = { effort };
-        else body.reasoning_effort = effort;
-      }
-    }
-
-    if (!isCfRun && this.providerName === 'deepseek' && this.reasoningEffort) {
-      body.reasoning_effort = this.reasoningEffort;
     }
 
     if (isCfRun) {
@@ -305,12 +300,6 @@ class OpenAICompatibleProvider {
       model.includes('k3') ||
       /^gpt-5(?:[\.-]|$)/.test(model)
     );
-  }
-
-  getOpenAIReasoningEffortForRequest() {
-    const raw = this.normalizeReasoningEffort(this.reasoningEffort);
-    if (!raw) return undefined;
-    return raw === 'xhigh' ? 'high' : raw;
   }
 
   buildSubtitleEntriesJsonSchema() {
@@ -368,10 +357,18 @@ class OpenAICompatibleProvider {
     const normalizedTarget = this.normalizeTargetName(targetLanguage);
     let systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
 
+    // 1:1 Parity dengan Gemini — Suntik protokol pintasan pemikiran untuk mempercepatkan proses
+    const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, literal translations, overlapping speech (-), sound/music tags (e.g., [sighs], ♪), song lyrics, and sentence fragments — bypass reasoning ENTIRELY. Output the XML immediately.\n4. SELECTIVE REASONING: ONLY activate reasoning for highly complex idioms or untranslatable slang. Resolve conceptually then output XML immediately.\n';
+
+    if (systemPrompt.includes('<input>')) {
+      systemPrompt = systemPrompt.replace('<input>', universalReasoningChain + '\n<input>');
+    } else {
+      systemPrompt = systemPrompt + universalReasoningChain;
+    }
+
     let userPrompt;
     let isSelfContained = false;
 
-    // Jika customPrompt sudah mengandungi blok input XML/JSON/SRT, elakkan pertindihan
     if (
       systemPrompt.includes('<input>') ||
       systemPrompt.includes('INPUT (') ||
@@ -713,7 +710,6 @@ class OpenAICompatibleProvider {
           if (chunkText) {
             aggregated += chunkText;
             const cleanedAgg = this.cleanTranslatedSubtitle(aggregated);
-            // Hantar hanya apabila pemikiran selesai dan teks sari kata bermula
             if (cleanedAgg && typeof onPartial === 'function') {
               try { onPartial(cleanedAgg); } catch (_) { }
             }
@@ -816,7 +812,6 @@ class OpenAICompatibleProvider {
   extractChunkText(choice) {
     if (!choice) return '';
     const delta = choice.delta || {};
-    // Abaikan delta.reasoning_content untuk mengelakkan pencemaran teks terjemahan
     if (typeof delta.content === 'string') return delta.content;
     if (typeof delta.text === 'string') return delta.text;
     if (choice.message?.content && typeof choice.message.content === 'string') {
@@ -837,12 +832,9 @@ class OpenAICompatibleProvider {
 
   cleanTranslatedSubtitle(text) {
     let cleaned = String(text || '');
-    // 1. Tapis blok pemikiran yang lengkap mahupun yang belum bertutup semasa streaming
     cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
     cleaned = cleaned.replace(/<think>[\s\S]*$/gi, '');
-    // 2. Buang blok kod markdown
     cleaned = cleaned.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
-    // 3. Seragamkan baris penamat
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     return cleaned.trim();
   }
