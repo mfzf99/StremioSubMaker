@@ -149,6 +149,17 @@ class SubDLService {
         return [];
       }
 
+      // 🎯 Penapis Spam Request Stremio (Local RAM Hit)
+      const localCacheKey = `${imdb_id}:${type}:${season || 1}:${episode || ''}:${(languages || []).join(',')}`;
+      if (subdlMemoryCache.has(localCacheKey)) {
+        const cachedEntry = subdlMemoryCache.get(localCacheKey);
+        if (Date.now() - cachedEntry.timestamp < DEBOUNCE_TTL_MS) {
+          log.debug(() => `[SubDL] Local RAM hit for ${localCacheKey} - Debouncing duplicate Stremio request`);
+          return cachedEntry.data;
+        }
+        subdlMemoryCache.delete(localCacheKey);
+      }
+
       // Convert ISO-639-2 codes to SubDL format (uppercase codes)
       // SubDL uses uppercase 2-letter codes with special cases like BR_PT
       const subdlLanguageMap = {
