@@ -400,22 +400,38 @@ class SubDLService {
 
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
+          // Percubaan 1: Cuba dengan API Key
+          // Jika gagal 403 (isu Free Tier), percubaan seterusnya buang x-api-key secara automatik
+          const useKeyHeader = this.apiKey && attempt === 0;
+
           subtitleResponse = await SubDLService.downloadClient.get(downloadUrl, {
             responseType: 'arraybuffer',
             timeout: timeout,
             maxContentLength: MAX_ZIP_BYTES,
-            ...(this.apiKey ? { headers: { 'x-api-key': this.apiKey } } : {})
+            headers: {
+              'User-Agent': 'StremioSubtitleTranslator v1.0',
+              'Referer': 'https://subdl.com/',
+              ...(useKeyHeader ? { 'x-api-key': this.apiKey } : {})
+            }
           });
           break;
         } catch (err) {
           lastError = err;
           const status = err.response?.status;
+
+          // Jika 403 dikesan semasa guna API key, cuba semula serta-merta tanpa API key
+          if (status === 403 && attempt === 0 && this.apiKey) {
+            log.warn(() => `[SubDL] 403 Forbidden with API key. Retrying download anonymously without x-api-key header...`);
+            continue;
+          }
+
           if (status === 503 && attempt < MAX_RETRIES) {
             const delay = BACKOFF_DELAYS[attempt];
             log.warn(() => `[SubDL] Download failed with 503, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
+
           throw err;
         }
       }
