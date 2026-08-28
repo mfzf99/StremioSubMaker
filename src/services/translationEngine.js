@@ -3213,8 +3213,14 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
     // 7. Bersihkan Simbol Beracun
     cleaned = cleaned.replace(/<(?=[\s\d])/g, '&lt;');
 
-    // 8. Normalisasi Pemisah Baris (CRLF → LF)
-    cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // 8. Normalisasi Pemisah Baris (CRLF → LF) & Buang baris kosong tergantung
+    cleaned = cleaned
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean) // Buang sebarang baris kosong di dalam atau di tepi
+      .join('\n');
 
     // 9. Format RTL (Jika Bahasa Sasaran Kanan-ke-Kiri)
     if (this.isRtlTarget) {
