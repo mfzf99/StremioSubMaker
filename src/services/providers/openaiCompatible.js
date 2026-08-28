@@ -496,7 +496,7 @@ class OpenAICompatibleProvider {
 
     getAuthHeaders() {
     // Sanitize API key to prevent header injection vulnerabilities
-    const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';[cite: 2]
+    const sanitizedKey = sanitizeApiKeyForHeader(this.apiKey) || '';
     
     // Jika tiada API key (contoh: Ollama / LocalAI local), jangan hantar header kosong
     if (!sanitizedKey) {
@@ -506,8 +506,8 @@ class OpenAICompatibleProvider {
     // Universal: Hantar Authorization Bearer untuk SEMUA jenis API key
     // (Serasi dengan Fiqstr, CrazyRouter, OpenAI, DeepSeek, Kimi, GLM & semua proxy dunia)
     return {
-      Authorization: `Bearer ${sanitizedKey}`,[cite: 2]
-      ...this.headers[cite: 2]
+      Authorization: `Bearer ${sanitizedKey}`,
+      ...this.headers
     };
   }
 
