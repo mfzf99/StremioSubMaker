@@ -6,11 +6,10 @@ const { handleSearchError, handleDownloadError, handleAuthError, parseApiError }
 const { httpAgent, httpsAgent, dnsLookup } = require('../utils/httpAgents');
 const { detectAndConvertEncoding } = require('../utils/encodingDetector');
 const { version } = require('../utils/version');
-const { appendHiddenInformationalNote } = require('../utils/subtitle');
 const { hasExplicitSeasonEpisodeMismatch } = require('../utils/animeSearchResolver');
 const log = require('../utils/logger');
 const { isTrueishFlag } = require('../utils/subtitleFlags');
-const { detectArchiveType, extractSubtitleFromArchive, isArchive, createEpisodeNotFoundSubtitle, createZipTooLargeSubtitle, convertSubtitleToVtt } = require('../utils/archiveExtractor');
+const { detectArchiveType, extractSubtitleFromArchive, convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const { analyzeResponseContent, createInvalidResponseSubtitle } = require('../utils/responseAnalyzer');
 
 const OPENSUBTITLES_API_URL = 'https://api.opensubtitles.com/api/v1';
@@ -18,26 +17,30 @@ const OPENSUBTITLES_VIP_API_URL = 'https://vip-api.opensubtitles.com/api/v1';
 const USER_AGENT = `SubMaker v${version}`;
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
 
+// 🎯 RAM Cache Anti-Spam (30s TTL + Had Siling Memori)
+const osMemoryCache = new Map();
+const MAX_CACHE_ENTRIES = 500;
+const DEBOUNCE_TTL_MS = 30000;
+
+function setOsCache(key, data) {
+  if (osMemoryCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = osMemoryCache.keys().next().value;
+    osMemoryCache.delete(oldestKey);
+  }
+  osMemoryCache.set(key, { timestamp: Date.now(), data });
+}
+
 const AUTH_FAILURE_TTL_MS = 10 * 60 * 1000; // Suppress repeated bad-credential logins for 10 minutes
 const credentialFailureCache = new Map();
 const AUTH_FAILURE_PREFIX = 'osauthfail:';
 
-// MULTI-INSTANCE FIX: Token cache is now backed by Redis for cross-pod sharing
-// Local Map is used as L1 cache for same-process performance
-// Redis is the source of truth, checked when local cache misses
 const tokenCacheLocal = new Map();
 const TOKEN_CACHE_PREFIX = 'ostoken:';
 const TOKEN_TTL_SECONDS = 23 * 60 * 60; // 23 hours (token valid for 24h, 1h buffer)
 
-// Login mutex: prevents multiple concurrent /login calls for the same credentials
-// Key: credentialsCacheKey, Value: Promise that resolves when login completes
 const loginMutex = new Map();
 
 // ─── OpenSubtitles API rate limiter ───────────────────────────────────────────
-// OpenSubtitles enforces a shared per-IP API budget: 5 REST requests / second,
-// plus /login has its own 1 request / second rule. Every REST call reserves a
-// send timestamp before it is made. /login reserves both gates atomically so the
-// actual request cannot slip outside either upstream limit after waiting.
 const RATE_LIMIT_MIN_INTERVAL_MS = Math.max(
   250,
   parseInt(process.env.OPENSUBTITLES_API_MIN_INTERVAL_MS || '250', 10) || 250
@@ -82,8 +85,7 @@ const LOGIN_SINGLEFLIGHT_POLL_MS = Math.max(
   100,
   parseInt(process.env.OPENSUBTITLES_LOGIN_LOCK_POLL_MS || '250', 10) || 250
 );
-// The Redis hash tag keeps the API and login keys in the same slot on Redis
-// Cluster/Sentinel deployments, so the multi-key Lua reservation remains valid.
+
 const DISTRIBUTED_RATE_LIMIT_KEY = '{opensubtitles}:api_next_at';
 const DISTRIBUTED_LOGIN_SEND_RATE_LIMIT_KEY = '{opensubtitles}:login_next_at';
 const DISTRIBUTED_LOGIN_SINGLEFLIGHT_PREFIX = '{opensubtitles}:login_singleflight:';
@@ -436,8 +438,6 @@ function fallbackDelayFromLimitHeaders(headers = {}, fallbackMs = RATE_LIMIT_MIN
     return fallbackMs;
   }
 
-  // Add a small buffer so integer limits like 5/sec do not land exactly on the
-  // upstream boundary.
   const headerDerivedMs = Math.ceil(1000 / limitSecond) + 50;
   return Math.max(fallbackMs, headerDerivedMs);
 }
@@ -655,12 +655,6 @@ async function acquireLoginApiToken(options = {}) {
   return acquireOpenSubtitlesRateLimitSlot('login', { ...options, context: options.context || 'login' });
 }
 
-/**
- * Acquire a rate-limit token before making an OpenSubtitles API call.
- * Redis enforces the cross-pod shared-IP budget when available. If Redis is
- * unavailable, fall back to a conservative process-local 1 req/sec gate.
- * @returns {Promise<void>}
- */
 async function acquireToken(options = {}) {
   return acquireOpenSubtitlesRateLimitSlot('api', options);
 }
@@ -806,27 +800,17 @@ function buildOpenSubtitlesQueryString(queryParams = {}) {
   return searchParams.toString();
 }
 
-
-/**
- * Get cached token for credentials (if valid)
- * MULTI-INSTANCE: Checks local cache first, then Redis
- * @param {string} cacheKey - Credentials cache key
- * @returns {Promise<{ token: string, expiry: number, baseUrl?: string } | null>}
- */
 async function getCachedToken(cacheKey) {
   if (!cacheKey) return null;
 
-  // L1: Check local cache first (fast path)
   const local = tokenCacheLocal.get(cacheKey);
   if (local) {
-    // Check if token is still valid (with 1 minute buffer)
     if (Date.now() < local.expiry - 60000) {
       return local;
     }
     tokenCacheLocal.delete(cacheKey);
   }
 
-  // L2: Check Redis (cross-pod cache)
   try {
     const { getShared } = require('../utils/sharedCache');
     const { StorageAdapter } = require('../storage');
@@ -836,9 +820,7 @@ async function getCachedToken(cacheKey) {
     if (cached) {
       const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
       if (parsed && parsed.token && parsed.expiry) {
-        // Check if token is still valid
         if (Date.now() < parsed.expiry - 60000) {
-          // Populate local cache for future same-process calls
           tokenCacheLocal.set(cacheKey, parsed);
           log.debug(() => '[OpenSubtitles] Token loaded from Redis (cross-pod cache)');
           return parsed;
@@ -846,33 +828,22 @@ async function getCachedToken(cacheKey) {
       }
     }
   } catch (err) {
-    // Redis unavailable - fall through
     log.debug(() => `[OpenSubtitles] Redis token lookup failed: ${err.message}`);
   }
 
   return null;
 }
 
-/**
- * Store token in cache (both local and Redis)
- * @param {string} cacheKey - Credentials cache key
- * @param {string} token - JWT token
- * @param {number} expiry - Expiry timestamp
- * @param {string} [baseUrl] - Optional VIP API base URL
- */
 async function setCachedToken(cacheKey, token, expiry, baseUrl = null) {
   if (!cacheKey || !token) return;
 
   const data = { token, expiry };
-  // Include VIP base URL if provided (for VIP members)
   if (baseUrl) {
     data.baseUrl = baseUrl;
   }
 
-  // L1: Store in local cache
   tokenCacheLocal.set(cacheKey, data);
 
-  // L2: Store in Redis for cross-pod sharing
   try {
     const { setShared } = require('../utils/sharedCache');
     const { StorageAdapter } = require('../storage');
@@ -880,22 +851,15 @@ async function setCachedToken(cacheKey, token, expiry, baseUrl = null) {
     await setShared(redisKey, JSON.stringify(data), StorageAdapter.CACHE_TYPES.SESSION, TOKEN_TTL_SECONDS);
     log.debug(() => '[OpenSubtitles] Token cached in Redis (cross-pod)');
   } catch (err) {
-    // Redis unavailable - local cache still works
     log.debug(() => `[OpenSubtitles] Redis token cache failed: ${err.message}`);
   }
 }
 
-/**
- * Clear cached token (both local and Redis)
- * @param {string} cacheKey - Credentials cache key
- */
 async function clearCachedToken(cacheKey) {
   if (!cacheKey) return;
 
-  // L1: Clear local cache
   tokenCacheLocal.delete(cacheKey);
 
-  // L2: Clear from Redis
   try {
     const { deleteShared } = require('../utils/sharedCache');
     const { StorageAdapter } = require('../storage');
@@ -939,21 +903,14 @@ function isAuthenticationFailure(error) {
   }
 
   const status = error.response?.status;
-
-  // 401 Unauthorized and 403 Forbidden are clear auth failures
   if (status === 401 || status === 403) {
     return true;
   }
 
-  // Check error message for auth-related keywords
-  // This handles 400 errors that might be auth-related, as well as other edge cases
   const message = String(error.response?.data?.message || error.message || '').toLowerCase();
   if (message.includes('invalid username') || message.includes('invalid credentials') || message.includes('usernamepassword') || message.includes('unauthorized') || message.includes('wrong password')) {
     return true;
   }
-
-  // 400 Bad Request is NOT automatically an auth failure - it could be many things
-  // (malformed request, missing fields, etc.) - only the message content tells us
 
   return false;
 }
@@ -1037,21 +994,14 @@ async function clearCachedAuthFailure(cacheKey) {
   }
 }
 
-/**
- * Get OpenSubtitles API key at runtime (not at module load time)
- * This ensures Docker ENV vars and runtime environment changes are picked up
- * @returns {string} API key or empty string
- */
 function getOpenSubtitlesApiKey() {
   return process.env.OPENSUBTITLES_API_KEY || '';
 }
 
 class OpenSubtitlesService {
-  // Static flag to track if initialization logs have been shown
   static initLogged = false;
 
   constructor(config = {}) {
-    // Config requires username/password for user authentication (mandatory)
     this.config = {
       username: config.username || '',
       password: config.password || ''
@@ -1059,13 +1009,10 @@ class OpenSubtitlesService {
 
     this.credentialsCacheKey = getCredentialsCacheKey(this.config.username, this.config.password);
 
-    // MULTI-INSTANCE: Token loading from Redis happens lazily in login()/isTokenExpired()
-    // Constructor only checks local cache for fast startup
     const local = tokenCacheLocal.get(this.credentialsCacheKey);
     if (local && Date.now() < local.expiry - 60000) {
       this.token = local.token;
       this.tokenExpiry = local.expiry;
-      // Apply VIP base_url if cached
       if (local.baseUrl) {
         this.baseUrl = local.baseUrl;
       }
@@ -1075,22 +1022,18 @@ class OpenSubtitlesService {
       this.baseUrl = null;
     }
 
-    // Read API key at runtime (not at module load time)
     const apiKey = getOpenSubtitlesApiKey();
 
-    // Base axios configuration
     const defaultHeaders = {
       'User-Agent': USER_AGENT,
       'Content-Type': 'application/json',
-      'Accept': '*/*', // OpenSubtitles docs: "make sure you always add to every request Accept header: Accept: */*"
+      'Accept': '*/*',
       'Accept-Encoding': 'gzip, deflate, br'
     };
 
-    // Add API key if configured (only for search/auth flows)
     const sanitizedApiKey = sanitizeApiKeyForHeader(apiKey);
     if (sanitizedApiKey) {
       defaultHeaders['Api-Key'] = sanitizedApiKey;
-      // Only log once at startup
       if (!OpenSubtitlesService.initLogged) {
         log.debug(() => '[OpenSubtitles] API key loaded successfully from environment');
       }
@@ -1107,38 +1050,27 @@ class OpenSubtitlesService {
       decompress: true
     };
 
-    // Primary client (search/auth) uses Api-Key
     this.client = axios.create(baseAxiosConfig);
-
-    // Download client also uses Api-Key - per OpenSubtitles docs:
-    // "In every request should be present these HTTP headers... Api-Key"
     this.downloadClient = axios.create(baseAxiosConfig);
 
-    // Only log initialization messages once at startup
     if (!OpenSubtitlesService.initLogged) {
-      // Validate API key is configured
       if (!apiKey) {
         log.warn(() => '[OpenSubtitles] WARNING: OPENSUBTITLES_API_KEY not found in environment variables');
         log.warn(() => '[OpenSubtitles] Set it via: .env file, Docker ENV, or docker-compose environment');
         log.warn(() => '[OpenSubtitles] API requests may fail or have very limited rate limits');
       }
 
-      // Validate that credentials are provided
       if (!this.config.username || !this.config.password) {
         log.warn(() => '[OpenSubtitles] Username and password are optional - searches will use basic API access (limited to 5 downloads/24h per IP)');
       } else {
         log.debug(() => '[OpenSubtitles] Initialized with user account authentication for higher rate limits');
       }
 
-      // Mark as logged
       OpenSubtitlesService.initLogged = true;
     }
 
-    // Add request interceptor to handle token refresh for user authentication
     const addAuthInterceptor = (axiosInstance) => {
       axiosInstance.interceptors.request.use((config) => {
-        // Use instance token if valid - Redis check happens in login()
-        // Interceptor is synchronous, so we only use local state here
         if (this.token && this.tokenExpiry && Date.now() < this.tokenExpiry) {
           config.headers['Authorization'] = `Bearer ${this.token}`;
         }
@@ -1148,63 +1080,38 @@ class OpenSubtitlesService {
     addAuthInterceptor(this.client);
     addAuthInterceptor(this.downloadClient);
 
-    // Apply cached VIP base_url to axios clients (if loaded from local cache in constructor)
     if (this.baseUrl) {
       this.client.defaults.baseURL = this.baseUrl;
       this.downloadClient.defaults.baseURL = this.baseUrl;
     }
   }
 
-  /**
-   * Check if token is expired (also checks Redis cache)
-   * MULTI-INSTANCE: Async to support Redis lookup
-   * Uses 60s safety margin to prevent race conditions:
-   * Without this, a token with e.g. 500ms TTL could pass the check
-   * but expire before the actual API request fires (especially after
-   * acquireToken() wait), causing the auth interceptor to silently
-   * drop the Bearer header → API sees unauthenticated request → 20/day limit.
-   * @returns {Promise<boolean>}
-   */
   async isTokenExpired() {
-    // Use 60s safety margin to prevent race between check and actual request
-    // This matches the constructor's existing margin (line 348)
     const SAFETY_MARGIN_MS = 60000;
 
-    // If we have a valid local token (with safety margin), use it
     if (this.tokenExpiry && Date.now() < this.tokenExpiry - SAFETY_MARGIN_MS) {
       return false;
     }
 
-    // Check Redis for a token from another pod
     const cached = await getCachedToken(this.credentialsCacheKey);
     if (cached) {
       this.token = cached.token;
       this.tokenExpiry = cached.expiry;
-      // Apply VIP base_url if cached
       if (cached.baseUrl && !this.baseUrl) {
         this.baseUrl = cached.baseUrl;
         this.client.defaults.baseURL = cached.baseUrl;
         this.downloadClient.defaults.baseURL = cached.baseUrl;
       }
-      // Also apply safety margin to Redis-fetched tokens
       return Date.now() >= this.tokenExpiry - SAFETY_MARGIN_MS;
     }
 
     return true;
   }
 
-  /**
-   * Login with username and password to get JWT token
-   * @param {string} username - OpenSubtitles username
-   * @param {string} password - OpenSubtitles password
-   * @param {number} timeout - Optional timeout in ms
-   * @returns {Promise<string>} - JWT token
-   */
   async loginWithCredentials(username, password, timeout) {
     try {
       log.debug(() => ['[OpenSubtitles] Authenticating user:', username]);
 
-      // Use provided timeout or fall back to client default
       const requestConfig = timeout ? { timeout } : {};
       const loginDeadlineAt = Date.now() + Math.max(
         0,
@@ -1225,30 +1132,23 @@ class OpenSubtitlesService {
       }
 
       this.token = response.data.token;
-      // Token is valid for 24 hours
       this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000);
 
-      // VIP users get a special base_url - use it for faster/less rate-limited access
       let vipBaseUrl = null;
       if (response.data.base_url) {
         const rawBaseUrl = String(response.data.base_url).trim();
-        // Only use vip-api endpoint if returned by OpenSubtitles
         if (rawBaseUrl.includes('vip-api.opensubtitles.com')) {
           vipBaseUrl = rawBaseUrl.startsWith('http') ? rawBaseUrl : `https://${rawBaseUrl}`;
-          // Ensure it ends with /api/v1
           if (!vipBaseUrl.endsWith('/api/v1')) {
             vipBaseUrl = vipBaseUrl.replace(/\/?$/, '/api/v1');
           }
           this.baseUrl = vipBaseUrl;
-          // Update axios clients to use VIP endpoint
           this.client.defaults.baseURL = vipBaseUrl;
           this.downloadClient.defaults.baseURL = vipBaseUrl;
           log.info(() => `[OpenSubtitles] VIP user detected - switching to VIP API endpoint`);
         }
       }
 
-      // Store before releasing the distributed login lock so other pods observe
-      // the token instead of starting a second login immediately after us.
       await setCachedToken(this.credentialsCacheKey, this.token, this.tokenExpiry, vipBaseUrl);
 
       log.debug(() => '[OpenSubtitles] User authentication successful');
@@ -1256,11 +1156,8 @@ class OpenSubtitlesService {
       return this.token;
 
     } catch (error) {
-      // Classify the error so we don't mis-treat rate limits as bad credentials
       const parsed = parseApiError(error, 'OpenSubtitles');
 
-      // OpenSubtitles returns 403 "You cannot consume this service" when API key is rate-limited/blocked
-      // Treat this like a rate limit, not an auth failure
       const errMsg = String(error.response?.data?.message || error.message || '').toLowerCase();
       const looksLikeRateLimit = errMsg.includes('throttle') || errMsg.includes('rate limit') || errMsg.includes('too many') || errMsg.includes('cannot consume');
       if (parsed.statusCode === 403 && looksLikeRateLimit) {
@@ -1280,13 +1177,10 @@ class OpenSubtitlesService {
         throw e;
       }
 
-      // Never cache an auth failure for retryable cases like 429/503
-      // Also skip caching if the error message looks like rate limiting regardless of status code
       if (parsed.type !== 'rate_limit' && parsed.statusCode !== 503 && parsed.statusCode !== 429 && !looksLikeRateLimit && isAuthenticationFailure(error)) {
         await cacheAuthFailure(this.credentialsCacheKey);
       }
 
-      // For rate limits or service unavailability, bubble up so callers can render a proper message
       if (parsed.statusCode === 429 || parsed.type === 'rate_limit' || parsed.statusCode === 503) {
         const e = new Error(parsed.userMessage || parsed.message || 'Service temporarily unavailable');
         e.statusCode = parsed.statusCode || 503;
@@ -1301,37 +1195,26 @@ class OpenSubtitlesService {
         throw e;
       }
 
-      // For timeout and network errors, also bubble up so they don't get misinterpreted as invalid credentials
       if (parsed.type === 'timeout' || parsed.type === 'network' || parsed.type === 'dns') {
         const e = new Error(parsed.userMessage || parsed.message || 'Network error during authentication');
         e.statusCode = parsed.statusCode || 0;
         e.type = parsed.type;
-        e.isRetryable = parsed.type !== 'dns'; // DNS errors are not retryable
+        e.isRetryable = parsed.type !== 'dns';
         throw e;
       }
 
-      // For genuine auth failures, throw so the caller knows it's an auth error (401)
       if (parsed.statusCode === 401 || isAuthenticationFailure(error)) {
         const authErr = new Error('OpenSubtitles authentication failed: invalid username/password');
         authErr.statusCode = 401;
         authErr.authError = true;
-        // Also log via handler for consistency
         handleAuthError(error, 'OpenSubtitles');
         throw authErr;
       }
 
-      // For other unexpected errors, log via auth handler and return null
       return handleAuthError(error, 'OpenSubtitles');
     }
   }
 
-  /**
-   * Login to OpenSubtitles REST API (optional, for higher download limits)
-   * Uses a process-local mutex plus a Redis singleflight lock so only one pod
-   * refreshes a given credential's JWT at a time.
-   * @param {number} timeout - Optional timeout in ms for the login request
-   * @returns {Promise<string|null>} - JWT token if credentials provided, null otherwise
-   */
   _applyCachedToken(cached, source = 'cache') {
     if (!cached?.token) {
       return null;
@@ -1439,7 +1322,6 @@ class OpenSubtitlesService {
 
   async login(timeout) {
     if (!this.config.username || !this.config.password) {
-      // No credentials provided, use basic API access
       return null;
     }
 
@@ -1448,20 +1330,17 @@ class OpenSubtitlesService {
       throw this._createAuthFailureError();
     }
 
-    // Check if there's already a valid token in cache (local + Redis)
     const cached = await getCachedToken(this.credentialsCacheKey);
     if (cached) {
       log.debug(() => '[OpenSubtitles] Using cached token (cross-pod Redis cache)');
       return this._applyCachedToken(cached, 'cross-pod cache');
     }
 
-    // Check if another request is already logging in with these credentials
     const existingMutex = loginMutex.get(this.credentialsCacheKey);
     if (existingMutex) {
       log.debug(() => '[OpenSubtitles] Waiting for existing login to complete (mutex)');
       try {
         const result = await existingMutex;
-        // After mutex resolves, check cache again
         const freshCached = await getCachedToken(this.credentialsCacheKey);
         if (freshCached) {
           return this._applyCachedToken(freshCached, 'process mutex');
@@ -1475,16 +1354,13 @@ class OpenSubtitlesService {
       }
     }
 
-    // Create a mutex promise for this login attempt
     let resolveMutex;
     let rejectMutex;
     const mutexPromise = new Promise((resolve, reject) => {
       resolveMutex = resolve;
       rejectMutex = reject;
     });
-    // Prevent unhandled rejection if no one awaits this mutex when it rejects
-    // This happens when the first request fails and no concurrent requests were waiting
-    mutexPromise.catch(() => { /* swallow - rejection is handled by the try/catch below */ });
+    mutexPromise.catch(() => { });
     loginMutex.set(this.credentialsCacheKey, mutexPromise);
 
     try {
@@ -1495,7 +1371,6 @@ class OpenSubtitlesService {
       rejectMutex(err);
       throw err;
     } finally {
-      // Clean up mutex after a short delay to handle race conditions
       setTimeout(() => {
         if (loginMutex.get(this.credentialsCacheKey) === mutexPromise) {
           loginMutex.delete(this.credentialsCacheKey);
@@ -1504,35 +1379,20 @@ class OpenSubtitlesService {
     }
   }
 
-  /**
-   * Search for subtitles using the new REST API
-   * @param {Object} params - Search parameters
-   * @param {string} params.imdb_id - IMDB ID (with 'tt' prefix)
-   * @param {string} params.type - 'movie' or 'episode'
-   * @param {number} params.season - Season number (for episodes)
-   * @param {number} params.episode - Episode number (for episodes)
-   * @param {Array<string>} params.languages - Array of ISO-639-2 language codes
-   * @returns {Promise<Array>} - Array of subtitle objects
-   */
   async searchSubtitles(params) {
     try {
-      // Extract providerTimeout early so it can be used for login as well as search
       const { providerTimeout } = params;
 
-      // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
         log.warn(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
         return [];
       }
 
-      // Check for cached authentication failure (known bad credentials)
       if (hasCachedAuthFailure(this.credentialsCacheKey)) {
         throw this._createAuthFailureError();
       }
 
       if (await this.isTokenExpired()) {
-        // login() coordinates Redis singleflight and throws typed
-        // transient errors so orchestration does not cache incomplete results.
         const loginResult = await this.login(providerTimeout);
 
         if (!loginResult) {
@@ -1550,70 +1410,62 @@ class OpenSubtitlesService {
         return [];
       }
 
-      // Convert imdb_id to OpenSubtitles' canonical numeric format:
-      // no "tt" prefix and no leading zeroes, otherwise the API may redirect.
       const imdbId = imdb_id.replace(/^tt/i, '').replace(/^0+/, '') || '0';
 
-      // Convert ISO-639-2 (3-letter) codes to ISO-639-1 (2-letter) codes for OpenSubtitles API
-      // IMPORTANT: OpenSubtitles API is strict about which codes it accepts.
-      // The /infos/languages endpoint returns the canonical list (74 codes).
-      // Codes NOT in that list (e.g., 'pt', 'zh', 'ea', 'nb', 'nn') silently return 0 results.
-      const convertedLanguages = languages.map(lang => {
+      // 🎯 Penapis Spam Request Stremio (Local RAM Hit)
+      const localCacheKey = `${imdbId}:${type}:${season || 1}:${episode || ''}:${(languages || []).join(',')}:${excludeHearingImpairedSubtitles === true ? 'nohi' : 'all'}:${videoHash || ''}`;
+      if (osMemoryCache.has(localCacheKey)) {
+        const cachedEntry = osMemoryCache.get(localCacheKey);
+        if (Date.now() - cachedEntry.timestamp < DEBOUNCE_TTL_MS) {
+          log.debug(() => `[OpenSubtitles] Local RAM hit for ${localCacheKey} - Debouncing duplicate Stremio request`);
+          return cachedEntry.data;
+        }
+        osMemoryCache.delete(localCacheKey);
+      }
+
+      const convertedLanguages = (languages || []).map(lang => {
         const lower = lang.toLowerCase().trim();
 
-        // Handle special case for Portuguese Brazilian
         if (lower === 'pob' || lower === 'ptbr' || lower === 'pt-br') {
           return 'pt-br';
         }
 
-        // Handle European Portuguese: OS Auth requires 'pt-pt', NOT bare 'pt'
-        // (bare 'pt' returns 0 results — confirmed via live API test)
         if (lower === 'por') {
           return 'pt-pt';
         }
 
-        // Handle Latin American Spanish: OS Auth does NOT support 'ea' (returns 0 results).
-        // Fall back to 'es' (Castilian) — closest available match.
         if (lower === 'spn') {
           return 'es';
         }
 
-        // Handle generic Chinese: OS Auth does NOT support bare 'zh' (returns 0 results).
-        // Map to 'zh-cn' (Simplified) as the closest default.
-        if (lower === 'chi' || lower === 'zho') {
+        if (lower === 'chi' || lower === 'zho' || lower === 'zhs' || lower === 'zh-cn' || lower === 'ze') {
           return 'zh-cn';
         }
 
-        // Handle Norwegian variants: OS Auth does NOT support 'nb' or 'nn' (return 0 results).
-        // Map both to 'no' (generic Norwegian) which returns results.
+        if (lower === 'zht' || lower === 'zh-tw') {
+          return 'zh-tw';
+        }
+
         if (lower === 'nob' || lower === 'nno') {
           return 'no';
         }
 
-        // Handle Filipino/Tagalog: fil has a 3-letter ISO 639-1 code (non-standard),
-        // map both fil and tgl to 'tl' (Tagalog 2-letter code accepted by OpenSubtitles)
         if (lower === 'fil' || lower === 'tgl') {
           return 'tl';
         }
 
-        // Handle Dari (prs): OS Auth doesn't have a separate Dari code.
-        // Map to 'fa' (Persian/Farsi) — same script and subtitle content.
         if (lower === 'prs') {
           return 'fa';
         }
 
-        // Handle Kurdish Sorani (ckb): OS Auth doesn't have a separate Sorani code.
-        // Map to 'ku' (generic Kurdish).
         if (lower === 'ckb') {
           return 'ku';
         }
 
-        // If already 2 letters, return as-is
         if (lower.length === 2 && /^[a-z]{2}$/.test(lower)) {
           return lower;
         }
 
-        // If 3 letters (ISO-639-2), convert to ISO-639-1
         if (lower.length === 3 && /^[a-z]{3}$/.test(lower)) {
           const iso1Code = toISO6391(lower);
           if (iso1Code) {
@@ -1621,20 +1473,17 @@ class OpenSubtitlesService {
           }
         }
 
-        // Return original if can't convert
         return lower;
-      }).filter(lang => lang); // Remove any nulls/undefined
+      }).filter(Boolean);
 
-      log.debug(() => ['[OpenSubtitles] Converted languages from ISO-639-2 to ISO-639-1:', languages.join(','), '->', convertedLanguages.join(',')]);
+      log.debug(() => ['[OpenSubtitles] Converted languages from ISO-639-2 to ISO-639-1:', (languages || []).join(','), '->', convertedLanguages.join(',')]);
 
-      // Build query parameters for REST API
       const queryParams = {
         imdb_id: imdbId,
         languages: convertedLanguages.join(',')
       };
 
       if ((type === 'episode' || type === 'anime-episode') && episode) {
-        // Default to season 1 if not specified (common for anime)
         queryParams.season_number = season || 1;
         queryParams.episode_number = episode;
       }
@@ -1643,28 +1492,19 @@ class OpenSubtitlesService {
         queryParams.hearing_impaired = 'exclude';
       }
 
-      // Send moviehash when a real Stremio video hash is available
-      // OpenSubtitles API will return moviehash_match=true for exact file matches
       if (videoHash) {
         queryParams.moviehash = videoHash;
         log.debug(() => '[OpenSubtitles] Including moviehash in search for hash-based matching');
       }
 
       log.debug(() => ['[OpenSubtitles] Searching with params:', JSON.stringify(queryParams)]);
-      if (this.token) {
-        log.debug(() => '[OpenSubtitles] Using user account authentication');
-      } else {
-        log.debug(() => '[OpenSubtitles] Using basic API access');
-      }
 
       const queryString = buildOpenSubtitlesQueryString(queryParams);
       const searchPath = queryString ? `/subtitles?${queryString}` : '/subtitles';
 
-      // Use providerTimeout from config if provided, otherwise use client default
       const requestConfig = {};
       if (providerTimeout) requestConfig.timeout = providerTimeout;
 
-      // Rate-limit gate: every OpenSubtitles REST API call goes through the shared gate.
       let response;
       try {
         response = await requestOpenSubtitlesApi(
@@ -1676,12 +1516,9 @@ class OpenSubtitlesService {
         const status = searchErr?.response?.status;
         const errMsg = String(searchErr?.response?.data?.message || searchErr?.message || '').toLowerCase();
 
-        // RETRY LOGIC: Handle invalid token (401 Unauthorized or 500 "invalid")
-        // OpenSubtitles docs: "In response check if JWT is valid (look for HTTP response code 500 with message invalid) otherwise re-authenticate user."
         if (status === 401 || (status === 500 && errMsg.includes('invalid'))) {
           log.warn(() => `[OpenSubtitles] Token rejected (${status}), clearing cache and retrying search...`);
 
-          // 1. Clear invalid token from cache (local + Redis)
           await clearCachedToken(this.credentialsCacheKey);
           this.token = null;
           this.tokenExpiry = null;
@@ -1689,8 +1526,6 @@ class OpenSubtitlesService {
           this.client.defaults.baseURL = OPENSUBTITLES_API_URL;
           this.downloadClient.defaults.baseURL = OPENSUBTITLES_API_URL;
 
-          // 2. Login again (implicitly handles token refresh and rate limiting)
-          // Note: login() will check cache first, but we just cleared it, so it will force a new login
           const freshToken = await this.login(providerTimeout);
           if (!freshToken) {
             throw createOpenSubtitlesQueueBusyError(
@@ -1699,7 +1534,6 @@ class OpenSubtitlesService {
             );
           }
 
-          // 3. Retry search with new token through the same API gate
           try {
             response = await requestOpenSubtitlesApi(
               () => this.client.get(searchPath, requestConfig),
@@ -1707,13 +1541,10 @@ class OpenSubtitlesService {
               { timeoutMs: providerTimeout || this.client.defaults.timeout }
             );
           } catch (retryErr) {
-            // If it fails again, throw the original error (or the new one) to be handled by standard error handler
             throw retryErr;
           }
         }
         else if (status === 429) {
-          // Do not retry in-band; requestOpenSubtitlesApi already recorded the
-          // upstream signal and the next call will reserve a later send time.
           throw searchErr;
         } else {
           throw searchErr;
@@ -1726,7 +1557,6 @@ class OpenSubtitlesService {
       }
 
       let subtitles = response.data.data.map(sub => {
-
         const originalLang = sub.attributes.language;
         const normalizedLang = this.normalizeLanguageCode(originalLang);
         const fileId = sub.attributes.files?.[0]?.file_id || sub.id;
@@ -1736,7 +1566,6 @@ class OpenSubtitlesService {
         const cleanedName = stripExtension(fileName);
         const displayName = releaseName || cleanedName || sub.attributes.feature_details?.movie_name || 'Unknown';
 
-        // OpenSubtitles API returns moviehash_match when moviehash was sent in query
         const isHashMatch = sub.attributes.moviehash_match === true;
 
         return {
@@ -1744,7 +1573,7 @@ class OpenSubtitlesService {
           language: originalLang,
           languageCode: normalizedLang,
           name: displayName,
-          downloads: parseInt(sub.attributes.download_count) || 0,
+          downloads: parseInt(sub.attributes.download_count, 10) || 0,
           rating: parseFloat(sub.attributes.ratings) || 0,
           uploadDate: sub.attributes.upload_date,
           format: detectedFormat,
@@ -1761,7 +1590,13 @@ class OpenSubtitlesService {
         };
       });
 
-      return this._postProcessSearchResults(subtitles, type, season, episode, convertedLanguages);
+      const processedResults = this._postProcessSearchResults(subtitles, type, season, episode, convertedLanguages);
+
+      if (processedResults.length > 0) {
+        setOsCache(localCacheKey, processedResults);
+      }
+
+      return processedResults;
 
     } catch (error) {
       if (isOpenSubtitlesRateLimitError(error)) {
@@ -1776,20 +1611,7 @@ class OpenSubtitlesService {
     }
   }
 
-  /**
-   * Post-process raw mapped search results: episode filtering, season pack
-   * detection, and per-language limiting.
-   * Extracted to keep live API mapping separate from filtering/limiting.
-   * @param {Array} subtitles - Raw mapped subtitle objects
-   * @param {string} type - Content type (movie, episode, anime-episode)
-   * @param {number} season - Season number
-   * @param {number} episode - Episode number
-   * @param {string[]} convertedLanguages - Languages used in the query (for logging)
-   * @returns {Array} - Filtered and limited subtitle results
-   * @private
-   */
   _postProcessSearchResults(subtitles, type, season, episode, convertedLanguages) {
-    // Client-side episode filtering and season pack detection
     if ((type === 'episode' || type === 'anime-episode') && episode) {
       const targetSeason = season || 1;
       const targetEpisode = episode;
@@ -1801,14 +1623,12 @@ class OpenSubtitlesService {
 
         if (hasExplicitSeasonEpisodeMismatch(name, targetSeason, targetEpisode)) return false;
 
-        // Season pack patterns
         const seasonPackPatterns = [
-          new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\\d)`, 'i'),
+          new RegExp(`(?:complete|full|entire)?\\s*(?:season|s)\\s*0*${targetSeason}(?:\\s+(?:complete|full|pack))?(?!.*e0*\\d)`, 'i'),
           new RegExp(`(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\s+season(?!.*episode)`, 'i'),
           new RegExp(`s0*${targetSeason}\\s*(?:complete|full|pack)`, 'i')
         ];
 
-        // Anime pack patterns
         const animeSeasonPackPatterns = [
           /(?:complete|batch|full(?:\s+series)?|\d{1,2}\s*[-~]\s*\d{1,2})/i,
           /\[(?:batch|complete|full)\]/i,
@@ -1835,18 +1655,17 @@ class OpenSubtitlesService {
           return true;
         }
 
-        // Episode match patterns
         const seasonEpisodePatterns = [
           new RegExp(`s0*${targetSeason}e0*${targetEpisode}(?![0-9])`, 'i'),
           new RegExp(`${targetSeason}x0*${targetEpisode}(?![0-9])`, 'i'),
-          new RegExp(`s0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'), // S01xE01, S01x1
-          new RegExp(`0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),  // 01xE01, 1xE01
+          new RegExp(`s0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),
+          new RegExp(`0*${targetSeason}[\\s._-]*x[\\s._-]*e?0*${targetEpisode}(?![0-9])`, 'i'),
           new RegExp(`s0*${targetSeason}\\.e0*${targetEpisode}(?![0-9])`, 'i'),
           new RegExp(`season\\s*0*${targetSeason}.*episode\\s*0*${targetEpisode}(?![0-9])`, 'i')
         ];
         if (seasonEpisodePatterns.some(p => p.test(name))) return true;
 
-        return true; // keep ambiguous
+        return true;
       });
 
       const filteredOut = beforeCount - subtitles.length;
@@ -1856,7 +1675,6 @@ class OpenSubtitlesService {
       }
     }
 
-    // Limit to 14 results per language to control response size
     const MAX_RESULTS_PER_LANGUAGE = 14;
     const groupedByLanguage = {};
 
@@ -1875,17 +1693,11 @@ class OpenSubtitlesService {
     return limitedSubtitles;
   }
 
-  /**
-   * Download subtitle content via REST API
-   * @param {string} fileId - File ID from search results
-   * @returns {Promise<string>} - Subtitle content as text
-   */
   async downloadSubtitle(fileId, options = {}) {
-    const timeout = options?.timeout || 12000; // Default 12s
+    const timeout = options?.timeout || 12000;
     try {
       log.debug(() => ['[OpenSubtitles] Downloading subtitle via REST API:', fileId]);
 
-      // Parse season pack info encoded in fileId if present
       let baseFileId = String(fileId);
       let isSeasonPack = false;
       let seasonPackSeason = null;
@@ -1899,7 +1711,6 @@ class OpenSubtitlesService {
         log.debug(() => `[OpenSubtitles] Season pack download detected for S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
       }
 
-      // Authenticate with user credentials (required)
       if (!this.config.username || !this.config.password) {
         log.warn(() => '[OpenSubtitles] Username and password are required. Please configure your OpenSubtitles credentials.');
         throw new Error('OpenSubtitles credentials not configured');
@@ -1915,12 +1726,9 @@ class OpenSubtitlesService {
       if (await this.isTokenExpired()) {
         const loginResult = await this.login(timeout);
         if (!loginResult) {
-          // Check if credentials are now cached as failed
           if (await hasCachedAuthFailureAsync(this.credentialsCacheKey)) {
             throw new Error('OpenSubtitles authentication failed: invalid username/password');
           }
-          // Queue congestion or another transient issue. This is not a user
-          // rate limit and should not be rendered as a provider 429 subtitle.
           throw createOpenSubtitlesQueueBusyError(
             'OpenSubtitles temporarily unavailable because the API queue is busy',
             RATE_LIMIT_RETRY_AFTER_FALLBACK_MS
@@ -1928,11 +1736,7 @@ class OpenSubtitlesService {
         }
       }
 
-      // First, request download link
-      // Use the primary client so Api-Key is sent (required by OpenSubtitles for /download)
       const logDownloadAuthState = () => {
-        // Diagnostic: Log auth state immediately before download request
-        // This helps diagnose cases where the Bearer token is silently dropped
         const tokenTTL = this.tokenExpiry ? Math.max(0, this.tokenExpiry - Date.now()) : 0;
         const hasToken = !!(this.token && this.tokenExpiry && Date.now() < this.tokenExpiry);
         log.debug(() => `[OpenSubtitles] Download auth state: token=${hasToken ? 'present' : 'MISSING'}, TTL=${Math.round(tokenTTL / 1000)}s, baseUrl=${this.baseUrl ? 'VIP' : 'standard'}`);
@@ -1946,21 +1750,17 @@ class OpenSubtitlesService {
         downloadResponse = await requestOpenSubtitlesApi(() => {
           logDownloadAuthState();
           return this.client.post('/download', {
-            file_id: parseInt(baseFileId)
+            file_id: parseInt(baseFileId, 10)
           });
         }, 'download-link', { timeoutMs: timeout });
       } catch (downloadErr) {
         const status = downloadErr?.response?.status;
         const errMsg = String(downloadErr?.response?.data?.message || downloadErr?.message || '').toLowerCase();
 
-        // RETRY LOGIC: Handle invalid token only. OpenSubtitles may return
-        // 406 for real daily quota exhaustion too; that must not trigger a
-        // fresh /login on every download attempt.
         const isInvalidToken406 = status === 406 && errMsg.includes('invalid token');
         if (status === 401 || (status === 500 && errMsg.includes('invalid')) || isInvalidToken406) {
           log.warn(() => `[OpenSubtitles] Download token rejected (${status}), clearing cache and retrying...`);
 
-          // 1. Clear invalid token from cache (local + Redis)
           await clearCachedToken(this.credentialsCacheKey);
           this.token = null;
           this.tokenExpiry = null;
@@ -1968,7 +1768,6 @@ class OpenSubtitlesService {
           this.client.defaults.baseURL = OPENSUBTITLES_API_URL;
           this.downloadClient.defaults.baseURL = OPENSUBTITLES_API_URL;
 
-          // 2. Login again (implicitly handles token refresh and rate limiting)
           const freshToken = await this.login(timeout);
           if (!freshToken) {
             const retryUnavailable = createOpenSubtitlesQueueBusyError(
@@ -1978,17 +1777,13 @@ class OpenSubtitlesService {
             throw retryUnavailable;
           }
 
-          // 3. Retry download with new token through the same API gate
           downloadResponse = await requestOpenSubtitlesApi(() => {
             logDownloadAuthState();
             return this.client.post('/download', {
-              file_id: parseInt(baseFileId)
+              file_id: parseInt(baseFileId, 10)
             });
           }, 'download-link-retry-after-login', { timeoutMs: timeout });
         }
-        // Do not relogin on normal 406 responses. They include real daily
-        // quota exhaustion and invalid file IDs; another /login cannot fix
-        // those and can create login-rate storms.
         else if (status === 406 && this.config.username && this.config.password) {
           const quotaMsg = String(downloadErr?.response?.data?.message || '');
           log.warn(() => `[OpenSubtitles] /download returned 406 with configured credentials; not re-authenticating. API message: "${quotaMsg}"`);
@@ -2004,8 +1799,6 @@ class OpenSubtitlesService {
 
       const downloadLink = downloadResponse.data.link;
 
-      // Log remaining downloads from API response for diagnostics
-      // The /download response includes: remaining, requests, message, reset_time, reset_time_utc
       const remaining = downloadResponse.data.remaining;
       const requests = downloadResponse.data.requests;
       if (remaining !== undefined) {
@@ -2014,13 +1807,12 @@ class OpenSubtitlesService {
 
       log.debug(() => ['[OpenSubtitles] Got download link:', downloadLink]);
 
-      // Download the subtitle file as raw bytes to handle BOM/ZIP cases efficiently
-      // Use a clean axios request for CDN downloads - don't send Api-Key/Authorization/Content-Type
-      // headers to the CDN; those are only needed for the OpenSubtitles API, not the file CDN
       let subtitleResponse;
       try {
         subtitleResponse = await axios.get(downloadLink, {
           responseType: 'arraybuffer',
+          timeout: timeout,
+          maxContentLength: MAX_ZIP_BYTES,
           headers: {
             'User-Agent': USER_AGENT,
             'Accept': '*/*'
@@ -2028,13 +1820,10 @@ class OpenSubtitlesService {
           httpAgent,
           httpsAgent,
           lookup: dnsLookup,
-          timeout: timeout,
           maxRedirects: 5,
           decompress: true
         });
       } catch (cdnError) {
-        // CDN download errors (403/410 from Varnish) should NOT be reported as "Authentication failed"
-        // These are file-level availability issues on OpenSubtitles' CDN, not credential problems
         const cdnStatus = cdnError.response?.status;
         if (cdnStatus === 403 || cdnStatus === 410) {
           const bodyStr = cdnError.response?.data
@@ -2051,23 +1840,19 @@ class OpenSubtitlesService {
           err._alreadyLogged = true;
           throw err;
         }
-        throw cdnError; // re-throw other errors for default handling
+        throw cdnError;
       }
 
       const buf = Buffer.isBuffer(subtitleResponse.data)
         ? subtitleResponse.data
         : Buffer.from(subtitleResponse.data);
 
-      // Analyze response content to detect HTML error pages, Cloudflare blocks, etc.
       const contentAnalysis = analyzeResponseContent(buf);
-
-      // Check for archive by magic bytes (ZIP, RAR, Gzip, 7z, Tar, etc.)
       const archiveType = detectArchiveType(buf);
 
       if (archiveType) {
         log.debug(() => `[OpenSubtitles] Detected ${archiveType.toUpperCase()} archive`);
 
-        // Use the centralized archive extractor
         return await extractSubtitleFromArchive(buf, {
           providerName: 'OpenSubtitles',
           maxBytes: MAX_ZIP_BYTES,
@@ -2079,7 +1864,6 @@ class OpenSubtitlesService {
         });
       }
 
-      // If not an archive, check if it's an error response (HTML, Cloudflare, etc.)
       if (contentAnalysis.type !== 'subtitle' && contentAnalysis.type !== 'unknown') {
         if (contentAnalysis.type.startsWith('html') || contentAnalysis.type === 'json_error' || contentAnalysis.type === 'text_error' || contentAnalysis.type === 'empty' || contentAnalysis.type === 'truncated') {
           log.error(() => `[OpenSubtitles] Download failed: ${contentAnalysis.type} - ${contentAnalysis.hint}`);
@@ -2087,7 +1871,6 @@ class OpenSubtitlesService {
         }
       }
 
-      // Non-ZIP: use centralized encoding detector for proper Arabic/Hebrew/RTL support
       let text = detectAndConvertEncoding(buf, 'OpenSubtitles', options.languageHint || null);
 
       const trimmed = (text || '').trimStart();
@@ -2096,7 +1879,6 @@ class OpenSubtitlesService {
         return text;
       }
 
-      // If content looks like ASS/SSA, convert to VTT using centralized converter
       if (/\[events\]/i.test(text) || /^dialogue\s*:/im.test(text)) {
         log.debug(() => '[OpenSubtitles] Detected ASS/SSA format, using centralized converter');
         return await convertSubtitleToVtt(text, 'subtitle.ass', 'OpenSubtitles', { skipAssConversion: options.skipAssConversion });
@@ -2110,99 +1892,37 @@ class OpenSubtitlesService {
     }
   }
 
-  /**
-   * Normalize language code to ISO-639-2 for Stremio
-   * @param {string} language - Language code or name from OpenSubtitles (ISO-639-2)
-   * @returns {string} - ISO-639-2 language code (3-letter)
-   */
   normalizeLanguageCode(language) {
     if (!language) return null;
 
     const lower = language.toLowerCase().trim();
 
-    // Map OpenSubtitles language names to ISO-639-2 codes
     const languageNameMap = {
-      'english': 'eng',
-      'spanish': 'spa',
-      'french': 'fre',
-      'german': 'ger',
-      'italian': 'ita',
-      'portuguese': 'por',
-      'russian': 'rus',
-      'japanese': 'jpn',
-      'chinese': 'chi',
-      'korean': 'kor',
-      'arabic': 'ara',
-      'dutch': 'dut',
-      'polish': 'pol',
-      'turkish': 'tur',
-      'swedish': 'swe',
-      'norwegian': 'nor',
-      'danish': 'dan',
-      'finnish': 'fin',
-      'greek': 'gre',
-      'hebrew': 'heb',
-      'hindi': 'hin',
-      'czech': 'cze',
-      'hungarian': 'hun',
-      'romanian': 'rum',
-      'thai': 'tha',
-      'vietnamese': 'vie',
-      'indonesian': 'ind',
-      'malay': 'may',
-      'ukrainian': 'ukr',
-      'bulgarian': 'bul',
-      'croatian': 'hrv',
-      'serbian': 'srp',
-      'slovak': 'slo',
-      'slovenian': 'slv',
-      'estonian': 'est',
-      'latvian': 'lav',
-      'lithuanian': 'lit',
-      'farsi': 'per',
-      'persian': 'per',
-      'bengali': 'ben',
-      'catalan': 'cat',
-      'basque': 'baq',
-      'galician': 'glg',
-      'bosnian': 'bos',
-      'macedonian': 'mac',
-      'albanian': 'alb',
-      'belarusian': 'bel',
-      'azerbaijani': 'aze',
-      'georgian': 'geo',
-      'malayalam': 'mal',
-      'tamil': 'tam',
-      'telugu': 'tel',
-      'urdu': 'urd',
-      'tagalog': 'tgl',
-      'icelandic': 'ice',
-      'kurdish': 'kur',
-      'afrikaans': 'afr',
-      'armenian': 'arm',
-      'kazakh': 'kaz',
-      'mongolian': 'mon',
-      'nepali': 'nep',
-      'punjabi': 'pan',
-      'sinhala': 'sin',
-      'swahili': 'swa',
-      'uzbek': 'uzb',
-      'amharic': 'amh',
-      'burmese': 'bur',
-      'khmer': 'khm',
-      'central khmer': 'khm',
-      'lao': 'lao',
-      'pashto': 'pus',
-      'somali': 'som',
+      'english': 'eng', 'spanish': 'spa', 'french': 'fre', 'german': 'ger',
+      'italian': 'ita', 'portuguese': 'por', 'russian': 'rus', 'japanese': 'jpn',
+      'chinese': 'chi', 'korean': 'kor', 'arabic': 'ara', 'dutch': 'dut',
+      'polish': 'pol', 'turkish': 'tur', 'swedish': 'swe', 'norwegian': 'nor',
+      'danish': 'dan', 'finnish': 'fin', 'greek': 'gre', 'hebrew': 'heb',
+      'hindi': 'hin', 'czech': 'cze', 'hungarian': 'hun', 'romanian': 'rum',
+      'thai': 'tha', 'vietnamese': 'vie', 'indonesian': 'ind', 'malay': 'may',
+      'ukrainian': 'ukr', 'bulgarian': 'bul', 'croatian': 'hrv', 'serbian': 'srp',
+      'slovak': 'slo', 'slovenian': 'slv', 'estonian': 'est', 'latvian': 'lav',
+      'lithuanian': 'lit', 'farsi': 'per', 'persian': 'per', 'bengali': 'ben',
+      'catalan': 'cat', 'basque': 'baq', 'galician': 'glg', 'bosnian': 'bos',
+      'macedonian': 'mac', 'albanian': 'alb', 'belarusian': 'bel', 'azerbaijani': 'aze',
+      'georgian': 'geo', 'malayalam': 'mal', 'tamil': 'tam', 'telugu': 'tel',
+      'urdu': 'urd', 'tagalog': 'tgl', 'icelandic': 'ice', 'kurdish': 'kur',
+      'afrikaans': 'afr', 'armenian': 'arm', 'kazakh': 'kaz', 'mongolian': 'mon',
+      'nepali': 'nep', 'punjabi': 'pan', 'sinhala': 'sin', 'swahili': 'swa',
+      'uzbek': 'uzb', 'amharic': 'amh', 'burmese': 'bur', 'khmer': 'khm',
+      'central khmer': 'khm', 'lao': 'lao', 'pashto': 'pus', 'somali': 'som',
       'sinhalese': 'sin'
     };
 
-    // Check if it's a full language name
     if (languageNameMap[lower]) {
       return languageNameMap[lower];
     }
 
-    // Handle special cases for regional variants per OpenSubtitles API format
     if (lower.includes('portuguese') && (lower.includes('brazil') || lower.includes('br'))) {
       return 'pob';
     }
@@ -2210,24 +1930,21 @@ class OpenSubtitlesService {
       return 'pob';
     }
 
-    // Spanish (Latin America) short code sometimes appears as 'ea'
     if (lower === 'ea') {
       return 'spn';
     }
 
-    // OS two-letter or variant codes requiring explicit mapping
-    if (lower === 'sx') return 'sat'; // Santali
-    if (lower === 'at') return 'ast'; // Asturian
-    if (lower === 'pr') return 'per'; // Dari -> Persian macro
-    if (lower === 'ex') return 'ext'; // Extremaduran (639-3)
-    if (lower === 'ma') return 'mni'; // Manipuri
-    if (lower === 'pm') return 'por'; // Portuguese (Mozambique)
-    if (lower === 'sp') return 'spa'; // Spanish (EU)
-    if (lower === 'sy') return 'syr'; // Syriac
-    if (lower === 'tm-td') return 'tet'; // Tetum
-    if (lower === 'tp') return 'tok'; // Toki Pona (639-3)
+    if (lower === 'sx') return 'sat';
+    if (lower === 'at') return 'ast';
+    if (lower === 'pr') return 'per';
+    if (lower === 'ex') return 'ext';
+    if (lower === 'ma') return 'mni';
+    if (lower === 'pm') return 'por';
+    if (lower === 'sp') return 'spa';
+    if (lower === 'sy') return 'syr';
+    if (lower === 'tm-td') return 'tet';
+    if (lower === 'tp') return 'tok';
 
-    // Handle Chinese variants per OpenSubtitles API format
     if (lower === 'zh-cn' || lower === 'zhcn' || (lower.includes('chinese') && lower.includes('simplified'))) {
       return 'zhs';
     }
@@ -2238,46 +1955,38 @@ class OpenSubtitlesService {
       return 'ze';
     }
 
-    // Handle Montenegrin
     if (lower === 'me' || lower === 'montenegrin') {
       return 'mne';
     }
 
-    // Normalize region-style codes like 'pt-PT', 'az-ZB' to base ISO-639-2
-    // Keep 'pt-br' handled above to map specifically to 'pob'
     const regionMatch = lower.match(/^([a-z]{2})-[a-z0-9]{2,}$/);
     if (regionMatch) {
       const base = regionMatch[1];
-      // Map 'pt-pt' explicitly to Portuguese
       if (lower === 'pt-pt') {
         return 'por';
       }
       const iso2Codes = toISO6392(base);
       if (iso2Codes && iso2Codes.length > 0) {
-        return iso2Codes[0].code2; // Convert base to ISO-639-2
+        return iso2Codes[0].code2;
       }
     }
 
-    // If it's already 3 letters, assume it's ISO-639-2
     if (lower.length === 3 && /^[a-z]{3}$/.test(lower)) {
       return lower;
     }
 
-    // If it's 2 letters, convert from ISO-639-1 to ISO-639-2
     if (lower.length === 2 && /^[a-z]{2}$/.test(lower)) {
       const iso2Codes = toISO6392(lower);
       if (iso2Codes && iso2Codes.length > 0) {
-        return iso2Codes[0].code2; // Return the first ISO-639-2 code
+        return iso2Codes[0].code2;
       }
     }
 
-    // Unknown language
     log.warn(() => `[OpenSubtitles] Unknown language format: "${language}", filtering out`);
     return null;
   }
 }
 
-// Support both `require()` direct and `{ OpenSubtitlesService }` destructured imports
 module.exports = OpenSubtitlesService;
 module.exports.OpenSubtitlesService = OpenSubtitlesService;
 module.exports.getCachedToken = getCachedToken;
