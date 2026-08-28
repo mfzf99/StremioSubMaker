@@ -7797,7 +7797,7 @@ Translate to {target_language}.`;
                     const selectedModel = e.target.value;
                     currentConfig.providers[key].model = selectedModel;
 
-                    // Auto-Detect Pintar untuk Custom Provider & OpenAI-compatible
+                    // 🧠 Smart Auto-Detection mengikut 28 Spesifikasi Model
                     if (selectedModel) {
                         const m = selectedModel.toLowerCase();
                         const maxTokensInput = document.getElementById(`provider-${key}-maxTokens`);
@@ -7813,12 +7813,24 @@ Translate to {target_language}.`;
                             m.includes('o3') ||
                             m.includes('thinking') ||
                             m.includes('reasoner') ||
-                            m.includes('minimax')
+                            m.includes('minimax') ||
+                            m.includes('hy3') ||
+                            m.includes('hunyuan')
                         ) {
                             if (maxTokensInput) maxTokensInput.value = 65536;
-                            if (reasoningSelect && !reasoningSelect.value) reasoningSelect.value = 'low';
+
+                            if (reasoningSelect) {
+                                // Model Always-On Thinking: paksa ke 'low' untuk kelajuan terjemahan optimum
+                                if (m.includes('5.3') || m.includes('k2.7') || m.includes('k3')) {
+                                    reasoningSelect.value = 'low';
+                                } else if (!reasoningSelect.value) {
+                                    reasoningSelect.value = 'low';
+                                }
+                            }
                         } else {
-                            if (maxTokensInput && maxTokensInput.value === '65536') maxTokensInput.value = 32768;
+                            if (maxTokensInput && maxTokensInput.value === '65536') {
+                                maxTokensInput.value = 32768;
+                            }
                         }
                     }
                 });
