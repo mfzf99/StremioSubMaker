@@ -21,8 +21,7 @@ const {
 
 /**
  * Universal OpenAI-Compatible Provider Wrapper
- * Calibrated 1:1 with Gemini translation architecture.
- * Supports OpenAI, DeepSeek, Kimi, GLM, MiniMax, Claude, and Proxy Gateways.
+ * Equipped with 28-Model Smart Payload & Reasoning Engine.
  */
 class OpenAICompatibleProvider {
   constructor(options = {}) {
@@ -52,7 +51,7 @@ class OpenAICompatibleProvider {
   }
 
   normalizeReasoningEffort(value) {
-    const allowed = ['disabled', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    const allowed = ['disabled', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'no_think'];
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return allowed.includes(normalized) ? normalized : undefined;
   }
@@ -66,10 +65,7 @@ class OpenAICompatibleProvider {
 
   isCfTranslationModel() {
     const model = String(this.model || '').toLowerCase();
-    return (
-      model.includes('m2m100') ||
-      model.includes('nllb-200')
-    );
+    return model.includes('m2m100') || model.includes('nllb-200');
   }
 
   normalizeCfModelId() {
@@ -177,6 +173,116 @@ class OpenAICompatibleProvider {
     return { body, url };
   }
 
+  /**
+   * 🧠 ENJIN PINTAR BINA PAYLOAD (28-Model Smart Payload Generator)
+   * Menyusun struktur JSON body mengikut spesifikasi mutlak setiap model.
+   */
+  applySmartModelPayload(body, modelName, rawEffort) {
+    const m = String(modelName || '').toLowerCase();
+    const effort = rawEffort || 'low';
+    const isDisable = effort === 'disabled' || effort === 'none' || effort === 'no_think';
+
+    // 1. DEEPSEEK FAMILY (deepseek-v4-pro, deepseek-v4-flash)
+    if (m.includes('deepseek')) {
+      if (isDisable) {
+        body.thinking = { type: 'disabled' };
+      } else {
+        body.thinking = { type: 'enabled' };
+        let mapped = 'low';
+        if (effort === 'max') mapped = 'max';
+        else if (effort === 'high' || effort === 'xhigh' || effort === 'medium') mapped = 'high';
+        body.reasoning_effort = mapped;
+      }
+      return;
+    }
+
+    // 2. GLM / ZHIPU AI FAMILY
+    if (m.includes('glm')) {
+      if (m.includes('5.3')) {
+        // GLM-5.3 & GLM-5.3-flash: Thinking ALWAYS-ON (pantang disabled = 400 error)
+        let mapped = 'low';
+        if (effort === 'max') mapped = 'max';
+        else if (effort === 'high' || effort === 'xhigh' || effort === 'medium') mapped = 'high';
+        body.reasoning_effort = mapped;
+      } else if (m.includes('5.2')) {
+        // GLM-5.2: Boleh disabled, effort cuma ada high / max
+        if (isDisable) {
+          body.thinking = { type: 'disabled' };
+        } else {
+          body.thinking = { type: 'enabled' };
+          body.reasoning_effort = (effort === 'max' || effort === 'xhigh') ? 'max' : 'high';
+        }
+      } else if (m.includes('5.1')) {
+        // GLM-5.1: Tiada reasoning_effort langsung
+        if (isDisable) {
+          body.thinking = { type: 'disabled' };
+        } else {
+          body.thinking = { type: 'enabled' };
+        }
+      }
+      return;
+    }
+
+    // 3. KIMI / MOONSHOT AI FAMILY
+    if (m.includes('kimi')) {
+      if (m.includes('k3')) {
+        // Kimi-k3: Always-on, top-level reasoning_effort
+        let mapped = 'low';
+        if (effort === 'max') mapped = 'max';
+        else if (effort === 'high' || effort === 'xhigh' || effort === 'medium') mapped = 'high';
+        body.reasoning_effort = mapped;
+      }
+      // Kimi-k2.7: Auto-managed, jangan hantar sebarang thinking parameter
+      return;
+    }
+
+    // 4. CLAUDE / ANTHROPIC FAMILY (Claude 4.6, 4.7, 4.8, 5)
+    if (m.includes('claude')) {
+      body.thinking = { type: 'adaptive' };
+      let mapped = 'low';
+      if (effort === 'max') mapped = 'max';
+      else if (effort === 'high') mapped = 'high';
+      else if (effort === 'medium') mapped = 'medium';
+      else if (effort === 'xhigh') {
+        mapped = m.includes('4.6') ? 'high' : 'xhigh'; // 4.6 tak sokong xhigh
+      }
+      body.output_config = { effort: mapped };
+      return;
+    }
+
+    // 5. TENCENT HUNYUAN (Hy3)
+    if (m.includes('hy3') || m.includes('hunyuan')) {
+      const mapped = isDisable ? 'no_think' : (effort === 'high' || effort === 'max' ? 'high' : 'low');
+      if (!body.extra_body) body.extra_body = {};
+      body.extra_body.chat_template_kwargs = { reasoning_effort: mapped };
+      return;
+    }
+
+    // 6. MINIMAX (MiniMax-M3)
+    if (m.includes('minimax')) {
+      if (isDisable) {
+        body.thinking = { type: 'disabled' };
+      } else {
+        body.thinking = { type: 'adaptive' };
+      }
+      return;
+    }
+
+    // 7. GPT-5.6 / OPENAI GENERIC REASONING MODELS
+    if (this.isOpenAIReasoningModel(m)) {
+      if (isDisable) {
+        body.reasoning_effort = 'none';
+      } else {
+        let mapped = 'low';
+        if (effort === 'max') mapped = 'max';
+        else if (effort === 'xhigh') mapped = 'xhigh';
+        else if (effort === 'high') mapped = 'high';
+        else if (effort === 'medium') mapped = 'medium';
+        body.reasoning_effort = mapped;
+      }
+    }
+  }
+
   buildChatRequest(userPrompt, stream = false, meta = {}) {
     const disableStructuredOutput = meta?.disableStructuredOutput === true;
     const isCfRun = this.isCfWorkersRunModel();
@@ -226,23 +332,9 @@ class OpenAICompatibleProvider {
           stream
         };
 
-    // Kawalan Mod Pemikiran (DeepSeek / OpenAI Reasoning / Gateway)
+    // 🚀 Terapkan parameter thinking/reasoning pintar mengikut spesifikasi model
     if (!isCfRun) {
-      const effort = this.reasoningEffort;
-      if (effort === 'disabled' || effort === 'none' || effort === 'off') {
-        body.thinking = { type: 'disabled' };
-        if (isOpenAI) {
-          if (useResponsesApi) body.reasoning = { effort: 'none' };
-          else body.reasoning_effort = 'none';
-        }
-      } else if (effort) {
-        body.thinking = { type: 'enabled' };
-        const mappedEffort = (effort === 'minimal' || effort === 'low') ? 'low' : (effort === 'max' ? 'max' : 'high');
-        body.reasoning_effort = mappedEffort;
-        if (useResponsesApi) {
-          body.reasoning = { effort: mappedEffort };
-        }
-      }
+      this.applySmartModelPayload(body, this.model, this.reasoningEffort);
     }
 
     if (!isCfRun && this.enableJsonOutput && !disableStructuredOutput) {
@@ -293,32 +385,36 @@ class OpenAICompatibleProvider {
   isOpenAIReasoningModel(modelName = this.model) {
     const model = String(modelName || '').trim().toLowerCase();
     return (
+      model.includes('deepseek') ||
+      model.includes('kimi') ||
+      model.includes('glm') ||
+      model.includes('claude') ||
+      model.includes('minimax') ||
+      model.includes('hy3') ||
+      model.includes('hunyuan') ||
       model.includes('reasoner') ||
       model.includes('thinking') ||
       model.startsWith('o1') ||
       model.startsWith('o3') ||
-      model.includes('k3') ||
       /^gpt-5(?:[\.-]|$)/.test(model)
     );
   }
 
   buildSubtitleEntriesJsonSchema() {
-    const entrySchema = {
-      type: 'object',
-      properties: {
-        id: { type: 'integer' },
-        text: { type: 'string' }
-      },
-      required: ['id', 'text'],
-      additionalProperties: false
-    };
-
     return {
       type: 'object',
       properties: {
         entries: {
           type: 'array',
-          items: entrySchema
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              text: { type: 'string' }
+            },
+            required: ['id', 'text'],
+            additionalProperties: false
+          }
         }
       },
       required: ['entries'],
@@ -352,7 +448,6 @@ class OpenAICompatibleProvider {
       : 65536;
     const model = String(this.model || '').toLowerCase();
 
-    // 🎯 Auto-Detect: Model generasi terkini / reasoning sentiasa mendapat siling 65,536+
     if (
       model.includes('deepseek') ||
       model.includes('kimi') ||
@@ -363,7 +458,8 @@ class OpenAICompatibleProvider {
       model.includes('o3') ||
       model.includes('thinking') ||
       model.includes('reasoner') ||
-      model.includes('minimax')
+      model.includes('minimax') ||
+      model.includes('hy3')
     ) {
       return Math.max(raw, 65536);
     }
@@ -375,7 +471,6 @@ class OpenAICompatibleProvider {
     const normalizedTarget = this.normalizeTargetName(targetLanguage);
     let systemPrompt = (customPrompt || DEFAULT_TRANSLATION_PROMPT).replace('{target_language}', normalizedTarget);
 
-    // 1:1 Parity dengan Gemini — Suntik protokol pintasan pemikiran untuk mempercepatkan proses
     const universalReasoningChain = '\n\n[CRITICAL REASONING PROTOCOL]\n1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.\n2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.\n3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, literal translations, overlapping speech (-), sound/music tags (e.g., [sighs], ♪), song lyrics, and sentence fragments — bypass reasoning ENTIRELY. Output the XML immediately.\n4. SELECTIVE REASONING: ONLY activate reasoning for highly complex idioms or untranslatable slang. Resolve conceptually then output XML immediately.\n';
 
     if (systemPrompt.includes('<input>')) {
