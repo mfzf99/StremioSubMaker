@@ -7794,7 +7794,33 @@ Translate to {target_language}.`;
             if (modelSelect) {
                 modelSelect.addEventListener('change', (e) => {
                     ensureProvidersInState();
-                    currentConfig.providers[key].model = e.target.value;
+                    const selectedModel = e.target.value;
+                    currentConfig.providers[key].model = selectedModel;
+
+                    // Auto-Detect Pintar untuk Custom Provider & OpenAI-compatible
+                    if (selectedModel) {
+                        const m = selectedModel.toLowerCase();
+                        const maxTokensInput = document.getElementById(`provider-${key}-maxTokens`);
+                        const reasoningSelect = document.getElementById(`provider-${key}-reasoning`);
+
+                        if (
+                            m.includes('deepseek') ||
+                            m.includes('kimi') ||
+                            m.includes('glm') ||
+                            m.includes('claude') ||
+                            m.includes('gpt-5') ||
+                            m.includes('o1') ||
+                            m.includes('o3') ||
+                            m.includes('thinking') ||
+                            m.includes('reasoner') ||
+                            m.includes('minimax')
+                        ) {
+                            if (maxTokensInput) maxTokensInput.value = 65536;
+                            if (reasoningSelect && !reasoningSelect.value) reasoningSelect.value = 'low';
+                        } else {
+                            if (maxTokensInput && maxTokensInput.value === '65536') maxTokensInput.value = 32768;
+                        }
+                    }
                 });
             }
         });
