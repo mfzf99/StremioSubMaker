@@ -8704,6 +8704,13 @@ Translate to {target_language}.`;
 
             const cachedModels = providerModelCache[key] || [];
             populateProviderModels(key, cachedModels, cfg?.model || '');
+
+            // 🧠 Jana dropdown Reasoning Effort mengikut model tersimpan
+            if (cfg?.model) {
+                const savedParams = currentConfig.providerParameters?.[key] || {};
+                updateReasoningDropdown(key, cfg.model, savedParams.reasoningEffort || '');
+            }
+
             toggleProviderFields(key, enabled);
             currentConfig.providers[key] = {
                 ...currentConfig.providers[key],
