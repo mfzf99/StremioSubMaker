@@ -76,6 +76,7 @@
     <button class="help-button mario" id="configHelp" title="Help" aria-label="Help" data-i18n="config.quickActionHelp"
         data-i18n-attr="title,aria-label">?</button>
 
+    <!-- Disable native HTML validation: we run all validation in config.js and hidden inputs (provider advanced sliders) can trip browser validity when collapsed -->
     <form id="configForm" autocomplete="off" spellcheck="false" novalidate>
 
         <!-- What's New Portal -->
@@ -83,10 +84,12 @@
             <div class="portal-frame">
                 <div class="portal-starfield" aria-hidden="true"></div>
                 <div class="portal-glow" aria-hidden="true"></div>
+                <!-- Corner decorations -->
                 <span class="portal-corner tl" aria-hidden="true"></span>
                 <span class="portal-corner tr" aria-hidden="true"></span>
                 <span class="portal-corner bl" aria-hidden="true"></span>
                 <span class="portal-corner br" aria-hidden="true"></span>
+                <!-- Animated creatures (butterflies / fireflies / bats per theme) -->
                 <div class="portal-creatures" aria-hidden="true">
                     <span class="portal-creature c1"></span>
                     <span class="portal-creature c2"></span>
@@ -94,6 +97,7 @@
                     <span class="portal-creature c4"></span>
                     <span class="portal-creature c5"></span>
                 </div>
+                <!-- Pixel runner character -->
                 <div class="portal-runner" aria-hidden="true"></div>
                 <div class="portal-header" id="portalHeader" role="button" tabindex="0"
                     aria-label="Toggle What's New changelog">
@@ -109,12 +113,14 @@
                     </div>
                 </div>
                 <div class="portal-content" id="portalContent">
-                    <div class="portal-entries" id="portalEntries"></div>
+                    <div class="portal-entries" id="portalEntries">
+                        <!-- Changelog entries rendered by JS -->
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Setup Entry Banner -->
+        <!-- Quick Setup Entry Banner (shown on first run or via help menu) -->
         <div class="qs-entry-banner" id="quickSetupBanner" role="button" tabindex="0"
             aria-label="Open Quick Setup wizard">
             <span class="qs-entry-icon">⚡</span>
@@ -133,7 +139,8 @@
             <div style="flex: 1;">
                 <span id="noTranslationTitle" data-i18n="config.noTranslation.title"
                     style="display: block; font-weight: 600; font-size: 0.9rem; color: var(--text-primary);">Just Fetch
-                    Subtitles (No Translation)</span>
+                    Subtitles (No
+                    Translation)</span>
                 <span id="noTranslationDescription" data-i18n="config.noTranslation.description"
                     style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">Skip
                     AI translation and just fetch subtitles in your chosen languages</span>
@@ -193,7 +200,8 @@
                                             style="display: block;">OpenSubtitles</strong>
                                         <span id="opensubsImplDescription" class="label-description"
                                             data-i18n="config.opensubs.implDescription" style="margin: 0;">Choose your
-                                            preferred OpenSubtitles implementation.</span>
+                                            preferred OpenSubtitles
+                                            implementation.</span>
                                     </div>
                                 </label>
                                 <label class="toggle-switch">
@@ -202,6 +210,7 @@
                                 </label>
                             </div>
                             <div id="opensubtitlesConfig">
+                                <!-- Implementation Type Selection -->
                                 <div
                                     style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--surface-light); border-radius: 8px;">
                                     <label id="opensubsImplTypeLabel" data-i18n="config.opensubs.implementationType"
@@ -250,12 +259,14 @@
                                                     style="margin: 0; font-size: 0.875rem;">Uses your OpenSubtitles.com
                                                     account. Requires username/password. <a
                                                         href="https://www.opensubtitles.com/en/newuser" target="_blank"
-                                                        style="color: var(--primary-light);">Create account</a></span>
+                                                        style="color: var(--primary-light);">Create
+                                                        account</a></span>
                                             </div>
                                         </label>
                                     </div>
                                 </div>
 
+                                <!-- Auth Configuration (shown when Auth is selected) -->
                                 <div id="opensubtitlesAuthConfig" style="display: none;">
                                     <div class="opensubs-auth-layout">
                                         <div class="opensubs-auth-fields">
@@ -287,7 +298,8 @@
                                                 data-i18n="config.opensubs.rateNote" data-i18n-attr="innerHTML">20
                                                 subtitles/day. <a href="https://www.opensubtitles.com/en/newuser"
                                                     target="_blank" style="color: var(--primary-light);">Create a free
-                                                    account</a> if you don't have one.</span>
+                                                    account</a> if you don't
+                                                have one.</span>
                                         </div>
 
                                         <div class="validate-tile">
@@ -318,7 +330,8 @@
                                         <strong id="subsourceTitle" data-i18n="config.providers.subsource.title"
                                             style="display: block;">SubSource</strong>
                                         <span class="label-description" id="subsourceDescription" style="margin: 0;">
-                                            <span data-i18n="config.providers.subsource.description">Get your free API key from</span>
+                                            <span data-i18n="config.providers.subsource.description">Get your free API
+                                                key from</span>
                                             <a id="subsourceLink" data-i18n="config.providers.subsource.linkLabel"
                                                 href="https://subsource.net/" target="_blank"
                                                 style="color: var(--primary-light);">SubSource.net</a>
@@ -359,7 +372,8 @@
                                         <strong id="subdlTitle" data-i18n="config.providers.subdl.title"
                                             style="display: block;">SubDL</strong>
                                         <span class="label-description" id="subdlDescription" style="margin: 0;">
-                                            <span data-i18n="config.providers.subdl.description">Get your free API key from</span>
+                                            <span data-i18n="config.providers.subdl.description">Get your free API key
+                                                from</span>
                                             <a id="subdlLink" data-i18n="config.providers.subdl.linkLabel"
                                                 href="https://subdl.com" target="_blank"
                                                 style="color: var(--primary-light);">SubDL.com</a>
@@ -467,7 +481,7 @@
                             </div>
                         </div>
 
-                        <!-- More Providers (beta) -->
+                        <!-- More Providers (beta) - Collapsible Section -->
                         <div class="form-group" style="padding-top: 1.5rem; border-top: 1px solid var(--border);">
                             <div class="more-providers-header"
                                 style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 0.75rem; background: var(--surface-light); border-radius: 8px; border: 1px solid var(--border);"
@@ -499,7 +513,8 @@
                                                 <strong id="wyzieTitle" data-i18n="config.providers.wyzie.title"
                                                     style="display: block;">Wyzie Subs</strong>
                                                 <span class="label-description" id="wyzieDescription" style="margin: 0;">
-                                                    <span data-i18n="config.providers.wyzie.description">Get your free API key from</span>
+                                                    <span data-i18n="config.providers.wyzie.description">Get your free API key
+                                                        from</span>
                                                     <a id="wyzieLink" data-i18n="config.providers.wyzie.linkLabel"
                                                         href="https://store.wyzie.io/redeem" target="_blank"
                                                         rel="noopener noreferrer"
@@ -606,6 +621,7 @@
                                 <span id="subtitleProviderTimeoutValue"
                                     style="min-width: 3.5rem; text-align: center; font-weight: 600; padding: 0.25rem 0.5rem; background: var(--surface-light); border-radius: 4px;">12s</span>
                             </div>
+                            <!-- Slow providers warning -->
                             <div id="slowProvidersWarning" class="slow-providers-warning"
                                 style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(185, 28, 28, 0.12) 100%); border: 1px solid rgba(220, 38, 38, 0.4); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);">
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -682,13 +698,16 @@
                                 data-i18n="config.validation.geminiKeyRequired">API key is required</div>
                         </div>
 
+                        <!-- Dynamic API Keys List (shown when rotation is enabled) -->
                         <div id="geminiApiKeysContainer" class="api-keys-list" style="display: none;">
                             <label style="display: block; margin-bottom: 0.35rem;">
                                 <span data-i18n="config.gemini.keyRotation.additionalKeysLabel">Additional API
                                     Keys</span>
                                 <span class="label-description" id="geminiKeysCountLabel">(+0 additional)</span>
                             </label>
-                            <div id="geminiApiKeysList" class="dynamic-keys-list"></div>
+                            <div id="geminiApiKeysList" class="dynamic-keys-list">
+                                <!-- Dynamic key inputs will be added here -->
+                            </div>
                             <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
                                 <button type="button" id="addGeminiKeyBtn" class="btn btn-secondary btn-sm">
                                     <span>+</span> <span data-i18n="config.gemini.keyRotation.addKey">Add Key</span>
@@ -698,6 +717,7 @@
                                 data-i18n="config.validation.geminiKeysRequired" style="display: none;">At least one
                                 API key is required for rotation</div>
 
+                            <!-- Key Rotation Mode Selector -->
                             <div class="form-group"
                                 style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
                                 <label for="geminiKeyRotationMode">
@@ -709,9 +729,11 @@
                                 </label>
                                 <select id="geminiKeyRotationMode">
                                     <option value="per-batch" data-i18n="config.gemini.keyRotation.modePerBatch"
-                                        selected>Per Batch (each translation batch)</option>
+                                        selected>Per
+                                        Batch (each translation batch)</option>
                                     <option value="per-request" data-i18n="config.gemini.keyRotation.modePerRequest">Per
-                                        Request (once per file)</option>
+                                        Request (once per
+                                        file)</option>
                                 </select>
                             </div>
                         </div>
@@ -756,20 +778,33 @@
                                 style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary);">
                                 <strong style="color: #ef4444;" data-i18n="config.gemini.model.rateWarningTitle">⚠️ Free
                                     Tier Limitation:</strong> <span data-i18n="config.gemini.model.rateWarningBody">If
-                                    using a free API key, Gemini 2.5 Pro may trigger rate limits (HTTP 429).</span>
+                                    using a free API key,
+                                    Gemini 2.5 Pro may trigger rate limits (HTTP 429). You'll likely only be able to
+                                    translate one
+                                    subtitle at a time.</span>
                             </div>
                         </div>
 
                         <div class="form-group" style="display: none;">
                             <label for="promptStyle">
                                 <span data-i18n="config.translationSettings.promptStyle.label">Prompt Style</span>
+                                <span class="label-description"
+                                    data-i18n="config.translationSettings.promptStyle.description">Choose between strict
+                                    structure preservation or natural flow
+                                    adaptation</span>
                             </label>
                             <select id="promptStyle">
-                                <option value="natural" disabled>Natural</option>
-                                <option value="strict" selected>Strict</option>
+                                <option value="natural" disabled title="Temporarily unavailable"
+                                    data-i18n="config.translationSettings.promptStyle.options.natural">Natural - Adapts
+                                    structure for
+                                    natural target language flow</option>
+                                <option value="strict"
+                                    data-i18n="config.translationSettings.promptStyle.options.strict">Strict - Preserves
+                                    exact timing and structure</option>
                             </select>
                         </div>
 
+                        <!-- Gemini API Key Rotation Toggle -->
                         <div class="form-group" id="geminiKeyRotationGroup"
                             style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border);">
                             <label style="display:flex; align-items:center; gap:0.5rem;">
@@ -781,6 +816,7 @@
                                 keys to avoid rate limits.</span>
                         </div>
 
+                        <!-- Advanced Settings -->
                         <div class="form-group" id="multiProvidersGroup">
                             <label style="display:flex; align-items:center; gap:0.5rem;">
                                 <input type="checkbox" id="enableMultiProviders">
@@ -817,7 +853,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -846,7 +883,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -875,7 +913,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -904,7 +943,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -933,11 +973,13 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                         <span class="label-description" data-i18n="config.providersUi.deeplHint">Free
-                                            keys auto-use api-free.deepl.com.</span>
+                                            keys auto-use api-free.deepl.com. Language codes
+                                            are auto-mapped from your selections.</span>
                                     </div>
                                 </div>
 
@@ -964,7 +1006,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -975,7 +1018,8 @@
                                         style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
                                         <label
                                             style="font-weight:600; margin:0; display:flex; align-items:center; gap:0.35rem;">
-                                            <input type="checkbox" id="provider-cfworkers-enabled"> Cloudflare Workers AI
+                                            <input type="checkbox" id="provider-cfworkers-enabled"> Cloudflare Workers
+                                            AI
                                         </label>
                                     </div>
                                     <div id="provider-cfworkers-fields" class="provider-fields"
@@ -993,7 +1037,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                         <span class="label-description" data-i18n="config.providersUi.cfworkersHint">Use
@@ -1024,7 +1069,8 @@
                                                 data-i18n-attr="title">
                                                 <span class="validate-icon">&#8635;</span>
                                                 <span class="validate-text"
-                                                    data-i18n="config.providersUi.loadModels">Load Models</span>
+                                                    data-i18n="config.providersUi.loadModels">Load
+                                                    Models</span>
                                             </button>
                                         </div>
                                     </div>
@@ -1035,7 +1081,9 @@
                                         style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
                                         <label
                                             style="font-weight:600; margin:0; display:flex; align-items:center; gap:0.35rem;">
-                                            <input type="checkbox" id="provider-googletranslate-enabled"> Google Translate (unofficial)
+                                            <input type="checkbox" id="provider-googletranslate-enabled"> Google
+                                            Translate
+                                            (unofficial)
                                         </label>
                                         <div style="font-size:0.85rem; color: var(--text-secondary);"
                                             data-i18n="config.providersUi.noKeyNeeded">No API key needed</div>
@@ -1044,14 +1092,16 @@
                                         style="display:none; margin-top:0.5rem; display: grid; gap: 0.5rem;">
                                         <input type="hidden" id="provider-googletranslate-key" value="">
                                         <select id="provider-googletranslate-model" disabled>
-                                            <option value="web" selected data-i18n="config.providersUi.googleWeb">web (fixed)</option>
+                                            <option value="web" selected data-i18n="config.providersUi.googleWeb">web
+                                                (fixed)</option>
                                         </select>
                                         <div style="font-size:0.9rem; color: var(--text-secondary);"
-                                            data-i18n="config.providersUi.googleHint">Uses the public Google Translate web endpoint.</div>
+                                            data-i18n="config.providersUi.googleHint">Uses the public Google
+                                            Translate web endpoint (may be unstable).</div>
                                     </div>
                                 </div>
 
-                                <!-- Custom Provider with Load Models / Test Button -->
+                                <!-- Custom Provider with Load Models Select Dropdown -->
                                 <div class="provider-block" data-provider="custom">
                                     <div
                                         style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
@@ -1122,7 +1172,8 @@
                         <div class="form-group"
                             style="padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem;">
                             <label for="cloudflareWorkersApiKey">
-                                <span data-i18n="config.otherApiKeys.cloudflare.label">Cloudflare Workers AI (Auto-Subs)</span>
+                                <span data-i18n="config.otherApiKeys.cloudflare.label">Cloudflare Workers AI
+                                    (Auto-Subs)</span>
                                 <span class="label-description" data-i18n="config.otherApiKeys.cloudflare.helper">Used
                                     by Automatic Subtitles via xSync. Format: ACCOUNT_ID|TOKEN.</span>
                             </label>
@@ -1200,6 +1251,7 @@
             </div>
             <div class="section-grid">
 
+                <!-- No-Translation Languages (flat, shown only in Just Fetch mode) -->
                 <div class="card" id="noTranslationCard" style="display: none;" data-card="notranslation">
                     <div class="card-content">
                         <div class="form-group">
@@ -1263,10 +1315,17 @@
                     <div class="card-content">
                         <div class="form-group">
                             <label>
-                                <span data-i18n="config.languageCards.sourceLabel">* Source languages for translations</span>
+                                <span data-i18n="config.languageCards.sourceLabel">* Source languages for
+                                    translations</span>
                                 <span class="label-description" id="sourceLanguagesDescription"
                                     data-i18n="config.limits.sourceDescription">You can select up to 3 source
-                                    language(s), but only 1 is recommended.</span>
+                                    language(s), but only 1 is recommended. This way you have the exact same
+                                    "Make (language)" subtitles list order as the Source language and can verify the
+                                    original subtitles for sync issues before translating.
+                                    <br><br>
+                                    All subtitles found in the selected Source language will show up in their original
+                                    language AND will be used as sources for the "Make (target language)" translation
+                                    lists.</span>
                             </label>
 
                             <div class="language-search">
@@ -1277,7 +1336,8 @@
 
                             <div id="selectedSourceLanguages" class="selected-languages empty"></div>
                             <div class="field-error" id="sourceLanguagesError"
-                                data-i18n="config.validation.sourceRequired">Please select at least one source language</div>
+                                data-i18n="config.validation.sourceRequired">Please select at least one source language
+                            </div>
 
                             <div id="sourceLanguages" class="language-grid"></div>
                         </div>
@@ -1307,9 +1367,15 @@
                     <div class="card-content">
                         <div class="form-group">
                             <label>
-                                <span data-i18n="config.languageCards.targetLabel">* Target languages for subtitles and translations</span>
+                                <span data-i18n="config.languageCards.targetLabel">* Target languages for subtitles and
+                                    translations</span>
                                 <span class="label-description" id="targetLanguagesDescription"
-                                    data-i18n="config.limits.targetDescription">Subtitles in target languages will be fetched and translation buttons will appear.</span>
+                                    data-i18n="config.limits.targetDescription">Subtitles in target languages
+                                    will be fetched (found subtitles will show up) AND translation buttons ("Make"
+                                    lists) will appear for translating FROM the Source language subtitles TO the target
+                                    languages.
+                                    <br><br>
+                                    You can select up to 6 total target languages (including Learn Mode).</span>
                             </label>
 
                             <div class="language-search">
@@ -1320,7 +1386,8 @@
 
                             <div id="selectedTargetLanguages" class="selected-languages empty"></div>
                             <div class="field-error" id="targetLanguagesError"
-                                data-i18n="config.validation.targetRequired">Please select at least one target language</div>
+                                data-i18n="config.validation.targetRequired">Please select at least one target language
+                            </div>
 
                             <div class="extended-languages-toggle" style="margin: 0.5rem 0;">
                                 <label
@@ -1328,7 +1395,8 @@
                                     <input type="checkbox" id="extendedLanguagesToggle">
                                     <span data-i18n="config.languageCards.extendedToggle">Extended languages list</span>
                                     <span class="label-description force-normal-whitespace" style="margin-left: 0;"
-                                        data-i18n="config.languageCards.extendedHint">Adds ~100 rare, ancient, and regional languages</span>
+                                        data-i18n="config.languageCards.extendedHint">Adds ~100 rare, ancient, and
+                                        regional languages (AI translation only)</span>
                                 </label>
                             </div>
 
@@ -1372,10 +1440,14 @@
                                         <path d="M16 13v11.9" stroke-width="2.2" />
                                         <path d="M13 21.6l-3 2m9-2l3 2" stroke-width="1.1" opacity="0.5" />
                                         <path d="M16 5.9l1.1 1.5L16 7.8l-1.1-0.4z" fill="currentColor" />
+                                        <path
+                                            d="M16 6.9l0.5 1.3 1.3 0.3-1.1 0.8 0.1 1.3L16 9.8l-0.8 0.8 0.1-1.3-1.1-0.8 1.3-0.3z"
+                                            fill="currentColor" opacity="0.9" />
                                     </g>
                                 </svg>
                             </div>
-                            <h2 class="card-title" data-i18n="config.languageCards.learnTitle">Learn Target Languages</h2>
+                            <h2 class="card-title" data-i18n="config.languageCards.learnTitle">Learn Target Languages
+                            </h2>
                             <span class="card-badge" id="learnBadge">0</span>
                         </div>
                         <button type="button" class="collapse-btn collapsed" data-collapse="learn"></button>
@@ -1385,7 +1457,9 @@
                             <label>
                                 <span data-i18n="config.languageCards.learnLabel">Select Learn Mode Languages</span>
                                 <span class="label-description"
-                                    data-i18n="config.languageCards.learnDescription">Creates dual-language WebVTT lines.</span>
+                                    data-i18n="config.languageCards.learnDescription">Creates "Learn (Language)" entries
+                                    that pair source + translated
+                                    lines in WebVTT. Select target "Learn" languages above after enabling.</span>
                             </label>
 
                             <div class="language-search">
@@ -1396,13 +1470,17 @@
 
                             <div id="selectedLearnLanguages" class="selected-languages empty"></div>
                             <div class="field-error" id="learnLanguagesError"
-                                data-i18n="config.validation.learnRequired">Please select at least one learn language</div>
+                                data-i18n="config.validation.learnRequired">Please select at least one learn language
+                            </div>
 
                             <div class="extended-languages-toggle" style="margin: 0.5rem 0;">
                                 <label
                                     style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
                                     <input type="checkbox" id="extendedLanguagesToggleLearn">
                                     <span data-i18n="config.languageCards.extendedToggle">Extended languages list</span>
+                                    <span class="label-description force-normal-whitespace" style="margin-left: 0;"
+                                        data-i18n="config.languageCards.extendedHint">Adds ~100 rare, ancient, and
+                                        regional languages (AI translation only)</span>
                                 </label>
                             </div>
 
@@ -1444,7 +1522,8 @@
                         <h2 class="section-title" id="settingsSectionTitle" data-i18n="config.sections.settingsTitle">
                             Settings</h2>
                         <p class="section-description" id="settingsSectionDescription"
-                            data-i18n="config.sections.settingsDescription">Adjust translation behavior and other preferences.</p>
+                            data-i18n="config.sections.settingsDescription">Adjust translation behavior and other
+                            preferences.</p>
                     </div>
                 </div>
                 <button type="button" class="collapse-btn section-collapse-btn collapsed"
@@ -1466,14 +1545,19 @@
                                     </defs>
                                     <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
                                         stroke-opacity="0.95">
+                                        <!-- Left speech bubble -->
                                         <path
                                             d="M6.8 7.2h9.4a1.8 1.8 0 0 1 1.8 1.8v5.5a1.8 1.8 0 0 1-1.8 1.8h-4.4L9 19v-2.7H6.8a1.8 1.8 0 0 1-1.8-1.8V9a1.8 1.8 0 0 1 1.8-1.8Z"
                                             stroke-width="1.9" fill="url(#translationBubbles)" />
                                         <path d="M9.6 10.6h4.2M9.6 12.8h3.4M9.6 15h2.4" stroke-width="1.2" />
+
+                                        <!-- Right speech bubble -->
                                         <path
                                             d="M15.2 15.2h9.2a1.8 1.8 0 0 1 1.8 1.8v5.5a1.8 1.8 0 0 1-1.8 1.8H20l-3 2.7v-2.7h-1.8a1.8 1.8 0 0 1-1.8-1.8V17a1.8 1.8 0 0 1 1.8-1.8Z"
                                             stroke-width="1.9" fill="url(#translationBubbles)" />
                                         <path d="M17.8 18.3h4.4M17.8 20.5h3.6" stroke-width="1.2" />
+
+                                        <!-- Swap arrows -->
                                         <path d="M13.2 8c2.3-1.7 6.3-1.3 8.5.6" stroke-width="1.35" />
                                         <path d="M21 7.6l2.6 1.9-3 .6" stroke-width="1.35" />
                                         <path d="M18.8 23.3c-2.3 1.7-6.3 1.3-8.5-.6" stroke-width="1.35" />
@@ -1481,7 +1565,8 @@
                                     </g>
                                 </svg>
                             </div>
-                            <h2 class="card-title" data-i18n="config.translationSettings.title">Translation Settings</h2>
+                            <h2 class="card-title" data-i18n="config.translationSettings.title">Translation Settings
+                            </h2>
                         </div>
                         <button type="button" class="collapse-btn collapsed" data-collapse="translation"></button>
                     </div>
@@ -1490,7 +1575,8 @@
                             <label for="mainProviderSelect">
                                 <span data-i18n="config.providersUi.main.label">Main Provider</span>
                                 <span class="label-description" data-i18n="config.providersUi.main.description">Choose
-                                    which enabled AI provider to use when multiple are configured.</span>
+                                    which enabled AI provider to use when multiple are
+                                    configured.</span>
                             </label>
                             <select id="mainProviderSelect">
                                 <option value="gemini" data-i18n="config.providersUi.main.defaultGemini">Gemini</option>
@@ -1502,12 +1588,16 @@
                                 <input type="checkbox" id="enableSecondaryProvider" style="margin-top: 0.3rem;">
                                 <div data-i18n="config.providersUi.secondary.label" data-i18n-attr="innerHTML">
                                     Secondary Provider
-                                    <span class="label-description">If the main provider errors, retry the failed batch with this provider.</span>
+                                    <span class="label-description">If the main provider errors
+                                        (429/503/prohibited/other),
+                                        retry the failed batch with this provider, then continue with the main
+                                        provider.</span>
                                 </div>
                             </label>
                             <div id="secondaryProviderSelectRow" style="margin-top: 0.5rem; display: none;">
                                 <select id="secondaryProviderSelect" disabled aria-label="Secondary provider selection">
-                                    <option value="" data-i18n="config.providersUi.selectProvider">Select provider</option>
+                                    <option value="" data-i18n="config.providersUi.selectProvider">Select provider
+                                    </option>
                                 </select>
                             </div>
                         </div>
@@ -1518,7 +1608,8 @@
                                     data-i18n="config.translationSettings.workflow.label">Translation Workflow</span>
                                 <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
                                     <span class="label-description"
-                                        data-i18n="config.translationSettings.workflow.description">Switching between modes is recommended if you have translation sync problems.</span>
+                                        data-i18n="config.translationSettings.workflow.description">Switching between
+                                        modes is recommended if you have translation sync problems.</span>
                                     <div class="v3-warning-tooltip">
                                         <span class="warning-icon" tabindex="0"
                                             aria-label="Translation workflow details"
@@ -1526,15 +1617,24 @@
                                             data-i18n-attr="aria-label">?</span>
                                         <div class="tooltip-bubble" role="tooltip" aria-hidden="true"
                                             id="translationWorkflowTooltip"
-                                            data-i18n="config.translationSettings.workflow.tooltip">"XML Tags" wraps each entry in &lt;s id="N"&gt; tags for robust ID-based recovery. "JSON" sends structured JSON arrays.</div>
+                                            data-i18n="config.translationSettings.workflow.tooltip">"Original
+                                            Timestamps" sends a numbered list and reattaches original timecodes. "Send
+                                            Timestamps to AI" sends full SRT and trusts the AI to preserve timecodes.
+                                            "XML Tags" wraps each entry in &lt;s id="N"&gt; tags for robust ID-based
+                                            recovery. "JSON" sends and receives structured JSON arrays for
+                                            unambiguous parsing.</div>
                                     </div>
                                 </div>
                             </label>
                             <select id="sendTimestampsToAI" class="styled-select">
-                                <option value="xml" data-i18n="config.translationSettings.workflow.xml">XML Tags (Default)</option>
-                                <option value="json" data-i18n="config.translationSettings.workflow.json">JSON (Structured)</option>
-                                <option value="original" data-i18n="config.translationSettings.workflow.original">Original Timestamps (Legacy)</option>
-                                <option value="ai" data-i18n="config.translationSettings.workflow.ai">Send Timestamps to AI</option>
+                                <option value="xml" data-i18n="config.translationSettings.workflow.xml">XML Tags
+                                    (Default)</option>
+                                <option value="json" data-i18n="config.translationSettings.workflow.json">JSON
+                                    (Structured)</option>
+                                <option value="original" data-i18n="config.translationSettings.workflow.original">
+                                    Original Timestamps (Legacy)</option>
+                                <option value="ai" data-i18n="config.translationSettings.workflow.ai">Send Timestamps to
+                                    AI</option>
                             </select>
                         </div>
 
@@ -1543,7 +1643,9 @@
                                 <input type="checkbox" id="singleBatchMode">
                                 <span data-i18n="config.translationSettings.chunking.label">Enable Single Batch</span>
                                 <span class="label-description"
-                                    data-i18n="config.translationSettings.chunking.description">Translate the whole subtitle in one go.</span>
+                                    data-i18n="config.translationSettings.chunking.description">Translate the whole
+                                    subtitle in one go (still auto-splits at very large sizes). Improves contextual
+                                    coherence but can hit provider limits more easily.</span>
                             </label>
                         </div>
 
@@ -1552,24 +1654,35 @@
                                 <input type="checkbox" id="enableBatchContext">
                                 <span data-i18n="config.advancedGemini.batchContext.label">Enable Batch Context</span>
                                 <span class="label-description"
-                                    data-i18n="config.advancedGemini.batchContext.description">Include surrounding context when processing batches.</span>
+                                    data-i18n="config.advancedGemini.batchContext.description">Include original
+                                    surrounding context and previous translations
+                                    when processing batches. Improves translation coherence but may break outputs and
+                                    increases
+                                    token usage.</span>
                             </label>
                         </div>
 
                         <div class="form-group" id="databaseModeGroup">
                             <label for="databaseMode" class="form-label">
-                                <span class="label-title" data-i18n="config.translationSettings.database.label">SubMaker Database</span>
+                                <span class="label-title" data-i18n="config.translationSettings.database.label">SubMaker
+                                    Database</span>
                                 <span class="label-description"
-                                    data-i18n="config.translationSettings.database.description">SubMaker's database caches translations permanently.</span>
+                                    data-i18n="config.translationSettings.database.description">SubMaker's database
+                                    caches translations permanently to reduce community AI API costs/usage.<br>Bypass
+                                    mode skips the shared database and stores translations temporarily (12
+                                    hours).</span>
                             </label>
                             <select id="databaseMode" class="styled-select">
-                                <option value="use" data-i18n="config.translationSettings.database.use">Use SubMaker Database</option>
-                                <option value="bypass" data-i18n="config.translationSettings.database.bypass">Bypass Cache (Force Retranslation)</option>
+                                <option value="use" data-i18n="config.translationSettings.database.use">Use SubMaker
+                                    Database</option>
+                                <option value="bypass" data-i18n="config.translationSettings.database.bypass">Bypass
+                                    Cache (Force Retranslation)</option>
                             </select>
                             <div id="databaseModeNote"
                                 style="display: none; margin-top: 0.5rem; padding: 0.75rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary);">
                                 <strong style="color: var(--warning);"
-                                    data-i18n="config.translationSettings.database.noteTitle">⚠️ Bypass Mode Required:</strong> <span id="databaseModeReason"></span>
+                                    data-i18n="config.translationSettings.database.noteTitle">⚠️ Bypass Mode
+                                    Required:</strong> <span id="databaseModeReason"></span>
                             </div>
                         </div>
 
@@ -1580,13 +1693,29 @@
                     <label>
                         <input type="checkbox" id="subToolboxEnabledNoTranslation">
                         <span data-i18n="config.otherSettings.subToolbox.label">Enable "Sub Toolbox" (Beta)</span>
+                        <span class="label-description" id="subToolboxDescriptionNoTranslation"><span
+                                data-i18n="config.otherSettings.subToolbox.description">Shows the Sub Toolbox entry in
+                                Stremio subtitles for brower access to all tools.</span><span
+                                id="subToolboxInstructionsWrapperNoTranslation" class="subtoolbox-instructions">(<a
+                                    id="subToolboxInstructionsLinkNoTranslation" class="link-button subtle-link"
+                                    href="#" style="font-size: 0.9rem;"><span
+                                        data-i18n="config.otherSettings.subToolbox.instructionsLink">Read
+                                        instructions</span></a>)</span></span>
+                        <span class="label-description subtoolbox-tools-note"
+                            data-i18n="config.otherSettings.subToolbox.tools">Tools: SRT Files Translation, Embedded
+                            Subs Extraction, AutoSync and AutoSubbing.</span>
                     </label>
                 </div>
 
                 <div class="form-group" id="enableSeasonPacksNoTranslationGroup" style="display: none;">
                     <label>
                         <input type="checkbox" id="enableSeasonPacksNoTranslation" checked>
-                        <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack Subtitles</span>
+                        <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack
+                            Subtitles</span>
+                        <span class="label-description"
+                            data-i18n="config.otherSettings.enableSeasonPacks.description">Include season pack subtitles
+                            (containing multiple episodes) in results. Disable to only show episode-specific
+                            subtitles.</span>
                     </label>
                 </div>
 
@@ -1594,13 +1723,21 @@
                     <label>
                         <input type="checkbox" id="excludeHearingImpairedSubtitlesNoTranslation">
                         <span data-i18n="config.otherSettings.excludeHearingImpaired.label">Hide SDH/HI subtitles</span>
+                        <span class="label-description"
+                            data-i18n="config.otherSettings.excludeHearingImpaired.description">Exclude subtitles
+                            labeled "Subtitles for hearing impaired" (SDH/HI) from results.</span>
                     </label>
                 </div>
 
                 <div class="form-group" id="convertAssToVttNoTranslationGroup" style="display: none;">
                     <label>
                         <input type="checkbox" id="convertAssToVttNoTranslation">
-                        <span data-i18n="config.otherSettings.convertAssToVtt.label">ASS/SSA Passthrough</span>
+                        <span data-i18n="config.otherSettings.convertAssToVtt.label">ASS/SSA
+                            Passthrough</span>
+                        <span class="label-description"
+                            data-i18n="config.otherSettings.convertAssToVtt.description">Enable to send
+                            ASS/SSA subtitles as-is to Stremio. Disable to convert ASS/SSA for
+                            compatibility.</span>
                     </label>
                 </div>
 
@@ -1608,6 +1745,9 @@
                     <label>
                         <input type="checkbox" id="forceSRTOutputNoTranslation">
                         <span data-i18n="config.otherSettings.forceSRTOutput.label">Force SRT output</span>
+                        <span class="label-description"
+                            data-i18n="config.otherSettings.forceSRTOutput.description">Convert all subtitle
+                            outputs to SRT format for maximum player compatibility.</span>
                     </label>
                 </div>
 
@@ -1636,7 +1776,19 @@
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="subToolboxEnabled">
-                                <span data-i18n="config.otherSettings.subToolbox.label">Enable "Sub Toolbox" (Beta)</span>
+                                <span data-i18n="config.otherSettings.subToolbox.label">Enable "Sub Toolbox"
+                                    (Beta)</span>
+                                <span class="label-description" id="subToolboxDescription"><span
+                                        data-i18n="config.otherSettings.subToolbox.description">Shows the Sub Toolbox
+                                        entry in Stremio subtitles for brower access to all tools.</span><span
+                                        id="subToolboxInstructionsWrapper" class="subtoolbox-instructions">(<a
+                                            id="subToolboxInstructionsLink" class="link-button subtle-link" href="#"
+                                            style="font-size: 0.9rem;"><span
+                                                data-i18n="config.otherSettings.subToolbox.instructionsLink">Read
+                                                instructions</span></a>)</span></span>
+                                <span class="label-description subtoolbox-tools-note"
+                                    data-i18n="config.otherSettings.subToolbox.tools">Tools: SRT Files Translation,
+                                    Embedded Subs Extraction, AutoSync and AutoSubbing.</span>
                             </label>
                         </div>
 
@@ -1644,12 +1796,22 @@
                             <label>
                                 <input type="checkbox" id="learnModeEnabled">
                                 <span id="learnModeLabel" data-i18n="config.learnMode.label">Learn Mode</span>
+                                <span class="label-description" id="learnModeDescription"
+                                    data-i18n="config.learnMode.description">Adds "Learn (Language)" entries that output
+                                    dual-language WebVTT
+                                    with source and translated lines for language learning. After enabling, set Target
+                                    Learn Languages in the "Languages" section above.</span>
                             </label>
                         </div>
 
                         <div class="form-group" id="learnOrderGroup" style="display: none;">
                             <label>
-                                <span id="learnOrderLabel" data-i18n="config.learnMode.orderLabel">Learn Mode Subtitle Order</span>
+                                <span id="learnOrderLabel" data-i18n="config.learnMode.orderLabel">Learn Mode Subtitle
+                                    Order</span>
+                                <span class="label-description" id="learnOrderDescription"
+                                    data-i18n="config.learnMode.orderDescription">Choose which language appears at the
+                                    top and bottom of the
+                                    screen.</span>
                             </label>
                             <div class="option-group" style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
                                 <label
@@ -1669,18 +1831,22 @@
                             <label>
                                 <input type="checkbox" id="learnItalicEnabled" checked>
                                 <span data-i18n="config.learnMode.italicLabel">Italicize one language</span>
+                                <span class="label-description" data-i18n="config.learnMode.italicDescription">Italicize
+                                    one of the subtitle lines to visually distinguish the two languages.</span>
                             </label>
                             <div class="option-group" id="learnItalicTargetGroup"
                                 style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
                                 <label
                                     style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
                                     <input type="radio" name="learnItalicTarget" value="target" checked>
-                                    <span data-i18n="config.learnMode.italicTarget">Italicize Target (learned language)</span>
+                                    <span data-i18n="config.learnMode.italicTarget">Italicize Target (learned
+                                        language)</span>
                                 </label>
                                 <label
                                     style="background: white; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
                                     <input type="radio" name="learnItalicTarget" value="source">
-                                    <span data-i18n="config.learnMode.italicSource">Italicize Source (original language)</span>
+                                    <span data-i18n="config.learnMode.italicSource">Italicize Source (original
+                                        language)</span>
                                 </label>
                             </div>
                         </div>
@@ -1688,28 +1854,56 @@
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="mobileMode">
-                                <span data-i18n="config.otherSettings.mobileMode.label">Mobile Mode (fix/workaround)</span>
+                                <span data-i18n="config.otherSettings.mobileMode.label">Mobile Mode
+                                    (fix/workaround)</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.mobileMode.description">Stremio makes only 1 request
+                                    for subtitles and caches it, so
+                                    subtitles in Android can't be partially delivered. Mobile Mode holds translation
+                                    requests
+                                    and sends the final subtitle only when ready. Use this if you're watching on
+                                    Android/iOS. No
+                                    partial translations, no loading messages. Might freeze the stream until translation
+                                    is
+                                    ready. Flash-lite recommended. Wait 1-3 min, if it doesn't load automatically switch
+                                    subtitles back and forth to load the translation.</span>
                             </label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="enableSeasonPacks" checked>
-                                <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack Subtitles</span>
+                                <span data-i18n="config.otherSettings.enableSeasonPacks.label">Include Season Pack
+                                    Subtitles</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.enableSeasonPacks.description">SubMaker can fetch,
+                                    detect and extract subtitles from full season packs for bigger coverage. When
+                                    enabled, includes season pack subtitles (containing multiple episodes) in
+                                    results.</span>
                             </label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="excludeHearingImpairedSubtitles">
-                                <span data-i18n="config.otherSettings.excludeHearingImpaired.label">Hide SDH/HI subtitles</span>
+                                <span data-i18n="config.otherSettings.excludeHearingImpaired.label">Hide SDH/HI
+                                    subtitles</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.excludeHearingImpaired.description">Exclude
+                                    subtitles labeled "Subtitles for hearing impaired" (SDH/HI) from results.</span>
                             </label>
                         </div>
 
+                        <!-- ASS/SSA passthrough option -->
                         <div class="form-group" id="convertAssToVttGroup">
                             <label>
                                 <input type="checkbox" id="convertAssToVtt">
-                                <span data-i18n="config.otherSettings.convertAssToVtt.label">ASS/SSA Passthrough</span>
+                                <span data-i18n="config.otherSettings.convertAssToVtt.label">ASS/SSA
+                                    Passthrough</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.convertAssToVtt.description">Enable to send
+                                    ASS/SSA subtitles as-is to Stremio. Disable to convert ASS/SSA for
+                                    compatibility.</span>
                             </label>
                         </div>
 
@@ -1717,6 +1911,9 @@
                             <label>
                                 <input type="checkbox" id="forceSRTOutput">
                                 <span data-i18n="config.otherSettings.forceSRTOutput.label">Force SRT output</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.forceSRTOutput.description">Convert all subtitle
+                                    outputs to SRT format for maximum player compatibility.</span>
                             </label>
                         </div>
 
@@ -1724,6 +1921,10 @@
                             <label>
                                 <input type="checkbox" id="betaMode">
                                 <span data-i18n="config.otherSettings.betaMode.label">Advanced Mode</span>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.betaMode.description">Unlocks Advanced Parameters
+                                    Settings for Gemini and other
+                                    providers.</span>
                             </label>
                         </div>
 
@@ -1734,18 +1935,23 @@
                             </label>
                         </div>
 
+                        <!-- Dev Mode: Parallel Batches -->
                         <div id="parallelBatchesGroup"
                             style="display: none; border-top: 1px dashed var(--border); padding-top: 1rem; margin-top: 0.5rem;">
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="parallelBatchesEnabled">
                                     <span>[DEV] Enable Parallel Batches</span>
+                                    <span class="label-description">Experimental: translate multiple batches
+                                        concurrently for faster processing. Disabled on ElfHosted instances.</span>
                                 </label>
                             </div>
                             <div class="form-group" id="parallelBatchesCountGroup"
                                 style="display: none; margin-top: 0.5rem; padding-left: 1.5rem;">
                                 <label for="parallelBatchesCount" class="form-label">
                                     <span class="label-title">Parallel Batches Count</span>
+                                    <span class="label-description">Number of concurrent batches to run (1-5). Higher
+                                        values consume more tokens/second.</span>
                                 </label>
                                 <select id="parallelBatchesCount" class="styled-select">
                                     <option value="1">1 Batch (Testing)</option>
@@ -1757,46 +1963,58 @@
                             </div>
                         </div>
 
+                        <!-- URL Extension Test Toggles (Dev Mode only) -->
                         <div class="form-group" id="urlExtensionTestGroup" style="display: none;">
                             <label>
                                 <span style="font-weight: 600; color: #f59e0b;">🧪 URL Extension Test Mode</span>
+                                <span class="label-description">Test different URL extensions for ASS/SSA subtitle
+                                    compatibility with Stremio. Only visible when ASS/SSA Passthrough is
+                                    enabled.</span>
                             </label>
                             <div style="margin-top: 8px; padding-left: 4px;">
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="srt" checked>
-                                    <span><strong>.srt</strong> (default)</span>
+                                    <span><strong>.srt</strong> (default) - Current behavior, may fail with raw
+                                        ASS</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="sub">
-                                    <span><strong>.sub</strong> (Option A)</span>
+                                    <span><strong>.sub</strong> (Option A) - Generic subtitle extension</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="none">
-                                    <span><strong>No extension</strong> (Option B)</span>
+                                    <span><strong>No extension</strong> (Option B) - Let Content-Type header drive
+                                        format</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="urlExtensionTest" value="resolve">
-                                    <span><strong>Resolver redirect</strong> (Test C)</span>
+                                    <span><strong>Resolver redirect</strong> (Test C) - Detect format on click, then
+                                        redirect to typed URL</span>
                                 </label>
                             </div>
                         </div>
 
+                        <!-- Android subtitle compatibility mode (Dev Mode only) -->
                         <div class="form-group" id="androidSubtitleCompatModeGroup" style="display: none;">
                             <label>
                                 <span style="font-weight: 600; color: #f59e0b;">Android Subtitle Compat Mode</span>
+                                <span class="label-description">Experimental Android/TV subtitle URL compatibility
+                                    options. Keep OFF unless debugging subtitle click/download issues.</span>
                             </label>
                             <div style="margin-top: 8px; padding-left: 4px;">
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="androidSubtitleCompatMode" value="off" checked>
-                                    <span><strong>Off</strong> (default)</span>
+                                    <span><strong>Off</strong> (default) - Normal behavior</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="androidSubtitleCompatMode" value="safe">
-                                    <span><strong>Safe</strong></span>
+                                    <span><strong>Safe</strong> - Encode URL path segments + force typed
+                                        <code>.srt</code> subtitle URLs</span>
                                 </label>
                                 <label style="display: block; margin-bottom: 6px;">
                                     <input type="radio" name="androidSubtitleCompatMode" value="aggressive">
-                                    <span><strong>Aggressive</strong></span>
+                                    <span><strong>Aggressive</strong> - Safe mode plus skip subtitle-route cache-buster
+                                        redirects and force stricter SRT headers</span>
                                 </label>
                             </div>
                         </div>
@@ -1824,7 +2042,14 @@
                                         <path
                                             d="M16 7.2c2.3 1.7 3.8 4.6 3.1 7.8L16 27l-3.1-12c-0.7-3.2 0.8-6.1 3.1-7.8z"
                                             stroke-width="1.7" fill="url(#advCore)" />
+                                        <path d="M13.3 15.6c-1.6 0.5-3 1.6-3 3.2 0 1 0.4 1.9 1.2 2.5"
+                                            stroke-width="1.2" />
+                                        <path d="M18.7 15.6c1.6 0.5 3 1.6 3 3.2 0 1-0.4 1.9-1.2 2.5"
+                                            stroke-width="1.2" />
                                         <circle cx="16" cy="13.5" r="1.8" stroke-width="1.5" fill="currentColor" />
+                                        <path d="M16 21.2l-2 2.5 2 1.4 2-1.4z" stroke-width="1.3" />
+                                        <path d="M12 10.2c1-1.2 2.5-2.1 4-2.2" stroke-width="1.2" opacity="0.6" />
+                                        <path d="M20 10.2c-1-1.2-2.5-2.1-4-2.2" stroke-width="1.2" opacity="0.6" />
                                     </g>
                                 </svg>
                             </div>
@@ -1837,6 +2062,10 @@
                         <div class="form-group" id="contextSizeGroup" style="display: none;">
                             <label for="contextSize">
                                 <span data-i18n="config.advancedGemini.contextSize.label">Context Size</span>
+                                <span class="label-description"
+                                    data-i18n="config.advancedGemini.contextSize.description">Number of surrounding
+                                    entries to include as context (1-20).
+                                    Default: 20</span>
                             </label>
                             <input type="number" id="contextSize" min="1" max="20" step="1" value="20" placeholder="20">
                         </div>
@@ -1844,6 +2073,10 @@
                         <div class="form-group">
                             <label for="mismatchRetries">
                                 <span data-i18n="config.advancedGemini.mismatchRetries.label">Mismatch Retries</span>
+                                <span class="label-description"
+                                    data-i18n="config.advancedGemini.mismatchRetries.description">When the AI returns a
+                                    different number of subtitle entries than expected, retry the batch this many times
+                                    before marking untranslated lines. (0-3, Default: 3)</span>
                             </label>
                             <input type="number" id="mismatchRetries" min="0" max="3" step="1" value="3"
                                 placeholder="3">
@@ -1883,19 +2116,28 @@
                 <div class="info-box" style="margin-bottom: 0.75rem;">
                     <p style="font-size: 0.95rem; margin: 0;">
                         <strong data-i18n="config.advancedGemini.infoTitle">Fine-tune Gemini behavior:</strong> <span
-                            data-i18n="config.advancedGemini.infoBody">Override default Gemini model and sampling parameters.</span>
+                            data-i18n="config.advancedGemini.infoBody">Override default Gemini model and sampling
+                            parameters.</span>
                     </p>
                 </div>
                 <div class="highlight-box" style="margin-bottom: 1.25rem;">
                     <p style="font-size: 0.9rem; margin: 0;">
-                        <span data-i18n="config.advancedGemini.cacheNotePrefix">When any Gemini setting is changed from defaults,</span>
-                        <strong style="color: var(--warning);" data-i18n="config.advancedGemini.cacheNoteStrong">Bypass Cache is automatically enabled</strong>.
+                        <span data-i18n="config.advancedGemini.cacheNotePrefix">When any Gemini setting is changed from
+                            defaults,</span> <strong style="color: var(--warning);"
+                            data-i18n="config.advancedGemini.cacheNoteStrong">Bypass
+                            Cache is automatically enabled</strong> <span
+                            data-i18n="config.advancedGemini.cacheNoteSuffix">to ensure your experimental translations
+                            don't
+                            pollute the shared database.</span>
                     </p>
                 </div>
 
                 <div class="form-group">
                     <label for="advancedModel">
                         <span data-i18n="config.advancedGemini.model.label">Translation Model Override</span>
+                        <span class="label-description" data-i18n="config.advancedGemini.model.description">Override the
+                            default model. Leave empty to use system default
+                            (Gemini 3.1 Flash Lite).</span>
                     </label>
                     <select id="advancedModel">
                         <option value="" data-i18n="config.advancedGemini.model.default">Use Default Model</option>
@@ -1910,6 +2152,8 @@
                 <div class="form-group" id="advancedThinkingLevelGroup">
                     <label for="advancedThinkingLevel">
                         <span data-i18n="config.advancedGemini.thinkingLevel.label">Thinking Level</span>
+                        <span class="label-description"
+                            data-i18n="config.advancedGemini.thinkingLevel.description">Controls Gemini reasoning intensity (Minimal, Low, Medium, High).</span>
                     </label>
                     <select id="advancedThinkingLevel">
                         <option value="minimal" data-i18n="config.advancedGemini.thinkingLevel.minimal">Minimal</option>
@@ -1922,6 +2166,10 @@
                 <div class="form-group">
                     <label for="advancedTemperature">
                         <span data-i18n="config.advancedGemini.temperature.label">Temperature (Creativity)</span>
+                        <span class="label-description"
+                            data-i18n="config.advancedGemini.temperature.description">Controls randomness (0.0-2.0).
+                            Lower = more deterministic,
+                            Higher = more creative. Default: 0.2</span>
                     </label>
                     <input type="number" id="advancedTemperature" min="0" max="2" step="0.1" value="0.2"
                         placeholder="0.2">
@@ -1930,6 +2178,9 @@
                 <div class="form-group" style="margin-bottom: 0;">
                     <label for="advancedTopP">
                         <span data-i18n="config.advancedGemini.topP.label">Top-P (Nucleus Sampling)</span>
+                        <span class="label-description" data-i18n="config.advancedGemini.topP.description">Probability
+                            threshold (0.0-1.0). Lower = more focused, Higher =
+                            more diverse. Default: 0.95</span>
                     </label>
                     <input type="number" id="advancedTopP" min="0" max="1" step="0.05" value="0.95" placeholder="0.95">
                 </div>
@@ -1957,7 +2208,8 @@
             <div class="card-content">
                 <div class="info-box" style="margin-bottom: 0.5rem;">
                     <p style="margin: 0;" data-i18n="config.providerAdvanced.intro">Fine-tune generation settings for
-                        every enabled provider. These apply in multi-provider mode only.</p>
+                        every enabled provider. These apply in
+                        multi-provider mode only.</p>
                 </div>
 
                 <div id="providerAdvancedEmpty" class="highlight-box" style="display: none; margin-bottom: 0.75rem;">
@@ -1970,9 +2222,11 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.openai.title">OpenAI Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.openai.title">OpenAI
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.openai.description">Applies to OpenAI and compatible endpoints</span>
+                                data-i18n="config.providerAdvanced.providers.openai.description">Applies to OpenAI and
+                                compatible endpoints</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -1986,13 +2240,21 @@
                                 <label for="provider-openai-reasoning"
                                     data-i18n="config.providerAdvanced.labels.reasoning">Reasoning effort</label>
                                 <select id="provider-openai-reasoning" class="styled-select">
-                                    <option value="" data-i18n="config.providerAdvanced.reasoningDefaults.default">Use provider default</option>
-                                    <option value="none" data-i18n="config.providerAdvanced.reasoningDefaults.none">None (no reasoning)</option>
-                                    <option value="minimal" data-i18n="config.providerAdvanced.reasoningDefaults.minimal">Minimal</option>
-                                    <option value="low" data-i18n="config.providerAdvanced.reasoningDefaults.low">Low (faster)</option>
-                                    <option value="medium" data-i18n="config.providerAdvanced.reasoningDefaults.medium">Medium (balanced)</option>
-                                    <option value="high" data-i18n="config.providerAdvanced.reasoningDefaults.high">High (deeper reasoning)</option>
-                                    <option value="xhigh" data-i18n="config.providerAdvanced.reasoningDefaults.xhigh">Extra high</option>
+                                    <option value="" data-i18n="config.providerAdvanced.reasoningDefaults.default">Use
+                                        provider default</option>
+                                    <option value="none" data-i18n="config.providerAdvanced.reasoningDefaults.none">None
+                                        (no reasoning)</option>
+                                    <option value="minimal"
+                                        data-i18n="config.providerAdvanced.reasoningDefaults.minimal">Minimal</option>
+                                    <option value="low" data-i18n="config.providerAdvanced.reasoningDefaults.low">Low
+                                        (faster)</option>
+                                    <option value="medium"
+                                        data-i18n="config.providerAdvanced.reasoningDefaults.medium">Medium (balanced)
+                                    </option>
+                                    <option value="high" data-i18n="config.providerAdvanced.reasoningDefaults.high">High
+                                        (deeper reasoning)</option>
+                                    <option value="xhigh" data-i18n="config.providerAdvanced.reasoningDefaults.xhigh">
+                                        Extra high</option>
                                 </select>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:0.25rem;">
@@ -2023,9 +2285,11 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.anthropic.title">Anthropic Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.anthropic.title">Anthropic
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.anthropic.description">Claude / Anthropic API tuning</span>
+                                data-i18n="config.providerAdvanced.providers.anthropic.description">Claude / Anthropic
+                                API tuning</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2071,7 +2335,8 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.xai.title">XAI (Grok) Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.xai.title">XAI (Grok)
+                                Parameters</strong>
                             <span class="label-description"
                                 data-i18n="config.providerAdvanced.providers.xai.description">Grok API tuning</span>
                         </div>
@@ -2100,7 +2365,8 @@
                                 <input type="number" id="provider-xai-timeout" min="5" max="720" step="5" value="60">
                             </div>
                             <div style="display:flex; flex-direction:column; gap:0.25rem;">
-                                <label for="provider-xai-retries" data-i18n="config.providerAdvanced.labels.retries">Max retries</label>
+                                <label for="provider-xai-retries" data-i18n="config.providerAdvanced.labels.retries">Max
+                                    retries</label>
                                 <input type="number" id="provider-xai-retries" min="0" max="5" step="1" value="2">
                             </div>
                         </div>
@@ -2110,9 +2376,11 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.deepseek.title">DeepSeek Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.deepseek.title">DeepSeek
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.deepseek.description">DeepSeek chat endpoints</span>
+                                data-i18n="config.providerAdvanced.providers.deepseek.description">DeepSeek chat
+                                endpoints</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2161,7 +2429,8 @@
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
                             <strong data-i18n="config.providerAdvanced.providers.deepl.title">DeepL Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.deepl.description">Formality & formatting controls</span>
+                                data-i18n="config.providerAdvanced.providers.deepl.description">Formality & formatting
+                                controls</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2169,9 +2438,12 @@
                                 <label for="provider-deepl-formality"
                                     data-i18n="config.providerAdvanced.labels.formality">Formality</label>
                                 <select id="provider-deepl-formality" class="styled-select">
-                                    <option value="default" data-i18n="config.providerAdvanced.formality.default">Default</option>
-                                    <option value="more" data-i18n="config.providerAdvanced.formality.more">More formal</option>
-                                    <option value="less" data-i18n="config.providerAdvanced.formality.less">Less formal</option>
+                                    <option value="default" data-i18n="config.providerAdvanced.formality.default">
+                                        Default</option>
+                                    <option value="more" data-i18n="config.providerAdvanced.formality.more">More formal
+                                    </option>
+                                    <option value="less" data-i18n="config.providerAdvanced.formality.less">Less formal
+                                    </option>
                                 </select>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:0.25rem;">
@@ -2186,24 +2458,31 @@
                             </div>
                             <div style="display:flex; flex-direction:column; gap:0.25rem;">
                                 <label for="provider-deepl-preserveFormatting"
-                                    data-i18n="config.providerAdvanced.labels.preserveFormatting">Preserve formatting</label>
+                                    data-i18n="config.providerAdvanced.labels.preserveFormatting">Preserve
+                                    formatting</label>
                                 <label style="display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0;">
                                     <input type="checkbox" id="provider-deepl-preserveFormatting" checked>
                                     <span class="label-description"
                                         data-i18n="config.providerAdvanced.labels.preserveFormattingHint"
-                                        style="margin:0;">Keep line breaks, casing, and tags intact</span>
+                                        style="margin:0;">Keep line breaks, casing, and tags
+                                        intact</span>
                                 </label>
                             </div>
                         </div>
+                        <div class="label-description" data-i18n="config.providerAdvanced.providers.deepl.footer"
+                            style="margin-top:0.35rem;">Beta languages auto-enable
+                            quality_optimized and disable latency_optimized.</div>
                     </div>
 
                     <div class="provider-advanced-block" data-provider="mistral"
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.mistral.title">Mistral Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.mistral.title">Mistral
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.mistral.description">Mistral API tuning</span>
+                                data-i18n="config.providerAdvanced.providers.mistral.description">Mistral API
+                                tuning</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2243,9 +2522,11 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.cfworkers.title">Cloudflare Workers AI Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.cfworkers.title">Cloudflare Workers AI
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.cfworkers.description">Use ACCOUNT_ID|TOKEN format</span>
+                                data-i18n="config.providerAdvanced.providers.cfworkers.description">Use ACCOUNT_ID|TOKEN
+                                format</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2285,9 +2566,11 @@
                         style="display: none; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-light);">
                         <div
                             style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem; margin-bottom: 0.5rem;">
-                            <strong data-i18n="config.providerAdvanced.providers.openrouter.title">OpenRouter Parameters</strong>
+                            <strong data-i18n="config.providerAdvanced.providers.openrouter.title">OpenRouter
+                                Parameters</strong>
                             <span class="label-description"
-                                data-i18n="config.providerAdvanced.providers.openrouter.description">OpenRouter routing</span>
+                                data-i18n="config.providerAdvanced.providers.openrouter.description">OpenRouter
+                                routing</span>
                         </div>
                         <div
                             style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
@@ -2409,7 +2692,7 @@
         </div>
     </form>
 
-    <!-- Full Reset CTA -->
+    <!-- Full Reset CTA (positioned vertically by JS) -->
     <div id="resetBarWrapper" class="reset-bar">
         <div class="reset-text" data-i18n="config.reset.hint">Any problems? Reset settings to default &rarr;</div>
         <button type="button" id="resetSettingsBtn" class="reset-btn" data-i18n="config.reset.cta">Reset</button>
