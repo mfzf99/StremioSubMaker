@@ -3048,8 +3048,10 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
     // 3. Buang sisa kurungan tag '>' di permulaan baris
     cleaned = cleaned.replace(/^(?:["']?\s*>)+\s*/, '').trim();
 
-    // 4. Tukar balik [br] kepada pemisah baris sebenar
-    cleaned = cleaned.replace(/\s*\[br\]\s*/gi, '\n');
+    // 4. Tukar balik [br] dan semua variasi tag HTML (<br>, <br/>, &lt;br&gt;) kepada pemisah baris sebenar
+    cleaned = cleaned
+      .replace(/\s*(?:\[br\]|<br\s*\/?>|&lt;br\s*\/?&gt;)\s*/gi, '\n')
+      .replace(/\n{2,}/g, '\n'); // Runtuhkan pemisah baris berganda jadi satu
 
     // 5. Tukar sengkang lewah ('--', '—', '–') atau sengkang tergantung di hujung ayat kepada elipsis '...'
     cleaned = cleaned
