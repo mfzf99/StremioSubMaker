@@ -14,14 +14,22 @@ const {
   cacheProviderAuthFailure
 } = require('../utils/providerAuthFailureCache');
 
-
 const SUBDL_API_URL = 'https://api.subdl.com/api/v1';
-const USER_AGENT = 'StremioSubtitleTranslator v1.0';
-const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
+const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const MAX_ZIP_BYTES = 25 * 1024 * 1024; // 25MB cap
 
-// 🎯 SELITKAN DUA BARIS INI KAT SINI:
+// 🎯 RAM Cache dengan Siling Memori (Anti-Memory Leak + 30s Debounce)
 const subdlMemoryCache = new Map();
-const DEBOUNCE_TTL_MS = 30000; // Simpan dalam RAM 30 saat untuk pancung spam Stremio
+const MAX_CACHE_ENTRIES = 500;
+const DEBOUNCE_TTL_MS = 30000;
+
+function setSubdlCache(key, data) {
+  if (subdlMemoryCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = subdlMemoryCache.keys().next().value;
+    subdlMemoryCache.delete(oldestKey);
+  }
+  subdlMemoryCache.set(key, { timestamp: Date.now(), data });
+}
 
 function getSubDLUpstreamMessage(payload, fallback = '') {
   if (typeof payload === 'string' && payload.trim()) {
@@ -48,13 +56,17 @@ function isSubDLAuthFailure(error) {
   }
 
   const message = getSubDLUpstreamMessage(error.response?.data, error.message || '').toLowerCase();
-  return message.includes('invalid api') || message.includes('invalid api key');
+  return (
+    message.includes('not authorized') ||
+    message.includes('unauthorized') ||
+    message.includes('invalid api') ||
+    message.includes('api key') ||
+    message.includes('authentication')
+  );
 }
 
 function detectPlainSubtitleFormat(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) return null;
-  // Subtitle structure markers are ASCII in all supported legacy codepages, so
-  // a Latin-1 preview is safe before the actual language-aware decoding step.
   const preview = buffer.subarray(0, Math.min(buffer.length, 16384)).toString('latin1').replace(/^ï»¿/, '').trimStart();
   if (/^WEBVTT(?:\s|$)/i.test(preview)) return 'vtt';
   if (/^\{\d+\}\{\d+\}/m.test(preview)) return 'sub';
@@ -64,10 +76,10 @@ function detectPlainSubtitleFormat(buffer) {
 }
 
 class SubDLService {
-static client = axios.create({
+  static client = axios.create({
     baseURL: SUBDL_API_URL,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': CHROME_USER_AGENT,
       'Accept': 'application/json'
     },
     httpAgent,
@@ -78,11 +90,9 @@ static client = axios.create({
     decompress: true
   });
 
-  // Keep archive downloads separate so the file host only receives the
-  // authentication header required for the user's own download quota.
   static downloadClient = axios.create({
     headers: {
-      'User-Agent': USER_AGENT,
+      'User-Agent': CHROME_USER_AGENT,
       'Accept': '*/*'
     },
     httpAgent,
@@ -94,11 +104,8 @@ static client = axios.create({
   });
 
   constructor(apiKey = null) {
-    // Ensure apiKey is always a string (protect against objects/undefined)
     this.apiKey = (typeof apiKey === 'string') ? apiKey.trim() : '';
     this.authFailureCacheKey = getProviderAuthFailureCacheKey('subdl', this.apiKey);
-
-    // Use static client for all instances (connection pooling optimization)
     this.client = SubDLService.client;
 
     if (this.apiKey && this.apiKey.trim() !== '') {
@@ -108,19 +115,8 @@ static client = axios.create({
     }
   }
 
-  /**
-   * Search for subtitles using SubDL API
-   * @param {Object} params - Search parameters
-   * @param {string} params.imdb_id - IMDB ID (with 'tt' prefix)
-   * @param {string} params.type - 'movie' or 'episode'
-   * @param {number} params.season - Season number (for episodes)
-   * @param {number} params.episode - Episode number (for episodes)
-   * @param {Array<string>} params.languages - Array of ISO-639-2 language codes
-   * @returns {Promise<Array>} - Array of subtitle objects
-   */
   async searchSubtitles(params) {
     try {
-      // Check if API key is provided
       if (!this.apiKey || this.apiKey.trim() === '') {
         log.debug(() => '[SubDL] API key is missing; skipping search');
         return [];
@@ -133,25 +129,22 @@ static client = axios.create({
 
       const { imdb_id, type, season, episode, languages, providerTimeout } = params;
 
-      // 🎯 Penapis Spam Request Kedua Stremio (Local RAM Hit)
-      const localCacheKey = `${imdb_id}:${type}:${season || 1}:${episode}:${languages.join(',')}`;
-      if (typeof subdlMemoryCache !== 'undefined' && subdlMemoryCache.has(localCacheKey)) {
-        const cachedEntry = subdlMemoryCache.get(localCacheKey);
-        if (Date.now() - cachedEntry.timestamp < 30000) { // 30 saat TTL
-          log.debug(() => `[SubDL] Local RAM hit untuk ${localCacheKey} - Memancung spam request kedua Stremio`);
-          return cachedEntry.data;
-        }
-        subdlMemoryCache.delete(localCacheKey);
-      }
-
-      // SubDL requires IMDB ID - skip if not available (e.g., anime with Kitsu IDs)
       if (!imdb_id || imdb_id === 'undefined') {
         log.debug(() => '[SubDL] No IMDB ID available, skipping search');
         return [];
       }
 
-      // Convert ISO-639-2 codes to SubDL format (uppercase codes)
-      // SubDL uses uppercase 2-letter codes with special cases like BR_PT
+      // 🎯 Penapis Spam Request Stremio (Local RAM Hit)
+      const localCacheKey = `${imdb_id}:${type}:${season || 1}:${episode || ''}:${(languages || []).join(',')}`;
+      if (subdlMemoryCache.has(localCacheKey)) {
+        const cachedEntry = subdlMemoryCache.get(localCacheKey);
+        if (Date.now() - cachedEntry.timestamp < DEBOUNCE_TTL_MS) {
+          log.debug(() => `[SubDL] Local RAM hit for ${localCacheKey} - Debouncing duplicate Stremio request`);
+          return cachedEntry.data;
+        }
+        subdlMemoryCache.delete(localCacheKey);
+      }
+
       const subdlLanguageMap = {
         'eng': 'EN', 'spa': 'ES', 'spn': 'ES', 'fre': 'FR', 'fra': 'FR', 'ger': 'DE', 'deu': 'DE',
         'por': 'PT', 'pob': 'BR_PT', 'pt-br': 'BR_PT', 'ptbr': 'BR_PT',
@@ -168,38 +161,17 @@ static client = axios.create({
         'aze': 'AZ', 'geo': 'KA', 'kat': 'KA', 'mal': 'ML', 'tam': 'TA',
         'tel': 'TE', 'urd': 'UR', 'may': 'MS', 'msa': 'MS', 'tgl': 'TL', 'fil': 'TL',
         'ice': 'IS', 'isl': 'IS', 'kur': 'KU', 'ckb': 'KU',
-        'prs': 'FA',
-        // Norwegian variants → generic Norwegian (SubDL only supports 'NO')
-        'nob': 'NO', 'nno': 'NO',
-        // Chinese variants → generic Chinese (SubDL only supports 'ZH')
-        'zhs': 'ZH', 'zht': 'ZH'
+        'prs': 'FA', 'nob': 'NO', 'nno': 'NO', 'zhs': 'ZH', 'zht': 'ZH'
       };
 
-      const convertedLanguages = [...new Set(languages.map(lang => {
+      const convertedLanguages = [...new Set((languages || []).map(lang => {
         const lower = lang.toLowerCase().trim();
-
-        // Check SubDL mapping first
-        if (subdlLanguageMap[lower]) {
-          return subdlLanguageMap[lower];
-        }
-
-        // Try ISO-639-1 conversion then uppercase
+        if (subdlLanguageMap[lower]) return subdlLanguageMap[lower];
         const iso1Code = toISO6391(lang);
-        if (iso1Code && iso1Code !== 'pb') {
-          return iso1Code.toUpperCase();
-        }
-
-        // Fallback: uppercase first 2 letters
+        if (iso1Code && iso1Code !== 'pb') return iso1Code.toUpperCase();
         return lang.substring(0, 2).toUpperCase();
       }))];
 
-      log.debug(() => `[SubDL] Converted languages: ${languages.join(',')} -> ${convertedLanguages.join(',')}`);
-
-      // Build query parameters for SubDL API
-      // NOTE: Do NOT add releases=1 or hi=1 here!
-      // Although the API docs say they should just add extra fields, in practice
-      // they cause the API to return significantly fewer results (filters to only
-      // entries with these fields populated). Tested: 5 results with vs 30 without.
       const queryParams = {
         api_key: this.apiKey,
         imdb_id: imdb_id,
@@ -207,43 +179,38 @@ static client = axios.create({
         subs_per_page: 30
       };
 
-      // Only add languages parameter if languages are specified (for "just fetch" mode)
       if (convertedLanguages.length > 0) {
         queryParams.languages = convertedLanguages.join(',');
       }
 
       const isTvOrAnime = (type === 'episode' || type === 'anime-episode') && episode;
-
-      // For TV shows and anime episodes, add season and episode parameters
       if (isTvOrAnime) {
         queryParams.type = 'tv';
-        // Default to season 1 if not specified (common for anime)
         queryParams.season_number = season || 1;
         queryParams.episode_number = episode;
       }
 
       log.debug(() => ['[SubDL] Searching with params:', JSON.stringify(redactSensitiveData(queryParams))]);
 
-      // Sediakan konfigurasi parameter berasingan untuk Page 1 dan Page 2
-      const requestConfigPage1 = { params: { ...queryParams, page: 1 } };
-      const requestConfigPage2 = { params: { ...queryParams, page: 2 } };
+      const reqP1 = { params: { ...queryParams, page: 1 } };
+      const reqP2 = { params: { ...queryParams, page: 2 } };
 
       if (providerTimeout) {
-        requestConfigPage1.timeout = providerTimeout;
-        requestConfigPage2.timeout = providerTimeout;
+        reqP1.timeout = providerTimeout;
+        reqP2.timeout = providerTimeout;
       }
 
-      // Tembak API SubDL serentak secara asenkrong (Asynchronous Parallel Fetch)
-      const [responsePage1, responsePage2] = await Promise.all([
-        this.client.get('/subtitles', requestConfigPage1),
-        this.client.get('/subtitles', requestConfigPage2)
+      // 🛡️ Panggilan Selari Kebal: Menggunakan Promise.allSettled (Jika Page 2 gagal, Page 1 tetap selamat)
+      const results = await Promise.allSettled([
+        this.client.get('/subtitles', reqP1),
+        this.client.get('/subtitles', reqP2)
       ]);
 
-      // Pastikan data respond wujud dan berbentuk array sebelum digabung secara selamat
-      const subsPage1 = (responsePage1.data && responsePage1.data.status === true && Array.isArray(responsePage1.data.subtitles)) ? responsePage1.data.subtitles : [];
-      const subsPage2 = (responsePage2.data && responsePage2.data.status === true && Array.isArray(responsePage2.data.subtitles)) ? responsePage2.data.subtitles : [];
+      const subsPage1 = (results[0].status === 'fulfilled' && results[0].value.data?.status === true && Array.isArray(results[0].value.data.subtitles))
+        ? results[0].value.data.subtitles : [];
+      const subsPage2 = (results[1].status === 'fulfilled' && results[1].value.data?.status === true && Array.isArray(results[1].value.data.subtitles))
+        ? results[1].value.data.subtitles : [];
 
-      // Gabungkan hasil tangkapan kedua-dua halaman menjadi satu array hibrid
       const combinedSubtitles = [...subsPage1, ...subsPage2];
 
       if (combinedSubtitles.length === 0) {
@@ -257,8 +224,6 @@ static client = axios.create({
         const originalLang = sub.lang || 'en';
         const normalizedLang = this.normalizeLanguageCode(originalLang);
 
-        // SubDL provides IDs in the URL field: /subtitle/3028156-3032428.zip
-        // Extract sd_id and subtitle_id from the URL
         let sdId = null;
         let subtitleId = null;
 
@@ -271,36 +236,22 @@ static client = axios.create({
         }
 
         let fileId = `subdl_${sdId}_${subtitleId}`;
-
-        // Use download count from API, or 0 if not provided
-        const downloadCount = parseInt(sub.download_count);
+        const downloadCount = parseInt(sub.download_count, 10);
         const downloads = (!isNaN(downloadCount) && downloadCount > 0) ? downloadCount : 0;
-
-        // Parse releases array from SubDL API (when releases=1 is set)
         const releases = Array.isArray(sub.releases) ? sub.releases : [];
 
-        // Detect season packs vs single episodes using API metadata
-        // Patterns observed from API testing:
-        // - Single episode: episode=X, episode_from=X, episode_end=X (all match)
-        // - Multi-episode pack: episode_from !== episode_end, both > 0 (e.g., 1→37, 15→24)
-        // - Full season pack: episode=null, episode_from=null, episode_end=0 or null
-        // NOTE: full_season field is ALWAYS false in the API - completely broken, do not use
         let isSeasonPack = false;
         let isMultiEpisodePack = false;
         if (isTvOrAnime) {
           const epFrom = sub.episode_from;
           const epEnd = sub.episode_end;
           const epValue = sub.episode;
-
-          // Normalize episode_end (API returns 0 when not set, treat as null)
           const normalizedEpEnd = (epEnd === 0 || epEnd == null) ? null : epEnd;
 
           if (epFrom != null && normalizedEpEnd != null && epFrom !== normalizedEpEnd) {
-            // Multi-episode pack with explicit range (e.g., episodes 1-37 or 15-24)
             isSeasonPack = true;
             isMultiEpisodePack = true;
           } else if (epValue == null && epFrom == null) {
-            // No episode info at all — full season pack
             isSeasonPack = true;
             isMultiEpisodePack = false;
           }
@@ -325,14 +276,12 @@ static client = axios.create({
           subdl_id: sdId,
           subtitles_id: subtitleId,
           releases: releases,
-          // Store API episode number for filtering (not exposed to other layers)
-          _subdlEpisode: sub.episode != null ? parseInt(sub.episode) : null
+          _subdlEpisode: sub.episode != null ? parseInt(sub.episode, 10) : null
         };
 
-        // Mark season packs from API metadata
         if (isSeasonPack) {
           result.is_season_pack = true;
-          result.is_multi_episode_pack = isMultiEpisodePack; // true if explicit range (1-37), false if full season
+          result.is_multi_episode_pack = isMultiEpisodePack;
           result.season_pack_season = effectiveSeason;
           result.season_pack_episode = episode;
           if (isMultiEpisodePack) {
@@ -340,21 +289,13 @@ static client = axios.create({
           }
           result.fileId = `${fileId}_seasonpack_s${effectiveSeason}e${episode}`;
           result.id = result.fileId;
-          log.debug(() => `[SubDL] ${isMultiEpisodePack ? 'Multi-episode pack' : 'Full season pack'} (ep=${sub.episode}, from=${sub.episode_from}, end=${sub.episode_end}): ${result.name}`);
         }
 
         return result;
       });
 
-      // Filter out wrong episodes using SubDL's API metadata
-      // We have sub.episode, episode_from, episode_end — use them directly instead of regex
       if (isTvOrAnime) {
-        const beforeCount = subtitles.length;
-
         subtitles = subtitles.filter(sub => {
-          // Keep full-season packs, but drop explicit episode ranges that do not
-          // contain the requested episode. Otherwise users can select a pack for
-          // episodes 5-7 while searching episode 2 and only fail at download time.
           if (sub.is_season_pack) {
             if (sub.is_multi_episode_pack && sub.episode_range) {
               const from = parseInt(sub.episode_range.from, 10);
@@ -366,29 +307,14 @@ static client = axios.create({
             return true;
           }
 
-          // Use the _subdlEpisode metadata we stored from the API response
           const subEp = sub._subdlEpisode;
-
-          // If the API says this subtitle is for a specific episode, check it matches
           if (subEp != null && subEp !== episode) {
-            return false; // Wrong episode — drop it
+            return false;
           }
-
-          // subEp matches requested episode, or subEp is null (ambiguous) — keep it
           return true;
         });
-
-        const filteredCount = beforeCount - subtitles.length;
-        const seasonPackCount = subtitles.filter(s => s.is_season_pack).length;
-        if (filteredCount > 0) {
-          log.debug(() => `[SubDL] Filtered out ${filteredCount} wrong episode subtitles (requested: S${String(effectiveSeason).padStart(2, '0')}E${String(episode).padStart(2, '0')})`);
-        }
-        if (seasonPackCount > 0) {
-          log.debug(() => `[SubDL] Included ${seasonPackCount} season pack subtitles (API-confirmed)`);
-        }
       }
 
-      // Limit to 14 results per language to control response size
       const MAX_RESULTS_PER_LANGUAGE = 14;
       const groupedByLanguage = {};
 
@@ -403,13 +329,9 @@ static client = axios.create({
       }
 
       const limitedSubtitles = Object.values(groupedByLanguage).flat();
-      
-      // 🎯 Simpan hasil carian penuh ke dalam RAM cache sebelum dipulangkan
-      if (limitedSubtitles.length > 0 && typeof subdlMemoryCache !== 'undefined') {
-        subdlMemoryCache.set(localCacheKey, {
-          timestamp: Date.now(),
-          data: limitedSubtitles
-        });
+
+      if (limitedSubtitles.length > 0) {
+        setSubdlCache(localCacheKey, limitedSubtitles);
       }
 
       return limitedSubtitles;
@@ -422,32 +344,20 @@ static client = axios.create({
     }
   }
 
-  /**
-   * Download subtitle content
-   * @param {string} fileId - File ID from search results (format: subdl_<sd_id>_<subtitles_id> or subdl_<sd_id>_<subtitles_id>_seasonpack_s<season>e<episode>)
-   * @param {string} subdl_id - SubDL subtitle ID
-   * @param {string} subtitles_id - SubDL subtitle file ID
-   * @returns {Promise<string>} - Subtitle content as text
-   */
   async downloadSubtitle(fileId, options = {}) {
-    // Support legacy call pattern: downloadSubtitle(fileId, subdl_id, subtitles_id)
-    // New pattern: downloadSubtitle(fileId, { timeout })
     let subdl_id = null;
     let subtitles_id = null;
-    let timeout = options?.timeout || 18000; // Default 18s (SubDL download server is slow)
+    let timeout = options?.timeout || 18000;
 
-    // Handle legacy call pattern where second arg is subdl_id string
     if (typeof options === 'string') {
       subdl_id = options;
       subtitles_id = arguments[2] || null;
-      timeout = 18000; // Match default timeout for new pattern
+      timeout = 18000;
     }
+
     try {
       log.debug(() => ['[SubDL] Downloading subtitle:', fileId]);
 
-      // Never fall back to SubDL's anonymous per-IP download allowance. Normal
-      // configuration disables this provider without a key, but failing closed
-      // here also protects legacy, malformed, and direct service calls.
       if (!this.apiKey) {
         const authError = new Error('SubDL API key is required for subtitle downloads');
         authError.response = {
@@ -458,27 +368,22 @@ static client = axios.create({
         throw authError;
       }
 
-      // Check if this is a season pack download
       let isSeasonPack = false;
       let seasonPackSeason = null;
       let seasonPackEpisode = null;
 
-      // Parse the fileId to extract subdl_id and subtitles_id if not provided
       if (!subdl_id || !subtitles_id) {
         const parts = fileId.split('_');
         if (parts.length >= 3 && parts[0] === 'subdl') {
           subdl_id = parts[1];
           subtitles_id = parts[2];
 
-          // Check for season pack format: subdl_<sd_id>_<subtitles_id>_seasonpack_s<season>e<episode>
           if (parts.length >= 5 && parts[3] === 'seasonpack') {
             isSeasonPack = true;
-            // Parse s<season>e<episode> from parts[4]
             const match = parts[4].match(/s(\d+)e(\d+)/i);
             if (match) {
-              seasonPackSeason = parseInt(match[1]);
-              seasonPackEpisode = parseInt(match[2]);
-              log.debug(() => `[SubDL] Season pack download requested: S${String(seasonPackSeason).padStart(2, '0')}E${String(seasonPackEpisode).padStart(2, '0')}`);
+              seasonPackSeason = parseInt(match[1], 10);
+              seasonPackEpisode = parseInt(match[2], 10);
             }
           }
         } else {
@@ -486,17 +391,10 @@ static client = axios.create({
         }
       }
 
-
-      // Construct download URL according to SubDL API documentation
-      // Format: https://dl.subdl.com/subtitle/<sd_id>-<subtitles_id>.zip
       const downloadUrl = `https://dl.subdl.com/subtitle/${subdl_id}-${subtitles_id}.zip`;
 
-      log.debug(() => ['[SubDL] Download URL:', downloadUrl]);
-
-      // Download the subtitle file (it's a ZIP file)
-      // Retry logic for 503 errors with exponential backoff (2s, 4s)
       const MAX_RETRIES = 2;
-      const BACKOFF_DELAYS = [2000, 4000]; // 2s, 4s
+      const BACKOFF_DELAYS = [2000, 4000];
       let subtitleResponse;
       let lastError;
 
@@ -504,55 +402,37 @@ static client = axios.create({
         try {
           subtitleResponse = await SubDLService.downloadClient.get(downloadUrl, {
             responseType: 'arraybuffer',
-            timeout: timeout, // Use configurable timeout
-            // Without this header SubDL treats the request as anonymous and
-            // applies its per-IP quota. That makes every user of a shared host
-            // consume the same allowance even though each configured a key.
+            timeout: timeout,
+            maxContentLength: MAX_ZIP_BYTES,
             ...(this.apiKey ? { headers: { 'x-api-key': this.apiKey } } : {})
           });
-          break; // Success, exit retry loop
+          break;
         } catch (err) {
           lastError = err;
           const status = err.response?.status;
-
-          // Only retry on 503 (Service Unavailable)
           if (status === 503 && attempt < MAX_RETRIES) {
             const delay = BACKOFF_DELAYS[attempt];
             log.warn(() => `[SubDL] Download failed with 503, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
-
-          // Non-retryable error or max retries exceeded
           throw err;
         }
       }
 
-      // If we exhausted retries without success
       if (!subtitleResponse) {
         throw lastError;
       }
 
-      log.debug(() => ['[SubDL] Response status:', subtitleResponse.status]);
-      log.debug(() => ['[SubDL] Response Content-Type:', subtitleResponse.headers['content-type']]);
-      log.debug(() => ['[SubDL] Response size:', subtitleResponse.data.length, 'bytes']);
-
-      // Validate that we received binary data (not HTML error page)
       if (!subtitleResponse.data || subtitleResponse.data.length === 0) {
         throw new Error('Downloaded file is empty');
       }
 
-      // Analyze response content to detect HTML error pages, Cloudflare blocks, etc.
       const responseBuffer = Buffer.isBuffer(subtitleResponse.data) ? subtitleResponse.data : Buffer.from(subtitleResponse.data);
       const contentAnalysis = analyzeResponseContent(responseBuffer);
-
-      // Check for valid archive signature (ZIP, RAR, Gzip, 7z, Tar, etc.)
       const archiveType = detectArchiveType(responseBuffer);
+
       if (!archiveType) {
-        // Although SubDL documents this endpoint as a ZIP download, it can
-        // return the subtitle file itself (observed with MicroDVD `.sub`
-        // payloads). Accept only positively identified subtitle structures so
-        // JSON/HTML error documents remain rejected.
         const plainFormat = detectPlainSubtitleFormat(responseBuffer);
         if (plainFormat) {
           log.debug(() => `[SubDL] Download endpoint returned a plain ${plainFormat.toUpperCase()} subtitle`);
@@ -565,19 +445,10 @@ static client = axios.create({
           return decoded;
         }
 
-        // Not a valid archive - provide user-friendly error message
         log.error(() => `[SubDL] Response is not a valid archive. Content analysis: ${contentAnalysis.type} - ${contentAnalysis.hint}`);
-        if (responseBuffer.length > 0 && responseBuffer.length < 500) {
-          log.debug(() => ['[SubDL] Response preview:', responseBuffer.toString('utf8', 0, Math.min(200, responseBuffer.length))]);
-        } else {
-          log.debug(() => ['[SubDL] First 20 bytes:', Array.from(responseBuffer.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')]);
-        }
         return createInvalidResponseSubtitle('SubDL', contentAnalysis, responseBuffer.length);
       }
 
-      log.debug(() => `[SubDL] Detected ${archiveType.toUpperCase()} archive`);
-
-      // Use the centralized archive extractor
       return await extractSubtitleFromArchive(responseBuffer, {
         providerName: 'SubDL',
         maxBytes: MAX_ZIP_BYTES,
@@ -593,136 +464,48 @@ static client = axios.create({
     }
   }
 
-  /**
-   * Normalize language code to ISO-639-2 for Stremio
-   * @param {string} language - Language code or name from SubDL
-   * @returns {string} - ISO-639-2 language code (3-letter)
-   */
   normalizeLanguageCode(language) {
     if (!language) return null;
 
     const lower = language.toLowerCase().trim();
 
-    // Map SubDL language names to ISO-639-2 codes
     const languageNameMap = {
-      'english': 'eng',
-      'spanish': 'spa',
-      'french': 'fre',
-      'german': 'ger',
-      'italian': 'ita',
-      'portuguese': 'por',
-      'portuguese (brazil)': 'pob',
-      'portuguese-brazilian': 'pob',
-      'russian': 'rus',
-      'japanese': 'jpn',
-      'chinese': 'chi',
-      'chinese bg code': 'chi',
-      'korean': 'kor',
-      'arabic': 'ara',
-      'dutch': 'dut',
-      'polish': 'pol',
-      'turkish': 'tur',
-      'swedish': 'swe',
-      'norwegian': 'nor',
-      'danish': 'dan',
-      'finnish': 'fin',
-      'greek': 'gre',
-      'hebrew': 'heb',
-      'hindi': 'hin',
-      'czech': 'cze',
-      'hungarian': 'hun',
-      'romanian': 'rum',
-      'thai': 'tha',
-      'vietnamese': 'vie',
-      'indonesian': 'ind',
-      'malay': 'may',
-      'ukrainian': 'ukr',
-      'bulgarian': 'bul',
-      'croatian': 'hrv',
-      'serbian': 'srp',
-      'serbian (latin)': 'srp',
-      'serbian (cyrillic)': 'srp',
-      'serbian latin': 'srp',
-      'serbian cyrillic': 'srp',
-      'slovak': 'slo',
-      'slovenian': 'slv',
-      'estonian': 'est',
-      'latvian': 'lav',
-      'lithuanian': 'lit',
-      'farsi': 'per',
-      'persian': 'per',
-      'farsi_persian': 'per',
-      'farsi/persian': 'per',
-      'bengali': 'ben',
-      'catalan': 'cat',
-      'basque': 'baq',
-      'galician': 'glg',
-      'albanian': 'alb',
-      'azerbaijani': 'aze',
-      'belarusian': 'bel',
-      'bosnian': 'bos',
-      'burmese': 'bur',
-      'esperanto': 'epo',
-      'georgian': 'geo',
-      'greenlandic': 'kal',
-      'icelandic': 'ice',
-      'kurdish': 'kur',
-      'macedonian': 'mac',
-      'malayalam': 'mal',
-      'manipuri': 'mni',
-      'sinhala': 'sin',
-      'sinhalese': 'sin',
-      'tagalog': 'tgl',
-      'filipino': 'tgl',
-      'tamil': 'tam',
-      'telugu': 'tel',
-      'urdu': 'urd',
-      'ukranian': 'ukr',  // SubDL typo variant of 'ukrainian'
-      'mongolian': 'mon',
-      'afrikaans': 'afr',
-      'swahili': 'swa',
-      'welsh': 'wel',
-      'nepali': 'nep',
-      'khmer': 'khm',
-      'lao': 'lao',
-      'punjabi': 'pan',
-      'montenegrin': 'mne',
-      'luxembourgish': 'ltz',
-      'occitan': 'oci',
-      'kazakh': 'kaz',
-      'uzbek': 'uzb',
-      'turkmen': 'tuk',
-      'syriac': 'syr',
-      'breton': 'bre'
+      'english': 'eng', 'spanish': 'spa', 'french': 'fre', 'german': 'ger',
+      'italian': 'ita', 'portuguese': 'por', 'portuguese (brazil)': 'pob',
+      'portuguese-brazilian': 'pob', 'russian': 'rus', 'japanese': 'jpn',
+      'chinese': 'chi', 'chinese bg code': 'chi', 'korean': 'kor',
+      'arabic': 'ara', 'dutch': 'dut', 'polish': 'pol', 'turkish': 'tur',
+      'swedish': 'swe', 'norwegian': 'nor', 'danish': 'dan', 'finnish': 'fin',
+      'greek': 'gre', 'hebrew': 'heb', 'hindi': 'hin', 'czech': 'cze',
+      'hungarian': 'hun', 'romanian': 'rum', 'thai': 'tha', 'vietnamese': 'vie',
+      'indonesian': 'ind', 'malay': 'may', 'ukrainian': 'ukr', 'bulgarian': 'bul',
+      'croatian': 'hrv', 'serbian': 'srp', 'serbian (latin)': 'srp',
+      'serbian (cyrillic)': 'srp', 'serbian latin': 'srp', 'serbian cyrillic': 'srp',
+      'slovak': 'slo', 'slovenian': 'slv', 'estonian': 'est', 'latvian': 'lav',
+      'lithuanian': 'lit', 'farsi': 'per', 'persian': 'per', 'farsi_persian': 'per',
+      'farsi/persian': 'per', 'bengali': 'ben', 'catalan': 'cat', 'basque': 'baq',
+      'galician': 'glg', 'albanian': 'alb', 'azerbaijani': 'aze', 'belarusian': 'bel',
+      'bosnian': 'bos', 'burmese': 'bur', 'esperanto': 'epo', 'georgian': 'geo',
+      'greenlandic': 'kal', 'icelandic': 'ice', 'kurdish': 'kur', 'macedonian': 'mac',
+      'malayalam': 'mal', 'manipuri': 'mni', 'sinhala': 'sin', 'sinhalese': 'sin',
+      'tagalog': 'tgl', 'filipino': 'tgl', 'tamil': 'tam', 'telugu': 'tel',
+      'urdu': 'urd', 'ukranian': 'ukr', 'mongolian': 'mon', 'afrikaans': 'afr',
+      'swahili': 'swa', 'welsh': 'wel', 'nepali': 'nep', 'khmer': 'khm',
+      'lao': 'lao', 'punjabi': 'pan', 'montenegrin': 'mne', 'luxembourgish': 'ltz',
+      'occitan': 'oci', 'kazakh': 'kaz', 'uzbek': 'uzb', 'turkmen': 'tuk',
+      'syriac': 'syr', 'breton': 'bre'
     };
 
-    // Check if it's a language name
-    if (languageNameMap[lower]) {
-      return languageNameMap[lower];
-    }
+    if (languageNameMap[lower]) return languageNameMap[lower];
+    if (lower.includes('portuguese') && (lower.includes('brazil') || lower.includes('br'))) return 'pob';
+    if (lower === 'brazilian' || lower === 'pt-br' || lower === 'ptbr') return 'pob';
+    if (lower.length === 3 && /^[a-z]{3}$/.test(lower)) return lower;
 
-    // Handle special cases for Portuguese Brazilian
-    if (lower.includes('portuguese') && (lower.includes('brazil') || lower.includes('br'))) {
-      return 'pob';
-    }
-    if (lower === 'brazilian' || lower === 'pt-br' || lower === 'ptbr') {
-      return 'pob';
-    }
-
-    // If it's already 3 letters, assume it's ISO-639-2
-    if (lower.length === 3 && /^[a-z]{3}$/.test(lower)) {
-      return lower;
-    }
-
-    // If it's 2 letters, convert from ISO-639-1 to ISO-639-2
     if (lower.length === 2 && /^[a-z]{2}$/.test(lower)) {
       const iso2Codes = toISO6392(lower);
-      if (iso2Codes && iso2Codes.length > 0) {
-        return iso2Codes[0].code2;
-      }
+      if (iso2Codes && iso2Codes.length > 0) return iso2Codes[0].code2;
     }
 
-    // Unknown language
     log.warn(() => `[SubDL] Unknown language format: "${language}", filtering out`);
     return null;
   }
