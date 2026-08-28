@@ -8480,7 +8480,7 @@ Translate to {target_language}.`;
         select.innerHTML = '';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = tConfig('config.providersUi.selectModel', {}, 'Select model');[cite: 1]
+        placeholder.textContent = tConfig('config.providersUi.selectModel', {}, 'Select model');
         select.appendChild(placeholder);
 
         (models || []).forEach(model => {
@@ -8504,15 +8504,15 @@ Translate to {target_language}.`;
     }
 
     function applyProvidersToForm(providers) {
-        ensureProvidersInState();[cite: 1]
-        ensureProviderParametersInState();[cite: 1]
+        ensureProvidersInState();
+        ensureProviderParametersInState();
         getProviderKeys().forEach(key => {
-            const cfg = providers && (providers[key] || providers[Object.keys(providers).find(k => k.toLowerCase() === key)]);[cite: 1]
-            const enabled = cfg?.enabled === true;[cite: 1]
-            const toggle = document.getElementById(`provider-${key}-enabled`);[cite: 1]
-            const apiKeyInput = document.getElementById(`provider-${key}-key`);[cite: 1]
-            if (toggle) toggle.checked = enabled;[cite: 1]
-            if (apiKeyInput) apiKeyInput.value = cfg?.apiKey || '';[cite: 1]
+            const cfg = providers && (providers[key] || providers[Object.keys(providers).find(k => k.toLowerCase() === key)]);
+            const enabled = cfg?.enabled === true;
+            const toggle = document.getElementById(`provider-${key}-enabled`);
+            const apiKeyInput = document.getElementById(`provider-${key}-key`);
+            if (toggle) toggle.checked = enabled;
+            if (apiKeyInput) apiKeyInput.value = cfg?.apiKey || '';
 
             // Populate baseUrl untuk custom provider
             if (key === 'custom') {
@@ -8520,15 +8520,15 @@ Translate to {target_language}.`;
                 if (baseUrlInput) baseUrlInput.value = cfg?.baseUrl || '';
             }
 
-            const cachedModels = providerModelCache[key] || [];[cite: 1]
+            const cachedModels = providerModelCache[key] || [];
             populateProviderModels(key, cachedModels, cfg?.model || '');
-            toggleProviderFields(key, enabled);[cite: 1]
+            toggleProviderFields(key, enabled);
             currentConfig.providers[key] = {
                 ...currentConfig.providers[key],
                 ...(cfg || {})
             };
         });
-        updateMainProviderOptions(currentConfig.mainProvider || 'gemini');[cite: 1]
+        updateMainProviderOptions(currentConfig.mainProvider || 'gemini');
         if (currentConfig.multiProviderEnabled) {
             const secondaryEnabled = currentConfig.secondaryProviderEnabled === true;
             if (secondaryEnabled) {
@@ -8536,11 +8536,11 @@ Translate to {target_language}.`;
                 if (toggle) toggle.checked = true;
             }
             toggleSecondaryProviderUI(secondaryEnabled);
-            updateSecondaryProviderOptions(currentConfig.secondaryProvider || '');[cite: 1]
+            updateSecondaryProviderOptions(currentConfig.secondaryProvider || '');
         } else {
             toggleSecondaryProviderUI(false);
         }
-        updateProviderAdvancedVisibility();[cite: 1]
+        updateProviderAdvancedVisibility();
     }
 
     function getProvidersFromForm() {
