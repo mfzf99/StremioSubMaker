@@ -909,11 +909,12 @@
             maxRetries: 2
         },
         custom: {
-            temperature: 0.4,
+            temperature: 0.2,
             topP: 0.95,
-            maxOutputTokens: 32768,
-            translationTimeout: 120,  // Higher for local models
-            maxRetries: 2
+            maxOutputTokens: 65536,
+            translationTimeout: 120,
+            maxRetries: 2,
+            reasoningEffort: 'low'
         }
     };
 
