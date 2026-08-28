@@ -350,6 +350,24 @@ class OpenAICompatibleProvider {
     const raw = Number.isFinite(Number(this.maxOutputTokens))
       ? Number(this.maxOutputTokens)
       : 65536;
+    const model = String(this.model || '').toLowerCase();
+
+    // 🎯 Auto-Detect: Model generasi terkini / reasoning sentiasa mendapat siling 65,536+
+    if (
+      model.includes('deepseek') ||
+      model.includes('kimi') ||
+      model.includes('glm') ||
+      model.includes('claude') ||
+      model.includes('gpt-5') ||
+      model.includes('o1') ||
+      model.includes('o3') ||
+      model.includes('thinking') ||
+      model.includes('reasoner') ||
+      model.includes('minimax')
+    ) {
+      return Math.max(raw, 65536);
+    }
+
     return Math.max(1024, Math.min(Math.floor(raw), 131072));
   }
 
