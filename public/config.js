@@ -8542,6 +8542,155 @@ Translate to {target_language}.`;
         }
     }
 
+    // 🧠 Profil Tahap Pemikiran Rasmi Mengikut Model (28-Model Registry)
+    function getModelThinkingOptions(modelName) {
+        const m = String(modelName || '').toLowerCase();
+
+        // 1. TENCENT HUNYUAN (Hy3)
+        if (m.includes('hy3') || m.includes('hunyuan')) {
+            return [
+                { value: 'disabled', label: 'Disabled (No Think)' },
+                { value: 'low', label: 'Low (Fast Reasoning)' },
+                { value: 'high', label: 'High (Deep Reasoning)' }
+            ];
+        }
+
+        // 2. GLM-5.3 & GLM-5.3-FLASH (ALWAYS-ON: Tiada pilihan disabled)
+        if (m.includes('5.3')) {
+            return [
+                { value: 'low', label: 'Low (Fastest)' },
+                { value: 'high', label: 'High (Deep)' },
+                { value: 'max', label: 'Max (Deepest - Default)' }
+            ];
+        }
+
+        // 3. GLM-5.1 (Tiada kawalan granular effort)
+        if (m.includes('5.1')) {
+            return [
+                { value: 'disabled', label: 'Disabled (No Thinking)' },
+                { value: 'low', label: 'Enabled (Auto-Decide)' }
+            ];
+        }
+
+        // 4. GLM-5.2 (Pilihan High & Max sahaja)
+        if (m.includes('5.2')) {
+            return [
+                { value: 'disabled', label: 'Disabled (No Thinking)' },
+                { value: 'high', label: 'High' },
+                { value: 'max', label: 'Max (Default)' }
+            ];
+        }
+
+        // 5. KIMI K2.7 (Always-on auto)
+        if (m.includes('k2.7')) {
+            return [
+                { value: 'low', label: 'Always-On (Preserved Thinking)' }
+            ];
+        }
+
+        // 6. KIMI K3 (ALWAYS-ON: Tiada pilihan disabled)
+        if (m.includes('k3')) {
+            return [
+                { value: 'low', label: 'Low (Fastest)' },
+                { value: 'high', label: 'High (Deep)' },
+                { value: 'max', label: 'Max (Deepest - Default)' }
+            ];
+        }
+
+        // 7. CLAUDE 4.6 (Tiada xhigh)
+        if (m.includes('claude') && m.includes('4.6')) {
+            return [
+                { value: 'low', label: 'Low (Fastest)' },
+                { value: 'medium', label: 'Medium (Balanced - Recommended)' },
+                { value: 'high', label: 'High (Deep - Default)' },
+                { value: 'max', label: 'Max (Deepest)' }
+            ];
+        }
+
+        // 8. CLAUDE 4.7, 4.8, 5 (Adaptive dengan xhigh)
+        if (m.includes('claude')) {
+            return [
+                { value: 'low', label: 'Low (Fastest)' },
+                { value: 'medium', label: 'Medium (Balanced)' },
+                { value: 'high', label: 'High (Deep - Default)' },
+                { value: 'xhigh', label: 'Extra High' },
+                { value: 'max', label: 'Max (Deepest)' }
+            ];
+        }
+
+        // 9. MINIMAX (Binary On/Off)
+        if (m.includes('minimax')) {
+            return [
+                { value: 'disabled', label: 'Disabled (No Thinking)' },
+                { value: 'low', label: 'Enabled (Adaptive Thinking)' }
+            ];
+        }
+
+        // 10. DEEPSEEK (V4-pro, V4-flash)
+        if (m.includes('deepseek')) {
+            return [
+                { value: 'disabled', label: 'Disabled (No Thinking)' },
+                { value: 'low', label: 'Low (Fastest Reasoning)' },
+                { value: 'high', label: 'High (Deep Reasoning - Default)' },
+                { value: 'max', label: 'Max (Deepest Reasoning)' }
+            ];
+        }
+
+        // 11. GPT-5.6 / OPENAI REASONING (Sol, Terra, Luna)
+        if (m.includes('gpt-5') || m.includes('o1') || m.includes('o3')) {
+            return [
+                { value: 'disabled', label: 'Disabled / None' },
+                { value: 'low', label: 'Low (Fastest)' },
+                { value: 'medium', label: 'Medium (Balanced - Default)' },
+                { value: 'high', label: 'High (Deep)' },
+                { value: 'xhigh', label: 'Extra High' },
+                { value: 'max', label: 'Max (Deepest)' }
+            ];
+        }
+
+        // 12. Standard Fallback
+        return [
+            { value: 'disabled', label: 'Disabled / None (Fastest)' },
+            { value: 'low', label: 'Low (Fastest Reasoning)' },
+            { value: 'medium', label: 'Medium (Balanced)' },
+            { value: 'high', label: 'High (Deep Reasoning)' },
+            { value: 'max', label: 'Max (Deepest)' }
+        ];
+    }
+
+    function updateReasoningDropdown(providerKey, modelName, selectedEffort = '') {
+        const reasoningSelect = document.getElementById(`provider-${providerKey}-reasoning`);
+        if (!reasoningSelect) return;
+
+        const options = getModelThinkingOptions(modelName);
+        reasoningSelect.innerHTML = '';
+
+        options.forEach(opt => {
+            const el = document.createElement('option');
+            el.value = opt.value;
+            el.textContent = opt.label;
+            reasoningSelect.appendChild(el);
+        });
+
+        // Pilih nilai yang sepadan, atau gunakan pilihan pertama sekiranya nilai semasa tidak sah untuk model ini
+        const validValues = options.map(o => o.value);
+        if (selectedEffort && validValues.includes(selectedEffort)) {
+            reasoningSelect.value = selectedEffort;
+        } else {
+            // Tetapkan pilihan lalai mengikut keluarga model
+            const m = String(modelName || '').toLowerCase();
+            if (m.includes('5.3') || m.includes('k3') || (m.includes('glm') && m.includes('5.2'))) {
+                reasoningSelect.value = validValues.includes('max') ? 'max' : validValues[0];
+            } else if (m.includes('claude') || m.includes('deepseek')) {
+                reasoningSelect.value = validValues.includes('high') ? 'high' : validValues[0];
+            } else if (m.includes('gpt-5')) {
+                reasoningSelect.value = validValues.includes('medium') ? 'medium' : validValues[0];
+            } else {
+                reasoningSelect.value = validValues[0];
+            }
+        }
+    }
+
     function applyProvidersToForm(providers) {
         ensureProvidersInState();
         ensureProviderParametersInState();
