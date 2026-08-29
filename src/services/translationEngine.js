@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability (200)
   if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 50;
+    return 200;
   }
 
   // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
@@ -133,19 +133,19 @@ function getBatchSizeForModel(model) {
 
   // 4. Reasoning & Pro tier: Balanced against latency penalty and retry overhead
   if (modelStr.includes('pro')) {
-    if (version >= 2.5) return 50; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+) (300)
-    return 50;                     // Legacy Pro (1.5) (200)
+    if (version >= 2.5) return 300; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+) (300)
+    return 200;                     // Legacy Pro (1.5) (200)
   }
 
   // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 50; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
-    if (version >= 2.0) return 50; // Mid-gen Flash (2.0, 2.5) (300)
-    return 50;                     // Legacy Flash (1.5) (250)
+    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
+    if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5) (300)
+    return 250;                     // Legacy Flash (1.5) (250)
   }
 
   // 6. Safe baseline fallback for unmapped architectures (250)
-  return 50; 
+  return 250; 
 }
 
 // Module-level shared key health tracking across engine instances.
