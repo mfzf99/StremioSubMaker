@@ -2110,8 +2110,18 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
-   in an adjacent ID. Dividing the natural thought across matching 
-   fragments is MANDATORY. Merging them DESTROYS subtitle sync permanently.
+   in an adjacent ID.
+
+   Example (X and Y are placeholder IDs, not real ones from the input):
+   IN:  <s id="X">If you really think</s>
+        <s id="Y">that I would betray you...</s>
+   Correct: <s id="X">Kalau awak betul-betul rasa</s>
+            <s id="Y">saya sanggup khianati awak...</s>
+   Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+            <s id="Y">.</s>
+
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
 
 2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
