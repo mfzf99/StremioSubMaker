@@ -2123,16 +2123,17 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    Dividing the natural thought across matching fragments is MANDATORY. 
    Merging them DESTROYS subtitle sync permanently.
 
-2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
-   background music (BGM) playing during scenes — MUST be fully translated. 
+2. ESCAPE HATCH, PROPER NOUNS & MUSIC: ALL song lyrics in music notes (♫ / ♪) — 
+   including background music (BGM) playing during scenes — MUST be fully translated. 
+   NEVER translate character names, brand names, company/organization titles, 
+   or entity suffixes (e.g., keep "Taeja Group", NEVER translate to "Kumpulan Taeja"). 
    Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
-   (foreign proper nouns, corrupted text) or contains ONLY standalone 
-   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
-   remaining entry.
+   (corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) 
+   and numbers. NEVER shift any remaining entry.
 
    Example: <s id="X">♪ La la la ♪</s> → copy as-is (no lyrics). 
-   <s id="Y">♪ I will follow you to the end of the world ♪</s> → translate 
-   (real lyric content).
+            <s id="Y">♪ I will follow you to the end of the world ♪</s> → translate 
+            (real lyric content).
 
 3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    total, matching input IDs strictly in order from ID_${startId} to 
