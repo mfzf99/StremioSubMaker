@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
+    `You are an expert subtitle translator. Translate the ${sourceLabel} text into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
+    `You are an expert subtitle translator. Translate the ${sourceLabel} text into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2129,6 +2129,10 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    (foreign proper nouns, corrupted text) or contains ONLY standalone 
    symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
    remaining entry.
+
+   Example: <s id="X">♪ La la la ♪</s> → copy as-is (no lyrics). 
+   <s id="Y">♪ I will follow you to the end of the world ♪</s> → translate 
+   (real lyric content).
 
 3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    total, matching input IDs strictly in order from ID_${startId} to 
