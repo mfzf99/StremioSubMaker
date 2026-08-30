@@ -2150,8 +2150,8 @@ Respond with exactly ${expectedCount} XML-tagged entries.
 </task>
 <s id="`;
 
-    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
-  }
+    return this.addBatchHeader({ systemInstruction, userPrompt }, batchIndex, totalBatches);
+}
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
