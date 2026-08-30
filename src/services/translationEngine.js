@@ -2106,55 +2106,52 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-<constraints>
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
-   Never steal, merge, or complete a sentence using words that belong 
+   NEVER steal, merge, or complete a sentence using words that belong 
    in an adjacent ID.
 
-   Example (X and Y are placeholder IDs, not real ones from the input):
+   ✅ CORRECT (X and Y are placeholder IDs, not real ones from the input):
    IN:  <s id="X">If you really think</s>
         <s id="Y">that I would betray you...</s>
-   Correct: <s id="X">Kalau awak betul-betul rasa</s>
-            <s id="Y">saya sanggup khianati awak...</s>
-   Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
-            <s id="Y">.</s>
+   OUT: <s id="X">Kalau awak betul-betul rasa</s>
+        <s id="Y">saya sanggup khianati awak...</s>
 
-   Dividing the thought across matching fragments is required. Merging 
-   them destroys subtitle sync permanently and cannot be recovered.
+   ❌ CATASTROPHICALLY WRONG:
+   OUT: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+        <s id="Y">...</s>
 
-2. ESCAPE HATCH & MUSIC: All song lyrics in music notes (♫ / ♪) — 
-   including background music playing during scenes — must be fully 
-   translated. Copy the exact original text for an ID only if content 
-   is untranslatable (foreign proper nouns, corrupted text) or contains 
-   ONLY standalone symbols/music notes and numbers. Never shift any 
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
+
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
+   (foreign proper nouns, corrupted text) or contains ONLY standalone 
+   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
    remaining entry.
 
-   Example: <s id="X">♪ La la la ♪</s> → copy as-is (no lyrics). 
-   <s id="Y">♪ Untukmu, aku sanggup ke hujung dunia ♪</s> → translate 
-   (real lyric content).
-
-3. ID INTEGRITY & EXACT COUNT: Output exactly ${expectedCount} entries 
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    total, matching input IDs strictly in order from ID_${startId} to 
    ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
-   reorder, or invent IDs. Use Rule 2 for content you cannot translate — 
-   never fabricate to hit the count.
+   reorder, or invent IDs. NEVER fabricate content to hit the count — 
+   use Rule 2 instead.
 
 4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
-   dash (-) stays in the exact same structure and position as the source.
+   dash (-) MUST be preserved in the exact same structure and position 
+   as in the source.
 
-5. CLEAN OUTPUT: The response contains only <s id="N">...</s> tags. 
-   No commentary, no markdown code blocks. Every translated word stays 
-   inside its corresponding tag.
-</constraints>
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+   Zero commentary, zero markdown code blocks. Every translated word 
+   MUST be enclosed inside its corresponding tag.
 
-<context>
+<input>
 ${batchText}
-</context>
+</input>
 
-<task>
-Based on the entries above, translate each one according to the 
-constraints. Respond with exactly ${expectedCount} XML-tagged entries.
-</task>
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
