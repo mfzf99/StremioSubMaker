@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
+    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
+    `You are an expert audiovisual translator. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2120,8 +2120,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
             <s id="Y">.</s>
 
-   Dividing the thought across matching fragments is required. Merging 
-   them destroys subtitle sync permanently and cannot be recovered.
+   Dividing the natural thought across matching fragments is MANDATORY. 
+   Merging them DESTROYS subtitle sync permanently.
 
 2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
    background music (BGM) playing during scenes — MUST be fully translated. 
