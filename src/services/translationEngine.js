@@ -3048,7 +3048,17 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
     // 3. Buang sisa kurungan tag '>' di permulaan baris
     cleaned = cleaned.replace(/^(?:["']?\s*>)+\s*/, '').trim();
 
-    // 4. Tukar balik [br] dan semua variasi tag HTML (<br>, <br/>, &lt;br&gt;) kepada pemisah baris sebenar
+    // 3.1 PEMBERSIH TANDA PETIK (NETFLIX STYLE + KEBAL ERROR AI)
+    cleaned = cleaned
+      // 1. Buang SEMUA tanda petik berganda (berpasangan mahupun sebiji tergantung)
+      .replace(/["“”„«»]/g, '')
+      // 2. Buang tanda petik tunggal di awal atau di hujung perkataan/ayat
+      .replace(/(^|[\s([{\-])['‘`]([a-zA-Z0-9])/g, '$1$2')
+      .replace(/([a-zA-Z0-9])['’`]([\s)\]}.,!?-]|$)/g, '$1$2')
+      // 3. Buang sebarang tanda petik tunggal yang terapung kosong seorang diri
+      .replace(/(^|\s)['‘`]+(?=\s|$)/g, '$1');
+
+    // 4. Tukar balik [br] kepada \n
     cleaned = cleaned
       .replace(/\s*(?:\[br\]|<br\s*\/?>|&lt;br\s*\/?&gt;)\s*/gi, '\n')
       .replace(/\n{2,}/g, '\n'); // Runtuhkan pemisah baris berganda jadi satu
