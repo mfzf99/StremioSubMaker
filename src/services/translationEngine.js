@@ -2075,7 +2075,7 @@ class TranslationEngine {
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
-    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance
+    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance[cite: 2]
 
     let startId = 'START';
     let endId = 'END';
@@ -2102,11 +2102,12 @@ class TranslationEngine {
     }
 
     // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel); //[cite: 2]
 
     const promptBody = `${introInstruction}
 
-<constraints>
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
    in an adjacent ID.
@@ -2122,34 +2123,33 @@ class TranslationEngine {
    Dividing the thought across matching fragments is required. Merging 
    them destroys subtitle sync permanently and cannot be recovered.
 
-2. ESCAPE HATCH & MUSIC: All song lyrics in music notes (♫ / ♪) — 
-   including background music playing during scenes — must be fully 
-   translated. Copy the exact original text for an ID only if content 
-   is untranslatable (foreign proper nouns, corrupted text) or contains 
-   ONLY standalone symbols/music notes and numbers. Never shift any 
+2. ESCAPE HATCH & MUSIC: ALL song lyrics in music notes (♫ / ♪) — including 
+   background music (BGM) playing during scenes — MUST be fully translated. 
+   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
+   (foreign proper nouns, corrupted text) or contains ONLY standalone 
+   symbols/music notes (♪, ♫, ♪♪) and numbers. NEVER shift any 
    remaining entry.
 
-3. ID INTEGRITY & EXACT COUNT: Output exactly ${expectedCount} entries 
-   total, matching input IDs strictly in order from id="${startId}" to 
-   id="${endId}". Format: <s id="N">translated text</s>. Never skip, 
-   reorder, or invent IDs. Use Rule 2 for content you cannot translate.
+3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
+   total, matching input IDs strictly in order from ID_${startId} to 
+   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
+   reorder, or invent IDs. NEVER fabricate content to hit the count — 
+   use Rule 2 instead.
 
 4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
-   dash (-) stays in the exact same structure and position as source.
+   dash (-) MUST be preserved in the exact same structure and position 
+   as in the source.
 
-5. CLEAN OUTPUT: The response contains only <s id="N">...</s> tags. 
-   No commentary, no markdown code blocks. Every translated word stays 
-   inside its corresponding tag.
-</constraints>
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
+   Zero commentary, zero markdown code blocks. Every translated word 
+   MUST be enclosed inside its corresponding tag.
 
-<context>
+<input>
 ${batchText}
-</context>
+</input>
 
-<task>
-Based on the entries above, translate each one according to the constraints.
-Respond with exactly ${expectedCount} XML-tagged entries.
-</task>
+[OUTPUT_FORMAT]
+RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
