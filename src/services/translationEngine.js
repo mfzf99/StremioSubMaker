@@ -2145,8 +2145,9 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    as in the source.
 
 5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
-   Zero commentary, zero markdown code blocks. Every translated word 
-   MUST be enclosed inside its corresponding tag.
+   Zero commentary, zero markdown code blocks, and NO explanatory 
+   notes in parentheses. Every translated word MUST be enclosed 
+   inside its corresponding tag.
 
 <input>
 ${batchText}
