@@ -91,6 +91,131 @@ function wrapRtlText(text) {
     .join('\n');
 }
 
+// ============================================================================
+// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + MULTI-PENUTUR + LIRIK)
+// ============================================================================
+
+/**
+ * Mengira panjang fizikal teks tanpa mengira tag formatting (<i>, <b>, <u>, dll.)
+ */
+function getVisibleLength(str) {
+  return String(str || '').replace(/<[^>]+>/g, '').length;
+}
+
+/**
+ * Membahagikan satu ayat panjang kepada 2 baris seimbang secara sintaksis (Netflix Standard)
+ */
+function formatBalancedTwoLines(text, maxCpl = 42) {
+  const words = text.split(/\s+/);
+  if (words.length <= 1) return text;
+
+  const conjunctions = new Set([
+    'dan', 'atau', 'serta', 'tetapi', 'namun', 'kerana', 'sebab', 'supaya', 
+    'untuk', 'bahawa', 'yang', 'pada', 'dengan', 'dalam', 'tentang', 'oleh',
+    'semasa', 'apabila', 'jika', 'kalau', 'walaupun', 'sambil', 'hingga'
+  ]);
+
+  let bestSplitIndex = -1;
+  let highestScore = -Infinity;
+  let currentCharCount = 0;
+
+  for (let i = 0; i < words.length - 1; i++) {
+    currentCharCount += getVisibleLength(words[i]) + 1;
+
+    const line1 = words.slice(0, i + 1).join(' ');
+    const line2 = words.slice(i + 1).join(' ');
+
+    const len1 = getVisibleLength(line1);
+    const len2 = getVisibleLength(line2);
+
+    let penalty = 0;
+    if (len1 > maxCpl) penalty += (len1 - maxCpl) * 150;
+    if (len2 > maxCpl) penalty += (len2 - maxCpl) * 150;
+
+    const balanceDiff = Math.abs(len1 - len2);
+    let score = 100 - balanceDiff * 2 - penalty;
+
+    const lastWord = words[i];
+    const nextWord = words[i + 1].toLowerCase();
+
+    // Keutamaan Tanda Baca
+    if (/[?!.]$/.test(lastWord)) {
+      score += 80;
+    } else if (/[,;—]$|\.\.\.$/.test(lastWord)) {
+      score += 60;
+    }
+
+    // Keutamaan Kata Hubung / Sendi
+    if (conjunctions.has(nextWord)) {
+      score += 40;
+    }
+
+    // Elak memotong kata ganti nama tergantung
+    if (['saya', 'awak', 'dia', 'kita', 'kami', 'mereka', 'ini', 'itu'].includes(lastWord.toLowerCase())) {
+      score -= 20;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestSplitIndex = i;
+    }
+  }
+
+  if (bestSplitIndex !== -1) {
+    const finalLine1 = words.slice(0, bestSplitIndex + 1).join(' ');
+    const finalLine2 = words.slice(bestSplitIndex + 1).join(' ');
+    return `${finalLine1}\n${finalLine2}`;
+  }
+
+  const mid = Math.ceil(words.length / 2);
+  return words.slice(0, mid).join(' ') + '\n' + words.slice(mid).join(' ');
+}
+
+/**
+ * Smart Subtitle Line Wrapper V2 (Multi-Speaker, Syntax-Aware, Music-Safe)
+ */
+function smartWrapSubtitle(text, maxCpl = 42) {
+  if (!text) return '';
+
+  let processed = String(text).trim();
+
+  // 1. Pengasingan Multi-Penutur sebaris ("- Ayat 1 - Ayat 2" -> 2 baris)
+  processed = processed.replace(/(?<=[^\n])\s+-\s+/g, '\n- ');
+
+  let lines = processed.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return '';
+
+  // 2. Jika ada berbilang baris / penutur / lirik muzik, proses setiap baris secara individu
+  const hasMultipleLines = lines.length > 1;
+  const hasSpeakerDashes = lines.some(l => l.startsWith('-'));
+  const hasMusic = /[♫♪♬♩🎵🎶]/.test(processed);
+
+  if (hasMultipleLines || hasSpeakerDashes || hasMusic) {
+    const outputLines = [];
+
+    for (const line of lines) {
+      const lineLen = getVisibleLength(line);
+
+      if (lineLen <= maxCpl) {
+        outputLines.push(line);
+      } else {
+        const wrappedSubLines = formatBalancedTwoLines(line, maxCpl);
+        outputLines.push(...wrappedSubLines.split('\n'));
+      }
+    }
+
+    return outputLines.join('\n');
+  }
+
+  // 3. Ayat tunggal biasa yang melebihi had 42 CPL
+  const singleLineLen = getVisibleLength(lines[0]);
+  if (singleLineLen <= maxCpl) {
+    return lines[0];
+  }
+
+  return formatBalancedTwoLines(lines[0], maxCpl);
+}
+
 // Entry-level cache for translated subtitle entries
 const entryCache = new Map();
 const MAX_ENTRY_CACHE_SIZE = parseInt(process.env.ENTRY_CACHE_SIZE) || 100000;
