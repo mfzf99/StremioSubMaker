@@ -2075,7 +2075,7 @@ class TranslationEngine {
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
-    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance[cite: 2]
+    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance
 
     let startId = 'START';
     let endId = 'END';
@@ -2102,9 +2102,11 @@ class TranslationEngine {
     }
 
     // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel); //[cite: 2]
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
 
-    const userPrompt = `<constraints>
+    const promptBody = `${introInstruction}
+
+<constraints>
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
    in an adjacent ID.
@@ -2128,8 +2130,8 @@ class TranslationEngine {
    remaining entry.
 
 3. ID INTEGRITY & EXACT COUNT: Output exactly ${expectedCount} entries 
-   total, matching input IDs strictly in order from ID_${startId} to 
-   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
+   total, matching input IDs strictly in order from id="${startId}" to 
+   id="${endId}". Format: <s id="N">translated text</s>. Never skip, 
    reorder, or invent IDs. Use Rule 2 for content you cannot translate.
 
 4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
@@ -2150,8 +2152,8 @@ Respond with exactly ${expectedCount} XML-tagged entries.
 </task>
 <s id="`;
 
-    return this.addBatchHeader({ systemInstruction, userPrompt }, batchIndex, totalBatches);
-}
+    return this.addBatchHeader(promptBody, batchIndex, totalBatches);
+  }
   
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
