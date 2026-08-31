@@ -92,7 +92,7 @@ function wrapRtlText(text) {
 }
 
 // ============================================================================
-// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + MULTI-PENUTUR + LIRIK + ZERO-SPACE)
+// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + DUAL-SPEAKER 2-LINE LOCK + LIRIK)
 // ============================================================================
 
 /**
@@ -188,17 +188,11 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
 }
 
 /**
- * Smart Subtitle Line Wrapper V4 (Production Ready)
- * 
- * Ciri-ciri Utama:
- * 1. Kebal sengkang penutur rapat tanpa ruang (contoh: "-Kejap, ... -Cepat").
- * 2. Mengasingkan 2, 3 atau lebih penutur serentak ke baris masing-masing tanpa kehilangan data.
- * 3. Melindungi baris lirik lagu / BGM (♪ / ♫) daripada dicantumkan dengan dialog biasa.
- * 4. Meruntuhkan (flatten) dialog 1 penutur yang herot/terlebih potong dan menyusunnya semula ke format 2 baris optimum.
+ * Smart Subtitle Line Wrapper V5 (Dual-Speaker 2-Line Enforcer & Syntax-Aware)
  * 
  * @param {string} text - Teks sari kata yang telah melalui sanitasi awal
- * @param {number} maxCpl - Had maksimum aksara sebaris (Lalai: 42)
- * @returns {string} - Teks sari kata akhir yang mematuhi piawaian Netflix
+ * @param {number} maxCpl - Had maksimum aksara sebaris untuk dialog 1 penutur (Lalai: 42)
+ * @returns {string} - Teks sari kata akhir
  */
 function smartWrapSubtitle(text, maxCpl = 42) {
   if (!text) return '';
@@ -206,47 +200,65 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   let processed = String(text).trim();
 
   // ============================================================================
-  // FASA 1: NORMALISASI & PENGASINGAN MULTI-PENUTUR (MULTI-SPEAKER SPLITTER)
+  // FASA 1: NORMALISASI & PENGASINGAN MULTI-PENUTUR
   // ============================================================================
   
   // 1.1 Seragamkan sengkang di awal baris supaya sentiasa ada jarak ("-Kejap" -> "- Kejap")
   processed = processed.replace(/^-(?=[^\s-])/gm, '- ');
 
-  // 1.2 Pisahkan penutur kedua/ketiga yang berada dalam baris yang sama.
-  // Kebal terhadap pelbagai corak: " -Cepat", " - Cepat", "... -Cepat", "...-Cepat", "? -Cepat"
+  // 1.2 Pisahkan penutur kedua/ketiga yang berada dalam baris yang sama
   processed = processed.replace(/(?<=[^\n])(?:\s+-\s*|(?<=[?.!,…])\s*-\s*)(?=[a-zA-Z0-9<♫♪"'])/g, '\n- ');
 
-  // Pecahkan teks kepada baris-baris berasingan dan buang baris kosong
   let lines = processed
     .split('\n')
     .map(l => l.trim())
-    .map(l => l.replace(/^-(?=[^\s-])/, '- ')) // Pastikan sengkang setiap baris ada jarak
+    .map(l => l.replace(/^-(?=[^\s-])/, '- '))
     .filter(Boolean);
 
   if (lines.length === 0) return '';
 
   // ============================================================================
-  // FASA 2: PENGESANAN KATEGORI KANDUNGAN (MULTI-SPEAKER VS LIRIK VS SINGLE)
+  // FASA 2: PENGESANAN KATEGORI KANDUNGAN
   // ============================================================================
   const speakerDashesCount = lines.filter(l => l.startsWith('-')).length;
-  const isMultiSpeaker = speakerDashesCount >= 2;
+  const isDualSpeaker = speakerDashesCount === 2 && lines.length === 2;
+  const isMultiSpeaker3Plus = speakerDashesCount >= 3;
   const hasMusic = /[♫♪♬♩🎵🎶]/.test(processed);
 
   // ============================================================================
-  // FASA 3: PENGENDALIAN MULTI-SPEAKER (2+ PENUTUR) & LIRIK MUZIK
-  // Setiap baris penutur/lirik diproses SECARA BERASINGAN (Dilarang campur teks!)
+  // FASA 3: SENARIO DUA PENUTUR (DUAL SPEAKER - TEPAT 2 PENUTUR)
+  // Standard Audiovisual: KEKALKAN 1 PENUTUR = 1 BARIS (Maksimum 2 baris skrin).
+  // Jangan pecahkan mana-mana penutur jika panjang masih dalam toleransi paparan (<= 52 CPL)
   // ============================================================================
-  if (isMultiSpeaker || hasMusic) {
+  if (isDualSpeaker) {
+    // 52 CPL adalah had toleransi selamat skrin sebelum teks terpotong
+    const DUAL_SPEAKER_TOLERANCE_CPL = 52;
+
+    const outputLines = lines.map(line => {
+      const lineLen = getVisibleLength(line);
+      // Jika <= 52 CPL, kekalkan 1 baris per penutur
+      if (lineLen <= DUAL_SPEAKER_TOLERANCE_CPL) {
+        return line;
+      }
+      // Hanya jika ekstrem (> 52 CPL) barulah dipecahkan
+      return formatBalancedTwoLines(line, maxCpl);
+    });
+
+    return outputLines.join('\n');
+  }
+
+  // ============================================================================
+  // FASA 4: SENARIO 3+ PENUTUR ATAU LIRIK MUZIK
+  // ============================================================================
+  if (isMultiSpeaker3Plus || hasMusic) {
     const outputLines = [];
 
     for (const line of lines) {
       const lineLen = getVisibleLength(line);
 
-      // Jika baris penutur/lirik ini sudah mematuhi had <= 42 CPL, kekalkan
       if (lineLen <= maxCpl) {
         outputLines.push(line);
       } else {
-        // Jika baris penutur ini terlalu panjang (> 42 CPL), pecahkan baris tersebut sahaja
         const wrappedSubLines = formatBalancedTwoLines(line, maxCpl);
         outputLines.push(...wrappedSubLines.split('\n'));
       }
@@ -254,6 +266,19 @@ function smartWrapSubtitle(text, maxCpl = 42) {
 
     return outputLines.join('\n');
   }
+
+  // ============================================================================
+  // FASA 5: DIALOG BIASA SEORANG PENUTUR (SINGLE SPEAKER)
+  // ============================================================================
+  const fullText = lines.join(' ');
+  const totalLength = getVisibleLength(fullText);
+
+  if (totalLength <= maxCpl) {
+    return fullText;
+  }
+
+  return formatBalancedTwoLines(fullText, maxCpl);
+}
 
   // ============================================================================
   // FASA 4: PENGENDALIAN DIALOG BIASA SEORANG PENUTUR (SINGLE SPEAKER)
