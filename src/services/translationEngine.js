@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
+    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
+    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability (200)
   if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 100;
+    return 200;
   }
 
   // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
