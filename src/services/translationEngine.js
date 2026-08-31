@@ -280,22 +280,6 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   return formatBalancedTwoLines(fullText, maxCpl);
 }
 
-  // ============================================================================
-  // FASA 4: PENGENDALIAN DIALOG BIASA SEORANG PENUTUR (SINGLE SPEAKER)
-  // Runtuhkan serpihan baris yang terputus dari teks asal dan kira semula secara optimum
-  // ============================================================================
-  const fullText = lines.join(' ');
-  const totalLength = getVisibleLength(fullText);
-
-  // Jika keseluruhan ayat muat dalam 1 baris (<= 42 CPL), kekalkan sebaris
-  if (totalLength <= maxCpl) {
-    return fullText;
-  }
-
-  // Jika melebihi 42 CPL, susun kepada 2 baris seimbang berasaskan sintaksis
-  return formatBalancedTwoLines(fullText, maxCpl);
-}
-
 // Entry-level cache for translated subtitle entries
 const entryCache = new Map();
 const MAX_ENTRY_CACHE_SIZE = parseInt(process.env.ENTRY_CACHE_SIZE) || 100000;
