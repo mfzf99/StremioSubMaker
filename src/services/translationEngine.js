@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel} using appropriate colloquialisms. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
+    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel} using appropriate colloquialisms. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
+    `You are an expert audiovisual translator and subtitle localization specialist. Translate the following subtitle content from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2297,7 +2297,7 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES:
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
