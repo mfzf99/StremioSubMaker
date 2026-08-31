@@ -115,9 +115,6 @@ function getVisibleLength(str) {
  * @returns {string} - Teks yang telah dibungkus kepada 2 baris seimbang
  */
 function formatBalancedTwoLines(text, maxCpl = 42) {
-  // 🔴 POTONG SEMENTARA (BYPASS A/B TESTING):
-  return text;
-
   const words = text.split(/\s+/);
   if (words.length <= 1) return text;
 
