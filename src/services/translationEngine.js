@@ -128,10 +128,12 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
     const len1 = getVisibleLength(line1);
     const len2 = getVisibleLength(line2);
 
+    // Had Keras: Penalti tinggi jika melebihi 42 CPL
     let penalty = 0;
     if (len1 > maxCpl) penalty += (len1 - maxCpl) * 150;
     if (len2 > maxCpl) penalty += (len2 - maxCpl) * 150;
 
+    // Keseimbangan Visual (Bottom-heavy / Simetri)
     const balanceDiff = Math.abs(len1 - len2);
     let score = 100 - balanceDiff * 2 - penalty;
 
@@ -172,7 +174,7 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
 }
 
 /**
- * Smart Subtitle Line Wrapper V2 (Multi-Speaker, Syntax-Aware, Music-Safe)
+ * Smart Subtitle Line Wrapper V3 (Multi-Speaker, Music-Safe & Single-Speaker Auto-Balance)
  */
 function smartWrapSubtitle(text, maxCpl = 42) {
   if (!text) return '';
@@ -185,12 +187,13 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   let lines = processed.split('\n').map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) return '';
 
-  // 2. Jika ada berbilang baris / penutur / lirik muzik, proses setiap baris secara individu
-  const hasMultipleLines = lines.length > 1;
-  const hasSpeakerDashes = lines.some(l => l.startsWith('-'));
+  // 2. Semak jika SAH Multi-Speaker (sekurang-kurangnya 2 baris ada '-') atau lirik muzik
+  const speakerCount = lines.filter(l => l.startsWith('-')).length;
+  const isMultiSpeaker = speakerCount >= 2;
   const hasMusic = /[♫♪♬♩🎵🎶]/.test(processed);
 
-  if (hasMultipleLines || hasSpeakerDashes || hasMusic) {
+  // Jika Multi-Speaker atau Muzik, barulah kekalkan pemisahan baris individu
+  if (isMultiSpeaker || hasMusic) {
     const outputLines = [];
 
     for (const line of lines) {
@@ -207,13 +210,14 @@ function smartWrapSubtitle(text, maxCpl = 42) {
     return outputLines.join('\n');
   }
 
-  // 3. Ayat tunggal biasa yang melebihi had 42 CPL
-  const singleLineLen = getVisibleLength(lines[0]);
-  if (singleLineLen <= maxCpl) {
-    return lines[0];
+  // 3. Jika dialog biasa seorang penutur (walaupun asal ada 2 baris):
+  // Satukan semula teks dan biar algoritma imbangkan kepada maksimum 2 baris
+  const fullText = lines.join(' ');
+  if (getVisibleLength(fullText) <= maxCpl) {
+    return fullText;
   }
 
-  return formatBalancedTwoLines(lines[0], maxCpl);
+  return formatBalancedTwoLines(fullText, maxCpl);
 }
 
 // Entry-level cache for translated subtitle entries
