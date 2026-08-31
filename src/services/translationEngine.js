@@ -2115,8 +2115,8 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
 2. ESCAPE HATCH, PROPER NOUNS & MUSIC: ALL song lyrics in music notes (♫ / ♪) — 
    including background music (BGM) playing during scenes — MUST be fully translated. 
-   NEVER translate character names, brand names, company/organization titles, 
-   or entity suffixes (e.g., keep "Taeja Group", NEVER translate to "Kumpulan Taeja"). 
+   NEVER translate brand names, company/organization titles, or entity suffixes 
+   (e.g., keep "Taeja Group", NEVER translate to "Kumpulan Taeja"). 
    Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
    (corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) 
    and numbers. NEVER shift any remaining entry.
