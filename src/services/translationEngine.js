@@ -124,7 +124,7 @@ function getBatchSizeForModel(model) {
 
   // 2. Lightweight & edge tier: Conservative batch sizing to preserve strict formatting and context stability (200)
   if (modelStr.includes('gemma') || modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 200;
+    return 100;
   }
 
   // 3. Extract semantic version (handles 'gemini-3.5-flash', 'gemini-4-flash', '3-flash', etc.)
