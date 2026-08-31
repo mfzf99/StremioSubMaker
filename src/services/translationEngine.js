@@ -92,7 +92,7 @@ function wrapRtlText(text) {
 }
 
 // ============================================================================
-// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + DUAL-SPEAKER 2-LINE LOCK + LIRIK AUTO-BALANCE)
+// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (TAG-SAFE + DUAL-SPEAKER 2-LINE LOCK + LIRIK)
 // ============================================================================
 
 /**
@@ -188,7 +188,7 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
 }
 
 /**
- * Smart Subtitle Line Wrapper V6 (Production-Grade Multi-Speaker, Music-Safe & Strict 2-Line Enforcer)
+ * Smart Subtitle Line Wrapper V7 (Tag-Safe Multi-Speaker & Production-Ready Netflix Standard)
  * 
  * @param {string} text - Teks sari kata yang telah melalui sanitasi awal
  * @param {number} maxCpl - Had maksimum aksara sebaris untuk dialog 1 penutur / lirik (Lalai: 42)
@@ -200,27 +200,33 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   let processed = String(text).trim();
 
   // ============================================================================
-  // FASA 1: NORMALISASI & PENGASINGAN MULTI-PENUTUR
+  // FASA 1: NORMALISASI & PENGASINGAN MULTI-PENUTUR (TAG-AWARE)
   // ============================================================================
   
-  // 1.1 Seragamkan sengkang di awal baris supaya sentiasa ada jarak ("-Kejap" -> "- Kejap")
-  processed = processed.replace(/^-(?=[^\s-])/gm, '- ');
+  // 1.1 Seragamkan sengkang di awal teks/baris walaupun ada tag HTML di depannya (cth: "<i>-Pintu" -> "<i>- Pintu")
+  processed = processed.replace(/(^|[\n>])\s*-(?=[^\s-])/g, '$1- ');
 
-  // 1.2 Pisahkan penutur kedua/ketiga yang berada dalam baris yang sama
-  processed = processed.replace(/(?<=[^\n])(?:\s+-\s*|(?<=[?.!,…])\s*-\s*)(?=[a-zA-Z0-9<♫♪"'])/g, '\n- ');
+  // 1.2 Pisahkan penutur kedua/ketiga yang berada dalam baris yang sama (kebal tag penutup cth: "</i> -Terima")
+  processed = processed.replace(/(?<=[^\n])(?:\s+-\s*|(?<=[?.!,…>])\s*-\s*)(?=[a-zA-Z0-9<♫♪"'])/g, '\n- ');
 
   let lines = processed
     .split('\n')
     .map(l => l.trim())
-    .map(l => l.replace(/^-(?=[^\s-])/, '- '))
+    .map(l => l.replace(/(^|[\n>])\s*-(?=[^\s-])/g, '$1- '))
     .filter(Boolean);
 
   if (lines.length === 0) return '';
 
   // ============================================================================
-  // FASA 2: PENGESANAN KATEGORI KANDUNGAN
+  // FASA 2: PENGESANAN KATEGORI KANDUNGAN (TAG-STRIPPED CHECK)
+  // Buang tag formatting sementara untuk mengesan tanda sengkang '-' yang sebenar
   // ============================================================================
-  const speakerDashesCount = lines.filter(l => l.startsWith('-')).length;
+  const isSpeakerLine = (line) => {
+    const rawContent = line.replace(/<[^>]+>/g, '').trim();
+    return rawContent.startsWith('-');
+  };
+
+  const speakerDashesCount = lines.filter(isSpeakerLine).length;
   const isDualSpeaker = speakerDashesCount === 2 && lines.length === 2;
   const isMultiSpeaker3Plus = speakerDashesCount >= 3;
 
@@ -244,7 +250,6 @@ function smartWrapSubtitle(text, maxCpl = 42) {
 
   // ============================================================================
   // FASA 4: SENARIO 3+ PENUTUR (3 ATAU LEBIH PENUTUR SERENTAK)
-  // Hanya kekalkan pemisahan baris jika BENAR-BENAR ada 3 sengkang penutur berasingan
   // ============================================================================
   if (isMultiSpeaker3Plus) {
     const outputLines = [];
@@ -265,17 +270,15 @@ function smartWrapSubtitle(text, maxCpl = 42) {
 
   // ============================================================================
   // FASA 5: DIALOG TUNGGAL & LIRIK MUZIK (SINGLE SPEAKER / MUSIC LYRICS)
-  // Satukan semua serpihan baris menjadi satu teks penuh dan kira semula kepada 2 baris seimbang
+  // Satukan semula baris dan susun kepada 2 baris seimbang jika melebihi 42 CPL
   // ============================================================================
   const fullText = lines.join(' ');
   const totalLength = getVisibleLength(fullText);
 
-  // Jika keseluruhan lirik/dialog muat dalam 1 baris (<= 42 CPL), kekalkan sebaris
   if (totalLength <= maxCpl) {
     return fullText;
   }
 
-  // Jika panjang, bahagikan kepada 2 baris seimbang secara sintaksis
   return formatBalancedTwoLines(fullText, maxCpl);
 }
 
