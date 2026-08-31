@@ -92,7 +92,7 @@ function wrapRtlText(text) {
 }
 
 // ============================================================================
-// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + DUAL-SPEAKER 2-LINE LOCK + LIRIK)
+// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + DUAL-SPEAKER 2-LINE LOCK + LIRIK AUTO-BALANCE)
 // ============================================================================
 
 /**
@@ -165,7 +165,7 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
     }
 
     // Penalti: Elakkan memotong selepas kata ganti nama tergantung (-20)
-    if (['saya', 'awak', 'dia', 'kita', 'kami', 'mereka', 'ini', 'itu'].includes(lastWord.toLowerCase())) {
+    if (['saya', 'awak', 'dia', 'kita', 'kami', 'mereka', 'ini', 'itu', 'aku', 'kau'].includes(lastWord.toLowerCase())) {
       score -= 20;
     }
 
@@ -188,10 +188,10 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
 }
 
 /**
- * Smart Subtitle Line Wrapper V5 (Dual-Speaker 2-Line Enforcer & Syntax-Aware)
+ * Smart Subtitle Line Wrapper V6 (Production-Grade Multi-Speaker, Music-Safe & Strict 2-Line Enforcer)
  * 
  * @param {string} text - Teks sari kata yang telah melalui sanitasi awal
- * @param {number} maxCpl - Had maksimum aksara sebaris untuk dialog 1 penutur (Lalai: 42)
+ * @param {number} maxCpl - Had maksimum aksara sebaris untuk dialog 1 penutur / lirik (Lalai: 42)
  * @returns {string} - Teks sari kata akhir
  */
 function smartWrapSubtitle(text, maxCpl = 42) {
@@ -223,24 +223,19 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   const speakerDashesCount = lines.filter(l => l.startsWith('-')).length;
   const isDualSpeaker = speakerDashesCount === 2 && lines.length === 2;
   const isMultiSpeaker3Plus = speakerDashesCount >= 3;
-  const hasMusic = /[♫♪♬♩🎵🎶]/.test(processed);
 
   // ============================================================================
   // FASA 3: SENARIO DUA PENUTUR (DUAL SPEAKER - TEPAT 2 PENUTUR)
   // Standard Audiovisual: KEKALKAN 1 PENUTUR = 1 BARIS (Maksimum 2 baris skrin).
-  // Jangan pecahkan mana-mana penutur jika panjang masih dalam toleransi paparan (<= 52 CPL)
   // ============================================================================
   if (isDualSpeaker) {
-    // 52 CPL adalah had toleransi selamat skrin sebelum teks terpotong
     const DUAL_SPEAKER_TOLERANCE_CPL = 52;
 
     const outputLines = lines.map(line => {
       const lineLen = getVisibleLength(line);
-      // Jika <= 52 CPL, kekalkan 1 baris per penutur
       if (lineLen <= DUAL_SPEAKER_TOLERANCE_CPL) {
         return line;
       }
-      // Hanya jika ekstrem (> 52 CPL) barulah dipecahkan
       return formatBalancedTwoLines(line, maxCpl);
     });
 
@@ -248,9 +243,10 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   }
 
   // ============================================================================
-  // FASA 4: SENARIO 3+ PENUTUR ATAU LIRIK MUZIK
+  // FASA 4: SENARIO 3+ PENUTUR (3 ATAU LEBIH PENUTUR SERENTAK)
+  // Hanya kekalkan pemisahan baris jika BENAR-BENAR ada 3 sengkang penutur berasingan
   // ============================================================================
-  if (isMultiSpeaker3Plus || hasMusic) {
+  if (isMultiSpeaker3Plus) {
     const outputLines = [];
 
     for (const line of lines) {
@@ -268,15 +264,18 @@ function smartWrapSubtitle(text, maxCpl = 42) {
   }
 
   // ============================================================================
-  // FASA 5: DIALOG BIASA SEORANG PENUTUR (SINGLE SPEAKER)
+  // FASA 5: DIALOG TUNGGAL & LIRIK MUZIK (SINGLE SPEAKER / MUSIC LYRICS)
+  // Satukan semua serpihan baris menjadi satu teks penuh dan kira semula kepada 2 baris seimbang
   // ============================================================================
   const fullText = lines.join(' ');
   const totalLength = getVisibleLength(fullText);
 
+  // Jika keseluruhan lirik/dialog muat dalam 1 baris (<= 42 CPL), kekalkan sebaris
   if (totalLength <= maxCpl) {
     return fullText;
   }
 
+  // Jika panjang, bahagikan kepada 2 baris seimbang secara sintaksis
   return formatBalancedTwoLines(fullText, maxCpl);
 }
 
