@@ -92,23 +92,33 @@ function wrapRtlText(text) {
 }
 
 // ============================================================================
-// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + MULTI-PENUTUR + LIRIK)
+// 📏 ENJIN PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + MULTI-PENUTUR + LIRIK + ZERO-SPACE)
 // ============================================================================
 
 /**
- * Mengira panjang fizikal teks tanpa mengira tag formatting (<i>, <b>, <u>, dll.)
+ * Mengira panjang fizikal teks tanpa mengira tag formatting (<i>, <b>, <u>, <font>, dll.)
+ * Memastikan pengiraan aksara adalah 100% tepat mengikut paparan visual skrin.
+ * 
+ * @param {string} str - Teks dialog input
+ * @returns {number} - Jumlah aksara yang kelihatan pada skrin
  */
 function getVisibleLength(str) {
   return String(str || '').replace(/<[^>]+>/g, '').length;
 }
 
 /**
- * Membahagikan satu ayat panjang kepada 2 baris seimbang secara sintaksis (Netflix Standard)
+ * Membahagikan satu ayat panjang kepada 2 baris seimbang secara sintaksis mengikut Standard Netflix.
+ * Menggunakan sistem pemarkahan berhierarki berasaskan tanda henti, kata hubung, dan imbangan visual.
+ * 
+ * @param {string} text - Satu baris ayat penuh yang melebihi had CPL
+ * @param {number} maxCpl - Had maksimum aksara sebaris (Lalai: 42)
+ * @returns {string} - Teks yang telah dibungkus kepada 2 baris seimbang
  */
 function formatBalancedTwoLines(text, maxCpl = 42) {
   const words = text.split(/\s+/);
   if (words.length <= 1) return text;
 
+  // Senarai kata hubung & kata sendi Bahasa Melayu untuk titik pemotongan semulajadi
   const conjunctions = new Set([
     'dan', 'atau', 'serta', 'tetapi', 'namun', 'kerana', 'sebab', 'supaya', 
     'untuk', 'bahawa', 'yang', 'pada', 'dengan', 'dalam', 'tentang', 'oleh',
@@ -128,31 +138,33 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
     const len1 = getVisibleLength(line1);
     const len2 = getVisibleLength(line2);
 
-    // Had Keras: Penalti tinggi jika melebihi 42 CPL
+    // Had Keras: Penalti tinggi jika mana-mana baris melebihi had maxCpl (42)
     let penalty = 0;
     if (len1 > maxCpl) penalty += (len1 - maxCpl) * 150;
     if (len2 > maxCpl) penalty += (len2 - maxCpl) * 150;
 
-    // Keseimbangan Visual (Bottom-heavy / Simetri)
+    // Keseimbangan Visual: Menghukum jurang perbezaan panjang antara baris atas dan bawah
     const balanceDiff = Math.abs(len1 - len2);
     let score = 100 - balanceDiff * 2 - penalty;
 
     const lastWord = words[i];
     const nextWord = words[i + 1].toLowerCase();
 
-    // Keutamaan Tanda Baca
+    // Keutamaan 1: Tanda baca penamat (?, !, .) - Mendapat keutamaan tertinggi (+80)
     if (/[?!.]$/.test(lastWord)) {
       score += 80;
-    } else if (/[,;—]$|\.\.\.$/.test(lastWord)) {
+    } 
+    // Keutamaan 2: Tanda jeda/klausa (,, ;, —, ...) - Pilihan kedua terbaik (+60)
+    else if (/[,;—]$|\.\.\.$/.test(lastWord)) {
       score += 60;
     }
 
-    // Keutamaan Kata Hubung / Sendi
+    // Keutamaan 3: Kata Hubung / Kata Sendi - Potong sebelum kata penerang (+40)
     if (conjunctions.has(nextWord)) {
       score += 40;
     }
 
-    // Elak memotong kata ganti nama tergantung
+    // Penalti: Elakkan memotong selepas kata ganti nama tergantung (-20)
     if (['saya', 'awak', 'dia', 'kita', 'kami', 'mereka', 'ini', 'itu'].includes(lastWord.toLowerCase())) {
       score -= 20;
     }
@@ -163,45 +175,78 @@ function formatBalancedTwoLines(text, maxCpl = 42) {
     }
   }
 
+  // Jika titik potong terbaik ditemui, pulangkan 2 baris seimbang
   if (bestSplitIndex !== -1) {
     const finalLine1 = words.slice(0, bestSplitIndex + 1).join(' ');
     const finalLine2 = words.slice(bestSplitIndex + 1).join(' ');
     return `${finalLine1}\n${finalLine2}`;
   }
 
+  // Fallback sekiranya pemisah sintaksis tidak ditemui (Potong tepat pada titik tengah perkataan)
   const mid = Math.ceil(words.length / 2);
   return words.slice(0, mid).join(' ') + '\n' + words.slice(mid).join(' ');
 }
 
 /**
- * Smart Subtitle Line Wrapper V3 (Multi-Speaker, Music-Safe & Single-Speaker Auto-Balance)
+ * Smart Subtitle Line Wrapper V4 (Production Ready)
+ * 
+ * Ciri-ciri Utama:
+ * 1. Kebal sengkang penutur rapat tanpa ruang (contoh: "-Kejap, ... -Cepat").
+ * 2. Mengasingkan 2, 3 atau lebih penutur serentak ke baris masing-masing tanpa kehilangan data.
+ * 3. Melindungi baris lirik lagu / BGM (♪ / ♫) daripada dicantumkan dengan dialog biasa.
+ * 4. Meruntuhkan (flatten) dialog 1 penutur yang herot/terlebih potong dan menyusunnya semula ke format 2 baris optimum.
+ * 
+ * @param {string} text - Teks sari kata yang telah melalui sanitasi awal
+ * @param {number} maxCpl - Had maksimum aksara sebaris (Lalai: 42)
+ * @returns {string} - Teks sari kata akhir yang mematuhi piawaian Netflix
  */
 function smartWrapSubtitle(text, maxCpl = 42) {
   if (!text) return '';
 
   let processed = String(text).trim();
 
-  // 1. Pengasingan Multi-Penutur sebaris ("- Ayat 1 - Ayat 2" -> 2 baris)
-  processed = processed.replace(/(?<=[^\n])\s+-\s+/g, '\n- ');
+  // ============================================================================
+  // FASA 1: NORMALISASI & PENGASINGAN MULTI-PENUTUR (MULTI-SPEAKER SPLITTER)
+  // ============================================================================
+  
+  // 1.1 Seragamkan sengkang di awal baris supaya sentiasa ada jarak ("-Kejap" -> "- Kejap")
+  processed = processed.replace(/^-(?=[^\s-])/gm, '- ');
 
-  let lines = processed.split('\n').map(l => l.trim()).filter(Boolean);
+  // 1.2 Pisahkan penutur kedua/ketiga yang berada dalam baris yang sama.
+  // Kebal terhadap pelbagai corak: " -Cepat", " - Cepat", "... -Cepat", "...-Cepat", "? -Cepat"
+  processed = processed.replace(/(?<=[^\n])(?:\s+-\s*|(?<=[?.!,…])\s*-\s*)(?=[a-zA-Z0-9<♫♪"'])/g, '\n- ');
+
+  // Pecahkan teks kepada baris-baris berasingan dan buang baris kosong
+  let lines = processed
+    .split('\n')
+    .map(l => l.trim())
+    .map(l => l.replace(/^-(?=[^\s-])/, '- ')) // Pastikan sengkang setiap baris ada jarak
+    .filter(Boolean);
+
   if (lines.length === 0) return '';
 
-  // 2. Semak jika SAH Multi-Speaker (sekurang-kurangnya 2 baris ada '-') atau lirik muzik
-  const speakerCount = lines.filter(l => l.startsWith('-')).length;
-  const isMultiSpeaker = speakerCount >= 2;
+  // ============================================================================
+  // FASA 2: PENGESANAN KATEGORI KANDUNGAN (MULTI-SPEAKER VS LIRIK VS SINGLE)
+  // ============================================================================
+  const speakerDashesCount = lines.filter(l => l.startsWith('-')).length;
+  const isMultiSpeaker = speakerDashesCount >= 2;
   const hasMusic = /[♫♪♬♩🎵🎶]/.test(processed);
 
-  // Jika Multi-Speaker atau Muzik, barulah kekalkan pemisahan baris individu
+  // ============================================================================
+  // FASA 3: PENGENDALIAN MULTI-SPEAKER (2+ PENUTUR) & LIRIK MUZIK
+  // Setiap baris penutur/lirik diproses SECARA BERASINGAN (Dilarang campur teks!)
+  // ============================================================================
   if (isMultiSpeaker || hasMusic) {
     const outputLines = [];
 
     for (const line of lines) {
       const lineLen = getVisibleLength(line);
 
+      // Jika baris penutur/lirik ini sudah mematuhi had <= 42 CPL, kekalkan
       if (lineLen <= maxCpl) {
         outputLines.push(line);
       } else {
+        // Jika baris penutur ini terlalu panjang (> 42 CPL), pecahkan baris tersebut sahaja
         const wrappedSubLines = formatBalancedTwoLines(line, maxCpl);
         outputLines.push(...wrappedSubLines.split('\n'));
       }
@@ -210,13 +255,19 @@ function smartWrapSubtitle(text, maxCpl = 42) {
     return outputLines.join('\n');
   }
 
-  // 3. Jika dialog biasa seorang penutur (walaupun asal ada 2 baris):
-  // Satukan semula teks dan biar algoritma imbangkan kepada maksimum 2 baris
+  // ============================================================================
+  // FASA 4: PENGENDALIAN DIALOG BIASA SEORANG PENUTUR (SINGLE SPEAKER)
+  // Runtuhkan serpihan baris yang terputus dari teks asal dan kira semula secara optimum
+  // ============================================================================
   const fullText = lines.join(' ');
-  if (getVisibleLength(fullText) <= maxCpl) {
+  const totalLength = getVisibleLength(fullText);
+
+  // Jika keseluruhan ayat muat dalam 1 baris (<= 42 CPL), kekalkan sebaris
+  if (totalLength <= maxCpl) {
     return fullText;
   }
 
+  // Jika melebihi 42 CPL, susun kepada 2 baris seimbang berasaskan sintaksis
   return formatBalancedTwoLines(fullText, maxCpl);
 }
 
