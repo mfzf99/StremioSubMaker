@@ -2106,9 +2106,9 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES:
+CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
 
-1. SLOT LOCK: Each <s id="N"> is a separate output slot. 
+1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
    in an adjacent ID. Dividing the natural thought across matching 
    fragments is MANDATORY — merging them DESTROYS subtitle sync permanently.
