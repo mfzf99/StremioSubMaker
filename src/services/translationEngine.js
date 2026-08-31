@@ -3222,11 +3222,6 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
       .filter(Boolean) // Buang sebarang baris kosong di dalam atau di tepi
       .join('\n');
 
-    // ============================================================================
-    // 📏 8.1 PEMBUNGKUS PINTAR 42 CPL (SINTAKSIS + MULTI-PENUTUR + LIRIK + BALANCED)
-    // ============================================================================
-    cleaned = smartWrapSubtitle(cleaned, 42);
-
     // 9. Format RTL (Jika Bahasa Sasaran Kanan-ke-Kiri)
     if (this.isRtlTarget) {
       cleaned = wrapRtlText(cleaned);
