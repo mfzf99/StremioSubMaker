@@ -2297,22 +2297,12 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES:
 
 1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
    Never steal, merge, or complete a sentence using words that belong 
-   in an adjacent ID.
-
-   Example (X and Y are placeholder IDs, not real ones from the input):
-   IN:  <s id="X">If you really think</s>
-        <s id="Y">that I would betray you...</s>
-   Correct: <s id="X">Kalau awak betul-betul rasa</s>
-            <s id="Y">saya sanggup khianati awak...</s>
-   Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
-            <s id="Y">.</s>
-
-   Dividing the natural thought across matching fragments is MANDATORY. 
-   Merging them DESTROYS subtitle sync permanently.
+   in an adjacent ID. Dividing the natural thought across matching 
+   fragments is MANDATORY — merging them DESTROYS subtitle sync permanently.
 
 2. ESCAPE HATCH, PROPER NOUNS & MUSIC: ALL song lyrics in music notes (♫ / ♪) — 
    including background music (BGM) playing during scenes — MUST be fully translated. 
@@ -2321,10 +2311,6 @@ CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
    Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
    (corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) 
    and numbers. NEVER shift any remaining entry.
-
-   Example: <s id="X">♪ La la la ♪</s> → copy as-is (no lyrics). 
-            <s id="Y">♪ I will follow you to the end of the world ♪</s> → translate 
-            (real lyric content).
 
 3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
    total, matching input IDs strictly in order from ID_${startId} to 
