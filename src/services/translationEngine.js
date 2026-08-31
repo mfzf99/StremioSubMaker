@@ -2129,8 +2129,8 @@ CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
 
 5. PURE XML OUTPUT:
    - Output ONLY raw <s id="N">...</s> tags.
-   - ZERO commentary, ZERO markdown code fences (no ```), and ZERO notes in parentheses.
-
+   - ZERO commentary, ZERO markdown code blocks, and ZERO notes in parentheses.
+   
 <input>
 ${batchText}
 </input>
