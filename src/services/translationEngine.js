@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel}. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
+    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel}. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
+    `You are an expert audiovisual translator and subtitle localization specialist. Your task is to translate the following subtitle content from ${sourceLabel} to ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into appropriate ${targetLabel} equivalents. Match the original speaker's tone (e.g., casual, conversational, formal, or cinematic), emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
