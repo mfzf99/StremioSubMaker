@@ -2106,35 +2106,30 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
 
-1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
-   Never steal, merge, or complete a sentence using words that belong 
-   in an adjacent ID. Dividing the natural thought across matching 
-   fragments is MANDATORY — merging them DESTROYS subtitle sync permanently.
+1. STRICT SLOT LOCK (1:1 MAPPING):
+   - Each <s id="N"> is an isolated output slot.
+   - NEVER steal, merge, or complete a sentence using words from adjacent IDs.
+   - Translating incomplete sentence fragments as fragments is MANDATORY. Merging breaks sync permanently.
 
-2. ESCAPE HATCH, PROPER NOUNS & MUSIC: ALL song lyrics in music notes (♫ / ♪) — 
-   including background music (BGM) playing during scenes — MUST be fully translated. 
-   NEVER translate brand names, company/organization titles, or entity suffixes 
-   (e.g., keep "Taeja Group", NEVER translate to "Kumpulan Taeja"). 
-   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
-   (corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) 
-   and numbers. NEVER shift any remaining entry.
+2. MUSIC, PROPER NOUNS & ESCAPE HATCH:
+   - FULLY translate all song lyrics inside music notes (♫ / ♪), including background music (BGM).
+   - NEVER translate brand names, company/organization titles, or entity suffixes (e.g., keep "Taeja Group").
+   - Copy EXACT source text ONLY if text is corrupted or contains ONLY standalone symbols/notes (♪, ♫) and numbers.
+   - NEVER shift or re-align any subsequent slot.
 
-3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   total, matching input IDs strictly in order from ID_${startId} to 
-   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
-   reorder, or invent IDs. NEVER fabricate content to hit the count — 
-   use Rule 2 instead.
+3. ID INTEGRITY & EXACT COUNT:
+   - Output EXACTLY ${expectedCount} XML entries matching input IDs in strict order from ID_${startId} to ID_${endId}.
+   - Format: <s id="N">translated text</s>.
+   - NEVER skip, omit, reorder, or fabricate IDs.
 
-4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
-   dash (-) MUST be preserved in the exact same structure and position 
-   as in the source.
+4. PRESERVE ALL INLINE MARKUP:
+   - Preserve every [br] tag, <i> tag, and speaker dash (-) in the exact same position as in the source.
 
-5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
-   Zero commentary, zero markdown code blocks, and NO explanatory 
-   notes in parentheses. Every translated word MUST be enclosed 
-   inside its corresponding tag.
+5. PURE XML OUTPUT:
+   - Output ONLY raw <s id="N">...</s> tags.
+   - ZERO commentary, ZERO markdown code fences (no ```), and ZERO notes in parentheses.
 
 <input>
 ${batchText}
@@ -2143,7 +2138,7 @@ ${batchText}
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
-
+  
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
   
