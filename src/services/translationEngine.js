@@ -2110,66 +2110,66 @@ CRITICAL RULES — FOLLOW STRICTLY:
 
 1. STRICT SLOT LOCK (1:1 MAPPING) — HIGHEST PRIORITY:
 
-   * Each <s id="N"> is an independent output slot.
-   * Translate only the text belonging to that exact <s id="N"> entry.
-   * NEVER merge, split, borrow, steal, infer, or complete text across adjacent <s> IDs.
-   * An incomplete sentence or phrase MUST remain incomplete within its original slot.
-   * NEVER move words, punctuation, or content from one slot into another.
-   * Example (X and Y are placeholders only):
+   - Each <s id="N"> is an independent output slot.
+   - Translate only the text belonging to that exact <s id="N"> entry.
+   - NEVER merge, split, borrow, steal, infer, or complete text across adjacent <s> IDs.
+   - An incomplete sentence or phrase MUST remain incomplete within its original slot.
+   - NEVER move words, punctuation, or content from one slot into another.
+   - Example (X and Y are placeholders only):
      ✅ Correct: <s id="X">Kalau awak betul-betul rasa</s> <s id="Y">saya sanggup khianati awak...</s>
      ❌ Wrong: <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s> <s id="Y">.</s>
 
 2. TRANSLATE ONLY TARGET ENTRIES:
 
-   * Translate ONLY the <s id="N"> entries under "ENTRIES TO TRANSLATE".
-   * Any <m>, <src>, <dst>, or previous translation memory is reference context ONLY.
-   * NEVER translate, reproduce, modify, or output the translation memory.
-   * NEVER use IDs from translation memory as output IDs.
-   * NEVER output any <m>, <src>, or <dst> tags.
+   - Translate ONLY the <s id="N"> entries under "ENTRIES TO TRANSLATE".
+   - Any <m>, <src>, <dst>, or previous translation memory is reference context ONLY.
+   - NEVER translate, reproduce, modify, or output the translation memory.
+   - NEVER use IDs from translation memory as output IDs.
+   - NEVER output any <m>, <src>, or <dst> tags.
 
 3. CONTENT LOCALIZATION:
 
-   * Translate all dialogue and subtitle text into ${targetLabel}.
-   * Use natural spoken phrasing appropriate for subtitles, not literal word-for-word translation.
-   * Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents.
-   * Preserve the original speaker's tone, emotion, intent, personality, and character register.
-   * Preserve the meaning and communicative intent of the source.
+   - Translate all dialogue and subtitle text into ${targetLabel}.
+   - Use natural spoken phrasing appropriate for subtitles, not literal word-for-word translation.
+   - Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents.
+   - Preserve the original speaker's tone, emotion, intent, personality, and character register.
+   - Preserve the meaning and communicative intent of the source.
 
 4. MUSIC, PROPER NOUNS & SAFE PRESERVATION:
 
-   * Fully translate song lyrics and lyrical text inside ♪ / ♫ markers.
-   * Preserve ♪ / ♫ markers exactly as written.
-   * Do not translate brand names, company names, organization names, product names, or entity suffixes; preserve them exactly as in the source.
-   * Do not translate foreign place names; preserve them exactly as in the source.
-   * If an entry is corrupted, unintelligible, or consists only of standalone symbols, music notes, or numbers, preserve the source text exactly.
-   * Do not use preservation as a reason to skip translatable text.
-   * NEVER shift, merge, omit, duplicate, or re-align any subsequent slot.
+   - Fully translate song lyrics and lyrical text inside ♪ / ♫ markers.
+   - Preserve ♪ / ♫ markers exactly as written.
+   - Do not translate brand names, company names, organization names, product names, or entity suffixes; preserve them exactly as in the source.
+   - Do not translate foreign place names; preserve them exactly as in the source.
+   - If an entry is corrupted, unintelligible, or consists only of standalone symbols, music notes, or numbers, preserve the source text exactly.
+   - Do not use preservation as a reason to skip translatable text.
+   - NEVER shift, merge, omit, duplicate, or re-align any subsequent slot.
 
 5. ID INTEGRITY & EXACT COUNT — ABSOLUTE:
 
-   * Output EXACTLY ${expectedCount} <s> entries.
-   * Preserve every input <s id="N"> exactly.
-   * Output the same IDs in the same order as the input.
-   * Use ONLY IDs that appear in the target input entries.
-   * NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
-   * Do not infer missing IDs from sequential numbering.
+   - Output EXACTLY ${expectedCount} <s> entries.
+   - Preserve every input <s id="N"> exactly.
+   - Output the same IDs in the same order as the input.
+   - Use ONLY IDs that appear in the target input entries.
+   - NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
+   - Do not infer missing IDs from sequential numbering.
 
 6. PRESERVE INLINE MARKUP EXACTLY:
 
-   * Preserve every [br] tag exactly.
-   * Preserve every <i>...</i> tag exactly.
-   * Preserve every speaker dash (-) exactly when present.
-   * Preserve the original order, count, and structure of all inline markup.
-   * NEVER add, remove, duplicate, reorder, rename, or alter inline markup.
-   * Translate text around the markup without changing the markup itself.
+   - Preserve every [br] tag exactly.
+   - Preserve every <i>...</i> tag exactly.
+   - Preserve every speaker dash (-) exactly when present.
+   - Preserve the original order, count, and structure of all inline markup.
+   - NEVER add, remove, duplicate, reorder, rename, or alter inline markup.
+   - Translate text around the markup without changing the markup itself.
 
 7. OUTPUT FORMAT — XML ONLY:
 
-   * Output ONLY the translated <s id="N">...</s> entries.
-   * Output no <m>, <src>, <dst>, headings, labels, explanations, notes, or commentary.
-   * Output no Markdown or code fences.
-   * Do not output any text before the first <s> tag or after the last </s> tag.
-   * The final output MUST contain exactly ${expectedCount} <s> entries.
+   - Output ONLY the translated <s id="N">...</s> entries.
+   - Output no <m>, <src>, <dst>, headings, labels, explanations, notes, or commentary.
+   - Output no Markdown or code fences.
+   - Do not output any text before the first <s> tag or after the last </s> tag.
+   - The final output MUST contain exactly ${expectedCount} <s> entries.
 
 <input>
 ${batchText}
