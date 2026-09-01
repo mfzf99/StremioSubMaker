@@ -2108,14 +2108,22 @@ class TranslationEngine {
 
 CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
 
-1. STRICT SLOT LOCK (1:1 MAPPING):
+1. STRICT SLOT LOCK (1:1 MAPPING) — MOST CRITICAL:
    - Each <s id="N"> is an isolated output slot.
    - NEVER steal, merge, or complete a sentence using words from adjacent IDs.
    - Translating incomplete sentence fragments as fragments is MANDATORY. Merging breaks sync permanently.
+   - Example (X and Y are placeholder IDs, not real ones from the input):
+     ✅ Correct:
+        <s id="X">Kalau awak betul-betul rasa</s>
+        <s id="Y">saya sanggup khianati awak...</s>
+     ❌ Catastrophically wrong:
+        <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+        <s id="Y">.</s>
 
 2. MUSIC, PROPER NOUNS & ESCAPE HATCH:
    - FULLY translate all song lyrics inside music notes (♫ / ♪), including background music (BGM).
    - NEVER translate brand names, company/organization titles, or entity suffixes (e.g., keep "Taeja Group").
+   - NEVER translate foreign proper nouns (place names) — keep them exactly as in the source.
    - Copy EXACT source text ONLY if text is corrupted or contains ONLY standalone symbols/notes (♪, ♫) and numbers.
    - NEVER shift or re-align any subsequent slot.
 
@@ -2130,7 +2138,7 @@ CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
 5. PURE XML OUTPUT:
    - Output ONLY raw <s id="N">...</s> tags.
    - ZERO commentary, ZERO markdown code blocks, and ZERO notes in parentheses.
-   
+
 <input>
 ${batchText}
 </input>
