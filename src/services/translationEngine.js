@@ -139,7 +139,7 @@ function getBatchSizeForModel(model) {
 
   // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
+    if (version >= 3.0) return 200; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
     if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5) (300)
     return 250;                     // Legacy Flash (1.5) (250)
   }
