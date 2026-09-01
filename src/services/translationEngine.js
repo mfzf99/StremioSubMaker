@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert audio-visual translator and subtitler. Translate the following subtitle text from ${sourceLabel} to ${targetLabel}. Maintain natural dialogue flow for ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}.`,
+    `You are an expert audiovisual translator and subtitler. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert audio-visual translator and subtitler. Translate the following subtitle text from ${sourceLabel} to ${targetLabel}. Maintain natural dialogue flow for ${targetLabel}. Use appropriate colloquialisms for ${targetLabel}.`
+    `You are an expert audiovisual translator and subtitler. Translate the following subtitle text from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
