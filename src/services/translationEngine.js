@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are a programmatic subtitle localization engine. Translate the following subtitle entries from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
+    `You are a programmatic subtitle localization engine. Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Preserve the original speaker's tone, emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are a programmatic localization engine. Translate the following subtitle entries from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
+    `You are a programmatic subtitle localization engine. Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using natural spoken phrasing. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Preserve the original speaker's tone, emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2128,10 +2128,11 @@ CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
    - NEVER shift or re-align any subsequent slot.
 
 3. ID INTEGRITY & EXACT COUNT:
-   - Output EXACTLY ${expectedCount} XML entries matching input IDs in strict order from ID_${startId} to ID_${endId}.
-   - Format: <s id="N">translated text</s>.
-   - NEVER skip, omit, reorder, or fabricate IDs.
-
+   - Output EXACTLY ${expectedCount} XML entries.
+   - Preserve every input <s id="N"> exactly and output the same IDs in the same order.
+   - NEVER skip, omit, duplicate, reorder, or fabricate an ID.
+   - Use only IDs present in the input entries.
+   
 4. PRESERVE ALL INLINE MARKUP:
    - Preserve every [br] tag, <i> tag, and speaker dash (-) in the exact same position as in the source.
 
