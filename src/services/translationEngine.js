@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`,
+    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using spoken phrasing.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and character register.`
+    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using spoken phrasing.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -139,7 +139,7 @@ function getBatchSizeForModel(model) {
 
   // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 400; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
+    if (version >= 3.0) return 200; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
     if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5) (300)
     return 250;                     // Legacy Flash (1.5) (250)
   }
