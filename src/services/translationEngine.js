@@ -2106,49 +2106,38 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES (VIOLATING THESE WILL CORRUPT THE SUBTITLES):
+CRITICAL RULES (VIOLATING THESE CORRUPTS THE SUBTITLES):
 
-1. SLOT LOCK (MOST CRITICAL): Each <s id="N"> is a separate output slot. 
-   Never steal, merge, or complete a sentence using words that belong 
-   in an adjacent ID.
+1. STRICT SLOT LOCK (1:1 MAPPING) — MOST CRITICAL:
+   - Each <s id="N"> is an isolated output slot.
+   - NEVER steal, merge, or complete a sentence using words from adjacent IDs.
+   - Translating incomplete sentence fragments as fragments is MANDATORY. Merging breaks sync permanently.
+   - Example (X and Y are placeholder IDs, not real ones from the input):
+     ✅ Correct:
+        <s id="X">Kalau awak betul-betul rasa</s>
+        <s id="Y">saya sanggup khianati awak...</s>
+     ❌ Catastrophically wrong:
+        <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
+        <s id="Y">.</s>
 
-   Example (X and Y are placeholder IDs, not real ones from the input):
-   IN:  <s id="X">If you really think</s>
-        <s id="Y">that I would betray you...</s>
-   Correct: <s id="X">Kalau awak betul-betul rasa</s>
-            <s id="Y">saya sanggup khianati awak...</s>
-   Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s>
-            <s id="Y">.</s>
+2. MUSIC, PROPER NOUNS & ESCAPE HATCH:
+   - FULLY translate all song lyrics inside music notes (♫ / ♪), including background music (BGM).
+   - NEVER translate brand names, company/organization titles, or entity suffixes (e.g., keep "Taeja Group").
+   - NEVER translate foreign proper nouns (place names) — keep them exactly as in the source.
+   - Copy EXACT source text ONLY if text is corrupted or contains ONLY standalone symbols/notes (♪, ♫) and numbers.
+   - NEVER shift or re-align any subsequent slot.
 
-   Dividing the natural thought across matching fragments is MANDATORY. 
-   Merging them DESTROYS subtitle sync permanently.
+3. ID INTEGRITY & EXACT COUNT:
+   - Output EXACTLY ${expectedCount} XML entries matching input IDs in strict order from ID_${startId} to ID_${endId}.
+   - Format: <s id="N">translated text</s>.
+   - NEVER skip, omit, reorder, or fabricate IDs.
 
-2. ESCAPE HATCH, PROPER NOUNS & MUSIC: ALL song lyrics in music notes (♫ / ♪) — 
-   including background music (BGM) playing during scenes — MUST be fully translated. 
-   NEVER translate character names, brand names, company/organization titles, 
-   or entity suffixes (e.g., keep "Taeja Group", NEVER translate to "Kumpulan Taeja"). 
-   Copy EXACT ORIGINAL TEXT for an ID only if content is untranslatable 
-   (corrupted text) or contains ONLY standalone symbols/music notes (♪, ♫, ♪♪) 
-   and numbers. NEVER shift any remaining entry.
+4. PRESERVE ALL INLINE MARKUP:
+   - Preserve every [br] tag, <i> tag, and speaker dash (-) in the exact same position as in the source.
 
-   Example: <s id="X">♪ La la la ♪</s> → copy as-is (no lyrics). 
-            <s id="Y">♪ I will follow you to the end of the world ♪</s> → translate 
-            (real lyric content).
-
-3. ID INTEGRITY & EXACT COUNT: Output EXACTLY ${expectedCount} entries 
-   total, matching input IDs strictly in order from ID_${startId} to 
-   ID_${endId}. Format: <s id="N">translated text</s>. Never skip, 
-   reorder, or invent IDs. NEVER fabricate content to hit the count — 
-   use Rule 2 instead.
-
-4. PRESERVE ALL INLINE MARKUP: Every [br] tag, <i> tag, and speaker 
-   dash (-) MUST be preserved in the exact same structure and position 
-   as in the source.
-
-5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> tags. 
-   Zero commentary, zero markdown code blocks, and NO explanatory 
-   notes in parentheses. Every translated word MUST be enclosed 
-   inside its corresponding tag.
+5. PURE XML OUTPUT:
+   - Output ONLY raw <s id="N">...</s> tags.
+   - ZERO commentary, ZERO markdown code blocks, and ZERO notes in parentheses.
 
 <input>
 ${batchText}
