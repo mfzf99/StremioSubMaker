@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using spoken phrasing.`,
+    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using appropriate colloquialisms.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using spoken phrasing.`
+    `You are an expert subtitle translator. Translate the following text from ${sourceLabel} to ${targetLabel} using appropriate colloquialisms.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -133,19 +133,19 @@ function getBatchSizeForModel(model) {
 
   // 4. Reasoning & Pro tier: Balanced against latency penalty and retry overhead
   if (modelStr.includes('pro')) {
-    if (version >= 2.5) return 300; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+) (300)
-    return 200;                     // Legacy Pro (1.5) (200)
+    if (version >= 2.5) return 80; // Modern Pro architectures (2.5, 3.1, 3.7, 4.0+) (300)
+    return 60;                     // Legacy Pro (1.5) (200)
   }
 
   // 5. Flash tier: Optimized for high-throughput context windows
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 50; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
-    if (version >= 2.0) return 300; // Mid-gen Flash (2.0, 2.5) (300)
-    return 250;                     // Legacy Flash (1.5) (250)
+    if (version >= 3.0) return 100; // Next-gen Flash architectures (3.0, 3.5, 3.7, 4.0+) (400)
+    if (version >= 2.0) return 80; // Mid-gen Flash (2.0, 2.5) (300)
+    return 60;                     // Legacy Flash (1.5) (250)
   }
 
   // 6. Safe baseline fallback for unmapped architectures (250)
-  return 250; 
+  return 80; 
 }
 
 // Module-level shared key health tracking across engine instances.
