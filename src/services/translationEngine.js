@@ -2075,7 +2075,7 @@ class TranslationEngine {
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
-    const sourceLabel = this.sourceLanguage; // 🌐 Sedut sourceLabel dinamik dari instance[cite: 2]
+    const sourceLabel = this.sourceLanguage;
 
     let startId = 'START';
     let endId = 'END';
@@ -2102,7 +2102,7 @@ class TranslationEngine {
     }
 
     // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
-    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel); //[cite: 2]
+    const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
 
     const promptBody = `${introInstruction}
 
@@ -2125,7 +2125,7 @@ CRITICAL RULES — FOLLOW STRICTLY:
    - Translate them directly and naturally, the same way as standard dialogue.
 
 4. ID & CARDINALITY INTEGRITY — ABSOLUTE:
-   - Output EXACTLY ${expectedCount} <s> entries, using only IDs present in the target entries, in their original order.
+   - Output EXACTLY ${expectedCount} <s> entries, strictly from ID ${startId} to ID ${endId}, matching input IDs in original order.
    - NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
 
 5. XML & INLINE MARKUP INTEGRITY:
