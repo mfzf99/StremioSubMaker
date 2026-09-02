@@ -32,13 +32,13 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 // 🛠️ ZON TEMPLATE PROMPT (100% UNIVERSAL & DYNAMIC)
 // ============================================================================
 const PROMPT_TEMPLATES = {
-  // 1. PROMPT ASAL
+  // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `You are a programmatic subtitle localization engine. Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Preserve the original speaker's tone, emotion, and character register.`,
+    `You are a deterministic timed-text localization engine adhering to professional broadcast standards (Netflix/SMPTE Timed Text Style Guide). Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents while strictly preserving the original speaker's tone, emotion, and character register.`,
 
-  // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback)
+  // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `You are a programmatic subtitle localization engine. Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Preserve the original speaker's tone, emotion, and character register.`
+    `You are a deterministic timed-text localization engine. Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} using direct, natural phrasing. Adapt idioms and cultural references into ${targetLabel} equivalents while strictly preserving the original speaker's tone, emotion, and character register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -106,7 +106,7 @@ const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/
 
 /**
  * Resolves the optimal translation batch size based on empirical testing.
- * Capped at 80-100 entries to completely eliminate slot merging and attention drift on rapid dialogue.
+ * Capped at 30-80 entries to completely eliminate slot merging and attention drift on rapid dialogue.
  */
 function getBatchSizeForModel(model) {
   if (process.env.TRANSLATION_BATCH_SIZE) {
@@ -2065,7 +2065,7 @@ class TranslationEngine {
   }
 
   /**
-   * Create translation prompt for XML-tagged batches
+   * Create translation prompt for XML-tagged batches (Enterprise Industry Standard)
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
@@ -2100,36 +2100,40 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES — FOLLOW STRICTLY:
+CRITICAL PRODUCTION INVARIANTS — FOLLOW STRICTLY:
 
-1. SLOT BOUNDARY INTEGRITY — HIGHEST PRIORITY:
-   - Each <s id="N"> is an independent output slot.
-   - Keep all content confined to its original <s id="N"> boundary.
-   - NEVER merge, split, borrow, move, transfer, or complete content across <s> IDs.
-   - An incomplete sentence or phrase MUST remain within its original slot.
-   - NEVER use content from one slot to modify or complete another slot.
+1. ATOMIC SLOT ISOLATION (ANTI-MERGING PROTOCOL — HIGHEST PRIORITY):
+   - Each <s id="N"> container represents an immutable, hardware-timed display slot tied to exact video frames.
+   - Keep all content strictly confined to its assigned <s id="N"> slot.
+   - NEVER merge, split, borrow, move, transfer, or complete sentences across <s> IDs, even if a clause is grammatically incomplete.
+   * PROHIBITED (Semantic Merge):
+     Input:  <s id="X">Although he was</s> <s id="Y">exhausted...</s>
+     Output: <s id="X">Walaupun dia terlalu penat...</s> <s id="Y"></s>  <-- [FATAL DESYNC ERROR]
+   * REQUIRED (Slot-Preserved Fragment):
+     Output: <s id="X">Walaupun dia</s> <s id="Y">terlalu penat...</s>
+   - Dividing the natural thought across matching fragments is MANDATORY.
 
-2. ENTITIES, TITLES & ESCAPE HATCH:
-   - Brands & Corporations: DO NOT translate private company or brand names (e.g., keep "Taeja Group", "Apple", "Wayne Enterprises" as-is).
-   - Public Institutions & Government Bodies: DO translate public offices, civil bureaus, government departments, and places of authority naturally (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah" / "Pejabat Hal Ehwal Awam", "Police Station" -> "Balai Polis", "Supreme Court" -> "Mahkamah Agung").
-   - Personal Names & Titles: Keep personal names unchanged, but translate honorifics, ranks, and titles naturally (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim", "President Kang" -> "Presiden Kang").
-   - Corrupted & Standalone Slots: If a slot contains corrupted text, or ONLY standalone symbols/music notes (♪, ♫) or numbers with no dialogue, copy the EXACT source text into that slot.
-   - NEVER shift or re-align any subsequent slot as a result.
+2. NAMED ENTITY RECOGNITION (NER) & ESCAPE HATCH:
+   - Brands & Corporations: DO NOT translate private commercial entities, trademarks, or company names (e.g., keep "Taeja Group", "Apple", "Wayne Enterprises" verbatim).
+   - Public Institutions & Government Bodies: DO translate public offices, civil bureaus, municipal departments, and authorities naturally (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah" / "Pejabat Hal Ehwal Awam", "Police Station" -> "Balai Polis", "Supreme Court" -> "Mahkamah Agung").
+   - Personal Names & Titles: Keep personal names unchanged, but localize honorifics, ranks, and titles naturally (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim", "President Kang" -> "Presiden Kang").
+   - Corrupted & Standalone Slots: If a slot contains corrupted text, or ONLY standalone symbols/music notes (♪, ♫) or numbers with no translatable dialogue, copy the EXACT source text into that slot. NEVER shift subsequent entries.
 
-3. SONG LYRICS:
-   - Lyrics inside music notes (♪ / ♫) must always be translated, whether they appear as a full song block or scattered as background music during a scene.
-   - Translate them directly and naturally, the same way as standard dialogue.
+3. ACOUSTIC & SONG LYRIC LOCALIZATION:
+   - Audible Lyrics: Text inside musical notes (♪ / ♫) represents audible lyrics. Localize them naturally into fluent dialogue while preserving the bounding music notes.
+   - Standalone Symbols: If a slot has only music notes without words, treat it under Rule 2 and copy as-is.
 
 4. ID & CARDINALITY INTEGRITY — ABSOLUTE:
-   - Output EXACTLY ${expectedCount} <s> entries, strictly from ID ${startId} to ID ${endId}, matching input IDs in original order.
+   - Output PRECISELY ${expectedCount} <s> entries, strictly spanning from ID ${startId} to ID ${endId} in original sequential order.
    - NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
 
-5. XML & INLINE MARKUP INTEGRITY:
-   - Preserve every [br] tag, <i>...</i> tag, and speaker dash (-) exactly, in original count, order, and structure.
-   - NEVER add, remove, duplicate, reorder, rename, or alter markup.
+5. MARKUP, BREVITY & INLINE SYNTAX:
+   - Preserve every [br] tag, <i>...</i> tag, and dual-speaker dash (-) exactly, in original count, order, and structure.
+   - Subtitle Brevity: Maintain concise phrasing suitable for subtitle reading speed (target ≤ 42 characters per line). Avoid unnecessary wordiness.
 
-6. PURE OUTPUT:
-   - Output ONLY raw <s id="N">...</s> tags — no headings, labels, commentary, explanations, notes, Markdown, or code fences.
+6. PURE OUTPUT (ZERO TELEMETRY):
+   - Output ONLY raw <s id="N">...</s> tags.
+   - Absolute Zero Markdown: NO \`\`\`xml code blocks, NO backticks, NO commentary, NO explanations, and NO notes.
    - Output nothing before the first <s> tag or after the last </s> tag.
 
 <input>
