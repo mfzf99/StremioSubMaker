@@ -2120,9 +2120,11 @@ CRITICAL RULES — FOLLOW STRICTLY:
    - An incomplete sentence or phrase MUST remain within its original slot.
    - NEVER use content from one slot to modify or complete another slot.
 
-2. ESCAPE HATCH:
-   - If content cannot be translated — foreign proper nouns, brand/entity names (e.g., keep "Taeja Group"), corrupted text — copy the EXACT source text into that slot instead.
-   - If a slot contains ONLY standalone symbols/music notes (♪, ♫) or numbers with no translatable words, copy it as-is.
+2. ENTITIES, TITLES & ESCAPE HATCH:
+   - Brands & Corporations: DO NOT translate private company or brand names (e.g., keep "Taeja Group", "Apple", "Wayne Enterprises" as-is).
+   - Public Institutions & Government Bodies: DO translate public offices, civil bureaus, government departments, and places of authority naturally (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah" / "Pejabat Hal Ehwal Awam", "Police Station" -> "Balai Polis", "Supreme Court" -> "Mahkamah Agung").
+   - Personal Names & Titles: Keep personal names unchanged, but translate honorifics, ranks, and titles naturally (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim", "President Kang" -> "Presiden Kang").
+   - Corrupted & Standalone Slots: If a slot contains corrupted text, or ONLY standalone symbols/music notes (♪, ♫) or numbers with no dialogue, copy the EXACT source text into that slot.
    - NEVER shift or re-align any subsequent slot as a result.
 
 3. SONG LYRICS:
@@ -2148,7 +2150,7 @@ ${batchText}
 [OUTPUT_FORMAT]
 RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
-  
+
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
   
