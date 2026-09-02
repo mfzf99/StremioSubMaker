@@ -105,52 +105,41 @@ const NATIVE_BATCH_PROVIDER_NAMES = new Set(['deepl', 'googletranslate']);
 const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/disable entry caching
 
 /**
- * Resolves the optimal translation batch size based on model architecture and versioning.
- * Recalibrated with an absolute ceiling of 200 entries for zero-retry reliability.
- *
- * Tier Hierarchy (Max Ceiling = 200):
- * - ENV Override > Flash 3.0+ (200) > Flash 2.x (180) > Flash-Lite (150) > Pro Tier (120) > Gemma/Edge (80) > Fallback (120)
- *
- * @param {string} model - Gemini/LLM model identifier
- * @returns {number} Batch size (entries per translation payload)
+ * Resolves the optimal translation batch size based on empirical testing.
+ * Capped at 80-100 entries to completely eliminate slot merging and attention drift on rapid dialogue.
  */
 function getBatchSizeForModel(model) {
-  // 1. Environment variable override (highest priority)
   if (process.env.TRANSLATION_BATCH_SIZE) {
     return parseInt(process.env.TRANSLATION_BATCH_SIZE, 10);
   }
 
   const modelStr = String(model || '').toLowerCase().replace(/_/g, '-');
 
-  // 2. Edge & Open Source SLM (Gemma): Strict formatting discipline limit (80)
+  // Gemma / Edge Tier (40)
   if (modelStr.includes('gemma')) {
-    return 80;
+    return 40;
   }
 
-  // 3. Lightweight & Lite Tier: High speed, calibrated to prevent XML attention drift (150)
+  // Flash-Lite Tier (60)
   if (modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 150;
+    return 60;
   }
 
-  // 4. Extract semantic version
   const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
   const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
 
-  // 5. Reasoning & Pro tier: Capped low to eliminate high TTFT latency and timeout risks (120)
+  // Pro Tier (60) - rendah untuk elak timeout
   if (modelStr.includes('pro')) {
-    if (version >= 2.5) return 120; // Modern Pro (2.5, 3.1)
-    return 100;                     // Legacy Pro (1.5)
+    return 60;
   }
 
-  // 6. Flash tier: High-throughput context
+  // Frontier & Standard Flash (80)
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 100; // Frontier Flash (3.0, 3.5+) -> THE ABSOLUTE BENCHMARK CEILING
-    if (version >= 2.0) return 180; // Mid-gen Flash (2.0, 2.5)
-    return 150;                     // Legacy Flash (1.5)
+    if (version >= 3.0) return 80; // Siling optimum mutlak
+    return 70;
   }
 
-  // 7. Safe baseline fallback for unmapped architectures (120)
-  return 120;
+  return 60; // Safe baseline fallback
 }
 
 // Module-level shared key health tracking across engine instances.
