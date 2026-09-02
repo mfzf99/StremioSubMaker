@@ -144,7 +144,7 @@ function getBatchSizeForModel(model) {
 
   // 6. Flash tier: High-throughput context
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 200; // Frontier Flash (3.0, 3.5+) -> THE ABSOLUTE BENCHMARK CEILING
+    if (version >= 3.0) return 100; // Frontier Flash (3.0, 3.5+) -> THE ABSOLUTE BENCHMARK CEILING
     if (version >= 2.0) return 180; // Mid-gen Flash (2.0, 2.5)
     return 150;                     // Legacy Flash (1.5)
   }
