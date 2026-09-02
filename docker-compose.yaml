@@ -9,7 +9,7 @@ services:
     # Give container 30 seconds to gracefully shutdown and save sessions
     stop_grace_period: 30s
     ports:
-      - "${PORT:-7001}:7001"
+  - "127.0.0.1:${PORT:-7001}:7001"
     # Load ALL environment variables from .env file
     # Optional: set TZ in .env (for example TZ=America/New_York) to localize log timestamps.
     # Leave TZ unset to preserve the existing UTC log format.
