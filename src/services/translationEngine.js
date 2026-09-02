@@ -2109,40 +2109,32 @@ class TranslationEngine {
 CRITICAL RULES — FOLLOW STRICTLY:
 
 1. SLOT BOUNDARY INTEGRITY — HIGHEST PRIORITY:
-
    - Each <s id="N"> is an independent output slot.
    - Keep all content confined to its original <s id="N"> boundary.
    - NEVER merge, split, borrow, move, transfer, or complete content across <s> IDs.
    - An incomplete sentence or phrase MUST remain within its original slot.
    - NEVER use content from one slot to modify or complete another slot.
 
-2. TARGET SCOPE INTEGRITY:
+2. ESCAPE HATCH:
+   - If content cannot be translated — foreign proper nouns, brand/entity names (e.g., keep "Taeja Group"), corrupted text — copy the EXACT source text into that slot instead.
+   - If a slot contains ONLY standalone symbols/music notes (♪, ♫) or numbers with no translatable words, copy it as-is.
+   - NEVER shift or re-align any subsequent slot as a result.
 
-   - Only <s id="N"> entries under "ENTRIES TO TRANSLATE" are output targets.
-   - <m>, <src>, <dst>, and previous translation memory are reference data only.
-   - NEVER output, modify, duplicate, or reinterpret reference data as target entries.
-   - NEVER use IDs from reference data as output IDs.
+3. SONG LYRICS:
+   - Lyrics inside music notes (♪ / ♫) must always be translated, whether they appear as a full song block or scattered as background music during a scene.
+   - Translate them directly and naturally, the same way as standard dialogue.
 
-3. ID & CARDINALITY INTEGRITY — ABSOLUTE:
-
-   - Output EXACTLY ${expectedCount} <s> entries.
-   - Preserve every target <s id="N"> exactly.
-   - Preserve the exact ID of every target entry.
-   - Preserve the original target-entry order.
-   - Use ONLY IDs present in the target entries.
+4. ID & CARDINALITY INTEGRITY — ABSOLUTE:
+   - Output EXACTLY ${expectedCount} <s> entries, using only IDs present in the target entries, in their original order.
    - NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
 
-4. XML & INLINE MARKUP INTEGRITY:
-
-   - Preserve every [br] tag exactly.
-   - Preserve every <i>...</i> tag exactly.
-   - Preserve every speaker dash (-) exactly when present.
-   - Preserve the original count, order, and structure of all inline markup.
+5. XML & INLINE MARKUP INTEGRITY:
+   - Preserve every [br] tag, <i>...</i> tag, and speaker dash (-) exactly, in original count, order, and structure.
    - NEVER add, remove, duplicate, reorder, rename, or alter markup.
-   - Output ONLY raw <s id="N">...</s> tags.
-   - Output no headings, labels, commentary, explanations, notes, Markdown, or code fences.
+
+6. PURE OUTPUT:
+   - Output ONLY raw <s id="N">...</s> tags — no headings, labels, commentary, explanations, notes, Markdown, or code fences.
    - Output nothing before the first <s> tag or after the last </s> tag.
-   - The final output MUST contain exactly ${expectedCount} <s> entries.
 
 <input>
 ${batchText}
