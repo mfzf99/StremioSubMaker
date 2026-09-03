@@ -2130,7 +2130,6 @@ ${batchText}
 </input>
 
 [OUTPUT_FORMAT]
-RESPOND ONLY WITH EXACTLY ${expectedCount} XML-TAGGED ENTRIES.
 <s id="`;
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
