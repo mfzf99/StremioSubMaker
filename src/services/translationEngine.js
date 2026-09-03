@@ -2115,9 +2115,10 @@ CRITICAL RULES:
 4. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
 5. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 6. If a slot cannot be translated, is corrupted, or contains ONLY standalone symbols, music notes (♪, ♫), or numbers, copy the EXACT source text into that slot.
-7. Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
-8. NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
-9. Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
+7. Lyrics inside music notes (♪ / ♫) MUST be translated while preserving the bounding notes, whether they appear as a full song block or scattered background music (BGM).
+8. Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
+9. NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
+10. Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
 
 <input>
 ${batchText}
