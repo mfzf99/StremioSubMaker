@@ -2100,30 +2100,18 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-STRICT TRANSLATION RULES:
+CRITICAL RULES — MUST FOLLOW STRICTLY:
 
-1. ONE-TO-ONE SLOT LOCK (DO NOT MERGE):
-   - Every input <s id="N"> MUST produce exactly one translated <s id="N">.
-   - NEVER combine two or more lines into one slot.
-   - If a sentence in the source text is split across multiple slots, translate each fragment strictly within its own slot.
-   CORRECT PATTERN:
-   Input:  <s id="1">[Sentence fragment A...]</s> <s id="2">[...sentence fragment B]</s>
-   Output: <s id="1">[Translated fragment A]</s> <s id="2">[Translated fragment B]</s>
-
-2. ESCAPE HATCH (STRICT NO-SHIFT):
-   - If a slot cannot be translated, is corrupted, or contains ONLY standalone symbols, music notes (♪, ♫), or numbers, copy the EXACT source text into that slot.
-   - NEVER skip a slot and NEVER shift subsequent entries under any circumstance.
-
-3. EXACT COUNT & IDS:
-   - Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-   - Never skip, reorder, or invent IDs.
-
-4. PRESERVE FORMATTING:
-   - Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
-
-5. PURE OUTPUT & NO EXPLANATORY PARENTHESES:
-   - NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
-   - Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
+1. Every input <s id="N"> MUST produce exactly one translated <s id="N">.
+2. NEVER combine two or more lines into one slot.
+3. If a sentence in the source text is split across multiple slots, translate each fragment strictly within its own slot.
+4. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
+5. Never skip, reorder, or invent IDs.
+6. If a slot cannot be translated, is corrupted, or contains ONLY standalone symbols, music notes (♪, ♫), or numbers, copy the EXACT source text into that slot.
+7. NEVER skip a slot and NEVER shift subsequent entries under any circumstance.
+8. Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
+9. NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
+10. Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
 
 <input>
 ${batchText}
