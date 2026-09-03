@@ -139,7 +139,7 @@ function getBatchSizeForModel(model) {
     return 70;
   }
 
-  return 60; // Safe baseline fallback
+  return 50; // Safe baseline fallback
 }
 
 // Module-level shared key health tracking across engine instances.
