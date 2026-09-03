@@ -105,41 +105,48 @@ const NATIVE_BATCH_PROVIDER_NAMES = new Set(['deepl', 'googletranslate']);
 const CACHE_TRANSLATIONS = process.env.CACHE_TRANSLATIONS === 'true'; // Enable/disable entry caching
 
 /**
- * Resolves the optimal translation batch size based on empirical testing.
- * Capped at 30-80 entries to completely eliminate slot merging and attention drift on rapid dialogue.
+ * Get batch size for model (model-specific optimization)
+ * Priority: Environment variable > Model-specific > Default (250)
+ *
+ * Model-specific batch sizes are hardcoded in backend and safe from client manipulation.
+ * Different models have different processing speeds and capabilities:
+ * - Flash models: 250 entries (faster, more capable)
+ * - Flash-lite models: 200 entries (more conservative for stability)
+ *
+ * @param {string} model - Gemini model name
+ * @returns {number} - Batch size for this model
  */
 function getBatchSizeForModel(model) {
+  // Environment variable override (highest priority)
   if (process.env.TRANSLATION_BATCH_SIZE) {
-    return parseInt(process.env.TRANSLATION_BATCH_SIZE, 10);
+    return parseInt(process.env.TRANSLATION_BATCH_SIZE);
   }
 
-  const modelStr = String(model || '').toLowerCase().replace(/_/g, '-');
+  // Model-specific batch sizes (hardcoded, safe from client manipulation)
+  const modelStr = String(model || '').toLowerCase();
 
-  // Gemma / Edge Tier (40)
+  // Gemini 3.0 Flash: Large context window, higher batch size for throughput
+  if (modelStr.includes('gemini-3-flash')) {
+    return 400;
+  }
+
+  // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 40;
+    return 200;
   }
 
-  // Flash-Lite Tier (60)
-  if (modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 100;
+  // Flash-lite models: More conservative batch size for stability
+  if (modelStr.includes('flash-lite')) {
+    return 200;
   }
 
-  const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
-  const version = versionMatch ? parseFloat(versionMatch[1]) : 0;
-
-  // Pro Tier (60) - rendah untuk elak timeout
-  if (modelStr.includes('pro')) {
-    return 60;
-  }
-
-  // Frontier & Standard Flash (80)
+  // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 80; // Siling optimum mutlak
-    return 70;
+    return 250;
   }
 
-  return 50; // Safe baseline fallback
+  // Default batch size for unknown models
+  return 250;
 }
 
 // Module-level shared key health tracking across engine instances.
