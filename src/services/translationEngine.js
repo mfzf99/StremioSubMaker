@@ -2111,7 +2111,7 @@ CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
 2. Every input <s id="N"> MUST produce exactly one translated <s id="N"> — NEVER combine or merge multiple lines into one slot.
-3. If a sentence in the source text is split across multiple slots, translate each fragment STRICTLY within its own slot.
+3. If a sentence is split across multiple <s id="N"> slots, distribute the translation across the EXACT same number of slots — NEVER finish early and pull subsequent dialogue into earlier slots.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
 6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
