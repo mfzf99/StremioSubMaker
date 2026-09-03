@@ -2109,7 +2109,7 @@ class TranslationEngine {
 
 CRITICAL RULES:
 
-1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
+1. Output EXACTLY 400 entries from ID 1 to ID 400.
 2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
 3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun or object from a later slot into an earlier slot to fix grammar — preserve the fragmented pause as spoken.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
@@ -2117,7 +2117,18 @@ CRITICAL RULES:
 6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
 
 <input>
-${batchText}
+<s id="1">[English subtitles are available]</s>
+<s id="2">[Begin Again]</s>
+<s id="3">[Episode 34]</s>
+<s id="4">A proposal?</s>
+...
+<s id="162">You secretly handed over</s>
+<s id="163">Deer Sing Group's</s>
+<s id="164">outlet and manufacturer</s>
+<s id="165">tenders</s>
+<s id="166">to Ming Cheng.</s>
+...
+<s id="400">Please be my girlfriend.</s>
 </input>
 
 [OUTPUT_FORMAT]
