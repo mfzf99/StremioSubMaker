@@ -2110,9 +2110,11 @@ class TranslationEngine {
 CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. NEVER combine two or more lines into one slot.
-3. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
-4. PRESERVE all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
+2. Every input <s id="N"> MUST produce exactly one translated <s id="N"> — NEVER combine or merge multiple lines into one slot.
+3. If a sentence in the source text is split across multiple slots, translate each fragment STRICTLY within its own slot.
+4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
+5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
+6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
 
 <input>
 ${batchText}
