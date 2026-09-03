@@ -2104,32 +2104,26 @@ STRICT TRANSLATION RULES:
 
 1. ONE-TO-ONE SLOT LOCK (DO NOT MERGE):
    - Every input <s id="N"> MUST produce exactly one translated <s id="N">.
-   - NEVER combine two lines into one slot.
+   - NEVER combine two or more lines into one slot.
    - If a sentence in the source text is split across multiple slots, translate each fragment strictly within its own slot.
-   CORRECT EXAMPLE:
-   Input:  <s id="1">Even if you</s> <s id="2">don't want to...</s>
-   Output: <s id="1">Walaupun awak</s> <s id="2">tak nak buat...</s>
+   CORRECT PATTERN:
+   Input:  <s id="1">[Sentence fragment A...]</s> <s id="2">[...sentence fragment B]</s>
+   Output: <s id="1">[Translated fragment A]</s> <s id="2">[Translated fragment B]</s>
 
-2. ENTITIES & ESCAPE HATCH (STRICT NO-SHIFT):
-   - Keep private company names and brand names unchanged (e.g., "Taeja Group", "Apple").
-   - Translate public government offices and places (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah", "Police Station" -> "Balai Polis").
-   - Translate titles and ranks (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim").
-   - ESCAPE HATCH: If a slot cannot be translated, is corrupted, or contains ONLY symbols/music notes (♪, ♫)/numbers, copy the EXACT source text into that slot.
+2. ESCAPE HATCH (STRICT NO-SHIFT):
+   - If a slot cannot be translated, is corrupted, or contains ONLY standalone symbols, music notes (♪, ♫), or numbers, copy the EXACT source text into that slot.
    - NEVER skip a slot and NEVER shift subsequent entries under any circumstance.
 
-3. SONG LYRICS:
-   - Translate lyrics inside music notes (♪ / ♫) into natural dialogue. Keep the music notes.
-
-4. EXACT COUNT & IDS:
+3. EXACT COUNT & IDS:
    - Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
    - Never skip, reorder, or invent IDs.
 
-5. PRESERVE FORMATTING:
+4. PRESERVE FORMATTING:
    - Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
 
-6. PURE OUTPUT & NO EXPLANATORY PARENTHESES:
-   - NEVER add explanations, meanings, definitions, or translator notes inside parentheses () or brackets [] (e.g., NEVER write "perkataan (maksud perkataan)" or "[Nota: ...]"). Output dialogue ONLY.
-   - Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no notes before or after.
+5. PURE OUTPUT & NO EXPLANATORY PARENTHESES:
+   - NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
+   - Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
 
 <input>
 ${batchText}
