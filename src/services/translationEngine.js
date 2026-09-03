@@ -135,7 +135,7 @@ function getBatchSizeForModel(model) {
 
   // Frontier & Standard Flash (80)
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 80; // Siling optimum mutlak
+    if (version >= 3.0) return 200; // Siling optimum mutlak
     return 70;
   }
 
@@ -2100,18 +2100,17 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL RULES — MUST FOLLOW STRICTLY:
+CRITICAL RULES:
 
 1. Every input <s id="N"> MUST produce exactly one translated <s id="N">.
 2. NEVER combine two or more lines into one slot.
 3. If a sentence in the source text is split across multiple slots, translate each fragment strictly within its own slot.
 4. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-5. Never skip, reorder, or invent IDs.
+5. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 6. If a slot cannot be translated, is corrupted, or contains ONLY standalone symbols, music notes (♪, ♫), or numbers, copy the EXACT source text into that slot.
-7. NEVER skip a slot and NEVER shift subsequent entries under any circumstance.
-8. Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
-9. NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
-10. Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
+7. Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
+8. NEVER add explanations, definitions, or translator notes inside parentheses. Output subtitle content ONLY.
+9. Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no preamble, and no text before or after.
 
 <input>
 ${batchText}
