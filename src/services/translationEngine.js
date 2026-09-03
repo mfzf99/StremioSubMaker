@@ -2100,41 +2100,36 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-CRITICAL PRODUCTION INVARIANTS — FOLLOW STRICTLY:
+STRICT TRANSLATION RULES:
 
-1. ATOMIC SLOT ISOLATION (ANTI-MERGING PROTOCOL — HIGHEST PRIORITY):
-   - Each <s id="N"> container represents an immutable, hardware-timed display slot tied to exact video frames.
-   - Keep all content strictly confined to its assigned <s id="N"> slot.
-   - NEVER merge, split, borrow, move, transfer, or complete sentences across <s> IDs, even if a clause is grammatically incomplete.
-   * PROHIBITED (Semantic Merge):
-     Input:  <s id="X">Although he was</s> <s id="Y">exhausted...</s>
-     Output: <s id="X">Walaupun dia terlalu penat...</s> <s id="Y"></s>  <-- [FATAL DESYNC ERROR]
-   * REQUIRED (Slot-Preserved Fragment):
-     Output: <s id="X">Walaupun dia</s> <s id="Y">terlalu penat...</s>
-   - Dividing the natural thought across matching fragments is MANDATORY.
+1. ONE-TO-ONE SLOT LOCK (DO NOT MERGE):
+   - Every input <s id="N"> MUST produce exactly one translated <s id="N">.
+   - NEVER combine two lines into one slot.
+   - If a sentence in the source text is split across multiple slots, translate each fragment strictly within its own slot.
+   CORRECT EXAMPLE:
+   Input:  <s id="1">Even if you</s> <s id="2">don't want to...</s>
+   Output: <s id="1">Walaupun awak</s> <s id="2">tak nak buat...</s>
 
-2. NAMED ENTITY RECOGNITION (NER) & ESCAPE HATCH:
-   - Brands & Corporations: DO NOT translate private commercial entities, trademarks, or company names (e.g., keep "Taeja Group", "Apple", "Wayne Enterprises" verbatim).
-   - Public Institutions & Government Bodies: DO translate public offices, civil bureaus, municipal departments, and authorities naturally (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah" / "Pejabat Hal Ehwal Awam", "Police Station" -> "Balai Polis", "Supreme Court" -> "Mahkamah Agung").
-   - Personal Names & Titles: Keep personal names unchanged, but localize honorifics, ranks, and titles naturally (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim", "President Kang" -> "Presiden Kang").
-   - Corrupted & Standalone Slots: If a slot contains corrupted text, or ONLY standalone symbols/music notes (♪, ♫) or numbers with no translatable dialogue, copy the EXACT source text into that slot. NEVER shift subsequent entries.
+2. ENTITIES & ESCAPE HATCH (STRICT NO-SHIFT):
+   - Keep private company names and brand names unchanged (e.g., "Taeja Group", "Apple").
+   - Translate public government offices and places (e.g., "Civil Affairs Bureau" -> "Pejabat Pendaftaran Nikah", "Police Station" -> "Balai Polis").
+   - Translate titles and ranks (e.g., "Mr. Jin" -> "Encik Jin", "Detective Kim" -> "Detektif Kim").
+   - ESCAPE HATCH: If a slot cannot be translated, is corrupted, or contains ONLY symbols/music notes (♪, ♫)/numbers, copy the EXACT source text into that slot.
+   - NEVER skip a slot and NEVER shift subsequent entries under any circumstance.
 
-3. ACOUSTIC & SONG LYRIC LOCALIZATION:
-   - Audible Lyrics: Text inside musical notes (♪ / ♫) represents audible lyrics. Localize them naturally into fluent dialogue while preserving the bounding music notes.
-   - Standalone Symbols: If a slot has only music notes without words, treat it under Rule 2 and copy as-is.
+3. SONG LYRICS:
+   - Translate lyrics inside music notes (♪ / ♫) into natural dialogue. Keep the music notes.
 
-4. ID & CARDINALITY INTEGRITY — ABSOLUTE:
-   - Output PRECISELY ${expectedCount} <s> entries, strictly spanning from ID ${startId} to ID ${endId} in original sequential order.
-   - NEVER skip, omit, duplicate, reorder, alter, or fabricate an ID.
+4. EXACT COUNT & IDS:
+   - Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
+   - Never skip, reorder, or invent IDs.
 
-5. MARKUP, BREVITY & INLINE SYNTAX:
-   - Preserve every [br] tag, <i>...</i> tag, and dual-speaker dash (-) exactly, in original count, order, and structure.
-   - Subtitle Brevity: Maintain concise phrasing suitable for subtitle reading speed (target ≤ 42 characters per line). Avoid unnecessary wordiness.
+5. PRESERVE FORMATTING:
+   - Keep all [br], <i>...</i>, and speaker dashes (-) exactly where they appear.
 
-6. PURE OUTPUT (ZERO TELEMETRY):
-   - Output ONLY raw <s id="N">...</s> tags.
-   - Absolute Zero Markdown: NO \`\`\`xml code blocks, NO backticks, NO commentary, NO explanations, and NO notes.
-   - Output nothing before the first <s> tag or after the last </s> tag.
+6. PURE OUTPUT & NO EXPLANATORY PARENTHESES:
+   - NEVER add explanations, meanings, definitions, or translator notes inside parentheses () or brackets [] (e.g., NEVER write "perkataan (maksud perkataan)" or "[Nota: ...]"). Output dialogue ONLY.
+   - Output ONLY raw <s id="N">...</s> lines. No markdown code blocks, no backticks, no notes before or after.
 
 <input>
 ${batchText}
