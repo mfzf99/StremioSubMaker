@@ -135,7 +135,7 @@ function getBatchSizeForModel(model) {
 
   // Frontier & Standard Flash (80)
   if (modelStr.includes('flash')) {
-    if (version >= 3.0) return 200; // Siling optimum mutlak
+    if (version >= 3.0) return 80; // Siling optimum mutlak
     return 70;
   }
 
