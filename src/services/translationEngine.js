@@ -122,7 +122,7 @@ function getBatchSizeForModel(model) {
 
   // Flash-Lite Tier (60)
   if (modelStr.includes('flash-lite') || modelStr.includes('lite')) {
-    return 60;
+    return 50;
   }
 
   const versionMatch = modelStr.match(/(?:gemini-)?(\d+(?:\.\d+)?)/);
