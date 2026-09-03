@@ -2110,8 +2110,8 @@ class TranslationEngine {
 CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. Every input <s id="N"> MUST produce exactly one translated <s id="N"> — NEVER combine or merge multiple lines into one slot.
-3. If a sentence is split across multiple <s id="N"> slots, distribute the translation across the EXACT same number of slots — NEVER finish early and pull subsequent dialogue into earlier slots.
+2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
+3. If an input slot contains an incomplete sentence fragment or a single word, translate ONLY that fragment within that slot — preserve the natural pause and NEVER merge it into neighboring slots.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
 6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
