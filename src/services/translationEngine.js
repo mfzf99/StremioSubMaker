@@ -2111,7 +2111,7 @@ CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
 2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
-3. If an input slot contains an incomplete sentence fragment or a single word, translate ONLY that fragment within that slot — preserve the natural pause and NEVER merge it into neighboring slots.
+3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun or object from a later slot into an earlier slot to fix grammar — preserve the fragmented pause as spoken.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
 6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
