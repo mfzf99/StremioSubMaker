@@ -34,7 +34,7 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} into ${targetLabel} independently using natural colloquialisms, without shifting content across tags.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel} using natural colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Preserve the original speaker's tone, emotion, and character register.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
@@ -2106,18 +2106,6 @@ class TranslationEngine {
     const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
 
     const promptBody = `${introInstruction}
-
-[CRITICAL EXAMPLE OF SPLIT SENTENCES]
-Input:
-<s id="1">Company X's</s>
-<s id="2">outlet and factory</s>
-<s id="3">tenders</s>
-<s id="4">to Ming Cheng.</s>
-Correct Output (Keep each fragment strictly inside its own slot — NEVER combine into 3 slots):
-<s id="1">milik Kumpulan Syarikat X,</s>
-<s id="2">cawangan dan kilang,</s>
-<s id="3">tender-tender itu</s>
-<s id="4">kepada Ming Cheng.</s>
 
 CRITICAL RULES:
 
