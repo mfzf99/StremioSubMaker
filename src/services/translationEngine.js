@@ -3154,6 +3154,7 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
         .replace(/\bLA\b/g, 'LAH')
 
       // 3. KATA PINJAMAN & STANDARDIZASI
+        // Standardisasi Okay
         .replace(/\bokeylah\b/g, 'okaylah')
         .replace(/\bOkeylah\b/g, 'Okaylah')
         .replace(/\bOKEYLAH\b/g, 'OKAYLAH')
@@ -3169,6 +3170,14 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
         .replace(/\bok\b/g, 'okay')
         .replace(/\bOk\b/g, 'Okay')
         .replace(/\bOK\b/g, 'OKAY')
+
+        // Standardisasi Hello (Tukar Helo / Halo -> Hello)
+        .replace(/\bhelo\b/g, 'hello')
+        .replace(/\bHelo\b/g, 'Hello')
+        .replace(/\bHELO\b/g, 'HELLO')
+        .replace(/\bhalo\b/g, 'hello')
+        .replace(/\bHalo\b/g, 'Hello')
+        .replace(/\bHALO\b/g, 'HELLO')
 
       // 4. SINGKATAN TEKS
         .replace(/\bdgn\b/g, 'dengan')
