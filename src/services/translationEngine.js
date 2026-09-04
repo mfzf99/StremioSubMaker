@@ -2114,8 +2114,7 @@ CRITICAL RULES:
 3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun or object from a later slot into an earlier slot to fix grammar — preserve the fragmented pause as spoken.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
 5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
-6. NEVER add explanatory notes or commentary in parentheses. Preserve parentheses when they are part of the original dialogue.
-7. OUTPUT NOTHING OUTSIDE THE REQUIRED <s id="N">...</s> ENTRIES.
+6. ZERO notes in parentheses.
 
 <input>
 ${batchText}
