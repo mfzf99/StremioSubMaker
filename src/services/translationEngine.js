@@ -142,11 +142,11 @@ function getBatchSizeForModel(model) {
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 250;
+    return 200;
   }
 
   // Default batch size for unknown models
-  return 250;
+  return 200;
 }
 
 // Module-level shared key health tracking across engine instances.
