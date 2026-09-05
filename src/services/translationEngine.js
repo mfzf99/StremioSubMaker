@@ -2107,16 +2107,55 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
+[EXAMPLE FOR RULE 3 — CROSS-LANGUAGE WORD ORDER]
+English and Malay often place possessives, objects, and modifiers in 
+different positions. You may freely REPHRASE the grammatical role of 
+words WITHIN a slot to sound natural — but the underlying information 
+must stay in its original slot and sequence. Never move actual words 
+or information to a different slot to achieve this.
+
+Input:
+<s id="1">Company X's</s>
+<s id="2">outlet and factory</s>
+<s id="3">tenders</s>
+<s id="4">to Ming Cheng.</s>
+
+Correct (each slot rephrased internally, sequence and content boundaries untouched):
+<s id="1">Milik Syarikat X,</s>
+<s id="2">cawangan dan kilang,</s>
+<s id="3">tender-tender itu</s>
+<s id="4">kepada Ming Cheng.</s>
+
 CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
-3. If a sentence is split across multiple slots, translate each slot in its exact sequential order. You may rephrase a slot's grammar internally to sound natural, but NEVER pull a noun or object from a later slot into an earlier slot — preserve the fragmented pause as spoken, even if a slot reads awkwardly on its own.
-4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
-5. If content cannot be translated — foreign proper nouns, brand/entity names, corrupted text — copy the EXACT source text into that slot instead.
-6. Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
-7. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
-8. ZERO commentary, ZERO markdown code blocks, ZERO translator notes in parentheses.
+
+2. 1-TO-1 CONTENT LOCK — MOST CRITICAL: Output <s id="N"> MUST contain 
+   ONLY the translation of input <s id="N">. NEVER pull, borrow, or 
+   translate text from <s id="N+1"> into <s id="N">.
+
+3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple 
+   slots, translate each slot in its exact sequential order. You may 
+   rephrase a slot's grammar internally to sound natural (see example 
+   above), but NEVER pull a noun or object from a later slot into an 
+   earlier slot — preserve the fragmented pause as spoken, even if a 
+   slot reads awkwardly on its own.
+
+4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries 
+   under any circumstance.
+
+5. ESCAPE HATCH: If content cannot be translated — foreign proper nouns, 
+   brand/entity names, corrupted text — copy the EXACT source text into 
+   that slot instead.
+
+6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be 
+   translated, whether as a full song block or scattered background music.
+
+7. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact 
+   same position as in the source.
+
+8. CLEAN OUTPUT: ZERO commentary, ZERO markdown code blocks, ZERO 
+   translator notes in parentheses.
 
 <input>
 ${batchText}
