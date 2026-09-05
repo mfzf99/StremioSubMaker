@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Do not translate literally. Localize idioms, cultural references, slang, and humor so they feel natural to a native speaker of ${targetLabel} while retaining the original emotional intent and tone.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Prioritize natural, native-sounding ${targetLabel} over literal word-for-word translation. Localize idioms, cultural references, slang, and humor while preserving the original meaning, emotional intent, and tone. Do not introduce information that is not supported by the source or available context.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Do not translate literally. Localize idioms, cultural references, slang, and humor so they feel natural to a native speaker of ${targetLabel} while retaining the original emotional intent and tone.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Prioritize natural, native-sounding ${targetLabel} over literal word-for-word translation. Localize idioms, cultural references, slang, and humor while preserving the original meaning, emotional intent, and tone. Do not introduce information that is not supported by the source or available context.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
