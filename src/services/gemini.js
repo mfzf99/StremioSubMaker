@@ -425,7 +425,16 @@ class GeminiService {
     const thinkingEnabled = this.isThinkingEnabled();
 
     if (thinkingEnabled) {
-      const universalReasoningChain = '';
+      const universalReasoningChain = [
+  '',
+  '',
+  '[CRITICAL REASONING PROTOCOL]',
+  '1. ANTI-ECHO: NEVER copy or repeat the original source text into your internal reasoning scratchpad.',
+  '2. ANTI-CHECKLIST: XML syntax (<s id="N">) is a strict mechanical rule. Execute it automatically. DO NOT waste thought tokens writing validation checks for IDs or tags.',
+  '3. ZERO-THOUGHT BYPASS (CRITICAL): For 95% of standard dialogue, straightforward lines, overlapping speech (-), sound/music tags (e.g., [sighs], ♪), song lyrics, and sentence fragments — bypass reasoning ENTIRELY. Output the XML immediately.',
+  '4. SELECTIVE REASONING: ONLY activate reasoning for highly complex idioms or untranslatable slang. Resolve conceptually, NEVER plan cross-slot sentence merging, and output XML immediately.',
+  ''
+].join('\n');
 
       if (systemPrompt.includes('<input>')) {
         systemPrompt = systemPrompt.replace('<input>', universalReasoningChain + '\n<input>');
