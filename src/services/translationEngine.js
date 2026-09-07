@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match the original speaker's tone and emotion — whether tense, comedic, romantic, or formal — and adjust pronoun and speech formality to fit the relationship and setting. Adapt idioms and cultural references into natural equivalents rather than translating literally. Naturally integrate common English loanwords when contextually appropriate. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
+    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match the original speaker's tone and emotion. Adapt idioms and cultural references into natural equivalents rather than translating literally. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match the original speaker's tone and emotion — whether tense, comedic, romantic, or formal — and adjust pronoun and speech formality to fit the relationship and setting. Adapt idioms and cultural references into natural equivalents rather than translating literally. Naturally integrate common English loanwords when contextually appropriate. Keep lines concise for subtitle reading speed.`
+    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match the original speaker's tone and emotion. Adapt idioms and cultural references into natural equivalents rather than translating literally. Keep lines concise for subtitle reading speed.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
