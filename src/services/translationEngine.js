@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents rather than translating literally. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
+    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation, using colloquialisms where appropriate. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents rather than translating literally. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation. Match each speaker's tone, emotion, and character register Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents rather than translating literally. Keep lines concise for subtitle reading speed.`
+    `You are an expert ${sourceLabel} to ${targetLabel} subtitle translator. Prioritize meaning and natural dialogue flow over literal translation, using colloquialisms where appropriate. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents rather than translating literally. Keep lines concise for subtitle reading speed.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
