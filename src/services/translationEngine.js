@@ -2125,8 +2125,10 @@ CRITICAL RULES:
 2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
 3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun or object from a later slot into an earlier slot to fix grammar — preserve the fragmented pause as spoken.
 4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
-5. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
-6. ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
+5. ESCAPE HATCH: If content cannot be translated — foreign proper nouns, brand/entity names, corrupted text — copy the EXACT source text into that slot instead.
+6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
+7. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
+8. CLEAN OUTPUT: ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
 
 <input>
 ${batchText}
