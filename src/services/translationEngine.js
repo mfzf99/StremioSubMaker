@@ -2107,24 +2107,28 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-[CRITICAL EXAMPLE OF SPLIT SENTENCES]
+[CRITICAL EXAMPLE OF SPLIT SENTENCES & QUESTION TAGS]
 Input:
 <s id="1">Company X's</s>
 <s id="2">outlet and factory</s>
 <s id="3">tenders</s>
 <s id="4">to Ming Cheng.</s>
-Correct Output (Keep each fragment strictly inside its own slot — NEVER combine into 3 slots):
+<s id="5">You're seeing someone,</s>
+<s id="6">are you?</s>
+Correct Output (Translate fragment by fragment. NEVER absorb slot N+1 into slot N):
 <s id="1">milik Kumpulan Syarikat X,</s>
 <s id="2">cawangan dan kilang,</s>
 <s id="3">tender-tender itu</s>
 <s id="4">kepada Ming Cheng.</s>
+<s id="5">Awak bercinta dengan seseorang,</s>
+<s id="6">kan?</s>
 
 CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or translate text from <s id="N+1"> into <s id="N">.
-3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun or object from a later slot into an earlier slot to fix grammar — PRESERVE the fragmented pause as spoken.
-4. NEVER skip, omit, reorder, invent IDs, or shift subsequent entries under any circumstance.
+2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or absorb text from <s id="N+1"> into <s id="N">. Question tags and trailing particles (e.g., "are you?", "right?", "isn't it?", "you know?") MUST stay isolated in their own designated slot (e.g., outputting just "kan?" or "betul tak?") and NEVER be folded into the preceding slot.
+3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun, object, or question tag from a later slot into an earlier slot to fix grammar — PRESERVE the fragmented pause as spoken.
+4. ABSOLUTE ZERO SHIFTING: If a slot contains only 1 or 2 words (like "Right?", "Yeah", "No way"), translate ONLY those words in that slot. NEVER shift subsequent dialogue forward to fill it. Every input ID must match the exact same dialogue event in its corresponding output ID.
 5. ESCAPE HATCH: If content cannot be translated — foreign proper nouns, brand/entity names, corrupted text — copy the EXACT source text into that slot instead.
 6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
 7. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
