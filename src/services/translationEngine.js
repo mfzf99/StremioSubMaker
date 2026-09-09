@@ -2107,32 +2107,33 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-[CRITICAL EXAMPLE OF SPLIT SENTENCES & QUESTION TAGS]
+[CRITICAL STRUCTURAL EXAMPLE: SPLIT SENTENCES & TRAILING PARTICLES]
 Input:
 <s id="1">Company X's</s>
 <s id="2">outlet and factory</s>
 <s id="3">tenders</s>
 <s id="4">to Ming Cheng.</s>
-<s id="5">You're seeing someone,</s>
-<s id="6">are you?</s>
-Correct Output (Translate fragment by fragment. NEVER absorb slot N+1 into slot N):
-<s id="1">milik Kumpulan Syarikat X,</s>
-<s id="2">cawangan dan kilang,</s>
-<s id="3">tender-tender itu</s>
-<s id="4">kepada Ming Cheng.</s>
-<s id="5">Awak bercinta dengan seseorang,</s>
-<s id="6">kan?</s>
+<s id="5">You are coming with us,</s>
+<s id="6">aren't you?</s>
+
+Correct Target Output (Preserve fragmented syntax per slot. NEVER fold slot N+1 into slot N):
+<s id="1">${targetLabel} translation of slot 1 fragment only</s>
+<s id="2">${targetLabel} translation of slot 2 fragment only</s>
+<s id="3">${targetLabel} translation of slot 3 fragment only</s>
+<s id="4">${targetLabel} translation of slot 4 fragment only</s>
+<s id="5">${targetLabel} translation of the main statement only</s>
+<s id="6">${targetLabel} translation of the isolated question tag / confirmation particle only</s>
 
 CRITICAL RULES:
 
 1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. 1-TO-1 CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or absorb text from <s id="N+1"> into <s id="N">. Question tags and trailing particles (e.g., "are you?", "right?", "isn't it?", "you know?") MUST stay isolated in their own designated slot (e.g., outputting just "kan?" or "betul tak?") and NEVER be folded into the preceding slot.
-3. NEVER REORDER ACROSS SLOTS: If a sentence is split across multiple slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun, object, or question tag from a later slot into an earlier slot to fix grammar — PRESERVE the fragmented pause as spoken.
-4. ABSOLUTE ZERO SHIFTING: If a slot contains only 1 or 2 words (like "Right?", "Yeah", "No way"), translate ONLY those words in that slot. NEVER shift subsequent dialogue forward to fill it. Every input ID must match the exact same dialogue event in its corresponding output ID.
-5. ESCAPE HATCH: If content cannot be translated — foreign proper nouns, brand/entity names, corrupted text — copy the EXACT source text into that slot instead.
+2. 1-TO-1 STRICT CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or fold text from <s id="N+1"> into <s id="N">. Trailing sentence fragments, question tags (e.g., "right?", "are you?", "isn't it?"), and confirmation particles must remain strictly isolated inside their designated slot, even if the target language grammar prefers combining them.
+3. NEVER REORDER ACROSS SLOTS: If a sentence or thought is split across multiple consecutive slots, translate each slot in its exact sequential order without rearranging words between slots. PRESERVE the natural pauses and fragmentary delivery of the original speech.
+4. ABSOLUTE ZERO SHIFTING: If a slot contains only 1 or 2 words (e.g., interjections, short confirmations, single-word reactions), translate ONLY that content in that slot. NEVER shift subsequent dialogue forward to fill short slots. Every input ID must strictly align with the exact same dialogue event in its corresponding output ID.
+5. ESCAPE HATCH: If content cannot be translated (untranslated foreign proper nouns, fictional entities, corrupt strings), copy the EXACT source text into that slot instead.
 6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
-7. PRESERVE all [br], <i>...</i>, and speaker dashes (-) in the exact same position as in the source.
-8. CLEAN OUTPUT: ZERO commentary, ZERO markdown code blocks, and ZERO added translator notes or explanations in parentheses.
+7. PRESERVE all formatting tags: Retain [br], <i>...</i>, and speaker dashes (-) in the exact positions relative to the text.
+8. CLEAN OUTPUT: Output ONLY the sequence of <s id="N"> tags. ZERO commentary, ZERO markdown wrappers (no ```xml or ``` blocks), and ZERO parenthetical translator notes.
 
 <input>
 ${batchText}
