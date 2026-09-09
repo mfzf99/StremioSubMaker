@@ -2133,7 +2133,7 @@ CRITICAL RULES:
 5. ESCAPE HATCH: If content cannot be translated (untranslated foreign proper nouns, fictional entities, corrupt strings), copy the EXACT source text into that slot instead.
 6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
 7. PRESERVE all formatting tags: Retain [br], <i>...</i>, and speaker dashes (-) in the exact positions relative to the text.
-8. CLEAN OUTPUT: Output ONLY the sequence of <s id="N"> tags. ZERO commentary, ZERO markdown wrappers (no ```xml or ``` blocks), and ZERO parenthetical translator notes.
+8. CLEAN OUTPUT: Output ONLY the sequence of <s id="N"> tags. ZERO commentary, ZERO markdown wrappers (no markdown code blocks), and ZERO parenthetical translator notes.
 
 <input>
 ${batchText}
