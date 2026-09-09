@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Prioritize the speaker's underlying meaning and intent over literal, word-for-word translation, using natural colloquialisms and phrasing like a native speaker. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural equivalents rather than translating literally. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural colloquialisms, prioritizing meaning and flow over literal translation. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural equivalents. Preserve profanity at its original level. Keep lines concise for subtitle reading speed.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Prioritize the speaker's underlying meaning and intent over literal, word-for-word translation, using natural colloquialisms and phrasing like a native speaker. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural equivalents rather than translating literally. Keep lines concise for subtitle reading speed.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural colloquialisms, prioritizing meaning and flow over literal translation. Match each speaker's tone, emotion, and character register. Adapt idioms, slang, and cultural references into natural equivalents. Keep lines concise for subtitle reading speed.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
