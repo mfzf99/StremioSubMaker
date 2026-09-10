@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original intensity — do not censor, soften, or amplify. Keep translated lines concise for subtitle reading speed, but never at the cost of meaning or slot integrity.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original intensity — do not censor, soften, or amplify.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Keep translated lines concise for subtitle reading speed, but never at the cost of meaning or slot integrity.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2109,39 +2109,41 @@ class TranslationEngine {
 
 CRITICAL RULES:
 
-1. SLOT INTEGRITY (MOST CRITICAL)
-   Each <s id="N"> is a sealed, isolated slot. Translate ONLY the text inside it.
-   - NEVER steal, merge, complete, or pull text from adjacent IDs into this slot.
-   - NEVER shift text forward when a slot is short (1-2 words, interjections, 
-     question tags, confirmation particles).
-   - Trailing fragments, split idioms, and question tags MUST remain isolated 
-     inside their designated slot even if target grammar prefers combining.
-   - Preserve the exact sequential order of IDs. NEVER reorder across slots.
+1. SLOT INTEGRITY (MOST CRITICAL): Each <s id="N"> is a sealed, isolated 
+   slot. Translate ONLY the text inside it. NEVER steal, merge, complete, 
+   or pull text from adjacent IDs into this slot. NEVER shift text forward 
+   when a slot is short (1-2 words, interjections, question tags, 
+   confirmation particles). Trailing fragments and split idioms MUST 
+   remain isolated inside their designated slot even if target grammar 
+   prefers combining. Preserve exact sequential order — never reorder 
+   across slots.
 
-2. EXACT COUNT & ID INTEGRITY
-   Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-   Format: <s id="N">translated text</s>. Never skip, reorder, renumber, or 
-   invent IDs. NEVER fabricate content to hit the count — use Rule 3 instead.
+   Example (X and Y are placeholder IDs, not real ones from the input):
+   Correct: <s id="X">Kalau awak betul-betul rasa</s> <s id="Y">saya sanggup khianati awak...</s>
+   Wrong:   <s id="X">Kalau awak betul-betul rasa saya sanggup khianati awak...</s> <s id="Y">.</s>
 
-3. ESCAPE HATCH (Anti-Hallucination)
-   Copy the EXACT source text into a slot ONLY when:
-   - untranslated foreign proper nouns, fictional entities, corrupt strings
-   - slot contains ONLY symbols, music notes (♪ ♫), numbers, or punctuation
-   - slot is empty in the source
-   NEVER use this as a shortcut for difficult translations.
+2. EXACT COUNT & ID INTEGRITY: Output EXACTLY ${expectedCount} entries 
+   from ID ${startId} to ID ${endId}. Format: <s id="N">translated text</s>. 
+   Never skip, reorder, renumber, or invent IDs. Never fabricate content 
+   to hit the count — use Rule 3 instead.
 
-4. MUSIC & FORMATTING
-   - ALL song lyrics inside ♪/♫ — including background music — MUST be translated.
-   - If lyrics already in target language, keep as-is.
-   - Preserve every [br], <i>...</i>, and speaker dash (-) in the same position.
-   - Do NOT add line breaks or formatting tags that don't exist in the source.
+3. ESCAPE HATCH (Anti-Hallucination): Copy the EXACT source text into a 
+   slot ONLY when: untranslated foreign proper nouns/fictional entities/
+   corrupt strings; the slot contains ONLY symbols, music notes, numbers, 
+   or punctuation; or the slot is empty in the source. NEVER use this as 
+   a shortcut for difficult translations.
 
-5. CLEAN OUTPUT
-   Response contains ONLY the <s id="N">...</s> sequence.
-   - No commentary, no markdown code blocks, no [input]/[OUTPUT_FORMAT] echo.
-   - No BATCH header echo.
-   - Start directly with the first tag; end directly after the last </s>.
-   - Do NOT repeat the leading <s id=" prefix that was pre-filled for you.
+4. MUSIC & FORMATTING: ALL song lyrics inside ♪/♫ — including background 
+   music — MUST be translated. If lyrics are already in the target 
+   language, keep as-is. Preserve every [br], <i>...</i>, and speaker 
+   dash (-) in the same position. Do NOT add line breaks or formatting 
+   tags that don't exist in the source.
+
+5. CLEAN OUTPUT: Response contains ONLY the <s id="N">...</s> sequence. 
+   No commentary, no markdown code blocks, no [input]/[OUTPUT_FORMAT] 
+   echo, no BATCH header echo. Do NOT repeat the leading <s id=" prefix 
+   that was pre-filled for you. Start directly with the first tag; end 
+   directly after the last </s>.
 
 <input>
 ${batchText}
