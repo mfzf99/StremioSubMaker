@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Preserve profanity at its original intensity — do not censor, soften, or amplify. Keep translated lines concise for subtitle reading speed, but never at the cost of meaning or slot integrity.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use natural, colloquial ${targetLabel} where appropriate. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register. Keep translated lines concise for subtitle reading speed, but never at the cost of meaning or slot integrity.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
