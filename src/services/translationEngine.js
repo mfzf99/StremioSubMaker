@@ -2107,37 +2107,41 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-[CRITICAL STRUCTURAL EXAMPLE: SPLIT SENTENCES, IDIOMS & TRAILING PARTICLES]
-Input:
-<s id="1">Company X's</s>
-<s id="2">outlet and factory</s>
-<s id="3">tenders</s>
-<s id="4">to Ming Cheng.</s>
-<s id="5">I've got all your debts</s>
-<s id="6">etched in my mind.</s>
-<s id="7">You are coming with us,</s>
-<s id="8">aren't you?</s>
-
-Correct Target Output (Preserve fragmented syntax per slot. NEVER fold slot N+1 into slot N):
-<s id="1">${targetLabel} translation of slot 1 fragment only</s>
-<s id="2">${targetLabel} translation of slot 2 fragment only</s>
-<s id="3">${targetLabel} translation of slot 3 fragment only</s>
-<s id="4">${targetLabel} translation of slot 4 fragment only</s>
-<s id="5">${targetLabel} translation of slot 5 opening fragment only</s>
-<s id="6">${targetLabel} translation of slot 6 concluding idiom/predicate only</s>
-<s id="7">${targetLabel} translation of the main statement only</s>
-<s id="8">${targetLabel} translation of the isolated question tag / confirmation particle only</s>
-
 CRITICAL RULES:
 
-1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. 1-TO-1 STRICT CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or fold text from <s id="N+1"> into <s id="N">. Trailing sentence fragments, split idiom/verb complements, question tags (e.g., "right?", "are you?", "isn't it?"), and confirmation particles must remain strictly isolated inside their designated slot, even if the target language grammar prefers combining them.
-3. NEVER REORDER ACROSS SLOTS: If a sentence, idiom, or thought is split across multiple consecutive slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun, object, question tag, or trailing verb/idiom complement from a later slot into an earlier slot to fix grammar — PRESERVE the natural pauses and fragmentary delivery of the original speech.
-4. ABSOLUTE ZERO SHIFTING: If a slot contains only 1 or 2 words (e.g., short interjections, split particles, single-word reactions), translate ONLY that content in that slot. NEVER shift subsequent dialogue forward to fill short slots. Every input ID must strictly align with the exact same dialogue event in its corresponding output ID.
-5. ESCAPE HATCH: If content cannot be translated (untranslated foreign proper nouns, fictional entities, corrupt strings), copy the EXACT source text into that slot instead.
-6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
-7. PRESERVE all formatting tags: Retain [br], <i>...</i>, and speaker dashes (-) in the exact positions relative to the text.
-8. CLEAN OUTPUT: Output ONLY the sequence of <s id="N"> tags. ZERO commentary, ZERO markdown wrappers (no markdown code blocks), and ZERO parenthetical translator notes.
+1. SLOT INTEGRITY (MOST CRITICAL)
+   Each <s id="N"> is a sealed, isolated slot. Translate ONLY the text inside it.
+   - NEVER steal, merge, complete, or pull text from adjacent IDs into this slot.
+   - NEVER shift text forward when a slot is short (1-2 words, interjections, 
+     question tags, confirmation particles).
+   - Trailing fragments, split idioms, and question tags MUST remain isolated 
+     inside their designated slot even if target grammar prefers combining.
+   - Preserve the exact sequential order of IDs. NEVER reorder across slots.
+
+2. EXACT COUNT & ID INTEGRITY
+   Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
+   Format: <s id="N">translated text</s>. Never skip, reorder, renumber, or 
+   invent IDs. NEVER fabricate content to hit the count — use Rule 3 instead.
+
+3. ESCAPE HATCH (Anti-Hallucination)
+   Copy the EXACT source text into a slot ONLY when:
+   - untranslated foreign proper nouns, fictional entities, corrupt strings
+   - slot contains ONLY symbols, music notes (♪ ♫), numbers, or punctuation
+   - slot is empty in the source
+   NEVER use this as a shortcut for difficult translations.
+
+4. MUSIC & FORMATTING
+   - ALL song lyrics inside ♪/♫ — including background music — MUST be translated.
+   - If lyrics already in target language, keep as-is.
+   - Preserve every [br], <i>...</i>, and speaker dash (-) in the same position.
+   - Do NOT add line breaks or formatting tags that don't exist in the source.
+
+5. CLEAN OUTPUT
+   Response contains ONLY the <s id="N">...</s> sequence.
+   - No commentary, no markdown code blocks, no [input]/[OUTPUT_FORMAT] echo.
+   - No BATCH header echo.
+   - Start directly with the first tag; end directly after the last </s>.
+   - Do NOT repeat the leading <s id=" prefix that was pre-filled for you.
 
 <input>
 ${batchText}
