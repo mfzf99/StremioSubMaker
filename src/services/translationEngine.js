@@ -1284,18 +1284,43 @@ class TranslationEngine {
       }
 
       // Fix #7: Build context for second half from first half's translations
-      // [UPDATED]: Added previousMemory mapping for XML workflow to prevent Amnesia Auto-Chunking
+      // [UPGRADED]: Kalis Ralat Indeks Auto-Chunking + Penapis [⚠] Bersih
       const contextCount = Math.min(this.contextSize, firstHalf.length);
-      const secondHalfContext = this.enableBatchContext && contextCount > 0 ? {
-        surroundingOriginal: firstHalf.slice(-contextCount),
-        previousMemory: firstHalf.slice(-contextCount).map((orig, i) => {
-          const transIdx = firstTranslated.length - contextCount + i;
-          return {
+      const targetEntries = firstHalf.slice(-contextCount);
+      const startIndex = firstHalf.length - contextCount;
+
+      // 1. Petakan hasil terjemahan bahagian pertama mengikut index sebenar
+      const transMapByIndex = new Map();
+      if (Array.isArray(firstTranslated)) {
+        for (let i = 0; i < firstTranslated.length; i++) {
+          const item = firstTranslated[i];
+          const idx = (item && typeof item.index === 'number') ? item.index : i;
+          if (item && typeof item.text === 'string') {
+            transMapByIndex.set(idx, item.text);
+          }
+        }
+      }
+
+      // 2. Bina memori konteks berdasarkan padanan index tepat di dalam firstHalf
+      const memoryList = [];
+      for (let i = 0; i < targetEntries.length; i++) {
+        const orig = targetEntries[i];
+        const actualIndexInFirstHalf = startIndex + i;
+        const transText = transMapByIndex.get(actualIndexInFirstHalf);
+
+        // Hanya simpan jika terjemahan sah dan bukan amaran ralat [⚠]
+        if (transText && !transText.startsWith('[⚠]')) {
+          memoryList.push({
             id: orig.id,
             source: orig.text,
-            translation: firstTranslated[transIdx] ? firstTranslated[transIdx].text : ''
-          };
-        })
+            translation: transText
+          });
+        }
+      }
+
+      const secondHalfContext = this.enableBatchContext && memoryList.length > 0 ? {
+        surroundingOriginal: targetEntries,
+        previousMemory: memoryList
       } : null;
 
       const secondTranslated = await this.translateBatch(secondHalf, targetLanguage, customPrompt, batchIndex, totalBatches, secondHalfContext, opts);
