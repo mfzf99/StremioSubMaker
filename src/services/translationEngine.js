@@ -2129,88 +2129,90 @@ class TranslationEngine {
     let startId = 'START';
     let endId = 'END';
 
-    // 🚨 Halang baca ID dari memori, fokus pada teks sasaran sahaja
     let targetSection = batchText;
     if (batchText.includes('=== ENTRIES TO TRANSLATE ===')) {
       targetSection = batchText.split('=== ENTRIES TO TRANSLATE ===')[1];
     }
 
     if (totalBatches === 1) {
-        const firstMatch = targetSection.match(/<s id="([^"]+)">/);
-        if (firstMatch) startId = firstMatch[1];
+      const firstMatch = targetSection.match(/<s id="([^"]+)">/);
+      if (firstMatch) startId = firstMatch[1];
 
-        const lastIndex = targetSection.lastIndexOf('<s id="');
-        if (lastIndex !== -1) {
-            const endMatch = targetSection.substring(lastIndex).match(/<s id="([^"]+)">/);
-            if (endMatch) endId = endMatch[1];
-        }
+      const lastIndex = targetSection.lastIndexOf('<s id="');
+      if (lastIndex !== -1) {
+        const endMatch = targetSection.substring(lastIndex).match(/<s id="([^"]+)">/);
+        if (endMatch) endId = endMatch[1];
+      }
     } else {
-        const idMatches = [...targetSection.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
-        startId = idMatches.length > 0 ? idMatches[0] : 'START';
-        endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
+      const idMatches = [...targetSection.matchAll(/<s id="([^"]+)">/g)].map(m => m[1]);
+      startId = idMatches.length > 0 ? idMatches[0] : 'START';
+      endId = idMatches.length > 0 ? idMatches[idMatches.length - 1] : 'END';
     }
 
-    // 🛑 SEDUT AYAT PENGENALAN DARI ZON TEMPLATE BERSAMA SOURCE & TARGET LABEL 🛑
     const introInstruction = PROMPT_TEMPLATES.primary(targetLabel, sourceLabel);
 
     const promptBody = `${introInstruction}
 
-[CRITICAL STRUCTURAL EXAMPLES: STRICT FRAGMENTATION, BROKEN CLAUSES & SPLIT PARTICLES]
+[UNIVERSAL STRUCTURAL DEMONSTRATION: FRAGMENTATION & SYNTAX ISOLATION]
 Input:
-<s id="1">Yusen, Nie has been the one</s>
-<s id="2">in charge of Liuguang Garden, right?</s>
-<s id="3">even though I told him</s>
+<s id="1">The chief director was the one</s>
+<s id="2">responsible for the approval, right?</s>
+<s id="3">Even after we told them</s>
 <s id="4">not to.</s>
-<s id="5">I've got all your debts</s>
-<s id="6">etched in my mind.</s>
+<s id="5">Keep all those instructions</s>
+<s id="6">firmly in mind.</s>
+<s id="7">Wait.</s>
 
-CORRECT TARGET OUTPUT (MANDATORY GRAMMATICAL INCOMPLETENESS PER SLOT):
-<s id="1">${targetLabel} translation of slot 1 fragment only (leave incomplete)</s>
-<s id="2">${targetLabel} translation of slot 2 continuation only</s>
-<s id="3">${targetLabel} translation of slot 3 clause only</s>
-<s id="4">${targetLabel} translation of slot 4 negation particle only</s>
-<s id="5">${targetLabel} translation of slot 5 opening fragment only</s>
-<s id="6">${targetLabel} translation of slot 6 concluding predicate only</s>
+Target Output (Mandatory Grammatical Incompleteness Per Slot - Zero Cross-Slot Merging):
+<s id="1">${targetLabel} translation of opening relative clause only (leave grammatically incomplete)</s>
+<s id="2">${targetLabel} translation of predicate continuation and question tag only</s>
+<s id="3">${targetLabel} translation of dependent conjunction clause only (leave hanging)</s>
+<s id="4">${targetLabel} translation of isolated negation particle only</s>
+<s id="5">${targetLabel} translation of opening verb-object clause only</s>
+<s id="6">${targetLabel} translation of concluding complement/idiom only</s>
+<s id="7">${targetLabel} translation of the single reaction word only</s>
 
-CRITICAL ENFORCEMENT RULES:
+CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
 
-1. EXACT TAG AND COUNT PARITY:
-   - Output EXACTLY ${expectedCount} entries, sequentially numbered from ID ${startId} to ID ${endId}.
-   - Every single <s id="N"> in the output MUST pair 1-to-1 with input <s id="N">.
+1. 1-TO-1 STRICT CARDINALITY & ID PARITY:
+   - Output EXACTLY ${expectedCount} entries, numbered sequentially from ID ${startId} to ID ${endId}.
+   - Every input <s id="N"> MUST pair with exactly one output <s id="N">. Never omit, combine, or invent IDs.
 
-2. ABSOLUTE 1-TO-1 CONTENT LOCK (ZERO MERGING / ZERO FOLDING):
+2. ABSOLUTE SYNTACTIC ISOLATION (ZERO MERGING / ZERO BORROWING):
    - Output <s id="N"> MUST contain ONLY the translation of input <s id="N">.
-   - NEVER pull, borrow, or merge words from <s id="N+1"> into <s id="N"> under ANY circumstances.
-   - If an input slot is an unfinished clause, dangling pronoun ("the one who"), question tag ("right?"), or split particle ("not to."), you MUST leave the target translation grammatically incomplete inside that specific slot.
-   - INCOMPLETE TARGET GRAMMAR IS STRICTLY MANDATORY TO PRESERVE SUBTITLE TIMESTAMPS.
+   - NEVER pull, borrow, merge, or fold words from <s id="N+1"> into <s id="N"> under ANY circumstance.
+   - If an input slot contains a dangling relative pronoun ("the one who"), unfinished conjunction ("even though"), split infinitive ("to"), preposition, question tag ("right?"), or isolated negative ("not to."), you MUST leave the target translation grammatically incomplete inside that specific slot.
+   - INCOMPLETE TARGET SYNTAX IS MANDATORY TO PRESERVE TIMECODE SYNCHRONIZATION.
 
-3. ZERO SHIFTING, ANTI-HALLUCINATION & NO CONVERSATIONAL CONTINUATION:
-   - NEVER shift subsequent dialogues forward to fill an earlier slot.
-   - NEVER invent, hallucinate, or fabricate synthetic filler sentences (e.g., creating fake lines to reach the tag count).
-   - ZERO CONVERSATIONAL CONTINUATION: NEVER generate conversational responses, emotional reactions, or missing film dialogue to reply to the previous memory (<m> tags).
-   - The very first tag <s id="${startId}"> MUST contain ONLY the direct translation of input <s id="${startId}">.
-   - Do NOT invent bridging phrases (e.g., replying "Saya cuma cakap perkara yang betul" after "No need to be so humble", or echoing "Terbaik!" after "Syabas!"). You are a translator, NOT a scriptwriter.
+3. ZERO SHIFTING, ANTI-HALLUCINATION & SOURCE FIDELITY:
+   - NEVER shift subsequent dialogue forward to compensate for short or empty slots.
+   - NEVER invent synthetic filler lines to satisfy the tag count.
+   - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the text present inside input <s id="N">. Even if you recognize the media source and know the actors spoke unscripted words or omitted lines in the original audio, you are STRICTLY FORBIDDEN from inserting missing lines.
+   - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> immediately. NEVER output reactive conversational phrases, answers, or commentary responding to the background memory (<m> tags).
 
-4. STRICT READ-ONLY CONTEXT MEMORY (<m> TAGS):
-   - Any entries enclosed inside <m id="N"><src>...</src><dst>...</dst></m> are PREVIOUS TRANSLATION MEMORIES provided strictly as read-only background context.
-   - NEVER translate, alter, or output any <m> tag.
-   - NEVER borrow, pull, or duplicate text from <m> tags into the active <s id="N"> tags.
-   - Your output must start IMMEDIATELY with <s id="${startId}">.
+4. AIR-GAPPED READ-ONLY CONTEXT MEMORY (<m> TAGS):
+   - All entries enclosed in <m id="N"><src>...</src><dst>...</dst></m> are STRICTLY READ-ONLY background context.
+   - NEVER translate, modify, or output any <m> tags.
+   - NEVER duplicate or borrow text from <m> tags into active <s id="N"> tags.
+   - Your response MUST begin immediately with <s id="${startId}">.
 
-5. MINIMALIST SLOTS (1 TO 2 WORDS):
-   - If an input slot contains only 1 or 2 words (e.g., "No.", "Aunt.", "not to."), translate ONLY those words inside that slot. NEVER append words from the next slot.
+5. PRONOUN FIDELITY & ZERO KINSHIP GUESSING:
+   - Translate first/second person pronouns (I, you) strictly as standard pronouns.
+   - ABSOLUTE BAN ON TITLE INFERENCE: Do NOT substitute pronouns with kinship titles or honorifics (e.g., father, mother, uncle, boss) unless the source text in that EXACT slot explicitly contains the specific vocative noun (e.g., "Dad", "Mom", "Sir").
 
-6. ESCAPE HATCH:
-   - If an entry contains unreadable text, corrupt strings, or untranslatable foreign proper nouns, copy the EXACT source text into that slot.
+6. MINIMALIST SLOTS (1 TO 2 WORDS):
+   - If an input slot contains only 1 or 2 words (e.g., interjections, "Yes.", "Wait.", "not to."), translate ONLY those words inside that slot. NEVER append subsequent dialogue to make a complete sentence.
 
-7. SONG LYRICS:
-   - Lyrics inside music notes (♪/♫) must always be translated.
+7. ESCAPE HATCH:
+   - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible code, copy the EXACT source text into that slot.
 
-8. PRESERVE FORMATTING:
-   - Retain [br], <i>...</i>, and speaker hyphens (-) in the exact positions relative to the text.
+8. SONG LYRICS & FORMATTING:
+   - Translate all lyrics marked with musical symbols (♪/♫).
+   - Retain all formatting tags ([br], <i>...</i>, hyphens) in their exact relative positions.
 
-9. CLEAN OUTPUT:
-   - Output ONLY the sequence of <s id="N"> tags. ZERO markdown code blocks, ZERO commentary, and ZERO notes.
+9. CLEAN PAYLOAD ONLY:
+   - Output ONLY the sequence of <s id="N">...</s> tags.
+   - ZERO markdown code fences, ZERO conversational preambles, and ZERO translator notes.
 
 <input>
 ${batchText}
