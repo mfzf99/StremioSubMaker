@@ -2858,9 +2858,9 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
         // 🛡️ FASA 3: REGEX KEBAL UNTUK STREAMING 🛡️
         let cleaned = partialText;
         
-        // Pancing penyambung untuk streaming
+        // Pancing penyambung untuk streaming (Guna batchStartId yang sudah sedia ada di atas)
         if (!cleaned.startsWith('<s')) {
-          cleaned = '<s id="' + cleaned;
+          cleaned = `<s id="${batchStartId}">` + cleaned;
         }
         
         // Buang markdown (guna hex untuk elak UI pecah)
