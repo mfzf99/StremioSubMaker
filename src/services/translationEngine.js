@@ -1084,6 +1084,7 @@ class TranslationEngine {
   /**
    * Prepare context for a batch (original surrounding entries + previous translations)
    * Context improves translation coherence across batches
+   * Kalis ralat indeks & ID tak sekata (Global Array Index Alignment)
    * @param {Array} batch - Current batch entries
    * @param {Array} allOriginalEntries - All original entries
    * @param {Array} translatedSoFar - Previously translated entries
@@ -1091,40 +1092,53 @@ class TranslationEngine {
    * @returns {Object} - Context object with surrounding and previous entries
    */
   prepareContextForBatch(batch, allOriginalEntries, translatedSoFar, batchIndex) {
-    if (!this.enableBatchContext) {
+    if (!this.enableBatchContext || batchIndex === 0 || !batch || batch.length === 0 || !Array.isArray(allOriginalEntries)) {
       return null;
     }
 
-    const firstEntryId = batch[0].id;
-    const surroundingStartIdx = Math.max(0, firstEntryId - 1 - this.contextSize);
-    const surroundingEndIdx = firstEntryId - 2;
-    const memoryContext = [];
-
-    // Bina 'Kamus' carian pantas untuk terjemahan yang dah siap
-    const translatedMap = new Map();
-    for (const t of translatedSoFar) {
-      translatedMap.set(t.id, t.text);
+    // 1. Dapatkan indeks sebenar elemen batch[0] di dalam allOriginalEntries (Bukan teka nombor ID!)
+    let batchStartIdx = allOriginalEntries.indexOf(batch[0]);
+    if (batchStartIdx === -1) {
+      batchStartIdx = allOriginalEntries.findIndex(e => e.id === batch[0]?.id);
     }
 
-    for (let i = surroundingStartIdx; i <= surroundingEndIdx && i < allOriginalEntries.length; i++) {
-      if (allOriginalEntries[i]) {
-        const origEntry = allOriginalEntries[i];
-        const translatedText = translatedMap.get(origEntry.id);
-        
-        // Cuma masukkan dalam memori kalau terjemahan tu berjaya (bukan ralat)
-        if (translatedText && !translatedText.startsWith('[⚠]')) {
-          memoryContext.push({
-            id: origEntry.id,
-            source: origEntry.text,
-            translation: translatedText
-          });
+    // Jika ini permulaan fail atau kedudukan tidak sah, tiada konteks sebelumnya
+    if (batchStartIdx <= 0) {
+      return null;
+    }
+
+    const surroundingStartIdx = Math.max(0, batchStartIdx - this.contextSize);
+    const surroundingEndIdx = batchStartIdx - 1;
+    const memoryContext = [];
+
+    // 2. Bina kamus carian pantas untuk terjemahan yang telah siap mengikut ID sebenar
+    const translatedMap = new Map();
+    if (Array.isArray(translatedSoFar)) {
+      for (const t of translatedSoFar) {
+        if (t && t.id !== undefined) {
+          translatedMap.set(t.id, t.text);
         }
       }
     }
 
-    const hasContext = batchIndex > 0 && memoryContext.length > 0;
+    // 3. Kumpul baris sebelum batch ini berserta terjemahannya
+    for (let i = surroundingStartIdx; i <= surroundingEndIdx && i < allOriginalEntries.length; i++) {
+      const origEntry = allOriginalEntries[i];
+      if (!origEntry) continue;
 
-    return hasContext ? {
+      const translatedText = translatedMap.get(origEntry.id);
+
+      // Hanya masukkan ke dalam memori jika terjemahan sah dan bukan amaran ralat [⚠]
+      if (translatedText && typeof translatedText === 'string' && !translatedText.startsWith('[⚠]')) {
+        memoryContext.push({
+          id: origEntry.id,
+          source: origEntry.text,
+          translation: translatedText
+        });
+      }
+    }
+
+    return memoryContext.length > 0 ? {
       previousMemory: memoryContext
     } : null;
   }
