@@ -2081,10 +2081,18 @@ class TranslationEngine {
 
   /**
    * Prepare batch text using XML tags for robust entry identification
-   * [UPGRADED]: Menghantar pasangan Source + Target (Translation Memory) menggunakan tag <m>
+   * [UPGRADED]: Kalis Simbol Beracun XML (&, <, >) dalam Memori <m> & Teks <s>
    */
   prepareBatchXml(batch, context = null) {
     let result = '';
+
+    // Fungsi keselamatan untuk mengelak struktur tag <m> pecah akibat simbol mentah
+    const escapeMemoryXml = (str) => {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
 
     if (context?.previousMemory?.length > 0) {
       result += '[PREVIOUS_TRANSLATION_MEMORY - FOR CONTINUITY ONLY. DO NOT TRANSLATE THIS]\n';
@@ -2092,7 +2100,7 @@ class TranslationEngine {
         if (entry.translation) {
           const cleanSource = String(entry.source || '').trim().replace(/\n+/g, ' [br] ');
           const cleanTrans = String(entry.translation || '').trim().replace(/\n+/g, ' [br] ');
-          result += `<m id="${entry.id}"><src>${cleanSource}</src><dst>${cleanTrans}</dst></m>\n`;
+          result += `<m id="${entry.id}"><src>${escapeMemoryXml(cleanSource)}</src><dst>${escapeMemoryXml(cleanTrans)}</dst></m>\n`;
         }
       });
       result += '=== END OF MEMORY ===\n\n';
