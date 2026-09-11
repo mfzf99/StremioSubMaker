@@ -2184,29 +2184,35 @@ CRITICAL ENFORCEMENT RULES:
    - If an input slot is an unfinished clause, dangling pronoun ("the one who"), question tag ("right?"), or split particle ("not to."), you MUST leave the target translation grammatically incomplete inside that specific slot.
    - INCOMPLETE TARGET GRAMMAR IS STRICTLY MANDATORY TO PRESERVE SUBTITLE TIMESTAMPS.
 
-3. ZERO SHIFTING & ANTI-HALLUCINATION:
+3. ZERO KINSHIP GUESSING (PRONOUN INTEGRITY):
+   - Translate "I" / "you" STRICTLY as personal pronouns (saya, awak, aku, kau).
+   - ABSOLUTE BAN ON GUESSING TITLES: NEVER replace "you" or "I" with kinship terms or honorifics (e.g., "ayah", "mak", "ibu", "pak cik", "mak cik", "abang", "kakak", "tuan", "bos") unless the English source in that EXACT slot explicitly mentions the vocative word (e.g., "Dad", "Mom", "Uncle", "Aunt", "Sir").
+   - If the English text simply says "Are you sure?", translate using pronouns (e.g., "Awak pasti ke?" / "Kau pasti ke?"). You are STRICTLY FORBIDDEN from guessing "Ayah pasti ke?" or "Mak cik pasti ke?".
+   - SONG LYRICS (♪/♫): Allow natural, expressive, and poetic pronouns (e.g., aku/kau) to match musical flow and emotion.
+
+4. ZERO SHIFTING & ANTI-HALLUCINATION:
    - NEVER shift subsequent dialogues forward to fill an earlier slot.
    - NEVER invent, hallucinate, or fabricate synthetic filler sentences (e.g. creating fake lines to reach the tag count).
 
-4. STRICT READ-ONLY CONTEXT MEMORY (<m> TAGS):
+5. STRICT READ-ONLY CONTEXT MEMORY (<m> TAGS):
    - Any entries enclosed inside <m id="N"><src>...</src><dst>...</dst></m> are PREVIOUS TRANSLATION MEMORIES provided strictly as read-only background context.
    - NEVER translate, alter, or output any <m> tag.
    - NEVER borrow, pull, or duplicate text from <m> tags into the active <s id="N"> tags.
    - Your output must start IMMEDIATELY with <s id="${startId}">.
 
-5. MINIMALIST SLOTS (1 TO 2 WORDS):
+6. MINIMALIST SLOTS (1 TO 2 WORDS):
    - If an input slot contains only 1 or 2 words (e.g., "No.", "Aunt.", "not to."), translate ONLY those words inside that slot. NEVER append words from the next slot.
 
-6. ESCAPE HATCH:
+7. ESCAPE HATCH:
    - If an entry contains unreadable text, corrupt strings, or untranslatable foreign proper nouns, copy the EXACT source text into that slot.
 
-7. SONG LYRICS:
+8. SONG LYRICS:
    - Lyrics inside music notes (♪/♫) must always be translated.
 
-8. PRESERVE FORMATTING:
+9. PRESERVE FORMATTING:
    - Retain [br], <i>...</i>, and speaker hyphens (-) in the exact positions relative to the text.
 
-9. CLEAN OUTPUT:
+10. CLEAN OUTPUT:
    - Output ONLY the sequence of <s id="N"> tags. ZERO markdown code blocks, ZERO commentary, and ZERO notes.
 
 <input>
