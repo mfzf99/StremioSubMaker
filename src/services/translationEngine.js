@@ -2107,37 +2107,59 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-[CRITICAL STRUCTURAL EXAMPLE: SPLIT SENTENCES, IDIOMS & TRAILING PARTICLES]
+[CRITICAL STRUCTURAL EXAMPLES: STRICT FRAGMENTATION, BROKEN CLAUSES & SPLIT PARTICLES]
 Input:
-<s id="1">Company X's</s>
-<s id="2">outlet and factory</s>
-<s id="3">tenders</s>
-<s id="4">to Ming Cheng.</s>
+<s id="1">Yusen, Nie has been the one</s>
+<s id="2">in charge of Liuguang Garden, right?</s>
+<s id="3">even though I told him</s>
+<s id="4">not to.</s>
 <s id="5">I've got all your debts</s>
 <s id="6">etched in my mind.</s>
-<s id="7">You are coming with us,</s>
-<s id="8">aren't you?</s>
 
-Correct Target Output (Preserve fragmented syntax per slot. NEVER fold slot N+1 into slot N):
-<s id="1">${targetLabel} translation of slot 1 fragment only</s>
-<s id="2">${targetLabel} translation of slot 2 fragment only</s>
-<s id="3">${targetLabel} translation of slot 3 fragment only</s>
-<s id="4">${targetLabel} translation of slot 4 fragment only</s>
-<s id="5">${targetLabel} translation of slot 5 opening fragment only</s>
-<s id="6">${targetLabel} translation of slot 6 concluding idiom/predicate only</s>
-<s id="7">${targetLabel} translation of the main statement only</s>
-<s id="8">${targetLabel} translation of the isolated question tag / confirmation particle only</s>
+CORRECT TARGET OUTPUT (MANDATORY GRAMMATICAL INCOMPLETENESS PER SLOT):
+<s id="1">Yusen, Nie ialah orang yang</s>
+<s id="2">menjaga Taman Liuguang, kan?</s>
+<s id="3">walaupun saya dah kata</s>
+<s id="4">tak payah.</s>
+<s id="5">Semua hutang awak</s>
+<s id="6">dah terpahat dalam kepala saya.</s>
 
-CRITICAL RULES:
+WRONG OUTPUT (STRICTLY PROHIBITED - OFF-BY-ONE COLLAPSE):
+<s id="1">Yusen, Nie yang jaga Taman Liuguang, kan?</s>  <-- FORBIDDEN: Consumed text from slot 2!
+<s id="2">Ya, Nie ketuanya.</s>                          <-- FORBIDDEN: Shifted subsequent line into slot 2!
 
-1. Output EXACTLY ${expectedCount} entries from ID ${startId} to ID ${endId}.
-2. 1-TO-1 STRICT CONTENT LOCK: Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull, borrow, or fold text from <s id="N+1"> into <s id="N">. Trailing sentence fragments, split idiom/verb complements, question tags (e.g., "right?", "are you?", "isn't it?"), and confirmation particles must remain strictly isolated inside their designated slot, even if the target language grammar prefers combining them.
-3. NEVER REORDER ACROSS SLOTS: If a sentence, idiom, or thought is split across multiple consecutive slots, translate each slot in its exact sequential order without rearranging words between slots. NEVER pull a noun, object, question tag, or trailing verb/idiom complement from a later slot into an earlier slot to fix grammar — PRESERVE the natural pauses and fragmentary delivery of the original speech.
-4. ABSOLUTE ZERO SHIFTING: If a slot contains only 1 or 2 words (e.g., short interjections, split particles, single-word reactions), translate ONLY that content in that slot. NEVER shift subsequent dialogue forward to fill short slots. Every input ID must strictly align with the exact same dialogue event in its corresponding output ID.
-5. ESCAPE HATCH: If content cannot be translated (untranslated foreign proper nouns, fictional entities, corrupt strings), copy the EXACT source text into that slot instead.
-6. SONG LYRICS: Lyrics inside music notes (♪/♫) must always be translated, whether as a full song block or scattered background music.
-7. PRESERVE all formatting tags: Retain [br], <i>...</i>, and speaker dashes (-) in the exact positions relative to the text.
-8. CLEAN OUTPUT: Output ONLY the sequence of <s id="N"> tags. ZERO commentary, ZERO markdown wrappers (no markdown code blocks), and ZERO parenthetical translator notes.
+CRITICAL ENFORCEMENT RULES:
+
+1. EXACT TAG AND COUNT PARITY:
+   - Output EXACTLY ${expectedCount} tags, numbered sequentially from ID ${startId} to ID${endId}.
+   - Every single <s id="N"> in the output MUST pair with input <s id="N">.
+
+2. ABSOLUTE 1-TO-1 CONTENT ISOLATION (ZERO FORWARD/BACKWARD LEAK):
+   - Output <s id="N"> MUST contain ONLY the translation of input <s id="N">.
+   - NEVER pull, borrow, merge, or fold words from <s id="N+1"> into <s id="N"> under ANY circumstances.
+   - Even if input <s id="N"> is a broken clause, dangling relative pronoun ("the one who", "yang"), preposition, unfinished conjunction ("even though"), question tag ("right?"), or isolated negative particle ("not to."), you MUST leave the target translation grammatically incomplete inside that specific slot.
+   - INCOMPLETE TARGET GRAMMAR IS STRICTLY REQUIRED TO PRESERVE TIMING TIMESTAMPS. Do not attempt to fix or complete the sentence across slots.
+
+3. ZERO SHIFTING & ANTI-HALLUCINATION LOCK:
+   - NEVER shift subsequent dialogues forward to fill an earlier slot.
+   - NEVER invent, extrapolate, or hallucinate synthetic sentences (e.g., creating fake filler lines like "Pertama, tentang bajet") to satisfy the total tag count at the end of a batch.
+   - If dialogue in an earlier slot collapses due to an error, you are FORBIDDEN from inventing filler lines to compensate.
+
+4. READ-ONLY CONTEXT BOUNDARY:
+   - Any provided previous or upcoming context lines are strictly READ-ONLY references.
+   - NEVER translate, reproduce, or fold external context lines into the active batch slots (${startId} to${endId}).
+
+5. MINIMALIST SLOTS (1 TO 2 WORDS):
+   - If an input slot contains only 1 or 2 words (e.g., "No.", "Aunt.", "not to.", "Wait."), translate ONLY those 1 or 2 words inside that exact slot. NEVER append text from the next line to make it look like a complete sentence.
+
+6. ESCAPE HATCH:
+   - If an entry contains unreadable artifacts, untranslatable proper nouns, or corrupted text, copy the EXACT original source text into that slot.
+
+7. FORMATTING & TAG PRESERVATION:
+   - Preserve all internal formatting tags: [br], <i>...</i>, and speaker hyphens (-) in their exact relative positions.
+
+8. PURE PAYLOAD ONLY:
+   - Output ONLY the raw continuous stream of <s id="N">...</s> tags. ZERO markdown code blocks (no ```xml), ZERO greetings, ZERO conversational filler, and ZERO translator notes.
 
 <input>
 ${batchText}
