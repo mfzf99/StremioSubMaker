@@ -2347,9 +2347,10 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} VALID JSON ENTRIES AS A RAW ARRAY.
     let cleaned = String(translatedText || '').trim();
 
     // 🚨 PISAU BEDAH: PENYAMBUNG PANCING! 🚨
-    // AI menyambung terus dari pancing `<s id="` yang kita hantar.
+    // AI menyambung terus dari pancing `<s id="${startId}">` yang kita hantar.
+    const firstId = batch && batch.length > 0 ? batch[0].id : 1;
     if (!cleaned.startsWith('<s')) {
-      cleaned = '<s id="' + cleaned;
+      cleaned = `<s id="${firstId}">` + cleaned;
     }
 
     // Remove markdown code blocks (Guna hex \x60 untuk elak UI markdown pecah)
