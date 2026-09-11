@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use appropriate ${targetLabel} colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms. Ensure fluent, natural-sounding ${targetLabel} with preserved nuance and intent.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Use appropriate ${targetLabel} colloquialisms. Adapt idioms, slang, and cultural references into natural ${targetLabel} equivalents. Match the original speaker's tone, emotion, and register.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms. Ensure fluent, natural-sounding ${targetLabel} with preserved nuance and intent.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
