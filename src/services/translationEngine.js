@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} into appropriately casual, conversational ${targetLabel}.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning and idioms, not literal words, into appropriately casual, conversational ${targetLabel} that matches the scene's tone.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} into appropriately casual, conversational ${targetLabel}.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning and idioms, not literal words, into appropriately casual, conversational ${targetLabel} that matches the scene's tone.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2189,15 +2189,9 @@ CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
    - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the written source text. Even if you recognize the media and know actors spoke omitted/unscripted lines in the audio, you are STRICTLY FORBIDDEN from inserting missing lines.
    - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> directly. NEVER generate reactive conversational replies or commentary to the background memory (<m> tags).
 
-4. ESCAPE HATCH:
-   - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible strings, copy the EXACT source text into that slot.
-
-5. SONG LYRICS & INLINE MARKUP:
-   - Translate all lyrics marked with musical notes (♪/♫).
-   - Retain all formatting tags ([br], <i>...</i>, hyphens) in their exact relative positions.
-
-6. CLEAN PAYLOAD ONLY:
+4. CLEAN PAYLOAD & INLINE MARKUP:
    - Output ONLY the sequence of <s id="N">...</s> tags.
+   - Retain all formatting tags ([br], <i>...</i>, hyphens) in their exact relative positions.
    - ZERO markdown code blocks, ZERO preambles, and ZERO translator notes.
 
 <input>
