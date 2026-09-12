@@ -2183,11 +2183,9 @@ CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
    - ISOLATED PARTICLES & SHORT SLOTS (1-2 WORDS): If a slot contains only isolated question tags ("are you?", "right?"), negation particles ("not to."), or interjections ("Wait.", "Yes."), translate ONLY those words inside that exact slot (e.g., "kan?", "bukan?"). NEVER attach them to preceding or subsequent lines.
    - Incomplete target syntax is MANDATORY to preserve subtitle synchronization.
 
-3. ZERO SHIFTING, ANTI-HALLUCINATION & SOURCE FIDELITY:
+3. ZERO SHIFTING & ANTI-HALLUCINATION:
    - NEVER shift subsequent dialogue forward to compensate for short or empty slots.
    - NEVER invent synthetic filler lines to satisfy the tag count.
-   - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the written source text. Even if you recognize the media and know actors spoke omitted/unscripted lines in the audio, you are STRICTLY FORBIDDEN from inserting missing lines.
-   - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> directly. NEVER generate reactive conversational replies or commentary to the background memory (<m> tags).
 
 4. CLEAN PAYLOAD & INLINE MARKUP:
    - Output ONLY the sequence of <s id="N">...</s> tags.
@@ -2203,7 +2201,7 @@ ${batchText}
 
     return this.addBatchHeader(promptBody, batchIndex, totalBatches);
   }
-  
+
   /**
    * Prepare batch content as a JSON array for the 'json' workflow.
    * [UPGRADED]: Menghantar pasangan Source + Target dalam previous_translation_memory untuk keselarasan sejagat.
