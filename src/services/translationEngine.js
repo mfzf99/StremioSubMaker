@@ -34,11 +34,11 @@ const { executeParallelTranslation } = require('../utils/parallelTranslation');
 const PROMPT_TEMPLATES = {
   // 1. PROMPT ASAL (Enterprise Broadcast Standard + Natural Register)
   primary: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms. Ensure fluent, natural-sounding ${targetLabel} with preserved nuance and intent.`,
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms.`,
 
   // 2. PROMPT KECEMASAN (PROHIBITED_CONTENT Fallback - Neutral & Safe)
   fallback: (targetLabel, sourceLabel) => 
-    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms. Ensure fluent, natural-sounding ${targetLabel} with preserved nuance and intent.`
+    `Translate the text inside each <s id="N"> tag from ${sourceLabel} to ${targetLabel}. Translate meaning, not words. Use appropriate ${targetLabel} colloquialisms.`
 };
 // ============================================================================
 // Extract normalized tokens from a language label/code (split on common separators)
@@ -2120,7 +2120,7 @@ class TranslationEngine {
 
   /**
    * Create translation prompt for XML-tagged batches (Enterprise Industry Standard)
-   * Dilengkapi Perisai Memori <m> (Anti-Leak & Anti-Desync)
+   * Dilengkapi Universal Demonstration & Strict Tag-Question Isolation
    */
   createXmlBatchPrompt(batchText, targetLanguage, customPrompt, expectedCount, context = null, batchIndex = 0, totalBatches = 1) {
     const targetLabel = normalizeTargetLanguageForPrompt(targetLanguage);
@@ -2153,23 +2153,23 @@ class TranslationEngine {
 
     const promptBody = `${introInstruction}
 
-[UNIVERSAL STRUCTURAL DEMONSTRATION: FRAGMENTATION & SYNTAX ISOLATION]
+[UNIVERSAL STRUCTURAL DEMONSTRATION: FRAGMENTATION & TAG ISOLATION]
 Input:
 <s id="1">The chief director was the one</s>
-<s id="2">responsible for the approval, right?</s>
-<s id="3">Even after we told them</s>
-<s id="4">not to.</s>
-<s id="5">Keep all those instructions</s>
-<s id="6">firmly in mind.</s>
+<s id="2">responsible for the approval.</s>
+<s id="3">You are coming with us,</s>
+<s id="4">aren't you?</s>
+<s id="5">Even after we told them</s>
+<s id="6">not to.</s>
 <s id="7">Wait.</s>
 
-Target Output (Mandatory Grammatical Incompleteness Per Slot - Zero Cross-Slot Merging):
+Target Output (Mandatory Grammatical Incompleteness Per Slot - Zero Merging Across Slots):
 <s id="1">${targetLabel} translation of opening relative clause only (leave grammatically incomplete)</s>
-<s id="2">${targetLabel} translation of predicate continuation and question tag only</s>
-<s id="3">${targetLabel} translation of dependent conjunction clause only (leave hanging)</s>
-<s id="4">${targetLabel} translation of isolated negation particle only</s>
-<s id="5">${targetLabel} translation of opening verb-object clause only</s>
-<s id="6">${targetLabel} translation of concluding complement/idiom only</s>
+<s id="2">${targetLabel} translation of predicate continuation only</s>
+<s id="3">${targetLabel} translation of the main statement ONLY (DO NOT attach question tag here)</s>
+<s id="4">${targetLabel} isolated question tag / confirmation particle only (e.g., "kan?", "bukan?", "betul tak?")</s>
+<s id="5">${targetLabel} translation of dependent conjunction clause only (leave hanging)</s>
+<s id="6">${targetLabel} translation of isolated negation particle only</s>
 <s id="7">${targetLabel} translation of the single reaction word only</s>
 
 CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
@@ -2181,7 +2181,7 @@ CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
 2. ABSOLUTE SYNTACTIC ISOLATION (ZERO MERGING / ZERO BORROWING):
    - Output <s id="N"> MUST contain ONLY the translation of input <s id="N">.
    - NEVER pull, borrow, merge, or fold words from <s id="N+1"> into <s id="N"> under ANY circumstance.
-   - If an input slot contains a dangling relative pronoun ("the one who"), unfinished conjunction ("even though"), split infinitive ("to"), preposition, question tag ("right?"), or isolated negative ("not to."), you MUST leave the target translation grammatically incomplete inside that specific slot.
+   - TRAILING QUESTION TAGS & PARTICLES: If a question tag or particle (e.g., "are you?", "aren't you?", "right?", "isn't it?", "not to.") is placed in an isolated slot, you MUST translate it ONLY inside that specific slot (e.g., "kan?", "bukan?", "betul tak?"). You are FORBIDDEN from attaching it to the preceding sentence slot.
    - INCOMPLETE TARGET SYNTAX IS MANDATORY TO PRESERVE TIMECODE SYNCHRONIZATION.
 
 3. ZERO SHIFTING, ANTI-HALLUCINATION & SOURCE FIDELITY:
@@ -2201,7 +2201,7 @@ CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
    - ABSOLUTE BAN ON TITLE INFERENCE: Do NOT substitute pronouns with kinship titles or honorifics (e.g., father, mother, uncle, boss) unless the source text in that EXACT slot explicitly contains the specific vocative noun (e.g., "Dad", "Mom", "Sir").
 
 6. MINIMALIST SLOTS (1 TO 2 WORDS):
-   - If an input slot contains only 1 or 2 words (e.g., interjections, "Yes.", "Wait.", "not to."), translate ONLY those words inside that slot. NEVER append subsequent dialogue to make a complete sentence.
+   - If an input slot contains only 1 or 2 words (e.g., interjections, "Yes.", "Wait.", "not to.", "are you?"), translate ONLY those words inside that slot. NEVER append subsequent dialogue to form a complete sentence.
 
 7. ESCAPE HATCH:
    - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible code, copy the EXACT source text into that slot.
