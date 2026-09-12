@@ -127,7 +127,7 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 400;
+    return 200;
   }
 
   // Gemma models: Lower batch size for stability
