@@ -127,7 +127,7 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 200;
+    return 400;
   }
 
   // Gemma models: Lower batch size for stability
@@ -2189,19 +2189,14 @@ CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
    - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the written source text. Even if you recognize the media and know actors spoke omitted/unscripted lines in the audio, you are STRICTLY FORBIDDEN from inserting missing lines.
    - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> directly. NEVER generate reactive conversational replies or commentary to the background memory (<m> tags).
 
-4. AIR-GAPPED READ-ONLY CONTEXT MEMORY (<m> TAGS):
-   - Entries inside <m id="N"><src>...</src><dst>...</dst></m> are STRICTLY READ-ONLY background context.
-   - NEVER translate, modify, output, or duplicate text from <m> tags into active <s id="N"> tags.
-   - Your response MUST begin immediately with <s id="${startId}">.
-
-5. ESCAPE HATCH:
+4. ESCAPE HATCH:
    - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible strings, copy the EXACT source text into that slot.
 
-6. SONG LYRICS & INLINE MARKUP:
+5. SONG LYRICS & INLINE MARKUP:
    - Translate all lyrics marked with musical notes (♪/♫).
    - Retain all formatting tags ([br], <i>...</i>, hyphens) in their exact relative positions.
 
-7. CLEAN PAYLOAD ONLY:
+6. CLEAN PAYLOAD ONLY:
    - Output ONLY the sequence of <s id="N">...</s> tags.
    - ZERO markdown code blocks, ZERO preambles, and ZERO translator notes.
 
