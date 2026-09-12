@@ -3094,6 +3094,18 @@ RESPOND ONLY WITH EXACTLY ${expectedCount} NUMBERED ENTRIES.
     // 3. Buang sisa kurungan tag '>' di permulaan baris
     cleaned = cleaned.replace(/^(?:["']?\s*>)+\s*/, '').trim();
 
+    // 3.0 PENYAPU SISA SINTAKS KOD & KOMEN (/*, */, //)
+    cleaned = cleaned
+      // 1. Buang blok komen penuh /* ... */
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // 2. Buang penutup komen tergantung (cth: '*/' atau '****/') di hujung ayat/baris
+      .replace(/\s*\*+\/\s*(?=\n|$)/g, '')
+      // 3. Buang pembuka komen tergantung (cth: '/*') di awal ayat/baris
+      .replace(/(?:^|\n)\s*\/\*+\s*/g, '\n')
+      // 4. Buang tanda komen dua garis (//) di permulaan baris
+      .replace(/(?:^|\n)\s*\/\/\s*/g, '\n')
+      .trim();
+
     // 3.1 PEMBERSIH TANDA PETIK (NETFLIX STYLE + KEBAL ERROR AI)
     cleaned = cleaned
       // 1. Buang SEMUA tanda petik berganda (berpasangan mahupun sebiji tergantung)
