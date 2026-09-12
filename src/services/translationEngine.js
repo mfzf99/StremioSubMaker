@@ -127,26 +127,26 @@ function getBatchSizeForModel(model) {
 
   // Gemini 3.0 Flash: Large context window, higher batch size for throughput
   if (modelStr.includes('gemini-3-flash')) {
-    return 100;
+    return 200;
   }
 
   // Gemma models: Lower batch size for stability
   if (modelStr.includes('gemma')) {
-    return 100;
+    return 200;
   }
 
   // Flash-lite models: More conservative batch size for stability
   if (modelStr.includes('flash-lite')) {
-    return 100;
+    return 200;
   }
 
   // Flash models (non-lite): Larger batch size for better throughput
   if (modelStr.includes('flash')) {
-    return 100;
+    return 200;
   }
 
   // Default batch size for unknown models
-  return 100;
+  return 200;
 }
 
 // Module-level shared key health tracking across engine instances.
