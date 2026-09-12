@@ -2174,45 +2174,36 @@ Target Output (Mandatory Grammatical Incompleteness Per Slot - Zero Merging Acro
 
 CRITICAL ENFORCEMENT RULES (ZERO TOLERANCE):
 
-1. 1-TO-1 STRICT CARDINALITY & ID PARITY:
+1. STRICT 1-TO-1 CARDINALITY & ID PARITY:
    - Output EXACTLY ${expectedCount} entries, numbered sequentially from ID ${startId} to ID ${endId}.
-   - Every input <s id="N"> MUST pair with exactly one output <s id="N">. Never omit, combine, or invent IDs.
+   - Every input <s id="N"> pairs strictly with one output <s id="N">. Never omit, combine, or invent IDs.
 
-2. ABSOLUTE SYNTACTIC ISOLATION (ZERO MERGING / ZERO BORROWING):
-   - Output <s id="N"> MUST contain ONLY the translation of input <s id="N">.
-   - NEVER pull, borrow, merge, or fold words from <s id="N+1"> into <s id="N"> under ANY circumstance.
-   - TRAILING QUESTION TAGS & PARTICLES: If a question tag or particle (e.g., "are you?", "aren't you?", "right?", "isn't it?", "not to.") is placed in an isolated slot, you MUST translate it ONLY inside that specific slot (e.g., "kan?", "bukan?", "betul tak?"). You are FORBIDDEN from attaching it to the preceding sentence slot.
-   - INCOMPLETE TARGET SYNTAX IS MANDATORY TO PRESERVE TIMECODE SYNCHRONIZATION.
+2. ABSOLUTE SLOT ISOLATION (ZERO MERGING / ZERO FOLDING):
+   - Output <s id="N"> MUST contain ONLY the translation of input <s id="N">. NEVER pull or fold words from adjacent slots.
+   - ISOLATED PARTICLES & SHORT SLOTS (1-2 WORDS): If a slot contains only isolated question tags ("are you?", "right?"), negation particles ("not to."), or interjections ("Wait.", "Yes."), translate ONLY those words inside that exact slot (e.g., "kan?", "bukan?"). NEVER attach them to preceding or subsequent lines.
+   - Incomplete target syntax is MANDATORY to preserve subtitle synchronization.
 
 3. ZERO SHIFTING, ANTI-HALLUCINATION & SOURCE FIDELITY:
    - NEVER shift subsequent dialogue forward to compensate for short or empty slots.
    - NEVER invent synthetic filler lines to satisfy the tag count.
-   - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the text present inside input <s id="N">. Even if you recognize the media source and know the actors spoke unscripted words or omitted lines in the original audio, you are STRICTLY FORBIDDEN from inserting missing lines.
-   - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> immediately. NEVER output reactive conversational phrases, answers, or commentary responding to the background memory (<m> tags).
+   - ZERO SCRIPT RESTORATION: Translate EXCLUSIVELY the written source text. Even if you recognize the media and know actors spoke omitted/unscripted lines in the audio, you are STRICTLY FORBIDDEN from inserting missing lines.
+   - ZERO CONVERSATIONAL CONTINUATION: Output <s id="${startId}"> MUST translate input <s id="${startId}"> directly. NEVER generate reactive conversational replies or commentary to the background memory (<m> tags).
 
 4. AIR-GAPPED READ-ONLY CONTEXT MEMORY (<m> TAGS):
-   - All entries enclosed in <m id="N"><src>...</src><dst>...</dst></m> are STRICTLY READ-ONLY background context.
-   - NEVER translate, modify, or output any <m> tags.
-   - NEVER duplicate or borrow text from <m> tags into active <s id="N"> tags.
+   - Entries inside <m id="N"><src>...</src><dst>...</dst></m> are STRICTLY READ-ONLY background context.
+   - NEVER translate, modify, output, or duplicate text from <m> tags into active <s id="N"> tags.
    - Your response MUST begin immediately with <s id="${startId}">.
 
-5. PRONOUN FIDELITY & ZERO KINSHIP GUESSING:
-   - Translate first/second person pronouns (I, you) strictly as standard pronouns.
-   - ABSOLUTE BAN ON TITLE INFERENCE: Do NOT substitute pronouns with kinship titles or honorifics (e.g., father, mother, uncle, boss) unless the source text in that EXACT slot explicitly contains the specific vocative noun (e.g., "Dad", "Mom", "Sir").
+5. ESCAPE HATCH:
+   - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible strings, copy the EXACT source text into that slot.
 
-6. MINIMALIST SLOTS (1 TO 2 WORDS):
-   - If an input slot contains only 1 or 2 words (e.g., interjections, "Yes.", "Wait.", "not to.", "are you?"), translate ONLY those words inside that slot. NEVER append subsequent dialogue to form a complete sentence.
-
-7. ESCAPE HATCH:
-   - If an entry contains corrupt characters, untranslatable proper nouns, or unintelligible code, copy the EXACT source text into that slot.
-
-8. SONG LYRICS & FORMATTING:
-   - Translate all lyrics marked with musical symbols (♪/♫).
+6. SONG LYRICS & INLINE MARKUP:
+   - Translate all lyrics marked with musical notes (♪/♫).
    - Retain all formatting tags ([br], <i>...</i>, hyphens) in their exact relative positions.
 
-9. CLEAN PAYLOAD ONLY:
+7. CLEAN PAYLOAD ONLY:
    - Output ONLY the sequence of <s id="N">...</s> tags.
-   - ZERO markdown code fences, ZERO conversational preambles, and ZERO translator notes.
+   - ZERO markdown code blocks, ZERO preambles, and ZERO translator notes.
 
 <input>
 ${batchText}
